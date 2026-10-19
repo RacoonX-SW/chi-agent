@@ -1,0 +1,33 @@
+project: chi-agent
+description: >
+  CHI Workflow Agent — non-commercial research prototype for healthcare
+  administrative workflows.  Targets the chi-bench Kaggle competition.
+  Initial state: environment and baseline only; no custom agent yet.
+
+upstream:
+  repository: https://github.com/actava-ai/chi-bench
+  pinned_commit: 4444a07fa68a4f1623f841a292a54e284fc8e7f7
+  version: 1.1.0
+  vendor_dir: vendor/chi-bench
+  data_dir: data
+  data_version: chi-bench-v1.0.0   # must match data/.chi-bench-version when downloaded
+
+run:
+  output_dir: runs
+  default_n_tasks: 1
+  default_domain: pa_provider        # public domain for single-task baseline
+  # Agent and model are set at runtime via environment / CLI flags.
+  # Do not hard-code a model name here; specify it when you invoke run_baseline.py.
+
+secrets:
+  # All secrets come from environment variables; no values are stored here.
+  required_for_real_run:
+    - ANTHROPIC_API_KEY         # required: judge runs claude-opus-4-7
+  optional:
+    - OPENAI_API_KEY
+    - OPENROUTER_API_KEY
+
+handbook:
+  dataset: actava/managed-care-operations-handbook
+  access_url: https://huggingface.co/datasets/actava/managed-care-operations-handbook
+  status: PENDING                # user must obtain access; do not assume granted
