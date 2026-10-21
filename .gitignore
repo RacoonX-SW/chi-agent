@@ -1,0 +1,19 @@
+# Local credentials and downloaded/reference material
+.env
+.env.*
+*.env
+!.env.example
+data/
+vendor/
+runs/
+.coordination/
+
+# Local environments, caches and OS metadata
+.venv/
+.venv-hf/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store

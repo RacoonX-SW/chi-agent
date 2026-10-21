@@ -30,4 +30,6 @@ secrets:
 handbook:
   dataset: actava/managed-care-operations-handbook
   access_url: https://huggingface.co/datasets/actava/managed-care-operations-handbook
-  status: PENDING                # user must obtain access; do not assume granted
+  status: DOWNLOADED_VERIFIED    # authenticated download and remote size checks, 2026-10-20
+  revision: f1210b294904792541116852f6074df8b84d89dd
+  download_verified: true

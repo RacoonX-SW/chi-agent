@@ -1,5 +1,17 @@
 ## ADDED Requirements
 
+### Requirement: Distinguish documented and observed task contracts
+
+The baseline report SHALL distinguish official static inputs and tool references from live MCP contracts, actual execution traces and official verdicts.
+
+#### Scenario: Only the public task documents have been inspected
+
+- **GIVEN** the task instruction, tool reference and setup configuration have been read
+- **WHEN** the task analysis is delivered before a real trial
+- **THEN** tool names and limits are attributed to their fixed source versions
+- **AND** unobserved live schemas, execution steps and official reward are explicitly unverified
+- **AND** no illustrative workflow is presented as a real trajectory
+
 ### Requirement: Explicit readiness status
 
 The system SHALL report dependency and configuration readiness without invoking a model by default.
@@ -35,6 +47,92 @@ The system SHALL require necessary access and explicit run configuration before 
 - **WHEN** a real baseline is started
 - **THEN** it executes only the configured public task
 - **AND** it retains the actual command, version identities, exit status and local evidence paths
+
+#### Scenario: A configuration would run more than the selected task
+
+- **GIVEN** the requested baseline is one configured public task
+- **WHEN** the selected official entry point or effective configuration resolves to a whole domain, multiple tasks or multiple attempts
+- **THEN** the bounded baseline is not started under a one-task claim
+- **AND** the mismatch is reported before any paid execution
+
+### Requirement: Separate development execution from official grading
+
+The system SHALL distinguish offline readiness, live tool integration, ungraded Agent execution and officially scored evaluation. Deferring the official judge SHALL NOT imply that all development checks require judge credentials.
+
+#### Scenario: The user defers local official grading
+
+- **GIVEN** Agent development is planned without an Anthropic judge credential
+- **WHEN** readiness is reported
+- **THEN** offline and tool integration prerequisites are reported separately from grading prerequisites
+- **AND** model-backed simulator dependencies are identified separately
+- **AND** the report does not claim a real run merely because configuration is present
+
+#### Scenario: An ungraded development execution is supported
+
+- **GIVEN** a verified development entry point, permitted role tools, required access and bounded authorized model usage
+- **WHEN** one Agent execution runs without the official verifier
+- **THEN** actual commands, tool interactions, errors, stop reason and available resource use are retained
+- **AND** official reward is null with grading explicitly not run
+- **AND** no synthetic scorecard or official pass rate is produced
+
+#### Scenario: The requested development entry point is unsupported
+
+- **GIVEN** the fixed upstream version has no verified way to execute the requested ungraded path
+- **WHEN** development execution is requested
+- **THEN** the unsupported entry point is reported before paid execution
+- **AND** the wrapper does not invent upstream CLI options or modify the official grader to claim success
+
+#### Scenario: Official grading is requested without required credentials
+
+- **GIVEN** the run explicitly requests the official verifier but its required access is missing
+- **WHEN** the wrapper checks prerequisites
+- **THEN** that scored mode is reported unavailable before starting paid execution
+- **AND** it does not silently substitute a different judge or label an ungraded run as scored
+
+### Requirement: Verify the selected provider through full tool exchanges
+
+The system SHALL distinguish basic model connectivity from verified multi-turn tool use through the selected harness, API and explicit model mode.
+
+#### Scenario: Chat works but the selected tool-calling mode fails
+
+- **GIVEN** a provider returns a normal chat response
+- **WHEN** a subsequent tool exchange fails in the selected runner or required history fields are not preserved
+- **THEN** the selected tool integration remains unverified
+- **AND** a different API or thinking mode is recorded as a separate configuration rather than silently substituted
+
+#### Scenario: Synthetic tool integration succeeds
+
+- **GIVEN** the selected profile completes consecutive tool exchanges using synthetic inputs
+- **WHEN** the integration report is written
+- **THEN** actual settings, call/result associations and available usage are retained
+- **AND** the report does not label synthetic interactions as an official medical-task execution
+- **AND** the task attempt starts from an independent clean world rather than a debug-modified environment
+
+#### Scenario: A tool executes before the next model request is rejected
+
+- **GIVEN** a tool has executed and the next model API request containing its result is rejected
+- **WHEN** the failed integration is reported
+- **THEN** the observed tool execution/effect and subsequent model API error are recorded separately
+- **AND** the complete model-tool loop is not reported as verified
+- **AND** the wrapper does not replay an executed business write solely to recover from that model request rejection
+
+### Requirement: Respect the selected first-round runtime budget
+
+The system SHALL account for the selected 5 CNY first-round runtime budget across integration checks and the one task attempt, separately from coding costs. A budget plan SHALL NOT lift an active implementation or paid-run pause.
+
+#### Scenario: The user selects a budget while paid execution is paused
+
+- **GIVEN** the 5 CNY runtime budget has been selected for planning
+- **WHEN** the plan or configuration is updated without a subsequent instruction resuming execution
+- **THEN** no model request or task attempt is started
+
+#### Scenario: A further request cannot fit the remaining planned budget
+
+- **GIVEN** resumed execution with cumulative usage, finite generation limits and versioned pricing
+- **WHEN** the next request cannot conservatively fit the remaining budget, or missing usage prevents a trustworthy check
+- **THEN** the run stops with a budget or accounting reason and preserves available evidence
+- **AND** it does not count unknown usage as zero or automatically rerun the whole task
+- **AND** an unfinished task is not reported as completed and local estimates are not presented as an exact provider billing cap
 
 ### Requirement: Preserve official outcomes
 
@@ -76,6 +174,13 @@ The system SHALL keep credentials and restricted materials out of public deliver
 - **THEN** it uses only authorized task and role resources
 - **AND** hidden expectations and verifier-only evidence are not supplied to it
 
+#### Scenario: Public metadata contains evaluation targets
+
+- **GIVEN** a public index contains expected task statuses or other evaluation-only fields
+- **WHEN** the Agent input or retrieval context is prepared
+- **THEN** that index is excluded from runtime task context
+- **AND** task-specific answers and expected outputs are not used to route the Agent
+
 #### Scenario: Preparing a shareable report
 
 - **GIVEN** a run directory contains raw traces, handbook-related content or credentials
@@ -93,3 +198,28 @@ The delivery SHALL distinguish offline checks, simulated outcomes, real baseline
 - **WHEN** the implementation is handed over
 - **THEN** the report identifies offline verification as passed and real baseline as unverified
 - **AND** task completion checkboxes do not claim a real run
+
+### Requirement: Stage-specific stable handover
+
+The delivery SHALL identify the requested stage, stable candidate and actual evidence. An implementation-ready signal SHALL NOT imply independent review or user acceptance, and a narrow implementation resume SHALL NOT activate later stages.
+
+#### Scenario: Only offline repair is resumed
+
+- **GIVEN** the user resumes D0 offline repair only
+- **WHEN** the executor implements and hands over that stage
+- **THEN** it does not start the task environment, a runtime model request or a task attempt
+- **AND** live tools, model integration and task execution remain explicitly unverified
+
+#### Scenario: The candidate includes uncommitted changes
+
+- **GIVEN** the delivered implementation has not been committed or includes changes beyond HEAD
+- **WHEN** its identity is recorded
+- **THEN** a reviewable patch or equivalent file fingerprint set identifies the implementation changes in addition to the base commit
+- **AND** the executor distinguishes its changes from modifications inherited at handover
+
+#### Scenario: Implementation signals ready for review
+
+- **GIVEN** actual self-checks and a handover report have been saved for one stage
+- **WHEN** the executor publishes its stage-specific ready-for-review signal
+- **THEN** it stops modifying that candidate until review or a follow-up repair task
+- **AND** Codex review and user acceptance remain pending until performed by the corresponding reviewers
