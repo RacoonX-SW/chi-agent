@@ -2,26 +2,30 @@
 
 长期协作要求：**边参赛，边学习 Agent 开发。** 新对话先读 [学习约定与进度](docs/learning-agreement.md)；每轮结合设计、实际代码/轨迹和小问题推进理解，不只交付代码。
 
-## 当前准备状态汇总（2026-10-21）
+## 当前准备状态汇总（2026-10-24）
+
+最新逐项核对及实施顺序见 [开发前准备核对](docs/preparation-audit-2026-10-24.md)。本轮只做只读检查和文档整理，没有恢复编码或付费运行。
+
+2026-10-24 执行器更新：用户确认前次受限的是 Antigravity 中的 Claude，并报告已有 Google AI Pro。当前优先方案改为 **Antigravity + Gemini 3.8 Flash-High 写代码，DeepSeek 备用**；Codex 继续规格、独立验收、教学与 push。优先使用套餐内额度，具体账号限制与实际接入待核实。下文早期“DeepSeek 实现”的描述是历史安排；参赛运行时模型候选、5 元预算及暂停状态保持原约定。
 
 **规划材料和首份 D0 交接已具备，可以在用户恢复后开始离线修复；环境、接口与真实运行准备尚未完成。** 下表优先于后续按时间积累的旧状态，不能把“文档完成”写成“系统已可运行”。
 
 | 准备项 | 状态 | 依据与边界 |
 | --- | --- | --- |
 | 竞赛方向与路线 | 已整理/已明确 | 竞赛优先，医院侧任务起步；后续仍需覆盖赛事其他领域 |
-| 手册访问和下载 | 已验证 | 固定版本全量 1,292 文件；本轮只读复查手册入口、references 和下载清单存在，未重新联网下载 |
+| 手册访问和下载 | 已验证 | 2026-10-24 重新核对固定版本全量 1,292 文件字节数和 SHA-256，全部一致；公开规划子集 9 文件也全部一致 |
 | 一个官方任务的拆解 | 已完成静态分析 | 输入、公开工具、流程与评分边界已整理；实时 schema 未取得 |
-| 第一阶段 OpenSpec | 已成文 | proposal/design/spec/tasks/handoff 齐备，文件引用和场景结构已检查；未运行 OpenSpec CLI |
-| 分工、学习与交接 | 约定/材料已具备 | DeepSeek 计划实现、Codex 独立验收并教学、用户把关；当前未派发，也未验证新执行器接入 |
+| 第一阶段 OpenSpec | 已成文 | proposal/design/spec/tasks/handoff 齐备；23 份 Markdown 本地链接检查无缺失，规格有 11 条 Requirement/25 个 Scenario；未运行 OpenSpec CLI |
+| 分工、学习与交接 | 约定/材料已具备 | Antigravity 2.26.0 界面已选 chi-agent/Local/Gemini 3.8 Flash High，当前有可用额度；DeepSeek 备用。新模型读写、终端及交付闭环尚未实测，当前未派发 |
 | 首轮参赛运行预算 | 已确认规划 | 模型工具接入验证＋一次任务试跑合计 5 元；写代码另行记账，当前未恢复付费运行 |
 | 模型与 runner | 候选待实测 | `deepseek-flash`＋官方参考 runner，Chat Completions/思考 high 为候选；协议、字段与实际限额待验证 |
 | 完整数据与环境 | 未就绪 | 本轮确认 `vendor/chi-bench` 和 `data/.chi-bench-version` 均不存在；仅有规划用任务子集，Docker daemon 未验证 |
-| 本机运行工具 | 部分已知 | 默认 Python 3.9.6，Docker CLI 存在；当前 PATH 未找到 uv / OpenSpec。独立下载环境不等于参赛环境 |
+| 本机运行工具 | 部分就绪 | Docker 服务只读检查通过：29.5.3/linux/aarch64，CHI 镜像未构建；默认 Python 3.9.6，独立下载环境有 Python 3.13.5；uv/OpenSpec 在 PATH 未找到，项目依赖清单/环境待建立 |
 | 无评分执行入口 | 待验证 | 有设计方向，尚无实际可运行证据；不提供虚构的跳过 judge 开关 |
 | 现有实现与基线 | 未验收/未实测 | 旧候选及返工未通过新验收，D0 未交付；没有已验证的真实 trial、官方 reward 或实测成本 |
 | 官方判分 | 已决定本地暂缓 | 最终私有评分交主办方；确定性检查优先、Gemini 按需辅助的集成仍待实现 |
 | GitHub 存储 | 私有仓库 | [xsw932187210-cell/chi-agent](https://github.com/xsw932187210-cell/chi-agent)，保留现有目录结构；代码仍是待验收快照，见 [存储与协作约定](docs/github-workflow.md) |
-| Kaggle 报名 | 待核实 | GitHub 仓库建立不等于赛事报名或参赛提交 |
+| Kaggle 入场与材料 | 已接受规则；Writeup 待创建 | 已登录 Rules 页面显示接受规则和 Team 页签；Writeup、私有程序包和技术报告均未提交。最终截止为北京时间 2026-11-16 07:59 |
 
 下一步是 [交接包中的 D0](openspec/changes/bootstrap-baseline/handoff.md)：先修单题配置、按模式就绪检查、结果/预算记录和生产入口测试；稳定交付后再验收，之后按授权推进 A 官方工具、B 模型工具往返、C 一次自主执行。后续业务策略与自动压缩根据真实基线再细化，不属于已完成的实现。
 

@@ -2,7 +2,11 @@
 
 更新：2026-10-21（Asia/Shanghai）。**交接包已整理，尚未派发；编码与参赛模型付费运行仍暂停。** 用户在新对话明确恢复后才执行授权阶段。本轮“继续”仅延续交接准备，不恢复旧 Antigravity 会话。
 
-Codex 负责规格、独立验收和教学；DeepSeek 是计划中的实现执行器。当前没有验证 DeepSeek Harness 的项目权限、终端执行或本项目实际派发，不承诺已接通自动派发/后台验收。
+2026-10-24 执行器方案更新：用户澄清此前耗尽的是 Antigravity 中的 Claude 额度，并报告已有 Google AI Pro；当前优先由 **Antigravity + Gemini 3.8 Flash-High** 实现，DeepSeek 备用。此调整只涉及开发执行器，不更改参赛运行时模型候选或 5 元预算，也不恢复编码和付费运行。
+
+Codex 负责规格、独立验收和教学。恢复时核对当前客户端、所选模型、目录与终端权限及实际交付身份；旧 Antigravity 的派发记录不能代替新模型在当前版本的接入证据。DeepSeek Harness 的实际接入也尚未验证，不承诺已接通自动派发/后台验收。
+
+2026-10-24 只读准备核对已确认 Antigravity 2.26.0 的 chi-agent/Local/Gemini 3.8 Flash High 与可用额度、Docker 服务、Python 3.13 及资料清单哈希。项目依赖环境、源码/完整数据、新模型文件与终端工具仍待恢复后验证，见 [准备审计](../../../docs/preparation-audit-2026-10-24.md)。默认 Python 为 3.9.6；可用新解释器不代表项目环境已经建立。
 
 ## 先读什么，如何处理历史冲突
 
@@ -34,7 +38,7 @@ Codex 负责规格、独立验收和教学；DeepSeek 是计划中的实现执�
 | B：模型工具接入 | 在选定 runner 中验证连续工具往返及目标思考模式字段，使用合成小任务 | 实际请求设置、call/result 关联、后续响应与用量 | 与 C 合计不超过已规划的 5 元；初始建议预留至多 0.5 元 |
 | C：一次自主任务执行 | 从干净世界运行选定任务一次，并发 1；保存效果、产物与停止原因 | 任务与配置身份、真实 trace、可用业务回读、资源来源和未完成项 | 使用同一 5 元预算的剩余部分，初始建议至多 4.5 元 |
 
-B 的合成数据不是官方病例；A 的调试世界不能直接作为 C 的起点。独立验收默认检查产物、离线重放和实际设置，不因此自动再执行一次 C。费用属于同一预算账本，不给每个阶段重新加 5 元。DeepSeek 写代码的费用另行记录，不自动占用或推断其上限。
+B 的合成数据不是官方病例；A 的调试世界不能直接作为 C 的起点。独立验收默认检查产物、离线重放和实际设置，不因此自动再执行一次 C。费用属于同一预算账本，不给每个阶段重新加 5 元。开发执行器优先使用既有 Pro 套餐内额度；额外开发费用单独处理，不占用或扩大参赛运行预算，也不自动调用 DeepSeek 备用 API。
 
 ## 第一份 D0 的具体任务
 
@@ -89,7 +93,7 @@ B 的合成数据不是官方病例；A 的调试世界不能直接作为 C 的�
 
 用户准备恢复第一份实现时，可在新对话使用以下文字；它只恢复 D0，不包含 A/B/C 运行：
 
-> 请先读取 /Users/asaki/Documents/ChatGPT/Kaggle/AGENTS.md、COLLABORATION.md、chi-agent/docs/learning-agreement.md 和 chi-agent/openspec/changes/bootstrap-baseline/handoff.md。现在恢复 bootstrap-baseline 的 D0 离线修复，计划交给 DeepSeek 实现，由你独立验收并结合真实代码讲解。先核对已有未提交改动和执行器接入，只做 D0，不启动参赛模型 API、真实任务或官方判分。交付后提供代码身份、实际检查与未验证项，等独立验收后再推进后续阶段。
+> 请先读取 /Users/asaki/Documents/ChatGPT/Kaggle/AGENTS.md、COLLABORATION.md、chi-agent/docs/learning-agreement.md 和 chi-agent/openspec/changes/bootstrap-baseline/handoff.md。现在恢复 bootstrap-baseline 的 D0 离线修复，优先交给 Antigravity 中的 Gemini 3.8 Flash-High 实现，由你独立验收并结合真实代码讲解，DeepSeek 保留备用。先核对已有未提交改动、所选模型和执行器接入，只做 D0，不启动参赛模型 API、真实任务或官方判分。交付后提供代码身份、实际检查与未验证项，等独立验收后再推进后续阶段。
 
 若用户希望同时恢复 A/B/C，应在其当时指令中明确对应范围；已有 5 元预算不重复征求，但仍遵守原一次任务尝试限制。安装、网络与执行权限按实际工具环境处理，不能把这段交接文字当成已经取得权限。
 

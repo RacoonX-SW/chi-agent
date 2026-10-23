@@ -220,6 +220,35 @@
 - 材料：[GitHub 存储与协作](github-workflow.md)。手册、数据、凭据及真实运行产物仍留在本地；离线验收记录明确使用合成 fixture。
 - 学习状态：新增概念已说明，尚无用户回答或独立 Git 操作证据，不标记为掌握。下一步仍为用户在新对话恢复 D0，不把 GitHub 配置当作恢复编码或付费运行。
 
+### 2026-10-24：实现执行器的模型选择讨论
+
+**后续更正：下述首次建议的额度依据已被用户纠正，当前方案见下一条记录。**
+
+- 用户询问更倾向与 Gemini 3.8 Flash-High 还是 DeepSeek V4.1 Flash-1017 合作。Codex 建议当前先由 DeepSeek 负责主要实现，继续承担规格、独立验收和教学；这是建议，尚未获得用户新的选择确认。
+- 依据：用户此前报告 Antigravity 配额影响连续开发，既定交接也已准备转向 DeepSeek。没有同仓库、同任务的模型对照结果，不将此建议写成 DeepSeek 编码能力强于 Gemini 的已证事实。
+- 已核对 [DeepSeek 1017 官方发布说明](https://api-docs.deepseek.com/zh-cn/news/news261017/) 与 [API 模型及价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)：当前 `deepseek-flash` 对应 1017，官方建议 Harness 0.2.1-rc.1 或以上；本机版本和实际接入仍未验证。[Google 模型文档](https://ai.google.dev/gemini-api/docs/models) 也将 3.8 Flash 定位于软件工程与 Agent 场景，不能据型号名称预先判定本项目效果。
+- 协作概念：开发时负责写代码的模型，与参赛 Agent 运行时调用的模型可以独立选择；更换执行器不会自动改变参赛配置。此处仅说明，没有新增用户理解或实践证据。
+- 下一步：用户确认并恢复 D0 后核对执行器版本、项目权限和真实工具能力，再按稳定候选验收。当前没有修改应用实现、启动执行器、运行付费调用或更改原预算。
+
+### 2026-10-24：Claude 额度与 Google AI Pro 的澄清
+
+- 用户纠正：此前中断来自 Antigravity 中 Claude 的额度；用户已有 Google AI Pro，愿意优先使用套餐内 Gemini 3.8 Flash-High。不能再把这次中断写成 Gemini 已经额度不足。
+- Codex 更正判断依据，并调整建议为 Antigravity + Gemini 负责主要实现、DeepSeek 备用；规格、独立验收、教学、GitHub push 与用户最终验收的分工保持。同步更新当前协作入口、README 和 D0 交接文字，没有派发编码。
+- 官方核对：[Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash) 面向软件工程与 Agent，支持 high 思考选项；[Antigravity Plans](https://antigravity.google/docs/plans) 说明 Pro 有基础额度、五小时刷新及周上限，并可另选超额 credits。当前没有检查用户账号设置或实际余量，不宣称订阅无限使用，也没有修改计费选项。
+- 使用边界：优先使用已含的开发额度。订阅开发工具与程序运行时调用 API 分开核对；[Google AI plans](https://ai.google.dev/gemini-api/docs/google-ai-plans) 将程序 API 用量归于 Cloud Billing/适用 credits。比赛运行时模型候选与原 5 元预算没有随开发执行器变更。
+- 学习状态：用户已明确区分此前受限的 Claude 与拟使用的 Gemini；具体额度机制、执行器工具接入及 Gemini 的真实交付效果尚未实测，不标记为掌握。后续用 D0 的代码差异、生产入口测试与独立验收评估实际效果。
+- 下一步：用户在新对话恢复 D0 后，再核对 Antigravity 当前版本、所选模型、项目与终端权限，交付稳定候选后验收。当前仍暂停功能编码和参赛模型付费运行，没有修改应用代码或调用模型 API。
+
+### 2026-10-24：开发前准备的实际核对
+
+- 用户要求检查前期准备是否完成、还需补什么。结论是规划足以进入 D0，真实环境与模型/工具接入按 D0/A/B/C 继续完成；不把全部运行准备设为开始离线修复的前提。
+- 只读核对：Antigravity 2.26.0 已选择 chi-agent/Local/Gemini 3.8 Flash High，用量面板当前可用；Docker 服务返回 29.5.3/linux/aarch64；默认 Python 3.9.6，独立下载环境的解释器为 3.13.5。uv/OpenSpec、项目依赖清单和独立项目环境仍缺。没有向执行器发消息验证文件/终端工具。
+- 资料复核：手册 1,292 文件及公开规划子集 9 文件的字节数和 SHA-256 全部符合本机固定版本清单；没有联网重下、读取隐藏答案或将资料交给新模型。23 份 Markdown 的本地链接检查无缺失；规格的 11 条 Requirement/25 个 Scenario 只证明静态结构，不是 CLI 校验或代码验收。
+- Kaggle 已登录 Rules 页面确认接受规则并有 Team 入口，Writeup 尚未创建；最终材料截止为北京时间 2026-11-16 07:59。没有接受新条款、发布或提交材料。
+- 已整理 [开发前准备核对](preparation-audit-2026-10-24.md)，同步 README、协作入口和交接边界。原始用量与规则界面截图仅存忽略目录，文档不上传这些界面记录。
+- 学习点：执行器界面能选模型、有额度，与模型实际能操作项目、参赛 Agent 能调用官方工具，是不同层级的证据；配置、模拟、真实执行和官方 reward 仍分别验收。本轮不新增掌握等级，理解检查留到真实 D0 交付。
+- 下一步：用户在新对话恢复 D0 后，先做执行器接手和最小项目环境，再修旧候选并独立验收；A/B/C 按恢复范围推进。仍未恢复应用实现、付费运行、容器构建或后台自动唤醒。
+
 ## 新对话的交接提示
 
 可以在新对话中使用：

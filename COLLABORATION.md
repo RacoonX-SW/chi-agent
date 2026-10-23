@@ -2,6 +2,10 @@
 
 建立日期：2026-10-19（Asia/Shanghai）。这是本轮协作约定；不表示已启动外部执行器。
 
+2026-10-24 准备审计：规划和 D0 交接足以恢复离线修复，运行准备仍未完成。已实际核对 Antigravity 2.26.0 所选 chi-agent/Local/Gemini 3.8 Flash High 及当前可用额度、Docker 服务、可用 Python 3.13、手册与规划子集全量清单哈希；Kaggle 已接受规则，Writeup 尚未创建。新模型文件/终端与交付闭环、项目依赖环境、完整数据/源码、实时 MCP、模型往返和一次真实执行仍待分阶段验证。详见 [最新核对](chi-agent/docs/preparation-audit-2026-10-24.md)。没有派发实现、安装、构建镜像或付费调用；旧历史状态按最新核对接续。
+
+2026-10-24 最新执行器讨论：用户澄清，前次中断来自 Antigravity 中 Claude 的额度，并非已验证的 Gemini 额度问题；用户已有 Google AI Pro，希望优先利用套餐内的 Gemini 3.8 Flash-High。Codex 据此调整建议：优先 Antigravity + Gemini 实现，DeepSeek 作为备用；Codex 继续规格、独立验收、教学和 GitHub push，用户把关。此处更新开发执行器方案，不改变比赛运行时模型候选、5 元参赛运行预算或编码/付费运行暂停。用户账号的实际额度、客户端版本与新模型在本仓库的能力仍待接手核对，不承诺无限使用或新增自动派发已接通。
+
 最新安排（2026-10-20）：用户要求暂停编码，先确定项目规划，之后新开对话并改由 DeepSeek 接手。暂停安排优先于下文早先的派发/返工授权；现在不再派实现任务。详见 `chi-agent/docs/project-planning-v0.md` 和 `chi-agent/docs/executor-transition-2026-10-20.md`。
 
 用户最新澄清（同日，覆盖下文的首版产品范围）：**先以 Kaggle 竞赛为主，先分析比赛任务、评分与最终提交，暂不讨论网页工作台等产品形态。** 医院侧申请准备保留为起步调试方向，不视为整个竞赛的最终角色范围。当前执行依据为 `chi-agent/docs/competition-brief-2026-10-20.md`；完整最终材料是 Kaggle Writeup、私有可运行程序包和技术报告，公开全量结果及独立 evidence leaderboard 为规则注明的可选项。编码暂停安排继续有效。
