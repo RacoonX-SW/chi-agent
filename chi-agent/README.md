@@ -2,13 +2,13 @@
 
 长期协作要求：**边参赛，边学习 Agent 开发。** 新对话先读 [学习约定与进度](docs/learning-agreement.md)；每轮结合设计、实际代码/轨迹和小问题推进理解，不只交付代码。
 
-当前协作：**用户已仅恢复 `bootstrap-baseline/D0`，自行指挥 Gemini 写代码，Codex 负责规格、按提交差异独立审核、教学与 GitHub 存储。** Codex 不操作或调试 Antigravity；本次先核对并保存规划基线，交付稳定后由用户通知审核，不持续轮询。新对话先接上 [审核状态](reviews/REVIEW_STATE.md)，按需读相关规格与代码，历史记录不默认全量重读。流程见 [本地与 GitHub 协作](docs/github-workflow.md)。A/B/C、参赛模型 API 和官方判分仍暂停。
+当前协作：**用户已仅恢复 `bootstrap-baseline/D0`，自行指挥 Gemini 写代码，Codex 负责规格、按提交差异独立审核、教学与 GitHub 存储。** 首份候选 `01a044fe237aff7ddcafc3332e9444d443c41999` 已审核，**未通过，待返工**，见 [D0 审核报告](reviews/bootstrap-baseline-d0-review.md)。Codex 不操作或调试 Antigravity；稳定交付后由用户通知审核，不持续轮询。新对话先接上 [审核状态](reviews/REVIEW_STATE.md)，按需读相关规格与代码，历史记录不默认全量重读。流程见 [本地与 GitHub 协作](docs/github-workflow.md)。A/B/C、参赛模型 API 和官方判分仍暂停。
 
 ## 当前准备状态汇总（2026-10-24）
 
-恢复前逐项核对及实施顺序见 [开发前准备核对](docs/preparation-audit-2026-10-24.md)。本次 Codex 只核对规划差异与 Git 身份并保存本地规划提交；D0 实现和容器内自测由用户交给 Gemini，尚无新候选可审核。
+恢复前逐项核对及实施顺序见 [开发前准备核对](docs/preparation-audit-2026-10-24.md)。规划基线为 `c660e2699b8b972c9aa1d114a3e4d63510b8985e`；Gemini 已交付 D0，Codex 独立复现 42 项原测试通过，同时发现 R1–R8 需返工。报告区分执行器自测、独立检查和未运行项；不能以测试数量或存储提交代替验收。
 
-最新环境决定（2026-10-24）：**依赖安装、下载、测试和运行全部在 Docker 内完成。** 宿主机只保留已有 Docker Desktop、编辑器/Git 与源码，不再计划在 Mac 建立项目 `.venv` 或安装项目依赖。自有开发容器首选 Python 3.13；固定上游 `pyproject.toml` 已核实要求 3.12+，官方任务 Dockerfile 使用 Python 3.12，分别验证实际兼容性。此前报告的宿主机默认 3.9.6 不参与项目运行。详见 [Docker 工作流与交付边界](docs/docker-workflow.md)；目前尚未构建或运行这些项目镜像。
+最新环境决定（2026-10-24）：**依赖安装、下载、测试和运行全部在 Docker 内完成。** 宿主机只保留已有 Docker Desktop、编辑器/Git 与源码，不再计划在 Mac 建立项目 `.venv` 或安装项目依赖。自有开发容器已用 Python 3.13.17/aarch64 进行离线检查；固定上游 `pyproject.toml` 要求 3.12+，官方任务 Dockerfile 使用 Python 3.12，目标运行兼容性尚未验证。此前报告的宿主机默认 3.9.6 不参与项目运行。详见 [Docker 工作流与交付边界](docs/docker-workflow.md) 和本轮审核；官方任务镜像/任务世界未运行。
 
 2026-10-24 执行器更新：用户确认前次受限的是 Antigravity 中的 Claude，并报告已有 Google AI Pro。当前优先方案改为 **Antigravity + Gemini 3.8 Flash-High 写代码，DeepSeek 备用**；Codex 继续规格、独立验收、教学与 GitHub 存储。优先使用套餐内额度，具体账号限制与实际接入待核实。下文早期“DeepSeek 实现”的描述是历史安排；参赛运行时模型候选和 5 元预算不变，D0 以本次恢复指令为准，后续阶段仍暂停。
 
@@ -20,13 +20,13 @@
 | 手册访问和下载 | 已验证 | 2026-10-24 重新核对固定版本全量 1,292 文件字节数和 SHA-256，全部一致；公开规划子集 9 文件也全部一致 |
 | 一个官方任务的拆解 | 已完成静态分析 | 输入、公开工具、流程与评分边界已整理；实时 schema 未取得 |
 | 第一阶段 OpenSpec | 已成文 | proposal/design/spec/tasks/handoff 齐备，已补充 Docker 内开发和镜像交付场景；引用与结构做静态检查，尚未运行 OpenSpec CLI |
-| 分工、学习与交接 | D0 协作已恢复；待新候选 | 用户自行操作 Antigravity/Gemini；Codex 本次先保存规划基线，后续按稳定提交与报告独立审核。D0 实现与容器内自测尚未收到交付 |
+| 分工、学习与交接 | 已完成一次交付与独立审核；待返工 | 用户提供稳定候选与停止修改通知；Codex 按差异/相关代码及 Docker 内检查审核，已更新学习反馈和审核身份 |
 | 首轮参赛运行预算 | 已确认规划 | 模型工具接入验证＋一次任务试跑合计 5 元；写代码另行记账，当前未恢复付费运行 |
 | 模型与 runner | 候选待实测 | `deepseek-flash`＋官方参考 runner，Chat Completions/思考 high 为候选；协议、字段与实际限额待验证 |
 | 完整数据与环境 | 未就绪 | 本轮确认 `vendor/chi-bench` 和 `data/.chi-bench-version` 均不存在；仅有规划用任务子集。Docker 服务已核实可用，CHI 镜像与任务环境尚未建立 |
-| Docker 开发环境 | 已建立并验证 | 自有开发镜像 `chi-agent-dev:latest` 基于 Python 3.13-slim，锁定依赖于容器内 `/opt/venv`，已通过容器内 42 项离线自测；源码持久化挂载，构建上下文排除凭据与大资料 |
+| Docker 开发环境 | 镜像可构建/测试；D0 未通过 | 原测试 42/42 独立重跑通过；依赖装在 `/opt/venv`，但没有依赖锁。默认 socket 挂载与 offline readiness 存在问题；独立审核使用无网络/无 socket 的容器 |
 | 无评分执行入口 | 待验证 | 有设计方向，尚无实际可运行证据；不提供虚构的跳过 judge 开关 |
-| 现有实现与基线 | 未验收/未实测 | 旧候选及返工未通过新验收，D0 未交付；没有已验证的真实 trial、官方 reward 或实测成本 |
+| 现有实现与基线 | D0 已交付/已审，未通过 | 候选 `01a044fe…` 的 R1–R8 待返工，已通过实现提交仍为无；没有真实 trial、官方 reward 或实测模型成本 |
 | 官方判分 | 已决定本地暂缓 | 最终私有评分交主办方；确定性检查优先、Gemini 按需辅助的集成仍待实现 |
 | GitHub 存储 | 私有仓库 | [xsw932187210-cell/chi-agent](https://github.com/xsw932187210-cell/chi-agent)，保留现有目录结构；代码仍是待验收快照，见 [存储与协作约定](docs/github-workflow.md) |
 | Kaggle 入场与材料 | 已接受规则；Writeup 待创建 | 已登录 Rules 页面显示接受规则和 Team 页签；Writeup、私有程序包和技术报告均未提交。最终截止为北京时间 2026-11-16 07:59 |
@@ -89,7 +89,7 @@
 
 ## Docker 开发与离线自测运行
 
-本项目开发、测试与检查均在 Docker 容器内完成：
+本项目开发、测试与检查均在 Docker 容器内完成。下列为候选交付的操作命令，默认 Compose socket 权限与就绪逻辑待按 R4 返工，尚不是已验收入口；本轮独立审核的无 socket 命令见 [审核报告](reviews/bootstrap-baseline-d0-review.md)。
 
 ```bash
 # 1. 构建开发镜像
