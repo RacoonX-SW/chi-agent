@@ -6,6 +6,8 @@
 
 ## 当前准备状态汇总（2026-10-25）
 
+后续交付采用 **`codex/<任务名>` 工作分支 → Codex 推送并创建 PR → 用户审核/决定合并 main**，代码、规格、学习和审核文档都遵守。主代理不直接开发或 push main，不自行 merge 或开启 auto-merge；详见 [分支与 GitHub 工作流](docs/github-workflow.md)。
+
 恢复前逐项核对见 [准备审计](docs/preparation-audit-2026-10-24.md)。规划基线 `c660e2699b8b972c9aa1d114a3e4d63510b8985e`；双 Luna 本轮起点 `35370ab…`、协作文档 `83f3a8b…`、代码候选 `b7f8941…` 分别记录。主代理对固定快照独立构建、复跑 80 项测试及 21 项补充检查，结论为 D0 离线代码验收通过；官方 Python 3.12/其他架构、OpenSpec CLI 与真实接入未验证，用户完整验收尚未记录。
 
 最新环境决定（2026-10-24）：**依赖安装、下载、测试和运行全部在 Docker 内完成。** 宿主机只保留已有 Docker Desktop、编辑器/Git 与源码，不再计划在 Mac 建立项目 `.venv` 或安装项目依赖。自有开发容器已用 Python 3.13.17/aarch64 进行离线检查；固定上游 `pyproject.toml` 要求 3.12+，官方任务 Dockerfile 使用 Python 3.12，目标运行兼容性尚未验证。此前报告的宿主机默认 3.9.6 不参与项目运行。详见 [Docker 工作流与交付边界](docs/docker-workflow.md) 和本轮审核；官方任务镜像/任务世界未运行。
@@ -28,7 +30,7 @@
 | 无评分执行入口 | 明确阻断未验证真实执行；干运行保留 | 依据 R1 明确阻断无 skip-judge 机制的 ungraded 真实执行，记录 unsupported 理由；保留干运行与离线模式 |
 | 现有实现与基线 | b7f8941 通过 D0 离线代码验收 | R1–R8 在当前报告范围内关闭；主代理独立 80/80 项目测试、21/21 补充方法通过，没有真实 trial、官方 reward 或实测模型成本 |
 | 官方判分 | 已决定本地暂缓 | 最终私有评分交主办方；确定性检查优先、Gemini 按需辅助的集成仍待实现 |
-| GitHub 存储 | 私有仓库 | [xsw932187210-cell/chi-agent](https://github.com/xsw932187210-cell/chi-agent)，保留现有目录结构；代码仍是待验收快照，见 [存储与协作约定](docs/github-workflow.md) |
+| GitHub 存储与合并 | 私有仓库，工作分支/PR 交付用户 | [xsw932187210-cell/chi-agent](https://github.com/xsw932187210-cell/chi-agent)，后续 Codex 推送 codex 分支、创建 PR，由用户审核合并 main；内部代码验收不等于合并授权 |
 | Kaggle 入场与材料 | 已接受规则；Writeup 待创建 | 已登录 Rules 页面显示接受规则和 Team 页签；Writeup、私有程序包和技术报告均未提交。最终截止为北京时间 2026-11-16 07:59 |
 
 当前 D0 无代码返工待办；可继续讲解本轮真实代码和开发协作。A 官方工具、B 模型工具往返、C 一次自主执行仍须由用户恢复对应范围，见 [交接包](openspec/changes/bootstrap-baseline/handoff.md)。后续业务策略与自动压缩根据真实基线再细化，不属于已完成的实现。
