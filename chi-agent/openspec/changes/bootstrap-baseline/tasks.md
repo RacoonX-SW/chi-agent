@@ -1,8 +1,10 @@
-状态：2026-10-21 仍在规划阶段，未恢复编码或付费评测。第 0 节只表示资料拆解完成，不代表候选实现或真实基线已验收。
+状态：2026-10-24 用户已仅恢复 D0 开发协作，由用户指挥 Gemini 实现与容器内自测，Codex 本次先保存规划基线。A/B/C、参赛模型 API 和官方判分仍暂停。第 0 节只表示资料拆解完成，不代表候选实现或真实基线已验收；本次准备不代勾实现方或审核方任务。
 
 最新取舍：本地官方评分暂缓，先做离线与无评分开发验证；缺 Anthropic 不阻塞全部开发。已核对的 cb CLI 未见直接跳过 judge 的开关，开发入口需实际验证。见 `docs/development-preparation-2026-10-21.md`。
 
 执行顺序以 [分段交接包](handoff.md) 为准，不按编号误把付费兼容性验证提前到离线修复之前。D0 先完成包装、配置和离线证据；A 验证实际环境/工具与入口；B 验证候选模型往返；C 才做一次任务执行。每段交付稳定候选，由 Codex 验收，未授权阶段不自动启动。
+
+2026-10-24 环境方式按用户要求改为 Docker 内开发；依赖安装、下载和测试均在容器执行，宿主机不配置项目环境。D0 可构建/启动开发容器，不启动官方任务世界。详见 [Docker 工作流](../../../docs/docker-workflow.md)。下列实施项均未完成。
 
 ## 0. Understand the first official task
 
@@ -16,7 +18,7 @@
 ## 1. Inspect and freeze the baseline
 
 - [ ] 1.1 Read project instructions and these artifacts; record repository state and actual executor identity.
-- [ ] 1.2 Check Python, uv and Docker availability without invoking a model; report missing dependencies.
+- [ ] 1.2 Check host Docker availability and container Python/uv/dependencies per mode without invoking a model; do not require host project package installation.
 - [ ] 1.3 Fetch the official source into an ignored directory and pin its actual commit; inspect that version's installation, task and CLI contracts.
 - [ ] 1.4 Record user-controlled prerequisites separately: registration, handbook approval and local credentials; do not claim they are complete without evidence.
 - [ ] 1.5 Verify the candidate provider/model/API/mode through the selected harness, including consecutive tool exchanges and required history fields; record the actual effective profile before the task attempt.
@@ -31,6 +33,8 @@
 - [ ] 2.6 Verify a bounded ungraded entry point against the fixed upstream; report unsupported paths without inventing CLI flags or patching the official judge.
 - [ ] 2.7 Report readiness per mode, retain ungraded traces and null reward, and identify simulator/API dependencies separately. Existing project.yaml and wrapper behavior require review for these distinctions.
 - [ ] 2.8 Enforce bounded calls/generation and pre-request budget checks; record unknown use and budget stops, prevent automatic whole-task reruns and start the measured attempt from a clean initial world.
+- [ ] 2.9 Provide the minimal development image, Compose entry points, dependency lock and controlled build context; run offline checks inside containers, persist source/results and keep secrets/restricted data out of the distributable image.
+- [ ] 2.10 At stage A, verify task-container creation from the containerized scheduler using the existing engine, actual mount source paths, network endpoints, artifact persistence and cleanup; retain the official runtime contract.
 
 ## 3. Verify and hand over
 
@@ -39,5 +43,6 @@
 - [ ] 3.3 Report measured duration and available usage/cost, failed stages and implications for the next change; identify unmeasured fields.
 - [ ] 3.4 Codex independently reviews the code and applicable offline checks; user inspects the demonstrated result.
 - [ ] 3.5 Deferred by user: run the original official verifier only if local grading is later requested with its prerequisites available; retain the verdict, scorecard and resource sources.
+- [ ] 3.6 Demonstrate the applicable stage's clean container startup without host Python/uv/Node dependencies; record image/interpreter/dependency identity and disclose unverified architecture/runtime paths without repeating a paid task attempt.
 
 Do not check 3.2 based on a dry run or fixture, or 3.5 based on ungraded execution. Do not mark Codex/user acceptance complete on their behalf. If access or the development entry point is unavailable, hand over completed work with the real-run prerequisite still open. Deferred grading stays explicit without blocking all other development.

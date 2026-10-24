@@ -1,5 +1,40 @@
 ## ADDED Requirements
 
+### Requirement: Containerized development and reproducible delivery
+
+The workflow SHALL install project dependencies, download resources and execute project checks inside containers, without requiring project Python/uv/Node packages on the host. Containerized development SHALL preserve the official task runtime contract and separate distributable code images from restricted data.
+
+#### Scenario: The host has Docker but no project runtime packages
+
+- **GIVEN** Docker is available on the host and the development image's inputs and dependencies are declared
+- **WHEN** D0 is resumed and the image is built for offline checks
+- **THEN** installation and checks execute inside the development container
+- **AND** host Python/uv/Node project package installation is not a prerequisite
+- **AND** no runtime model request or official task world is started by the offline check
+
+#### Scenario: A containerized scheduler starts an official task
+
+- **GIVEN** stage A or a later stage is authorized and the scheduler uses the existing Docker engine
+- **WHEN** it resolves task mounts and service endpoints
+- **THEN** source paths are verified from the engine's filesystem context and endpoints from the caller's network context
+- **AND** invalid or inaccessible paths stop execution before a paid task attempt
+- **AND** the fixed official task runtime and Agent/verifier resource boundary are preserved
+
+#### Scenario: A development or task container is recreated
+
+- **GIVEN** source code and retained evidence use declared persistent storage
+- **WHEN** a container is removed or recreated under the workflow
+- **THEN** the retained source and evidence remain accessible in their declared locations
+- **AND** the project environment is not silently replaced by a host environment or an obscuring source mount
+
+#### Scenario: A distributable image is prepared
+
+- **GIVEN** official runtime build inputs can include protected handbook content
+- **WHEN** the project's distributable code image is built or exported
+- **THEN** its build context and retained layers exclude credentials and restricted content
+- **AND** authorized runtime resources and their provisioning instructions are declared separately
+- **AND** clean startup uses recorded dependencies and image identity rather than undeclared development-container installations
+
 ### Requirement: Distinguish documented and observed task contracts
 
 The baseline report SHALL distinguish official static inputs and tool references from live MCP contracts, actual execution traces and official verdicts.

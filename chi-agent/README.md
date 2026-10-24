@@ -2,25 +2,29 @@
 
 长期协作要求：**边参赛，边学习 Agent 开发。** 新对话先读 [学习约定与进度](docs/learning-agreement.md)；每轮结合设计、实际代码/轨迹和小问题推进理解，不只交付代码。
 
+当前协作：**用户已仅恢复 `bootstrap-baseline/D0`，自行指挥 Gemini 写代码，Codex 负责规格、按提交差异独立审核、教学与 GitHub 存储。** Codex 不操作或调试 Antigravity；本次先核对并保存规划基线，交付稳定后由用户通知审核，不持续轮询。新对话先接上 [审核状态](reviews/REVIEW_STATE.md)，按需读相关规格与代码，历史记录不默认全量重读。流程见 [本地与 GitHub 协作](docs/github-workflow.md)。A/B/C、参赛模型 API 和官方判分仍暂停。
+
 ## 当前准备状态汇总（2026-10-24）
 
-最新逐项核对及实施顺序见 [开发前准备核对](docs/preparation-audit-2026-10-24.md)。本轮只做只读检查和文档整理，没有恢复编码或付费运行。
+恢复前逐项核对及实施顺序见 [开发前准备核对](docs/preparation-audit-2026-10-24.md)。本次 Codex 只核对规划差异与 Git 身份并保存本地规划提交；D0 实现和容器内自测由用户交给 Gemini，尚无新候选可审核。
 
-2026-10-24 执行器更新：用户确认前次受限的是 Antigravity 中的 Claude，并报告已有 Google AI Pro。当前优先方案改为 **Antigravity + Gemini 3.8 Flash-High 写代码，DeepSeek 备用**；Codex 继续规格、独立验收、教学与 push。优先使用套餐内额度，具体账号限制与实际接入待核实。下文早期“DeepSeek 实现”的描述是历史安排；参赛运行时模型候选、5 元预算及暂停状态保持原约定。
+最新环境决定（2026-10-24）：**依赖安装、下载、测试和运行全部在 Docker 内完成。** 宿主机只保留已有 Docker Desktop、编辑器/Git 与源码，不再计划在 Mac 建立项目 `.venv` 或安装项目依赖。自有开发容器首选 Python 3.13；固定上游 `pyproject.toml` 已核实要求 3.12+，官方任务 Dockerfile 使用 Python 3.12，分别验证实际兼容性。此前报告的宿主机默认 3.9.6 不参与项目运行。详见 [Docker 工作流与交付边界](docs/docker-workflow.md)；目前尚未构建或运行这些项目镜像。
 
-**规划材料和首份 D0 交接已具备，可以在用户恢复后开始离线修复；环境、接口与真实运行准备尚未完成。** 下表优先于后续按时间积累的旧状态，不能把“文档完成”写成“系统已可运行”。
+2026-10-24 执行器更新：用户确认前次受限的是 Antigravity 中的 Claude，并报告已有 Google AI Pro。当前优先方案改为 **Antigravity + Gemini 3.8 Flash-High 写代码，DeepSeek 备用**；Codex 继续规格、独立验收、教学与 GitHub 存储。优先使用套餐内额度，具体账号限制与实际接入待核实。下文早期“DeepSeek 实现”的描述是历史安排；参赛运行时模型候选和 5 元预算不变，D0 以本次恢复指令为准，后续阶段仍暂停。
+
+**规划材料和首份 D0 交接已具备，用户已恢复 D0 开发协作；环境、接口与真实运行准备尚未完成。** 下表优先于后续按时间积累的旧状态，不能把“文档完成”写成“系统已可运行”。
 
 | 准备项 | 状态 | 依据与边界 |
 | --- | --- | --- |
 | 竞赛方向与路线 | 已整理/已明确 | 竞赛优先，医院侧任务起步；后续仍需覆盖赛事其他领域 |
 | 手册访问和下载 | 已验证 | 2026-10-24 重新核对固定版本全量 1,292 文件字节数和 SHA-256，全部一致；公开规划子集 9 文件也全部一致 |
 | 一个官方任务的拆解 | 已完成静态分析 | 输入、公开工具、流程与评分边界已整理；实时 schema 未取得 |
-| 第一阶段 OpenSpec | 已成文 | proposal/design/spec/tasks/handoff 齐备；23 份 Markdown 本地链接检查无缺失，规格有 11 条 Requirement/25 个 Scenario；未运行 OpenSpec CLI |
-| 分工、学习与交接 | 约定/材料已具备 | Antigravity 2.26.0 界面已选 chi-agent/Local/Gemini 3.8 Flash High，当前有可用额度；DeepSeek 备用。新模型读写、终端及交付闭环尚未实测，当前未派发 |
+| 第一阶段 OpenSpec | 已成文 | proposal/design/spec/tasks/handoff 齐备，已补充 Docker 内开发和镜像交付场景；引用与结构做静态检查，尚未运行 OpenSpec CLI |
+| 分工、学习与交接 | D0 协作已恢复；待新候选 | 用户自行操作 Antigravity/Gemini；Codex 本次先保存规划基线，后续按稳定提交与报告独立审核。D0 实现与容器内自测尚未收到交付 |
 | 首轮参赛运行预算 | 已确认规划 | 模型工具接入验证＋一次任务试跑合计 5 元；写代码另行记账，当前未恢复付费运行 |
 | 模型与 runner | 候选待实测 | `deepseek-flash`＋官方参考 runner，Chat Completions/思考 high 为候选；协议、字段与实际限额待验证 |
-| 完整数据与环境 | 未就绪 | 本轮确认 `vendor/chi-bench` 和 `data/.chi-bench-version` 均不存在；仅有规划用任务子集，Docker daemon 未验证 |
-| 本机运行工具 | 部分就绪 | Docker 服务只读检查通过：29.5.3/linux/aarch64，CHI 镜像未构建；默认 Python 3.9.6，独立下载环境有 Python 3.13.5；uv/OpenSpec 在 PATH 未找到，项目依赖清单/环境待建立 |
+| 完整数据与环境 | 未就绪 | 本轮确认 `vendor/chi-bench` 和 `data/.chi-bench-version` 均不存在；仅有规划用任务子集。Docker 服务已核实可用，CHI 镜像与任务环境尚未建立 |
+| Docker 开发环境 | 引擎就绪；项目镜像待建立 | Docker 服务只读检查通过：29.5.3/linux/aarch64；开发/任务镜像与容器内依赖、受控构建上下文和存储挂载仍待实施，不要求宿主机安装 Python/uv/OpenSpec |
 | 无评分执行入口 | 待验证 | 有设计方向，尚无实际可运行证据；不提供虚构的跳过 judge 开关 |
 | 现有实现与基线 | 未验收/未实测 | 旧候选及返工未通过新验收，D0 未交付；没有已验证的真实 trial、官方 reward 或实测成本 |
 | 官方判分 | 已决定本地暂缓 | 最终私有评分交主办方；确定性检查优先、Gemini 按需辅助的集成仍待实现 |
@@ -68,12 +72,14 @@
 1. 已完成：本机登录、手册全量下载与核对、首批 3 个公开任务输入说明的阅读，以及头痛新转诊任务的静态工具/执行/评分拆解。
 2. 已确认：竞赛优先，医院侧作为起步调试任务；不据此缩小最终比赛的评分范围。
 3. 接下来确认：候选模型、harness、开发入口和实际生效限制；首轮预算已选 5 元。恢复后补全环境并取得无评分的单任务执行证据，本地官方评分暂缓。工程改进依据实际错误与轨迹，竞赛通过率保持未测。具体参数和返回值仍需实际 MCP 契约核对，不从静态文档猜测。
-4. 第一份编码任务明确为 D0 离线修复，范围与验收见交接包；用户在新对话恢复后再交给 DeepSeek。后续 A/B/C 按恢复范围和阶段验收推进。旧 bootstrap 实现仍是待修候选，不能代替整个项目的业务能力。
+4. 本次已仅恢复 D0 离线修复，范围与验收见交接包；规划基线保存后由用户自行交给 Gemini 实现，DeepSeek 备用。稳定交付后通知 Codex 审核，A/B/C 仍暂停。旧 bootstrap 实现仍是待修候选，不能代替整个项目的业务能力。
 
 如需正式参赛，另核对 [Kaggle 赛事页](https://www.kaggle.com/competitions/chi-bench) 当前规则及报名状态。手册及其衍生输出的披露范围按实际授权确认，下载完成不代表可以上传 GitHub 或转发给第三方。
 
 ## 协作入口
 
+- [审核接续状态](reviews/REVIEW_STATE.md)
+- [本地与 GitHub 协作流程](docs/github-workflow.md)
 - [学习约定与当前进度](docs/learning-agreement.md)
 - [共同协作约定](../COLLABORATION.md)
 - [执行器交接指令](openspec/changes/bootstrap-baseline/handoff.md)
