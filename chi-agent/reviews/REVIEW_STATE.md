@@ -1,41 +1,34 @@
 # 审核接续状态
 
-更新：2026-10-25。此文件只保存接续所需的最小审核状态，详细证据放对应审核报告；它不是实现通过证明。
+更新：2026-10-25。只保存接续所需状态；实现通过范围以对应报告为准，存储提交不能代替验收。
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | `bootstrap-baseline/D0` 第二份候选已独立复审，未通过；R1/R4/R6/R7/R8 关闭，R2/R3/R5 已转由两个 Luna High 子代理接续；新实现须另行固定候选并复验。A/B/C、参赛模型 API 和官方判分仍暂停 |
-| 协作 | 主代理协调两个 `gpt-6-luna` / `high` 子代理，定规格、控制共享文件写入、独立审核、教学与存储；不操作 Antigravity，用户无需转交任务 |
-| 上次独立审核候选 | `c4b410a954bde9dbef64671a1c8079d90b68b79e`；结论需返工，见 [D0 复审](bootstrap-baseline-d0-review.md)；执行器为 Antigravity + Gemini 3.8 Flash (High) |
-| 上次通过的实现提交 | 无；尚未有通过本阶段独立验收的候选 |
-| 存储与验收身份 | 复审开始时 main 为候选，origin/main 为首审文档提交 `ff2e23d72fe1ae37b41872fbae655a1498c592e0`；本轮文档存储提交与 push 结果见交接回复，不能将备份 HEAD 当成已通过实现 |
-| D0 基线与既有改动 | 规划基线 `c660e2699b8b972c9aa1d114a3e4d63510b8985e`；本候选直接基于 `ff2e23d72fe1ae37b41872fbae655a1498c592e0`。起始仅有此前 Codex 学习笔记未提交，已保留并存起始 patch；本轮只更新审核/学习/项目状态文档 |
-| 下一次审核 | 主代理收集两个子代理的短交付、停止写入并固定候选；比较本次已审 `c4b410a…` 与新候选，重点 R2/R3/R5，核对累计目标和受影响回归；有证据的返工交回原子代理，无后台轮询 |
-| 当前协作开工点 | `35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9` / main，开始切换时工作区干净；先改协作文档，两个子代理并行分析、串行改共享文件，详见 [双 Luna 工作流](../docs/luna-subagent-workflow.md) |
-| 当前证据 | 独立无缓存构建成功，原测试 51/51 通过；18 个补充方法中 10 个通过、8 个失败（含子例共 9 条失败断言，0 errors）；11 个锁定依赖及 uv pip check 通过，真实 offline CLI 退出 0。运行检查在无网络/无 socket 的 Docker 容器内 |
-| 未验证项 | OpenSpec CLI、官方 Python 3.12/其他架构、真实超时清理与 A/B/C；没有因此运行模型或 judge |
-| 真实运行 | 无真实 trial、官方 reward、实测模型费用；原有离线测试数量不能替代新候选验收 |
-
-未决重点：
-
-- R2：已有未知用量标签和参数转发，但成本超额或非有限仍可被标为 within_budget，缺累计金额、下一请求预留和有效停止决策。
-- R3：明确相反的 config.json 仍可被目录名覆盖；单下划线前缀有身份碰撞；巨大判分整数可抛异常并留下 started。
-- R5：所选领域/任务与 provider 凭据未绑定；非空手册文件不足以证明资料版本完整；ungraded 就绪结论与生产阻断不一致。
-- R1/R4/R6/R7/R8 在本次报告注明的离线范围内关闭；真实 harness 限额是否生效仍留待 B，不用参数转发冒充实测。
-- 本机原始合成证据保存在忽略目录 `.coordination/d0-review-c4b410a/`，首审证据 `.coordination/d0-review-01a044fe/` 保留；均不随 GitHub 上传，候选实现未被 Codex 修改。
-- A 官方工具、B 模型工具往返、C 一次自主任务尚未验证，只恢复 D0 不自动推进后三项。
+| 当前任务 | bootstrap-baseline/D0 已通过当前 Python 3.13/aarch64 开发目标下的离线代码验收；R1–R8 在报告注明范围内关闭，当前无 D0 代码返工；用户完整验收尚未记录 |
+| 协作 | 主代理协调两个 gpt-6-luna / high 子代理，控制共享文件写入、独立审核、教学和 Git 存储；无需用户转交 Gemini，不操作 Antigravity，不后台轮询 |
+| 上次独立审核候选 | `b7f894130df93ded69496576b83e6dcdcab7e56b`，见 [D0 独立验收](bootstrap-baseline-d0-review.md) |
+| 上次通过的实现提交 | `b7f894130df93ded69496576b83e6dcdcab7e56b`，仅 D0 离线代码验收，不能扩大为真实 Agent/官方任务或用户验收已通过 |
+| 存储与验收身份 | main；实现候选之后的审核/学习文档单独提交和备份，结果见交接回复，后续存储 HEAD 不自动成为新的实现验收身份 |
+| 基线 | 初始规划 `c660e2699b8b972c9aa1d114a3e4d63510b8985e`；本轮起点 `35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9`，起始干净；协作约定独立提交 `83f3a8b425276cd7e987aeeb77c6a194bb79ec87` 为候选直接父提交 |
+| 实现交接 | Luna 一修 R2/R3，Luna 二先分析后修 R5；共享文件串行交接，两个子代理停止写入后固定候选，未创建下级代理 |
+| 当前证据 | 固定 git archive 快照，独立 Docker 构建成功；80/80 项目测试和 21/21 补充方法通过；锁定版本/uv pip check/真实 offline CLI 通过，无网络/无 socket/无真实凭据 |
+| 下一步 | 当前阶段无代码待办；先回应用户的学习或取舍，只有用户明确恢复相应范围才启动 A/B/C；若出现新 D0 候选，比较 b7f8941 与新候选并核对累计目标及受影响回归 |
+| 未验证项 | OpenSpec CLI、官方 Python 3.12/其他架构、真实超时清理、任务世界/实时 MCP、模型连续往返和判分认证；A/B/C、参赛模型 API 和官方判分仍暂停 |
+| 真实运行 | 无真实 trial、官方 reward、实测模型用量/费用；当前真实入口因缺核算依据仍阻断，ungraded 另明确 unsupported |
 
 接续材料：
 
+- [双 Luna 工作流与用法](../docs/luna-subagent-workflow.md)
+- [D0 接续 Prompt](../docs/d0-handoff-prompts.md)
 - [当前交接规格](../openspec/changes/bootstrap-baseline/handoff.md)
-- [历史独立验收](bootstrap-baseline-2026-10-20.md)
 - [本地与 GitHub 工作流](../docs/github-workflow.md)
 
-每轮审核后覆盖表中当前身份，并追加一行简短索引：日期、阶段、基线 SHA、候选 SHA、结论、报告路径。分别维护“已审”和“已通过”；缺少测试或用户验收时明确标记。候选仍有未提交差异时，附 patch/文件摘要身份，不能让 SHA 代表未包含的代码。
+每轮审核记录“已审”和“已通过”的实际身份；当前无同一候选未提交的实现差异。普通问答不默认创建子代理，不因 D0 通过自动启用后续阶段、付费调用或后台唤醒。
 
 | 日期 | 阶段 | 基线 SHA | 已审候选 SHA | 结论 | 报告 |
 | --- | --- | --- | --- | --- | --- |
-| 2026-10-24 | D0 | `c660e2699b8b972c9aa1d114a3e4d63510b8985e` | `01a044fe237aff7ddcafc3332e9444d443c41999` | 未通过，R1–R8 待返工；已通过提交仍为无 | [首审固定报告](https://github.com/xsw932187210-cell/chi-agent/blob/ff2e23d72fe1ae37b41872fbae655a1498c592e0/chi-agent/reviews/bootstrap-baseline-d0-review.md) |
-| 2026-10-25 | D0 复审 | `ff2e23d72fe1ae37b41872fbae655a1498c592e0` | `c4b410a954bde9dbef64671a1c8079d90b68b79e` | 未通过；关闭 R1/R4/R6/R7/R8，R2/R3/R5 待返工；已通过提交仍为无 | [独立复审](bootstrap-baseline-d0-review.md) |
+| 2026-10-24 | D0 首审 | `c660e2699b8b972c9aa1d114a3e4d63510b8985e` | `01a044fe237aff7ddcafc3332e9444d443c41999` | 未通过，R1–R8 待返工 | [首审固定报告](https://github.com/xsw932187210-cell/chi-agent/blob/ff2e23d72fe1ae37b41872fbae655a1498c592e0/chi-agent/reviews/bootstrap-baseline-d0-review.md) |
+| 2026-10-25 | D0 复审 | `ff2e23d72fe1ae37b41872fbae655a1498c592e0` | `c4b410a954bde9dbef64671a1c8079d90b68b79e` | 未通过，关闭五项，剩 R2/R3/R5 | [复审固定报告](https://github.com/xsw932187210-cell/chi-agent/blob/35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9/chi-agent/reviews/bootstrap-baseline-d0-review.md) |
+| 2026-10-25 | D0 双 Luna 交付验收 | `83f3a8b425276cd7e987aeeb77c6a194bb79ec87` | `b7f894130df93ded69496576b83e6dcdcab7e56b` | 当前开发目标下离线代码验收通过；无真实任务/官方判分/用户完整验收 | [本轮独立验收](bootstrap-baseline-d0-review.md) |
 
-历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 的未通过记录保留在原报告。沿用 `chi-agent/reviews/bootstrap-baseline-d0-handover.md`，由主代理汇总两个 Luna 子代理的实际交付；新候选须包含代码、报告与稳定提交身份。不把单纯协作文档提交或代理已派发当作新的实现验收。
+历史未通过候选及原始合成证据保留；原始日志在忽略目录，不上传 GitHub。沿用一份 D0 交付报告，区分子代理自测与主代理独立证据。历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 仍不是已通过候选。

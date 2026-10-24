@@ -1,4 +1,4 @@
-状态更新（2026-10-25）：当前仅恢复 D0，用户已改为 Codex 主代理协调两个 Luna High 子代理实现及 Docker 自测，主代理独立审核与教学。上次已审 c4b410a 未通过，接续 R2/R3/R5；共享文件串行写入。A/B/C、参赛模型 API 和官方判分仍暂停。首个真实基线选用 `pa_t018_t018_o001_p01_new_referral_provider`，模型与 harness 尚未冻结；首轮接入验证与一次试跑合计按 5 元人民币规划，写代码费用单独记录。参见 [竞赛路线](../../competition-route.md)、[双 Luna 工作流](../../../docs/luna-subagent-workflow.md) 和 [接入与预算草案](../../../docs/development-preparation-2026-10-21.md)。
+状态更新（2026-10-25）：双 Luna 候选 b7f8941 已通过当前 Python 3.13/aarch64 开发目标下的 D0 离线代码验收，R1–R8 在报告范围内关闭，真实执行仍因缺核算依据阻断。主代理协调两个 Luna High 子代理实现/Docker 自测，再独立审核与教学；共享文件串行写入。A/B/C、参赛模型 API 和官方判分仍暂停。首个真实基线选用 `pa_t018_t018_o001_p01_new_referral_provider`，模型与 harness 尚未冻结；首轮接入验证与一次试跑合计按 5 元人民币规划，写代码费用单独记录。参见 [竞赛路线](../../competition-route.md)、[双 Luna 工作流](../../../docs/luna-subagent-workflow.md) 和 [接入与预算草案](../../../docs/development-preparation-2026-10-21.md)。
 
 同日最新取舍：用户暂缓本地官方判分，先建立环境与无评分的单任务真实执行证据，最终私有评分交主办方。该安排覆盖下文最初的先评分顺序；本变更分别报告离线、真实开发执行与正式判分，不以缺 Anthropic 阻塞全部开发。见 [开发准备](../../../docs/development-preparation-2026-10-21.md)。
 

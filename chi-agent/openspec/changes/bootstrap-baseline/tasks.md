@@ -1,4 +1,4 @@
-状态：2026-10-25 当前仅恢复 D0，改由 Codex 主代理协调两个 Luna High 子代理实现与容器自测，主代理独立复验。上次已审 c4b410a 未通过，当前接续 R2/R3/R5；既有勾选不得替代审核证据，相关完成声明待实际修复/复验更新。A/B/C、参赛模型 API 和官方判分仍暂停；不代勾未执行或用户验收任务。
+状态：2026-10-25 双 Luna 候选 b7f8941 已通过当前 Python 3.13/aarch64 开发目标下的 D0 离线代码验收：80 项项目测试与 21 项独立补充检查通过，R1–R8 在报告范围内关闭。主代理协调两个 Luna High 子代理实现与 Docker 自测后独立复验。A/B/C、参赛模型 API 和官方判分仍暂停；OpenSpec CLI/官方 Python 3.12/其他架构未验证，用户完整验收未记录，不代勾未执行项。
 
 最新取舍：本地官方评分暂缓，先做离线与无评分开发验证；缺 Anthropic 不阻塞全部开发。已核对的 cb CLI 未见直接跳过 judge 的开关，开发入口需实际验证。见 `docs/development-preparation-2026-10-21.md`。
 
@@ -41,8 +41,8 @@
 - [x] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.
 - [ ] 3.2 Once implementation is resumed and prerequisites/budget are set, verify live tools and one real ungraded Agent execution; retain local evidence and do not claim official success.
 - [ ] 3.3 Report measured duration and available usage/cost, failed stages and implications for the next change; identify unmeasured fields.
-- [ ] 3.4 Codex independently reviews the code and applicable offline checks; user inspects the demonstrated result.
+- [ ] 3.4 Codex independently reviews the code and applicable offline checks; user inspects the demonstrated result. D0 code review passed at b7f8941; the combined checkbox remains open because separate full user acceptance has not been recorded.
 - [ ] 3.5 Deferred by user: run the original official verifier only if local grading is later requested with its prerequisites available; retain the verdict, scorecard and resource sources.
-- [ ] 3.6 Demonstrate the applicable stage's clean container startup without host Python/uv/Node dependencies; record image/interpreter/dependency identity and disclose unverified architecture/runtime paths without repeating a paid task attempt.
+- [x] 3.6 Demonstrate the D0 development target's clean container startup without host project dependencies; record Python 3.13.17/aarch64, uv/lock and image identity. Official Python 3.12, other architectures and real task runtime remain unverified; no paid task was repeated.
 
 Do not check 3.2 based on a dry run or fixture, or 3.5 based on ungraded execution. Do not mark Codex/user acceptance complete on their behalf. If access or the development entry point is unavailable, hand over completed work with the real-run prerequisite still open. Deferred grading stays explicit without blocking all other development.

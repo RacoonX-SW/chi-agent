@@ -26,7 +26,7 @@
 - 审核优先比较稳定的基线/候选提交，读取差异、相关入口/调用者/配置与必要测试；不默认重读整个项目或执行器对话。首次接手、范围扩大或接口/依赖变化时按实际影响补读。记录“上次已审核”和“上次已通过”的提交，不能因摘要或 commit/push 就认定实现正确；见 `chi-agent/reviews/REVIEW_STATE.md`。
 - 用户最新要求 Docker 内开发、调试与交付：项目依赖安装、下载、测试、运行均在容器中进行，宿主机保留 Docker Desktop、编辑器/Git 与源码。不要把宿主机缺 uv/OpenSpec/PyYAML 当成必须在 Mac 安装的缺口。自有开发容器首选 Python 3.13；固定官方任务镜像实际为 Python 3.12，保持其兼容性并分别验证。详见 `chi-agent/docs/docker-workflow.md`；实现由两个 Luna High 子代理承担，主代理独立检查。
 
-- 当前只恢复 `bootstrap-baseline/D0`：上次已审实现 `c4b410a954bde9dbef64671a1c8079d90b68b79e` 未通过，剩 R2/R3/R5；文档基线 `35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9`。两个子代理接续剩余修复，不重做已关闭项，受影响行为须回归。A/B/C、参赛模型 API 和官方判分仍暂停。写代码的 Luna 与参赛 Agent 的运行时模型分开，5 元参赛运行预算不变。
+- 当前只恢复 `bootstrap-baseline/D0`；双 Luna 实现候选 `b7f894130df93ded69496576b83e6dcdcab7e56b` 已通过当前 Python 3.13/aarch64 开发目标下的离线代码验收（80 项项目测试、21 项独立补充检查），R1–R8 在报告范围内关闭，当前无 D0 代码返工。OpenSpec CLI、官方 Python 3.12/其他架构及真实接入未验证；真实执行因缺核算依据仍阻断。A/B/C、参赛模型 API 和官方判分仍暂停，用户完整验收未单独记录。写代码的 Luna 与参赛 Agent 的运行时模型分开，5 元参赛运行预算不变。
 - 准备审计见 `chi-agent/docs/preparation-audit-2026-10-24.md`；后续 D0 复审已验证 Python 3.13/aarch64 开发镜像、依赖锁和离线检查，但完整数据/官方源码 checkout 与真实接入仍缺。Kaggle 已接受规则，Writeup 尚未创建；最终材料截止为北京时间 2026-11-16 07:59。
 - 已完成一个官方任务的静态拆解；尚未运行真实 trial，实时 MCP schema、官方 reward、耗时和成本仍未测。
 - 用户当前不为本地判分开通 Anthropic，最终私有评分交主办方。先规划离线、工具接入与无评分的真实开发执行；官方 reward 保持未知，部分 Claude 模拟对话的本地验证也需单独记录缺口。见 chi-agent/docs/development-preparation-2026-10-21.md。

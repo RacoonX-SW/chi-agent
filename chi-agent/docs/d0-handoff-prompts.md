@@ -2,6 +2,8 @@
 
 更新：2026-10-25。当前由 Codex 主代理协调两个 Luna High 子代理；替代原先用户把 Prompt 交给 Gemini、再转交审核意见的流程。旧模板保存在 [35370ab 的历史版本](https://github.com/xsw932187210-cell/chi-agent/blob/35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9/chi-agent/docs/d0-handoff-prompts.md)，不再作为当前派发指令。
 
+当前 b7f8941 已通过 D0 离线代码验收，暂无本阶段代码返工。复制模板时先读最新 REVIEW_STATE；查无当前阶段待办就报告状态，不重复修复，也不自动进入 A/B/C。
+
 ## 给当前或新 Codex 对话
 
 ```text
@@ -20,7 +22,8 @@ Kaggle，项目位于 chi-agent/；保留既有差异，不全量暂存、不 re
 
 由你给两个 Luna High 子代理精简任务包，明确目标、必读材料、文件所有权、
 验收行为、Docker 证据位置和停止条件；不要继续创建下级代理。
-共享文件串行写入，可以并行只读分析。本次未决 R2/R3/R5 的分工：
+共享文件串行写入，可以并行只读分析。本轮曾用的 R2/R3/R5 分工如下；
+实际只处理 REVIEW_STATE 仍未关闭的事项，无本阶段待办时先报告状态：
 1. 子代理一先修预算与判分解析，完成自测后停止写入并交接。
 2. 子代理二先分析门禁，收到你的交接后修所选任务/provider/资料/模式门禁。
 你可同时更新自己独占的规格/协作文档，不与子代理改同一文件。
@@ -48,7 +51,7 @@ A/B/C、参赛模型 API、真实 trial 和官方判分继续暂停。
 
 ## 主代理怎样给子代理任务
 
-任务包的内容和分工见 [双 Luna 工作流](luna-subagent-workflow.md)。当前技术验收以 [D0 复审](../reviews/bootstrap-baseline-d0-review.md) 的未决问题及实际 OpenSpec 为准；已关闭项只作受影响回归，不重新实现。
+任务包的内容和分工见 [双 Luna 工作流](luna-subagent-workflow.md)。技术状态以最新 REVIEW_STATE、[D0 验收](../reviews/bootstrap-baseline-d0-review.md) 及实际 OpenSpec 为准；当前 D0 无代码未决项，已关闭项只作新变更影响的回归，不重新实现。
 
 派发设置分为两件事：`gpt-6-luna` 是模型，`high` 是推理强度。主代理在实际派发时显式设置；写进 Prompt 或 AGENTS.md 是持续约定，不能冒充已启动的运行证据。当前会话支持直接派发，无须修改用户全局配置或新增 API Key。
 
