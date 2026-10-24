@@ -27,6 +27,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from d0_gate_policy import evaluate_gate
+from run_baseline import evaluate_budget
+
 # ---------------------------------------------------------------------------
 # Constants — pinned upstream commit matches project.yaml
 # ---------------------------------------------------------------------------
@@ -216,8 +219,8 @@ def check_handbook(env: dict[str, str] | None = None) -> dict:
     granted_flag = (env.get("HF_HANDBOOK_ACCESS_GRANTED") or "").strip() == "1"
 
     if on_disk:
-        detail = f"Handbook verified on disk at {HANDBOOK_DIR} (SKILL.md present)"
-        note = "Local handbook files present and verified."
+        detail = f"Handbook SKILL.md is present at {HANDBOOK_DIR}; version and inventory are checked by the shared real-mode gate."
+        note = "File presence alone does not verify the pinned revision or full handbook inventory."
         fix = None
     elif granted_flag:
         detail = (
@@ -275,13 +278,22 @@ def check_credentials(env: dict[str, str] | None = None) -> dict[str, dict]:
 # Mode Evaluation
 # ---------------------------------------------------------------------------
 
-def evaluate_modes(env: dict[str, str] | None = None) -> dict:
+def evaluate_modes(
+    env: dict[str, str] | None = None,
+    *,
+    domain: str | None = None,
+    task_name: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
+    include_real_modes: bool = True,
+    include_environment_modes: bool = True,
+) -> dict:
     """
     Evaluate readiness for distinct modes:
       - offline: python, git, uv (does NOT require docker socket, keys, or dataset)
       - tools: offline + docker daemon + vendor checkout
-      - ungraded: tools + task dataset + handbook on disk + at least 1 runner credential
-      - scored: ungraded + judge credential (ANTHROPIC_API_KEY)
+      - ungraded: selected task/provider/handbook checks; fixed ungraded entry remains unsupported
+      - scored: selected task/provider/handbook checks plus configured judge auth and budget
     """
     if env is None:
         env = os.environ  # type: ignore[assignment]
@@ -289,11 +301,32 @@ def evaluate_modes(env: dict[str, str] | None = None) -> dict:
     py_chk = check_python()
     uv_chk = check_uv()
     git_chk = check_git()
-    docker_chk = check_docker()
-    vendor_chk = check_vendor()
-    data_chk = check_dataset()
-    handbook_chk = check_handbook(env)
+    if include_environment_modes:
+        docker_chk = check_docker()
+        vendor_chk = check_vendor()
+    else:
+        docker_chk = {"check": "docker", "category": "environment", "ok": False, "detail": "Environment checks not requested", "fix": None}
+        vendor_chk = {"check": "upstream_vendor", "category": "upstream", "ok": False, "detail": "Environment checks not requested", "fix": None}
     creds = check_credentials(env)
+    shared_args = {
+        "domain": domain,
+        "task_name": task_name,
+        "model": model,
+        "provider": provider,
+        "env": env,
+        "data_dir": DATA_DIR,
+        "handbook_dir": HANDBOOK_DIR,
+        "project_config_path": PROJECT_ROOT / "project.yaml",
+        "source_manifest_path": DATA_DIR / "source-downloads.json",
+    }
+    if include_real_modes:
+        ungraded_gate = evaluate_gate(mode="ungraded", **shared_args)
+        scored_gate = evaluate_gate(mode="scored", **shared_args)
+        budget_status, budget_reason = evaluate_budget(5.0, 30, 8192)
+    else:
+        ungraded_gate = {"ready": False, "failures": ["Real-mode gate not requested"], "evidence": {}}
+        scored_gate = {"ready": False, "failures": ["Real-mode gate not requested"], "evidence": {}}
+        budget_status, budget_reason = "not_evaluated", "Real-mode gate not requested"
 
     # Mode 1: Offline checks (container, unit tests, config validation)
     # R4: Does NOT require docker daemon/socket, vendor checkout, or API keys.
@@ -303,49 +336,73 @@ def evaluate_modes(env: dict[str, str] | None = None) -> dict:
 
     # Mode 2: Tools integration
     tools_failures = []
-    if not docker_chk["ok"]:
-        tools_failures.append(docker_chk["detail"])
-    if not vendor_chk["ok"]:
-        tools_failures.append(vendor_chk["detail"])
+    if not include_environment_modes:
+        tools_failures.append("Environment checks not requested")
+    else:
+        if not docker_chk["ok"]:
+            tools_failures.append(docker_chk["detail"])
+        if not vendor_chk["ok"]:
+            tools_failures.append(vendor_chk["detail"])
     tools_ready = len(tools_failures) == 0
 
     # Mode 3: Ungraded execution (runs task with candidate model, no official judge)
-    # R5: Requires docker daemon, upstream vendor checkout, task dataset, handbook on disk,
-    # and at least one candidate runner key.
-    runner_key_present = any(creds[var]["ok"] for var in RUNNER_ENV_VARS)
+    # R5: real-mode selection and evidence come from the same pure gate used by
+    # run_baseline. Offline remains independent of these local/data/model checks.
     ungraded_failures = []
-    if not docker_chk["ok"]:
-        ungraded_failures.append("Docker daemon must be reachable for containerized execution.")
-    if not vendor_chk["ok"]:
-        ungraded_failures.append(vendor_chk["detail"])
-    if not data_chk["ok"]:
-        ungraded_failures.append(data_chk["detail"])
-    if not handbook_chk["ok"]:
-        ungraded_failures.append(handbook_chk["detail"])
-    if not runner_key_present:
-        ungraded_failures.append(
-            f"No candidate runner API key found. Set at least one of: {', '.join(RUNNER_ENV_VARS)}"
-        )
-    ungraded_ready = len(ungraded_failures) == 0
+    if include_environment_modes:
+        if not docker_chk["ok"]:
+            ungraded_failures.append("Docker daemon must be reachable for containerized execution.")
+        if not vendor_chk["ok"]:
+            ungraded_failures.append(vendor_chk["detail"])
+    else:
+        ungraded_failures.append("Environment checks not requested")
+    ungraded_failures.extend(ungraded_gate["failures"])
+    ungraded_local_ready = len(ungraded_failures) == 0
+    if include_real_modes and budget_status != "within_budget":
+        ungraded_failures.append(f"Budget gate: {budget_reason}")
+    ungraded_ready = ungraded_local_ready and budget_status == "within_budget"
 
-    # Mode 4: Scored execution (requires Anthropic judge key)
-    scored_failures = list(ungraded_failures)
-    anthropic_ok = creds["ANTHROPIC_API_KEY"]["ok"]
-    if not anthropic_ok:
-        scored_failures.append(
-            "ANTHROPIC_API_KEY is not set — required for the official Claude judge."
-        )
-    scored_ready = ungraded_ready and anthropic_ok
+    # Mode 4: Scored mode has a separate support/auth path; do not inherit the
+    # ungraded unsupported-entrypoint result.
+    scored_failures = []
+    if include_environment_modes:
+        if not docker_chk["ok"]:
+            scored_failures.append("Docker daemon must be reachable for containerized execution.")
+        if not vendor_chk["ok"]:
+            scored_failures.append(vendor_chk["detail"])
+    else:
+        scored_failures.append("Environment checks not requested")
+    scored_failures.extend(scored_gate["failures"])
+    scored_local_ready = len(scored_failures) == 0
+    if include_real_modes and budget_status != "within_budget":
+        scored_failures.append(f"Budget gate: {budget_reason}")
+    scored_ready = scored_local_ready and budget_status == "within_budget"
 
     all_checks = [
         py_chk,
         uv_chk,
         git_chk,
-        docker_chk,
-        vendor_chk,
-        data_chk,
-        handbook_chk,
     ] + list(creds.values())
+    if include_environment_modes:
+        all_checks.extend([docker_chk, vendor_chk])
+    for mode_name, gate in (("ungraded", ungraded_gate), ("scored", scored_gate)):
+        all_checks.append({
+            "check": f"selection_gate:{mode_name}",
+            "category": "selection",
+            "ok": gate["ready"],
+            "detail": "; ".join(gate["failures"]) if gate["failures"] else "Selection and local evidence checks passed",
+            "evidence": gate["evidence"],
+            "fix": None,
+        })
+    if include_real_modes:
+        all_checks.append({
+            "check": "budget_preflight",
+            "category": "budget",
+            "ok": budget_status == "within_budget",
+            "detail": budget_reason,
+            "status": budget_status,
+            "fix": None,
+        })
 
     return {
         "offline": {
@@ -360,13 +417,15 @@ def evaluate_modes(env: dict[str, str] | None = None) -> dict:
         },
         "ungraded": {
             "ready": ungraded_ready,
+            "local_configuration_ready": ungraded_local_ready,
             "failures": ungraded_failures,
-            "required_checks": ["docker", "upstream_vendor", "task_dataset", "handbook_access", "runner_api_key"],
+            "required_checks": ["docker", "upstream_vendor", "domain", "task_name", "model_provider", "task_files", "versioned_handbook", "mode_support"],
         },
         "scored": {
             "ready": scored_ready,
+            "local_configuration_ready": scored_local_ready,
             "failures": scored_failures,
-            "required_checks": ["docker", "upstream_vendor", "task_dataset", "handbook_access", "runner_api_key", "env:ANTHROPIC_API_KEY"],
+            "required_checks": ["docker", "upstream_vendor", "domain", "task_name", "model_provider", "task_files", "versioned_handbook", "judge_auth"],
         },
         "all_checks": all_checks,
     }
@@ -386,15 +445,27 @@ def main() -> None:
         default=str(PROJECT_ROOT / ".env"),
         help="Path to .env file to load credentials from",
     )
+    parser.add_argument("--domain", choices=["pa_provider", "pa_um", "cm"], help="Selected real-mode task domain")
+    parser.add_argument("--task-name", help="Selected task directory name for real-mode readiness")
+    parser.add_argument("--model", help="Selected runner model id, including a known provider prefix")
+    parser.add_argument("--provider", help="Optional provider assertion; must match the model prefix")
     args = parser.parse_args()
 
     # Load env file and merge with process env
     file_env = load_env_file(args.env_file)
     effective_env = {**os.environ, **file_env}
-
-    report = evaluate_modes(effective_env)
-
     target_mode = args.mode
+
+    report = evaluate_modes(
+        effective_env,
+        domain=args.domain,
+        task_name=args.task_name,
+        model=args.model,
+        provider=args.provider,
+        include_real_modes=target_mode != "offline",
+        include_environment_modes=target_mode != "offline",
+    )
+
     if target_mode == "all":
         is_ready = report["offline"]["ready"]
     else:
@@ -405,7 +476,7 @@ def main() -> None:
             "mode": target_mode,
             "ready": is_ready,
             "modes": {
-                k: {"ready": v["ready"], "failures": v["failures"]}
+                k: {key: v[key] for key in ("ready", "local_configuration_ready", "failures") if key in v}
                 for k, v in report.items()
                 if k != "all_checks"
             },

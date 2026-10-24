@@ -59,8 +59,11 @@ import subprocess
 import sys
 import time
 import uuid
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 from pathlib import Path
+
+from d0_gate_policy import evaluate_gate
 
 # ---------------------------------------------------------------------------
 # Constants — must match check_readiness.py and project.yaml
@@ -85,10 +88,6 @@ JUDGE_ENV_VARS = ["ANTHROPIC_API_KEY"]
 # Slug-safe pattern: lowercase letters, digits, '-', '_'
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-_]*$")
 
-# Minimum budget reservation required to conservatively attempt a single request (CNY)
-MIN_SINGLE_REQUEST_RESERVATION_CNY = 0.001
-
-
 # ---------------------------------------------------------------------------
 # Parameter Validation Helpers
 # ---------------------------------------------------------------------------
@@ -108,30 +107,75 @@ def evaluate_budget(
     budget_cny: float,
     max_rounds: int,
     max_tokens_per_request: int,
-    token_usage: dict | None = None,
-    cost_usd: float | None = None,
+    *,
+    rounds_used: int = 0,
+    cumulative_cost_cny: float | int | None = None,
+    input_price_usd_per_million: float | int | None = None,
+    output_price_usd_per_million: float | int | None = None,
+    max_input_tokens_per_request: int | None = None,
+    usd_to_cny: float | int | None = None,
+    pricing_version: str | None = None,
+    fx_rate_source: str | None = None,
 ) -> tuple[str, str]:
+    """Decide whether one more request can fit a measured CNY budget.
+
+    Cumulative cost must come from measured usage already converted to CNY. The
+    next-request reserve uses maximum input/output tokens and a versioned USD
+    price list plus an identified USD-to-CNY rate. Missing evidence is a stop,
+    never an implicit zero. The current wrapper has no trusted runtime source for
+    these measurements, so its production preflight intentionally stops.
     """
-    Evaluate budget status and decision.
+    def decimal_value(value: float | int | None, *, allow_zero: bool) -> Decimal | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        try:
+            result = Decimal(str(value))
+        except (InvalidOperation, ValueError, OverflowError):
+            return None
+        if not result.is_finite() or result < 0 or (not allow_zero and result == 0):
+            return None
+        return result
 
-    Returns:
-        (budget_status, budget_reason)
-    """
-    # Pre-execution check: cannot conservatively fit even 1 request
-    if budget_cny < MIN_SINGLE_REQUEST_RESERVATION_CNY:
-        return (
-            "stopped_insufficient_budget",
-            f"Budget {budget_cny} CNY is insufficient for minimum single-request reservation ({MIN_SINGLE_REQUEST_RESERVATION_CNY} CNY)",
-        )
+    cap = decimal_value(budget_cny, allow_zero=False)
+    if cap is None:
+        return "stopped_invalid_budget", "Budget cap is missing, non-finite, or non-positive"
+    if isinstance(max_rounds, bool) or not isinstance(max_rounds, int) or max_rounds <= 0:
+        return "stopped_invalid_limits", "max_rounds must be a positive integer"
+    if isinstance(rounds_used, bool) or not isinstance(rounds_used, int) or rounds_used < 0:
+        return "stopped_invalid_usage", "rounds_used must be a non-negative integer"
+    if rounds_used >= max_rounds:
+        return "stopped_round_limit", f"Round limit exhausted ({rounds_used}/{max_rounds})"
+    if isinstance(max_tokens_per_request, bool) or not isinstance(max_tokens_per_request, int) or max_tokens_per_request <= 0:
+        return "stopped_invalid_limits", "max_tokens_per_request must be a positive integer"
+    if isinstance(max_input_tokens_per_request, bool) or not isinstance(max_input_tokens_per_request, int) or max_input_tokens_per_request is None or max_input_tokens_per_request <= 0:
+        return "unverified_unknown_usage", "Maximum input tokens for a request are unknown; conservative reservation cannot be computed"
 
-    # Post-execution: if usage was not measured by harness / runner, do not claim within budget
-    if token_usage is None or cost_usd is None:
-        return (
-            "unverified_unknown_usage",
-            "Subprocess returned no measured token usage; unknown usage cannot be verified within budget",
-        )
+    cumulative = decimal_value(cumulative_cost_cny, allow_zero=True)
+    if cumulative is None:
+        return "unverified_unknown_usage", "Measured cumulative cost in CNY is unavailable or invalid"
+    input_price = decimal_value(input_price_usd_per_million, allow_zero=True)
+    output_price = decimal_value(output_price_usd_per_million, allow_zero=True)
+    fx = decimal_value(usd_to_cny, allow_zero=False)
+    if input_price is None or output_price is None or not pricing_version:
+        return "unverified_unknown_pricing", "Request pricing or its version is unavailable or invalid"
+    if fx is None or not fx_rate_source:
+        return "unverified_unknown_conversion", "USD-to-CNY conversion rate or its source is unavailable or invalid"
 
-    return ("within_budget", "Token usage confirmed within planned budget")
+    reserve_usd = (
+        Decimal(max_input_tokens_per_request) * input_price
+        + Decimal(max_tokens_per_request) * output_price
+    ) / Decimal(1_000_000)
+    reserve_cny = reserve_usd * fx
+    if not reserve_cny.is_finite() or reserve_cny < 0:
+        return "stopped_invalid_reservation", "Computed next-request reservation is invalid"
+    projected = cumulative + reserve_cny
+    if not projected.is_finite():
+        return "stopped_invalid_reservation", "Projected cumulative cost is invalid"
+    if cumulative > cap:
+        return "stopped_budget_exhausted", f"Measured cumulative cost {cumulative} CNY already exceeds cap {cap} CNY"
+    if projected > cap:
+        return "stopped_insufficient_budget", f"Next-request reserve would bring cumulative cost to {projected} CNY above cap {cap} CNY"
+    return "within_budget", f"Measured cumulative cost {cumulative} CNY plus conservative next-request reserve {reserve_cny} CNY fits cap {cap} CNY (pricing {pricing_version}; FX {fx_rate_source})"
 
 
 # ---------------------------------------------------------------------------
@@ -161,34 +205,51 @@ def extract_reward(
     reward_files = list(output_path.glob("**/verifier/reward.json"))
 
     matching: list[tuple[Path, Path]] = []
+    unresolved: list[str] = []
     for rf in reward_files:
         trial_dir = rf.parent.parent
 
         # 1. Check config.json task metadata if present
         cfg_path = trial_dir / "config.json"
         matched = False
+        allow_directory_fallback = not cfg_path.is_file()
         if cfg_path.is_file():
             try:
                 cfg_data = json.loads(cfg_path.read_text())
-                task_info = cfg_data.get("task", {})
-                if isinstance(task_info, dict):
-                    t_path = str(task_info.get("path", ""))
-                    t_id = str(task_info.get("id", ""))
-                    t_name = str(task_info.get("name", ""))
-                    if (
-                        Path(t_path).name == task_name
-                        or t_path.endswith(f"/{task_name}")
-                        or t_id == task_name
-                        or t_name == task_name
-                    ):
-                        matched = True
-            except Exception:
-                pass
+                if not isinstance(cfg_data, dict):
+                    raise ValueError("config.json root must be an object")
+                task_info = cfg_data.get("task")
+                if task_info is None:
+                    allow_directory_fallback = True
+                elif not isinstance(task_info, dict):
+                    raise ValueError("config.json task metadata must be an object")
+                else:
+                    identity_values = [task_info.get(key) for key in ("path", "id", "name")]
+                    identity_values = [value for value in identity_values if value is not None and value != ""]
+                    if not identity_values:
+                        allow_directory_fallback = True
+                    else:
+                        t_path, t_id, t_name = (task_info.get(k) for k in ("path", "id", "name"))
+                        claims: list[bool] = []
+                        if t_path not in (None, ""):
+                            claims.append(
+                                isinstance(t_path, str)
+                                and (Path(t_path).name == task_name or t_path.endswith(f"/{task_name}"))
+                            )
+                        if t_id not in (None, ""):
+                            claims.append(t_id == task_name)
+                        if t_name not in (None, ""):
+                            claims.append(t_name == task_name)
+                        matched = bool(claims) and all(claims)
+                        if not matched:
+                            unresolved.append(f"{trial_dir}: config.json explicitly identifies a different task")
+            except (OSError, json.JSONDecodeError, ValueError, TypeError) as exc:
+                unresolved.append(f"{trial_dir}: invalid config.json task metadata ({exc})")
 
-        # 2. Check directory name (handling random suffixes like task-1__AbC123)
-        if not matched:
+        # Only metadata-free layouts may use the confirmed task__suffix convention.
+        if not matched and allow_directory_fallback:
             d_name = trial_dir.name
-            if d_name == task_name or d_name.startswith(f"{task_name}__") or d_name.startswith(f"{task_name}_"):
+            if d_name == task_name or (d_name.startswith(f"{task_name}__") and len(d_name) > len(task_name) + 2):
                 matched = True
 
         if matched:
@@ -196,7 +257,13 @@ def extract_reward(
 
     # Reject missing or ambiguous results
     if len(matching) == 0:
-        return None, None, "reward.json not found — run may have failed before verifier", None
+        if not reward_files:
+            return None, None, "reward.json not found — run may have failed before verifier", None
+        detail = "; ".join(unresolved[:3])
+        reason = "No reward belongs to the requested task; metadata mismatch/invalid metadata is not overridden by directory names"
+        if detail:
+            reason += f" ({detail})"
+        return None, None, reason, None
 
     if len(matching) > 1:
         return (
@@ -210,7 +277,7 @@ def extract_reward(
 
     try:
         data = json.loads(actual_reward_path.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
+    except (json.JSONDecodeError, OSError, ValueError, OverflowError) as exc:
         return None, None, f"reward.json could not be parsed: {exc}", str(actual_reward_path)
 
     if not isinstance(data, dict) or "reward" not in data:
@@ -229,7 +296,10 @@ def extract_reward(
     if not isinstance(raw, (int, float)):
         return None, None, f"reward.json 'reward' is not a number: {raw!r}", str(actual_reward_path)
 
-    val = float(raw)
+    try:
+        val = float(raw)
+    except (OverflowError, ValueError, TypeError):
+        return None, None, "reward.json 'reward' cannot be represented as a finite float", str(actual_reward_path)
     if not math.isfinite(val):
         return None, None, f"reward.json 'reward' is not a finite number: {val!r}", str(actual_reward_path)
 
@@ -267,6 +337,11 @@ def _check_prerequisites(
     env_file_path: Path | str,
     mode: str = "ungraded",
     budget_cny: float = 5.0,
+    *,
+    domain: str | None = None,
+    task_name: str | None = None,
+    model: str | None = None,
+    provider: str | None = None,
 ) -> list[str]:
     """
     Return list of blocking prerequisite messages; empty = all clear.
@@ -299,44 +374,21 @@ def _check_prerequisites(
         except Exception as exc:
             blocks.append(f"Could not verify vendor/chi-bench commit: {exc}")
 
-    # 2. Task dataset check
-    task_dir = DATA_DIR / "prior_auth_provider" / "tasks"
-    if not (task_dir.is_dir() and any(task_dir.iterdir())):
-        blocks.append(f"Task dataset files missing or empty at {task_dir}")
-
-    # 3. Handbook on-disk check (R5: authorization flag alone does not prove files on disk)
-    skill_file = HANDBOOK_DIR / "SKILL.md"
-    if not (skill_file.is_file() and skill_file.stat().st_size > 0):
-        blocks.append(
-            f"Managed-Care Operations Handbook not downloaded on disk at {HANDBOOK_DIR} (SKILL.md missing)"
-        )
-
-    # 4. Runtime runner credential check
-    runner_key_present = any(effective_env.get(k) for k in RUNNER_ENV_VARS)
-    if not runner_key_present:
-        blocks.append(
-            f"No candidate runner API key configured. Set at least one of: {', '.join(RUNNER_ENV_VARS)}"
-        )
-
-    # 5. Budget reservation check
-    if budget_cny < MIN_SINGLE_REQUEST_RESERVATION_CNY:
-        blocks.append(
-            f"Planned budget {budget_cny} CNY is insufficient for minimum single-request reservation ({MIN_SINGLE_REQUEST_RESERVATION_CNY} CNY)"
-        )
-
-    # 6. Mode-specific check:
-    # R1: Ungraded real execution is currently unsupported by fixed upstream without verified skip-judge mechanism.
-    if mode == "ungraded":
-        blocks.append(
-            "Ungraded real execution is currently unsupported by fixed upstream cb experiment run "
-            "(no verified skip-judge mechanism). Blocked before real execution to prevent unverified scored run."
-        )
-    elif mode == "scored":
-        if not effective_env.get("ANTHROPIC_API_KEY"):
-            blocks.append(
-                "ANTHROPIC_API_KEY not set — required for the official Claude judge in scored mode. "
-                f"Set in environment or in {str(p_env)!r}."
-            )
+    # Selection, exact provider credentials, handbook revision/content integrity,
+    # and execution-mode support are shared with check_readiness.py.
+    gate = evaluate_gate(
+        mode=mode,
+        domain=domain,
+        task_name=task_name,
+        model=model,
+        provider=provider,
+        env=effective_env,
+        data_dir=DATA_DIR,
+        handbook_dir=HANDBOOK_DIR,
+        project_config_path=PROJECT_ROOT / "project.yaml",
+        source_manifest_path=DATA_DIR / "source-downloads.json",
+    )
+    blocks.extend(gate["failures"])
 
     return blocks
 
@@ -470,6 +522,10 @@ def parse_args() -> argparse.Namespace:
         help="Execution mode: 'ungraded' (development) or 'scored' (requires Claude judge)",
     )
     p.add_argument(
+        "--provider",
+        help="Optional provider assertion; must match the known prefix in --model",
+    )
+    p.add_argument(
         "--budget-cny",
         type=float,
         default=5.0,
@@ -578,18 +634,26 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Prerequisites & Budget Gates (R1, R2, R5)
     # ------------------------------------------------------------------
-    blocks = _check_prerequisites(env_file_path, mode=args.mode, budget_cny=args.budget_cny)
+    pre_budget_status, pre_budget_reason = evaluate_budget(
+        args.budget_cny, args.max_rounds, args.max_tokens_per_request
+    )
+    blocks = _check_prerequisites(
+        env_file_path,
+        mode=args.mode,
+        budget_cny=args.budget_cny,
+        domain=args.domain,
+        task_name=args.task_name,
+        model=args.model,
+        provider=args.provider,
+    )
+    if pre_budget_status != "within_budget":
+        blocks.append(f"Budget gate: {pre_budget_reason}")
     if blocks:
         # Write blocked manifest to record unsupported/blocked reason if in a run context
         run_id = _make_run_id()
         run_dir = RUNS_DIR / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = run_dir / "manifest.json"
-
-        # Determine budget status for blocked run
-        pre_budget_status, pre_budget_reason = evaluate_budget(
-            args.budget_cny, args.max_rounds, args.max_tokens_per_request
-        )
 
         manifest = {
             "run_id": run_id,
@@ -610,7 +674,7 @@ def main() -> None:
             "budget_cny": args.budget_cny,
             "max_rounds": args.max_rounds,
             "max_tokens_per_request": args.max_tokens_per_request,
-            "budget_status": pre_budget_status if pre_budget_status != "unverified_unknown_usage" else "blocked_before_execution",
+            "budget_status": pre_budget_status,
             "budget_reason": pre_budget_reason,
             "reward": None,
             "reward_reason": f"Execution blocked: {'; '.join(blocks)}",
@@ -660,9 +724,7 @@ def main() -> None:
     ]
 
     # Pre-execution budget status
-    init_budget_status, init_budget_reason = evaluate_budget(
-        args.budget_cny, args.max_rounds, args.max_tokens_per_request
-    )
+    init_budget_status, init_budget_reason = pre_budget_status, pre_budget_reason
 
     # Initial manifest
     manifest: dict = {
@@ -757,11 +819,16 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Post-Execution: Reward & Budget Evaluation
     # ------------------------------------------------------------------
-    reward, scorecard_path, reward_reason, actual_reward_path = extract_reward(
-        output_dir=output_dir,
-        task_name=args.task_name,
-        mode=args.mode,
-    )
+    try:
+        reward, scorecard_path, reward_reason, actual_reward_path = extract_reward(
+            output_dir=output_dir,
+            task_name=args.task_name,
+            mode=args.mode,
+        )
+    except Exception as exc:
+        # A bad verifier artifact must not strand the run in started state.
+        reward, scorecard_path, actual_reward_path = None, None, None
+        reward_reason = f"Result collection failed safely: {type(exc).__name__}: {exc}"
 
     if exit_code == 0:
         if args.mode == "ungraded":
@@ -777,8 +844,6 @@ def main() -> None:
         args.budget_cny,
         args.max_rounds,
         args.max_tokens_per_request,
-        token_usage=None,  # Wrapper does not measure token usage
-        cost_usd=None,
     )
 
     manifest.update({

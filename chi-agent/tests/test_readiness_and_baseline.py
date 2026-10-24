@@ -113,7 +113,8 @@ class TestReadinessChecks(unittest.TestCase):
             with patch.object(cr, "HANDBOOK_DIR", skill_dir):
                 res = cr.check_handbook(env={})
                 self.assertTrue(res["ok"])
-                self.assertIn("verified on disk", res["detail"].lower())
+                self.assertIn("present", res["detail"].lower())
+                self.assertIn("revision", res["note"].lower())
 
     def test_handbook_granted_via_env_flag_alone_fails(self):
         """R5: Authorization flag alone is NOT downloaded/versioned handbook files."""
@@ -153,12 +154,39 @@ class TestReadinessChecks(unittest.TestCase):
         """R4: Offline mode is READY with python, git, and uv; does NOT require docker daemon/socket or keys."""
         import check_readiness as cr
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
-             patch.object(cr, "check_docker", return_value={"ok": False, "detail": "Docker daemon down"}), \
+             patch.object(cr, "check_docker", side_effect=AssertionError("offline must not contact Docker")), \
              patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_uv", return_value={"ok": True, "detail": "OK"}):
-            modes = cr.evaluate_modes(env={})
+            modes = cr.evaluate_modes(env={}, include_real_modes=False, include_environment_modes=False)
             self.assertTrue(modes["offline"]["ready"])
             self.assertEqual(modes["offline"]["failures"], [])
+
+    def test_offline_evaluation_does_not_call_real_mode_gate(self):
+        import check_readiness as cr
+        with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
+             patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_uv", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_docker", side_effect=AssertionError("offline must not contact Docker")), \
+             patch.object(cr, "check_vendor", side_effect=AssertionError("offline need not check vendor")), \
+             patch.object(cr, "evaluate_gate", side_effect=AssertionError("real gate must not run")):
+            report = cr.evaluate_modes(env={}, include_real_modes=False, include_environment_modes=False)
+        self.assertTrue(report["offline"]["ready"])
+
+    def test_scored_readiness_cannot_claim_ready_without_budget_accounting(self):
+        import check_readiness as cr
+        good = {"ready": True, "failures": [], "evidence": {"synthetic": True}}
+        with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
+             patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_uv", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_vendor", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "evaluate_gate", return_value=good):
+            report = cr.evaluate_modes(
+                env={}, domain="pa_provider", task_name="synthetic", model="deepseek/chat"
+            )
+        self.assertTrue(report["scored"]["local_configuration_ready"])
+        self.assertFalse(report["scored"]["ready"])
+        self.assertTrue(any("Budget gate" in reason for reason in report["scored"]["failures"]))
 
     def test_ungraded_mode_requires_vendor_checkout(self):
         """R5: Ungraded mode requires vendor checkout at pinned commit."""
@@ -187,8 +215,9 @@ class TestReadinessChecks(unittest.TestCase):
              patch.object(cr, "check_handbook", return_value={"ok": True, "detail": "OK"}):
             env = {"DEEPSEEK_API_KEY": "sk-deepseek-123"}
             modes = cr.evaluate_modes(env=env)
-            self.assertTrue(modes["ungraded"]["ready"])
+            self.assertFalse(modes["ungraded"]["ready"])
             self.assertFalse(modes["scored"]["ready"])
+            self.assertFalse(any("ANTHROPIC_API_KEY" in f for f in modes["ungraded"]["failures"]))
             self.assertTrue(any("ANTHROPIC_API_KEY" in f for f in modes["scored"]["failures"]))
 
     def test_scored_mode_requires_anthropic_key(self):
@@ -203,11 +232,18 @@ class TestReadinessChecks(unittest.TestCase):
              patch.object(cr, "check_handbook", return_value={"ok": True, "detail": "OK"}):
             env = {"DEEPSEEK_API_KEY": "sk-deepseek", "ANTHROPIC_API_KEY": "sk-anthropic"}
             modes = cr.evaluate_modes(env=env)
-            self.assertTrue(modes["scored"]["ready"])
+            self.assertFalse(modes["scored"]["ready"])
+            self.assertFalse(any("ANTHROPIC_API_KEY" in f for f in modes["scored"]["failures"]))
 
     def test_cli_json_mode_output(self):
         result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "check_readiness.py"), "--mode", "offline", "--json"],
+            [
+                sys.executable,
+                str(SCRIPTS_DIR / "check_readiness.py"),
+                "--mode", "offline",
+                "--env-file", "/tmp/chi-agent-no-env-test",
+                "--json",
+            ],
             capture_output=True,
             text=True,
             timeout=30,
@@ -319,9 +355,16 @@ class TestRunBaselineHelpers(unittest.TestCase):
             budget_cny=0.000001,
             max_rounds=1,
             max_tokens_per_request=1,
+            cumulative_cost_cny=0,
+            input_price_usd_per_million=100,
+            output_price_usd_per_million=100,
+            max_input_tokens_per_request=1000,
+            usd_to_cny=2000,
+            pricing_version="synthetic-v1",
+            fx_rate_source="synthetic-test-rate",
         )
         self.assertEqual(status, "stopped_insufficient_budget")
-        self.assertIn("insufficient", reason)
+        self.assertIn("above cap", reason)
 
     def test_evaluate_budget_unmeasured_usage_post_execution(self):
         rb = self.rb
@@ -329,11 +372,10 @@ class TestRunBaselineHelpers(unittest.TestCase):
             budget_cny=5.0,
             max_rounds=30,
             max_tokens_per_request=8192,
-            token_usage=None,
-            cost_usd=None,
+            cumulative_cost_cny=None,
         )
         self.assertEqual(status, "unverified_unknown_usage")
-        self.assertIn("cannot be verified", reason)
+        self.assertIn("Maximum input tokens", reason)
 
     def test_evaluate_budget_within_budget(self):
         rb = self.rb
@@ -341,8 +383,13 @@ class TestRunBaselineHelpers(unittest.TestCase):
             budget_cny=5.0,
             max_rounds=30,
             max_tokens_per_request=8192,
-            token_usage={"prompt_tokens": 100, "completion_tokens": 50},
-            cost_usd=0.01,
+            cumulative_cost_cny=0.25,
+            input_price_usd_per_million=1.0,
+            output_price_usd_per_million=2.0,
+            max_input_tokens_per_request=1000,
+            usd_to_cny=7.0,
+            pricing_version="synthetic-v1",
+            fx_rate_source="synthetic-test-rate",
         )
         self.assertEqual(status, "within_budget")
 
@@ -560,6 +607,7 @@ class TestRunBaselineMain(unittest.TestCase):
                 with patch("sys.argv", ["run_baseline"] + argv), \
                      patch.object(rb, "_check_prerequisites",
                                   return_value=([] if prereqs_clear else ["Prerequisite blocked"])), \
+                     patch.object(rb, "evaluate_budget", side_effect=[("within_budget", "synthetic test evidence"), ("unverified_unknown_usage", "not measured by test harness")]), \
                      patch("subprocess.run", side_effect=side_effect):
                     rb.main()
             except SystemExit as e:
@@ -711,6 +759,7 @@ class TestRunBaselineMain(unittest.TestCase):
                     "--mode", "scored",
                     "--env-file", str(env_file),
                 ]), patch.object(rb, "_check_prerequisites", return_value=[]), \
+                   patch.object(rb, "evaluate_budget", side_effect=[("within_budget", "synthetic test evidence"), ("unverified_unknown_usage", "not measured by test harness")]), \
                    patch("subprocess.run") as mock_sub:
                     mock_sub.return_value = MagicMock(returncode=0)
                     try:
@@ -773,6 +822,7 @@ class TestRunBaselineMain(unittest.TestCase):
                     "--mode", "scored",
                     "--env-file", str(rel_env),
                 ]), patch.object(rb, "_check_prerequisites", return_value=[]), \
+                   patch.object(rb, "evaluate_budget", side_effect=[("within_budget", "synthetic test evidence"), ("unverified_unknown_usage", "not measured by test harness")]), \
                    patch("subprocess.run", side_effect=mock_sub):
                     try:
                         rb.main()

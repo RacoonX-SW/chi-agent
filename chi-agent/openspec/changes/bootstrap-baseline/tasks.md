@@ -4,7 +4,7 @@
 
 执行顺序以 [分段交接包](handoff.md) 为准，不按编号误把付费兼容性验证提前到离线修复之前。D0 先完成包装、配置和离线证据；A 验证实际环境/工具与入口；B 验证候选模型往返；C 才做一次任务执行。每段交付稳定候选，由 Codex 验收，未授权阶段不自动启动。
 
-2026-10-24 环境方式按用户要求改为 Docker 内开发；依赖安装、下载和测试均在容器执行，宿主机不配置项目环境。D0 可构建/启动开发容器，不启动官方任务世界。详见 [Docker 工作流](../../../docs/docker-workflow.md)。下列实施项均未完成。
+2026-10-24 环境方式按用户要求改为 Docker 内开发；依赖安装、下载和测试均在容器执行，宿主机不配置项目环境。D0 可构建/启动开发容器，不启动官方任务世界。详见 [Docker 工作流](../../../docs/docker-workflow.md)。勾选仅表示所注明阶段的实现或证据，不能代替独立审核及未运行的真实阶段。
 
 ## 0. Understand the first official task
 
@@ -31,8 +31,8 @@
 - [x] 2.4 Produce a local manifest linked to real upstream results; preserve reward 0 and null verdicts, and retain unknown usage as null.
 - [x] 2.5 Add focused offline checks for missing dependencies/configuration, command failure, timeout, missing verdict and fixture success; default checks require no network or API key.
 - [x] 2.6 Verify a bounded ungraded entry point against the fixed upstream; report unsupported paths without inventing CLI flags or patching the official judge (D0: unverified ungraded real execution blocked before subprocess with unsupported reason; dry-run preview preserved).
-- [x] 2.7 Report readiness per mode, retain ungraded traces and null reward, and identify simulator/API dependencies separately. Existing project.yaml and wrapper behavior require review for these distinctions.
-- [x] 2.8 Enforce bounded calls/generation and pre-request budget checks; record unknown use and budget stops, prevent automatic whole-task reruns and start the measured attempt from a clean initial world (D0: evaluate_budget implemented, reservation & unknown usage logic verified offline, limits forwarded via agent_kwargs).
+- [x] 2.7 Implement D0 mode-specific readiness with one selection/evidence policy; distinguish configured local prerequisites from overall execution readiness. Ungraded real execution remains unsupported, with null reward and a blocked manifest; no real ungraded trace is claimed. Independent review follows the candidate.
+- [x] 2.8 Implement the D0 offline cumulative-budget/next-request-reservation and round-limit decision; the production preflight stops on missing accounting evidence, and limits are forwarded via agent_kwargs. Actual per-request harness enforcement, measured usage and a clean real task attempt remain deferred to B/C, not completed by these offline checks.
 - [x] 2.9 Provide the minimal development image, Compose entry points, dependency lock and controlled build context; run offline checks inside containers, persist source/results and keep secrets/restricted data out of the distributable image (D0: requirements.lock committed, Dockerfile uses pinned image & locked dependencies, socket mount removed).
 - [ ] 2.10 At stage A, verify task-container creation from the containerized scheduler using the existing engine, actual mount source paths, network endpoints, artifact persistence and cleanup; retain the official runtime contract.
 

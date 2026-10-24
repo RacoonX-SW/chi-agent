@@ -22,17 +22,16 @@ run:
   default_max_tokens_per_request: 8192
 
 secrets:
-  # All secrets come from environment variables; no values are stored here.
-  # Different modes require different credentials.
-  required_for_scored_run:
-    - ANTHROPIC_API_KEY         # required: official judge runs Claude
-  required_for_ungraded_run:
-    - DEEPSEEK_API_KEY          # or GEMINI_API_KEY / OPENAI_API_KEY depending on runner
-  optional:
-    - GEMINI_API_KEY
-    - DEEPSEEK_API_KEY
-    - OPENAI_API_KEY
-    - OPENROUTER_API_KEY
+  # Presence is configuration evidence only; this project has not verified
+  # connectivity or successful authentication for any provider.
+  runner_provider_environment:
+    deepseek: DEEPSEEK_API_KEY
+    gemini: GEMINI_API_KEY
+    openai: OPENAI_API_KEY
+    openrouter: OPENROUTER_API_KEY
+    anthropic: ANTHROPIC_API_KEY
+  judge_api_key: ANTHROPIC_API_KEY  # configured key path; validity is unverified
+  judge_oauth_path: CLAUDE_CODE_OAUTH_TOKEN  # known upstream path; not verified here
 
 handbook:
   dataset: actava/managed-care-operations-handbook
