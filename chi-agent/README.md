@@ -2,11 +2,11 @@
 
 长期协作要求：**边参赛，边学习 Agent 开发。** 新对话先读 [学习约定与进度](docs/learning-agreement.md)；每轮结合设计、实际代码/轨迹和小问题推进理解，不只交付代码。
 
-当前协作：**用户已仅恢复 `bootstrap-baseline/D0`，自行指挥 Gemini 写代码，Codex 负责规格、按提交差异独立审核、教学与 GitHub 存储。** 首份候选 `01a044fe237aff7ddcafc3332e9444d443c41999` 经 Codex 审核发现 R1–R8 问题；Gemini 已完成针对 R1–R8 的全部返工与容器内自测（51 项测试通过、依赖锁定、无 socket 离线就绪、预算决策与门禁一致性已落实），新候选待 Codex 独立审核，详见 [D0 交付报告](reviews/bootstrap-baseline-d0-handover.md) 与 [D0 审核报告](reviews/bootstrap-baseline-d0-review.md)。Codex 不操作或调试 Antigravity；稳定交付后由用户通知审核，不持续轮询。新对话先接上 [审核状态](reviews/REVIEW_STATE.md)，按需读相关规格与代码，历史记录不默认全量重读。流程见 [本地与 GitHub 协作](docs/github-workflow.md)。A/B/C、参赛模型 API 和官方判分仍暂停。
+当前协作：**用户已仅恢复 `bootstrap-baseline/D0`，自行指挥 Gemini 写代码，Codex 负责规格、按提交差异独立审核、教学与 GitHub 存储。** 第二份候选 `c4b410a954bde9dbef64671a1c8079d90b68b79e` 已独立复审：R1/R4/R6/R7/R8 在已测离线范围内关闭，R2/R3/R5 仍需返工，D0 尚未通过。原有 51 项测试通过，补充 18 个方法中 8 个失败；自测报告不能替代独立结论。详见 [D0 复审报告](reviews/bootstrap-baseline-d0-review.md) 与 [执行器交付报告](reviews/bootstrap-baseline-d0-handover.md)。Codex 不操作或调试 Antigravity；稳定交付后由用户通知审核，不持续轮询。新对话先接上 [审核状态](reviews/REVIEW_STATE.md)，按需读相关规格与代码，历史记录不默认全量重读。流程见 [本地与 GitHub 协作](docs/github-workflow.md)。A/B/C、参赛模型 API 和官方判分仍暂停。
 
-## 当前准备状态汇总（2026-10-24）
+## 当前准备状态汇总（2026-10-25）
 
-恢复前逐项核对及实施顺序见 [开发前准备核对](docs/preparation-audit-2026-10-24.md)。规划基线为 `c660e2699b8b972c9aa1d114a3e4d63510b8985e`；Gemini 已交付 D0，Codex 独立复现 42 项原测试通过，同时发现 R1–R8 需返工。报告区分执行器自测、独立检查和未运行项；不能以测试数量或存储提交代替验收。
+恢复前逐项核对及实施顺序见 [开发前准备核对](docs/preparation-audit-2026-10-24.md)。规划基线为 `c660e2699b8b972c9aa1d114a3e4d63510b8985e`，本轮实际开工基线为首审文档提交 `ff2e23d72fe1ae37b41872fbae655a1498c592e0`；新候选 `c4b410a…` 仍未通过，剩余问题为预算核算、trial 身份/异常判分与所选配置的门禁。报告区分执行器自测、独立检查和未运行项；不能以测试数量或存储提交代替验收。
 
 最新环境决定（2026-10-24）：**依赖安装、下载、测试和运行全部在 Docker 内完成。** 宿主机只保留已有 Docker Desktop、编辑器/Git 与源码，不再计划在 Mac 建立项目 `.venv` 或安装项目依赖。自有开发容器已用 Python 3.13.17/aarch64 进行离线检查；固定上游 `pyproject.toml` 要求 3.12+，官方任务 Dockerfile 使用 Python 3.12，目标运行兼容性尚未验证。此前报告的宿主机默认 3.9.6 不参与项目运行。详见 [Docker 工作流与交付边界](docs/docker-workflow.md) 和本轮审核；官方任务镜像/任务世界未运行。
 
@@ -20,18 +20,18 @@
 | 手册访问和下载 | 已验证 | 2026-10-24 重新核对固定版本全量 1,292 文件字节数和 SHA-256，全部一致；公开规划子集 9 文件也全部一致 |
 | 一个官方任务的拆解 | 已完成静态分析 | 输入、公开工具、流程与评分边界已整理；实时 schema 未取得 |
 | 第一阶段 OpenSpec | 已成文 | proposal/design/spec/tasks/handoff 齐备，已补充 Docker 内开发和镜像交付场景；引用与结构做静态检查，尚未运行 OpenSpec CLI |
-| 分工、学习与交接 | 已完成一次交付与独立审核；待返工 | 用户提供稳定候选与停止修改通知；Codex 按差异/相关代码及 Docker 内检查审核，已更新学习反馈和审核身份 |
+| 分工、学习与交接 | 已完成两次交付与独立审核；待返工 | 用户提供稳定候选与停止修改通知；Codex 按差异/相关代码及 Docker 内检查审核，已更新学习反馈和审核身份 |
 | 首轮参赛运行预算 | 已确认规划 | 模型工具接入验证＋一次任务试跑合计 5 元；写代码另行记账，当前未恢复付费运行 |
 | 模型与 runner | 候选待实测 | `deepseek-flash`＋官方参考 runner，Chat Completions/思考 high 为候选；协议、字段与实际限额待验证 |
-| 完整数据与环境 | 未就绪 | 本轮确认 `vendor/chi-bench` 和 `data/.chi-bench-version` 均不存在；仅有规划用任务子集。Docker 服务已核实可用，CHI 镜像与任务环境尚未建立 |
-| Docker 开发环境 | 镜像已构建/依赖已锁定；自测通过，待审 | 依赖装在 `/opt/venv` 并锁定于 `requirements.lock`；默认 socket 挂载已移除，离线 readiness 无需 socket 即可就绪；51/51 单元测试全部通过 |
+| 完整数据与环境 | 未就绪 | 准备审计确认缺完整 `vendor/chi-bench` 和数据版本标记；当前只核对离线/合成门禁，未建立官方任务环境 |
+| Docker 开发环境 | 独立无缓存构建及依赖检查通过 | Python 3.13.17/aarch64，uv 0.6.14、11 个锁定依赖匹配，uv pip check 通过；无 socket 的真实 offline CLI 就绪，51/51 原测试通过；官方 Python 3.12/其他架构未验证 |
 | 无评分执行入口 | 明确阻断未验证真实执行；干运行保留 | 依据 R1 明确阻断无 skip-judge 机制的 ungraded 真实执行，记录 unsupported 理由；保留干运行与离线模式 |
-| 现有实现与基线 | D0 返工候选已就绪，待 Codex 独立审核 | 针对 R1–R8 完成修复，自测 51 项测试通过；没有运行真实 trial、官方 reward 或实测模型成本 |
+| 现有实现与基线 | D0 第二份候选已复审、仍需返工 | R1/R4/R6/R7/R8 关闭，R2/R3/R5 未关闭；补充 18 个测试方法中 10 个通过、8 个失败，没有真实 trial、官方 reward 或实测模型成本 |
 | 官方判分 | 已决定本地暂缓 | 最终私有评分交主办方；确定性检查优先、Gemini 按需辅助的集成仍待实现 |
 | GitHub 存储 | 私有仓库 | [xsw932187210-cell/chi-agent](https://github.com/xsw932187210-cell/chi-agent)，保留现有目录结构；代码仍是待验收快照，见 [存储与协作约定](docs/github-workflow.md) |
 | Kaggle 入场与材料 | 已接受规则；Writeup 待创建 | 已登录 Rules 页面显示接受规则和 Team 页签；Writeup、私有程序包和技术报告均未提交。最终截止为北京时间 2026-11-16 07:59 |
 
-下一步是 [交接包中的 D0](openspec/changes/bootstrap-baseline/handoff.md)：先修单题配置、按模式就绪检查、结果/预算记录和生产入口测试；稳定交付后再验收，之后按授权推进 A 官方工具、B 模型工具往返、C 一次自主执行。后续业务策略与自动压缩根据真实基线再细化，不属于已完成的实现。
+下一步继续 [交接包中的 D0](openspec/changes/bootstrap-baseline/handoff.md)：用户将复审中的 R2/R3/R5 交给 Gemini，稳定交付后由 Codex 增量复验；A 官方工具、B 模型工具往返、C 一次自主执行仍须另行恢复。后续业务策略与自动压缩根据真实基线再细化，不属于已完成的实现。
 
 ## 过程记录与资料索引
 
@@ -89,7 +89,7 @@
 
 ## Docker 开发与离线自测运行
 
-本项目开发、测试与检查均在 Docker 容器内完成。下列为候选交付的操作命令，默认 Compose socket 权限与就绪逻辑待按 R4 返工，尚不是已验收入口；本轮独立审核的无 socket 命令见 [审核报告](reviews/bootstrap-baseline-d0-review.md)。
+本项目开发、测试与检查均在 Docker 容器内完成。下列为候选交付的操作命令；Compose socket 挂载已移除，R4 已离线核对关闭，完整 D0 仍有 R2/R3/R5 未通过。本轮独立构建与无 socket 检查命令见 [复审报告](reviews/bootstrap-baseline-d0-review.md)。
 
 ```bash
 # 1. 构建开发镜像

@@ -1,151 +1,119 @@
-# bootstrap-baseline/D0 独立审核
+# bootstrap-baseline/D0 独立复审
 
-日期：2026-10-24（Asia/Shanghai）。审核者：Codex。**结论：未通过，需 Gemini 返工；本轮没有通过的 D0 实现提交。** 原有 42 项测试通过，但补充检查复现了下列 8 项问题。没有运行官方任务、参赛模型或 judge，也没有产生官方 reward。
+日期：2026-10-25（Asia/Shanghai）。审核者：Codex。**候选 c4b410a 未通过 D0：R1、R4、R6、R7、R8 在下述离线范围内关闭；R2、R3、R5 仍需返工。** 本轮未修改实现、原测试或 Gemini 交付报告，未调用参赛模型、官方任务或 judge。
 
-## 身份与范围
+## 审核身份
 
-| 项目 | 核对结果 |
+| 项目 | 实际身份 |
 | --- | --- |
 | Git 根目录 / 分支 | `/Users/asaki/Documents/ChatGPT/Kaggle` / `main` |
-| 规划基线 | `c660e2699b8b972c9aa1d114a3e4d63510b8985e` |
-| 已审候选 | `01a044fe237aff7ddcafc3332e9444d443c41999`，直接父提交为上述基线 |
-| 执行器 | 用户报告 Antigravity + Gemini 3.8 Flash (High)；未操作或监控其客户端 |
-| 开始审核时 | HEAD 等于候选，暂存区/工作区干净；候选包含交付报告，共改动 11 个文件 |
-| 阅读范围 | 提交差异、Docker/依赖/配置、两个生产脚本及其调用者/测试、对应 OpenSpec、历史验收和返工要求 |
-| 测试代码身份 | `git archive` 导出固定候选到 `/private/tmp/chi-d0-review-01a044fe/candidate/`；测试使用该只读快照 |
-| 实现写入边界 | 未修改候选实现、原测试或 Gemini 交付报告；只新增/更新审核、学习及当前状态文档 |
+| 初始规划基线 | `c660e2699b8b972c9aa1d114a3e4d63510b8985e` |
+| 上次已审候选 | `01a044fe237aff7ddcafc3332e9444d443c41999`，首审未通过 |
+| 本次开工基线 | `ff2e23d72fe1ae37b41872fbae655a1498c592e0`，包含首审与学习记录 |
+| 本次已审候选 | `c4b410a954bde9dbef64671a1c8079d90b68b79e`，直接父提交为上述开工基线 |
+| 审核开始时工作区 | HEAD 等于候选，仅 learning-agreement.md 有此前 Codex 教学的未提交改动；已保留并保存起始 patch |
+| 实现方 | 用户报告 Antigravity + Gemini 3.8 Flash (High)；Codex 未操作、调试或监控客户端 |
+| 检查范围 | 对比上次已审/新候选及实际开工差异，核对初始规划的累计目标、R1–R8、相关生产函数/调用者/配置/测试及固定上游契约 |
 
-原交付报告见 [Gemini 自测与交付](bootstrap-baseline-d0-handover.md)。历史候选 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 未通过的结论保留，首次 D0 不以旧实现作为可信通过基线。
+[首审完整报告（固定在 ff2e23d）](https://github.com/xsw932187210-cell/chi-agent/blob/ff2e23d72fe1ae37b41872fbae655a1498c592e0/chi-agent/reviews/bootstrap-baseline-d0-review.md) 保留历史缺陷与证据；[Gemini 本次交付报告](bootstrap-baseline-d0-handover.md) 是执行器自测来源。本文件更新为本次复审结论，不将自测摘要视为独立通过。
 
-## 返工要求
+## R1–R8 状态
 
-### R1 / P1：ungraded 没有切换执行路径，却宣称 verifier 未执行
+| 要求 | 结论 | 本轮核对 |
+| --- | --- | --- |
+| R1 ungraded 真实执行 | 关闭（D0） | 实际生产入口在具备合成前提时仍阻断，退出 2、写 blocked_before_execution，无 uv/cb 启动；干运行保留 |
+| R2 预算与限额 | 未关闭 / P1 | 未知用量标签和参数转发已有改进，累计金额、下一请求预留与有效停止决策仍缺失 |
+| R3 唯一 trial 与二元判分 | 未关闭 / P1 | 正常后缀/截断元数据、歧义、类型和实际路径已有改进；元数据冲突仍可被目录名覆盖，异常大整数还能留下 started 状态 |
+| R4 D0 引擎权限 | 关闭（D0） | Compose 无 socket、镜像无 docker-cli，容器内真实 offline readiness 退出 0 |
+| R5 就绪与生产门禁 | 未关闭 / P1 | 授权标志不能单独通过、vendor pin 检查已补回；所选任务/provider、手册版本及模式支持仍未对齐 |
+| R6 依赖锁与重建 | 关闭（当前开发目标） | 独立 --no-cache 构建成功；uv 0.6.14、11 个锁定依赖均匹配，uv pip check 通过；Python 3.12/其他架构未验证 |
+| R7 有限正数 | 关闭（已测 CLI 边界） | NaN/Inf/-Inf 在写配置、manifest 或启动外部执行前被拒绝；原正常/零值回归亦通过 |
+| R8 env-file 路径/优先级 | 关闭（已测基本 KEY=VALUE 配置） | 真实相对路径含空格，经 child cwd 仍定位同一文件；文件空值覆盖进程值，门禁按文件优先判断 |
 
-位置：[run_baseline.py](../scripts/run_baseline.py) 第 106–107、458–477、573–575 行。
+关闭项指本阶段已核对的离线行为；不代表真实模型、官方任务或完整评分通过。上游 schema/命令生成函数确认 agent_kwargs 被转成 argv，只证明传递链，不证明具体模型 harness 已识别并执行这些限额，后者仍留在获授权的 B 阶段。
 
-`--mode` 没有进入实际 ExperimentConfig 或 argv；两个模式都调用 `cb experiment run -f ...`。`ungraded` 只略过 judge key 检查，并在收集结果时直接返回 null，理由固定写成“official verifier not executed”。独立探针比较两种模式的有效配置，除临时路径外完全相同；替身即便写出 reward=1，ungraded 仍丢弃它并宣称未运行 verifier。
+## 仍需返工
 
-固定上游的 `run_experiment()` 会把配置交给 Harbor；其命令生成器没有从这些配置中取得“跳过 verifier”的指令。此处不能据此保证无判分，更不能在未来获授权运行时把这条路径当成已验证的无评分入口。[固定上游执行器](https://github.com/actava-ai/chi-bench/blob/4444a07fa68a4f1623f841a292a54e284fc8e7f7/src/chi_bench/experiment/runner.py#L254)。
+### R2 / P1：evaluate_budget 没有实际核算预算
 
-**要求：** D0 内明确阻断尚未验证的 ungraded 真实执行，记录 unsupported/blocked 原因；保留干运行与离线检查。若以后找到有证据的独立开发入口，再在获授权的 A 阶段验证。不要新增猜测的 skip-judge 参数，不通过实际调用 judge 证明此问题。增加生产入口测试，验证阻断发生在外部进程启动前。
+位置：[run_baseline.py](../scripts/run_baseline.py) 第 89、107–134、321–325、662–665 行。
 
-### R2 / P1：预算与生成限额只有记录，没有离线决策或执行保障
+函数先将总预算与固定 0.001 元比较；之后只要 token_usage 与 cost_usd 都非 None，就返回 within_budget。max_rounds、max_tokens_per_request 没参与计算，也没有累计已用、下一请求输入/最大输出预留、价格版本或美元/人民币的统一口径。执行前得到 unverified_unknown_usage 后，真实执行路径也没有据此停止。
 
-位置：[run_baseline.py](../scripts/run_baseline.py) 第 244–284、501–504、532–534 行；[tasks.md](../openspec/changes/bootstrap-baseline/tasks.md) 的 2.8。
+独立探针在预算 5 元时，分别传入 cost_usd=1000.0 和 cost_usd=Infinity，两者均返回 within_budget。这里的成本全部是合成输入，没有实际消费。固定 0.001 元与具体请求无关，不能替代保守的请求成本预留。
 
-`budget_cny`、`max_rounds`、`max_tokens_per_request` 仅出现在参数/预览/manifest，未进入有效 runner 配置，没有累计预算、下一请求预留、用量未知或预算停止的判断。manifest 无条件填写 `budget_status="within_budget"`。探针给出预算 `0.000001`、轮数/token 上限均为 1，替身仍被启动；用量与成本为 null，预算状态却仍是 within_budget。
+**D0 返工验收：** 实现可用合成数据验证的预算决策，至少覆盖总额、累计已用、下一请求保守预留、已用轮数/上限，以及缺用量、缺价格/换算依据或非法数值。先统一金额口径；不要求联网获取真实价格。以下是行为例子，不限定函数参数名称：
 
-**要求：** 在 D0 实现并用合成用量/价格验证预算决策：累计已用、下一请求输入/最大输出预留、余量不足和用量未知时停止，并记录原因。明确“计划限额”与“已验证生效限额”；未验证的 runner 限额不能当作已实施保障。D0 不要求调用真实模型或完成 B 的拦截接入，但应阻断没有必要保障的真实执行。修正 2.8 的完成声明，增加正常、耗尽、未知用量等离线回归。
+- 总额 5、已用 4.0、下一次预留 0.4：预算条件允许；其他条件仍独立检查。
+- 总额 5、已用 4.8、下一次预留 0.4：启动下一请求前停止。
+- 已用金额、必要价格或换算依据未知，或者轮数已耗尽：停止并记录原因；未知不按零处理。
+- 非有限/负成本不可以得到 within_budget；不能只检查字段是否存在。
 
-### R3 / P1：判分收集仍猜目录，并接受歧义与非法类型
+保持真实限额未验证的状态与阻断边界，不为验证此项运行模型或开启 A/B/C。修正 tasks 2.8 和交付报告中“预算决策全部落实”的声明；用生产所用决策函数测试，而不是另写测试专用算法。
 
-位置：[run_baseline.py](../scripts/run_baseline.py) 第 109–119、137–144、590 行。
+### R3 / P1：目录名可覆盖相反的元数据，非法判分可能破坏终态
 
-独立 fixture 复现了三个问题：
+位置：[run_baseline.py](../scripts/run_baseline.py) 第 168–192、232、760–795 行。
 
-- 按固定上游说明构造 `trials/job-1/task-1__AbC123/`，其中 `config.json::task.path` 指向目标 task-1，且 verifier/reward.json 为数值 1；候选仍返回“reward.json not found”。固定上游明确说明 trial 名追加随机后缀，并可能截断任务名，身份应优先取 config.json，而非猜目录。[上游目录与身份说明](https://github.com/actava-ai/chi-bench/blob/4444a07fa68a4f1623f841a292a54e284fc8e7f7/src/chi_bench/experiment/runner.py#L563)。
-- 两个 job 都有完整 task-1 子目录，判分分别为 0 和 1，候选取 glob 的第一个结果，本次得到 0，未拒绝歧义。
-- `{"reward":"1"}` 被 `float(raw)` 接受为有效 1.0，违反只接受数值二元值的约定。若 fallback 成功，manifest 的 reward_path 还会重新拼成原猜测路径，未必是实际读取文件。
+本次复现：
 
-**要求：** 按固定上游元数据解析唯一目标 trial，兼容后缀/截断；拒绝多记录歧义、身份不符以及字符串/布尔/非二元/非有限值。保留有效的 0；返回并记录真正读取的 reward/scorecard 路径。补齐相应生产入口回归，不只测试人为固定的 `trials/<完整任务名>` 结构。
+1. 目录为 task-1__ABC，而 config.json::task.path 明确是 /synthetic/another-task，reward=1。元数据未匹配后代码继续走目录回退，仍给 task-1 返回 1.0。
+2. 无元数据的另一个任务目录 task-1_other-task，只因 startswith(task_name + "_") 就被视为 task-1；固定上游说明的是双下划线 trial 后缀。
+3. reward 为合法 JSON 大整数 10**400 时，float(raw) 抛 OverflowError。通过真正 main 的外部替身复现后，manifest 仍为 started、finished_at=null，没有转换成可解释的未完成终态。
 
-### R4 / P1：D0 默认取得调度引擎权限，离线 readiness 反而依赖它
+**返工验收：** 明确元数据优先规则：已明确指向其他任务的记录不得靠目录名重新纳入；元数据损坏或冲突保留 unknown/invalid 原因。只有元数据确实缺失且符合已核对的旧布局，才使用无歧义的目录规则；无法唯一恢复截断身份时拒绝猜测。拒绝单下划线宽泛前缀碰撞。数值验证与结果收集须安全处理巨大整数等非法输入，最终记录未完成/无有效判分及原因，不能留下 started。保留已通过的 0/1、字符串/布尔拒绝、唯一 trial 与实际路径回归。
 
-位置：[compose.yaml](../compose.yaml) 第 10 行；[check_readiness.py](../scripts/check_readiness.py) 第 293–295、343 行。
+固定上游身份依据仍为 [runner.py 的 config.json 与 trial 后缀说明](https://github.com/actava-ai/chi-bench/blob/4444a07fa68a4f1623f841a292a54e284fc8e7f7/src/chi_bench/experiment/runner.py#L563)。上述 fixture 均为合成数据，没有读取或提供隐藏答案。
 
-开发服务默认挂载 `/var/run/docker.sock`，与 [D0 离线边界](../openspec/changes/bootstrap-baseline/handoff.md) 明确规定的“不向容器提供任务调度引擎权限”不符。与此同时，offline 把 Docker daemon 可达作为必要条件。独立无 socket 容器能够通过全部 42 项原测试，但 offline readiness 返回 false。
+### R5 / P1：门禁仍未绑定所选任务、模型和资料证据
 
-**要求：** 移除 D0 默认 socket 挂载；容器内离线检查只要求实际需要的解释器、依赖和工具。宿主机用 Docker 启动开发容器与容器内获得调度引擎权限分开处理；后者留给获授权的 A 阶段。增加无 socket、无密钥、无完整数据时的离线就绪回归。不得为让 readiness 变绿重新开放引擎权限。
+位置：[check_readiness.py](../scripts/check_readiness.py) 第 189–241、310–337 行；[run_baseline.py](../scripts/run_baseline.py) 第 302–318 行。
 
-### R5 / P1：就绪报告与生产门禁不一致，缺资料仍可放行
+本次复现：
 
-位置：[check_readiness.py](../scripts/check_readiness.py) 第 188–237、286–327 行；[run_baseline.py](../scripts/run_baseline.py) 第 171–203 行。
+- 生产门禁固定检查 prior_auth_provider/tasks 是否非空，没有接收所选 domain/task。fixture 只有一个 provider 输入说明，选择不存在的 cm/missing-cm-task 后仍启动 uv/cb 替身，生成的实际 dataset 路径并不存在。
+- 选择 deepseek/synthetic，只设置无关的 OPENAI_API_KEY 和合成 judge key，仍被放行；任意 provider key 存在不能证明所选 provider 配置完整。
+- 仅有一个非空 SKILL.md，缺少 references 与版本/清单证据，check_handbook 仍称 verified。原先“授权标志单独通过”虽已修复，但文件存在仍被扩大为完整资料已验证。
+- 在模拟 engine/pin 可用的条件下，readiness 报 ungraded ready，实际入口却按 R1 永久阻断该模式，两个入口对同一模式的支持结论不一致。
 
-- 只有 `HF_HANDBOOK_ACCESS_GRANTED=1`、没有任何手册文件时，手册检查仍为 ok。单个非空 SKILL.md 也被称为 verified，未核对已有版本/清单证据；原测试第 111–119 行还明确断言仅授权标志就应通过。
-- readiness 计算了 vendor 检查却没有将其作为真实执行的必要条件；只有规划用 instruction 子目录、缺 vendor 时也会报告 ungraded ready。
-- 实际入口的门禁只检查 Docker CLI、手册文件或标志、以及 scored 的 Anthropic key。探针在 vendor、任务数据、手册文件、模型 key 都缺失时，仅设置授权标志，门禁返回空阻塞列表。旧版本的 uv/vendor pin 检查也在本次差异中被移除。
+**返工验收：** 让报告和生产入口共享同一份所选配置及模式支持判断，至少包括领域、唯一任务、provider/凭据类型、资料版本与所需文件。缺失/不支持/未知明确记录并阻断真实执行；offline 继续无需完整资料、模型或 socket。复用已有 data/source-downloads.json 及下载/版本证据，使用合成清单测试缺文件、版本不符等分支，不重新申请或下载已验证的手册。判分侧保留已有 [Claude Code/OAuth 取舍](../docs/judge-access-options-2026-10-21.md)：可报告未验证的认证路径，不再用 key-only 分支代表所有技术可能；不做真实认证或判分。
 
-**要求：** 统一模式报告与实际入口的必要条件，区分授权、下载、版本校验和连通性。真实执行必须核对固定上游、所选领域/任务所需文件、已有手册版本证据与所选 provider 的凭据配置；缺失或未验证时明确阻断，不伪造连通性。无需重新申请或下载已验证的手册。判分认证还须保留已有 [Claude Code/OAuth 更正](../docs/judge-access-options-2026-10-21.md)，不要再次将原生 key 写成唯一技术路径；本轮不做真实认证或判分。
+## 独立运行与证据
 
-### R6 / P2：依赖没有锁定，不能据此宣称可复现
+所有 Python/uv 执行均在 Docker 内。候选由 git archive 导出，只读挂载；测试容器无网络、无 socket、无真实凭据。仅合成证据目录可写。原始日志日期使用 UTC，本报告使用上海日期。
 
-位置：[pyproject.toml](../pyproject.toml) 第 7–15 行；[Dockerfile](../Dockerfile) 第 1、12、24 行。
-
-提交没有 uv.lock 或等价锁文件；直接依赖都是 `>=`，uv 本身和基础镜像标签也未固定。`uv pip install -e ".[dev]"` 会在重新解析时选择当时的版本。将依赖装到 `/opt/venv` 解决的是位置隔离，不等于版本锁定。README 的“锁定依赖”及 tasks 2.9 的完成声明证据不足。
-
-**要求：** 在容器内生成并提交可审查的依赖锁，构建使用冻结安装；固定构建工具/解释器的实际版本或镜像身份，并记录架构。验证干净重建，不依赖临时手装或现有缓存。保留 Python 3.13 开发、官方 3.12 契约分别验证的边界；未验证的目标如实列出。
-
-### R7 / P2：NaN 和 Infinity 绕过有限正数检查
-
-位置：[run_baseline.py](../scripts/run_baseline.py) 第 376–384 行。
-
-float 参数仅检查 `<= 0`。`--budget-cny nan/inf`、`--timeout-multiplier nan/inf` 四个离线子例全部以 0 退出；后两项还进入生成的 YAML。NaN 不满足常规大小比较，正 Infinity 也大于零，因此当前判断并未落实“有限正数”。
-
-**要求：** 在写配置、建立运行目录或启动子进程前同时检查有限性与正数范围；为 NaN、正负 Infinity、零、负数补边界回归。
-
-### R8 / P2：相对 --env-file 在预检查与上游执行时指向不同文件
-
-位置：[run_baseline.py](../scripts/run_baseline.py) 第 159、279、464、533 行。
-
-预检查从启动目录读取相对 env-file，配置原样保留该相对路径，外部进程却在 vendor/chi-bench 中运行。独立探针使用 `--env-file review.env`：wrapper 侧文件存在，child cwd 下不存在，但包装仍以 0 结束。固定上游 `_load_env()` 在文件不存在时直接返回，且存在时使用 `load_dotenv(..., override=True)`；这也与本地门禁目前的进程环境优先策略不同。[上游 env 加载](https://github.com/actava-ai/chi-bench/blob/4444a07fa68a4f1623f841a292a54e284fc8e7f7/src/chi_bench/experiment/runner.py#L331)。
-
-**要求：** 尽早规范化 env-file 绝对路径，并保证预检查、YAML、执行环境及记录使用同一份配置和一致的优先级。补测相对路径、含空格路径以及文件/进程环境冲突；不输出真实凭据。
-
-## 独立检查与证据
-
-所有 Python 执行和测试均在 Docker 内。运行容器使用 `--network none`，没有 Docker socket 或真实凭据；候选源码只读，只有合成证据目录可写。构建使用单独标签 `chi-agent-d0-review:01a044fe`，未覆盖 Gemini 镜像。
-
-| 检查 | Codex 实际结果 |
+| 独立检查 | 结果 |
 | --- | --- |
-| 独立快照构建 | 退出 0；命中已有依赖层缓存，不等于无缓存依赖重建 |
-| 候选原有 unittest | 42/42 通过，0.210 秒，退出 0 |
-| 独立回归探针 | 13 个测试方法：2 个通过、11 个方法失败；含 NaN/Inf 子例，共 14 条失败断言，0 errors，退出 1 |
-| 相对 env-file 探针 | wrapper 路径存在、child 路径不存在，退出 1 |
-| 固定上游配置/argv | 实际 ExperimentConfig 解析成功；执行上游命令生成函数，核对 include-task-name、n-tasks=1、max-retries=0；未启动 Harbor |
-| 环境身份 | Python 3.13.17，`/opt/venv/bin/python3`，aarch64；PyYAML 6.0.3、pydantic 2.14.1、pytest 9.1.1 |
-| 审核镜像 ID | `sha256:3fc8876a8b3a57bdab39d68919358e4473c0dd6fdc91c285918e37d545efde7b` |
-| 候选 diff 格式 | `git diff --check <base> <candidate>` 退出 2；交付报告第 66、67 行有行尾空格，属于文档小问题，未改候选 |
+| Docker 构建 | docker build --no-cache，退出 0；开发依赖层重新执行，固定基础镜像按摘要复用 |
+| 原有 unittest | 51/51 通过，0.296 秒，退出 0 |
+| 补充探针 | 18 个测试方法，10 个通过、8 个方法失败；预算含两个子例，共 9 条失败断言，0 errors，退出 1 |
+| 依赖与真实 offline CLI | 11 个 lock 版本全部匹配；uv pip check 检查 12 个包（含本项目）通过；offline --json 退出 0 |
+| 环境 | Python 3.13.17，/opt/venv/bin/python3，aarch64，uv 0.6.14；无 docker CLI/socket |
+| 独立审核镜像 | chi-agent-d0-review:c4b410a；sha256:92d7eca90bbe001c729cd7f9881fa20921e48a57f3ee5ccfafb664af30bbbdec |
+| Git 格式 | 实际开工基线至候选的 git diff --check 通过 |
 
-Gemini 报告中的 pytest 42 项、带 socket 的 readiness 等是执行器自测证据；Codex 没有重复运行同一套 pytest，也没有按候选 Compose 开放 socket。上表为本次独立结果。
-
-实际执行的主要命令（工作目录为 Git 根目录，源码取自固定候选快照）：
+主要执行命令如下（工作目录为 Git 根目录）：
 
 ```bash
-docker build --progress=plain --tag chi-agent-d0-review:01a044fe \
-  /private/tmp/chi-d0-review-01a044fe/candidate/chi-agent
+docker build --no-cache --progress=plain --tag chi-agent-d0-review:c4b410a \
+  /private/tmp/chi-d0-review-c4b410a/candidate/chi-agent
 
 docker run --rm --network none \
-  --mount type=bind,source=/private/tmp/chi-d0-review-01a044fe/candidate/chi-agent,target=/workspace,readonly \
-  --workdir /workspace chi-agent-d0-review:01a044fe \
+  --mount type=bind,source=/private/tmp/chi-d0-review-c4b410a/candidate/chi-agent,target=/workspace,readonly \
+  --workdir /workspace chi-agent-d0-review:c4b410a \
   python3 -m unittest discover -s tests -v
-
-docker run --rm --network none \
-  --mount type=bind,source=/private/tmp/chi-d0-review-01a044fe/candidate/chi-agent,target=/workspace,readonly \
-  --mount type=bind,source=/private/tmp/chi-d0-review-01a044fe/probes,target=/probes,readonly \
-  --mount type=bind,source=/private/tmp/chi-d0-review-01a044fe/reference,target=/reference,readonly \
-  --mount type=bind,source=/private/tmp/chi-d0-review-01a044fe/logs,target=/evidence \
-  --workdir /workspace chi-agent-d0-review:01a044fe \
-  python3 /probes/audit_probes.py
 ```
 
-相对路径探针使用相同源码/probes/evidence 挂载，入口为 `python3 /probes/env_file_probe.py`。完整输出及探针已保留在本机忽略目录 `/Users/asaki/Documents/ChatGPT/Kaggle/chi-agent/.coordination/d0-review-01a044fe/`，不进入 GitHub：
+补充探针通过同样的只读源码挂载，另挂载 probes/reference 为只读、logs 为 /evidence 可写，执行 python3 /probes/review_probes.py；环境和锁文件检查执行 python3 /probes/environment_check.py。没有替换生产预算、判分或门禁函数，只替换外部进程和 fixture 路径。固定上游配置/argv 检查只执行 schema 与命令构造函数，未启动 Harbor。
 
-- `logs/build.log`、`logs/unittest.log`、`logs/probes.log`、`logs/env-file.log`。
-- `logs/observations.json`、`logs/env-file.json`、`logs/environment.json`。
-- `probes/audit_probes.py`、`probes/env_file_probe.py` 和固定上游只读 reference。
+全部原始证据保存在本机忽略目录 `/Users/asaki/Documents/ChatGPT/Kaggle/chi-agent/.coordination/d0-review-c4b410a/`：logs 中的 build.log、unittest.log、probes.log、observations.json、environment.json/log，以及 probes 和只读 reference。起始学习文档 patch 也已留存，原有教学记录继续保留。首次探针误清 PATH 的原始日志标为 probes-initial-invalid-env.log，不计入上述有效结果；修正探针运行环境后复跑已确认 R4 通过。原始文件不进入 GitHub。
 
-上游 config 文本经 GitHub connector 重新核对，与缓存一致；argv 探针只执行命令构造函数，并替换可执行文件定位及凭据边界，不启动上游执行器。所有 reward fixture 都是合成数据，不能作为官方评分或竞赛通过率。
+Gemini 自测与本次独立结果分开记录。未运行 OpenSpec CLI（镜像未提供）、官方 Python 3.12/其他架构兼容测试、任务容器/实时 MCP、真实模型往返、正式 trial、官方判分及真实超时清理。没有官方 reward、实测模型用量或费用；合成 fixture 的 reward 和成本不是竞赛证据。
 
-未运行：OpenSpec CLI（镜像未提供）、无缓存依赖重建、官方 Python 3.12/其他目标架构兼容检查、完整资料/实时 MCP、真实模型工具往返、正式 trial 和官方判分。超时后的子进程/任务容器清理也未作真实验证，不能把外层 timeout 当作精确费用或清理保障。
+## 接续与教学
 
-## 已核对的改进与接续
+用户只需把本报告 R2、R3、R5 转交 Gemini，在当前 main 上继续 D0；不重做已关闭项，除非返工影响它们的相关行为。修正 README/tasks/交付报告中的无证据完成声明，继续使用一份交付报告与稳定本地候选，停止修改后由用户通知 Codex。Codex 不自动派发、不自行改实现、不轮询；A/B/C、参赛模型 API 和官方判分继续暂停。
 
-- 原 submission 字段层级和 slug 路径已替换为实际支持的 ExperimentConfig，单题/单次尝试/并发 1 与禁重试参数的传递已做离线契约检查。
-- 原测试现在调用生产 main，而非在测试中自行编造终态；干运行确实不启动子进程，也不留下 started manifest。
-- 数值 0/1、布尔、0.5、缺文件及进程异常已有部分覆盖，但上述未覆盖场景仍阻止 D0 通过。
+下次先比较本次已审 c4b410a 与新候选，再核对初始规划累计目标及未决问题。已通过的完整 D0 实现提交仍为无。首审记录已保存在固定提交，REVIEW_STATE 保留两次审核索引。
 
-用户将本报告 R1–R8 交给 Gemini 返工；Codex 不直接改实现或自动派发。返工继续仅限 D0，报告/README/tasks 应反映实际完成范围，尤其不能保留预算已生效、依赖已锁定等无证据声明。仍使用一份阶段交付报告，稳定提交后停止写入，由用户提供新候选 SHA。
-
-下一轮先比较本次已审候选与新候选，再核对规划基线至新候选的累计目标和 R1–R8；记录关闭/未关闭证据，不把新增提交或备份当作通过。A/B/C、参赛模型 API、官方判分继续暂停。
-
-教学记录：已用实际 `main → build_experiment_config → YAML → uv/cb` 与独立 manifest 写入说明记录和执行约束的区别。用户回答“不能，仅有记录还不能约束执行”，支持其能判断这一具体区别；没有预算接入或调试实践证据，不扩大为已掌握 runner/预算系统。详见学习约定。
+本轮用真实元数据回退代码讲解身份优先级。用户回答“不归给 task-1，记录身份不匹配”，记为能判断该具体冲突；未据此推断其已实践 trial 解析或预算开发。此前 D0 总体能力与依赖锁的学习记录一并保留。
