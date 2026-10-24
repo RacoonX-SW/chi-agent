@@ -1,15 +1,14 @@
-FROM python:3.13-slim
+FROM python:3.13-slim@sha256:57b29a7c050c4e679e4bea572e14b3965cf4b5839de2da49d55e49ffc4024f39
 
-# Install system dependencies including docker-cli for environment inspections
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     curl \
     ca-certificates \
-    docker-cli \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv via pip
-RUN pip install --no-cache-dir uv
+# Install pinned uv
+RUN pip install --no-cache-dir uv==0.6.14
 
 # Set up isolated container environment for dependencies in /opt/venv
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
@@ -19,9 +18,9 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /workspace
 
-# Copy dependency definition and pre-install packages in /opt/venv
-COPY pyproject.toml /workspace/
-RUN uv venv /opt/venv && uv pip install -e ".[dev]"
+# Copy dependency definition and install locked dependencies in /opt/venv
+COPY pyproject.toml requirements.lock /workspace/
+RUN uv venv /opt/venv && uv pip install --no-cache -r requirements.lock && uv pip install --no-deps -e .
 
 # Default command runs offline tests
 CMD ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"]

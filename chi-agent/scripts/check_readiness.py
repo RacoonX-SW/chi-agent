@@ -5,7 +5,8 @@ scripts/check_readiness.py — no-model readiness check for chi-agent.
 Checks prerequisites per mode (offline, tools, ungraded, scored).
 Never makes a model call or downloads restricted content.
 Distinguishes credential presence from connectivity.
-Verifies handbook presence on disk or recorded download evidence.
+Verifies handbook presence on disk (authorization flag alone does not prove files).
+Offline mode does not require Docker socket or external services.
 
 Usage:
     python scripts/check_readiness.py
@@ -38,7 +39,7 @@ HANDBOOK_DIR = DATA_DIR / "skills" / "managed-care-operations-handbook"
 
 MIN_PYTHON = (3, 12)
 
-# Runner keys for ungraded execution
+# Runner keys for candidate models (DeepSeek, Gemini, etc.)
 RUNNER_ENV_VARS = ["DEEPSEEK_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"]
 JUDGE_ENV_VARS = ["ANTHROPIC_API_KEY"]
 
@@ -48,7 +49,7 @@ def load_env_file(env_file_path: Path | str | None) -> dict[str, str]:
     res: dict[str, str] = {}
     if not env_file_path:
         return res
-    p = Path(env_file_path)
+    p = Path(env_file_path).resolve()
     if not p.is_file():
         return res
     for line in p.read_text().splitlines():
@@ -204,37 +205,43 @@ def check_dataset() -> dict:
 
 def check_handbook(env: dict[str, str] | None = None) -> dict:
     """
-    Check handbook status: verified on disk or confirmed via environment variable.
+    Check handbook status.
+    Requires actual downloaded files on disk; an authorization flag alone
+    (e.g. HF_HANDBOOK_ACCESS_GRANTED=1) does NOT prove downloaded handbook.
     """
     if env is None:
         env = os.environ  # type: ignore[assignment]
-    # Check physical presence of handbook on disk
     skill_file = HANDBOOK_DIR / "SKILL.md"
     on_disk = skill_file.is_file() and skill_file.stat().st_size > 0
     granted_flag = (env.get("HF_HANDBOOK_ACCESS_GRANTED") or "").strip() == "1"
 
-    ok = on_disk or granted_flag
     if on_disk:
         detail = f"Handbook verified on disk at {HANDBOOK_DIR} (SKILL.md present)"
         note = "Local handbook files present and verified."
+        fix = None
     elif granted_flag:
-        detail = "HF_HANDBOOK_ACCESS_GRANTED=1 set (user-confirmed, files pending download)"
-        note = "Handbook access confirmed by user; verify files are downloaded before trial."
+        detail = (
+            "HF_HANDBOOK_ACCESS_GRANTED=1 is set, but handbook files are not downloaded on disk. "
+            f"Expected SKILL.md under {HANDBOOK_DIR}."
+        )
+        note = "Authorization flag alone is not a downloaded/versioned handbook."
+        fix = f"Download handbook to {HANDBOOK_DIR}"
     else:
         detail = (
-            "Managed-Care Operations Handbook not found on disk. "
+            f"Managed-Care Operations Handbook not found on disk at {HANDBOOK_DIR}. "
             "Apply at https://huggingface.co/datasets/actava/managed-care-operations-handbook "
-            "and download to data/skills/managed-care-operations-handbook."
+            "and download files."
         )
         note = "Required for medical task context in real agent execution."
+        fix = f"Download handbook to {HANDBOOK_DIR}"
 
     return {
         "check": "handbook_access",
         "category": "data",
-        "ok": ok,
+        "ok": on_disk,
         "detail": detail,
         "note": note,
-        "fix": None if ok else "Download handbook to data/skills/managed-care-operations-handbook",
+        "fix": fix,
     }
 
 
@@ -271,9 +278,9 @@ def check_credentials(env: dict[str, str] | None = None) -> dict[str, dict]:
 def evaluate_modes(env: dict[str, str] | None = None) -> dict:
     """
     Evaluate readiness for distinct modes:
-      - offline: python, git, docker CLI/daemon
-      - tools: offline + docker daemon + vendor or task data
-      - ungraded: tools + task dataset + handbook + at least 1 runner credential
+      - offline: python, git, uv (does NOT require docker socket, keys, or dataset)
+      - tools: offline + docker daemon + vendor checkout
+      - ungraded: tools + task dataset + handbook on disk + at least 1 runner credential
       - scored: ungraded + judge credential (ANTHROPIC_API_KEY)
     """
     if env is None:
@@ -289,24 +296,28 @@ def evaluate_modes(env: dict[str, str] | None = None) -> dict:
     creds = check_credentials(env)
 
     # Mode 1: Offline checks (container, unit tests, config validation)
-    # Does not require model keys, vendor checkout, or handbook.
-    offline_required = [py_chk, docker_chk, git_chk]
+    # R4: Does NOT require docker daemon/socket, vendor checkout, or API keys.
+    offline_required = [py_chk, git_chk, uv_chk]
     offline_failures = [c["detail"] for c in offline_required if not c["ok"]]
     offline_ready = len(offline_failures) == 0
 
     # Mode 2: Tools integration
-    tools_required = [docker_chk]
-    tools_failures = [c["detail"] for c in tools_required if not c["ok"]]
+    tools_failures = []
     if not docker_chk["ok"]:
-        tools_failures.append("Docker daemon is required for tool sandbox integration.")
+        tools_failures.append(docker_chk["detail"])
+    if not vendor_chk["ok"]:
+        tools_failures.append(vendor_chk["detail"])
     tools_ready = len(tools_failures) == 0
 
     # Mode 3: Ungraded execution (runs task with candidate model, no official judge)
-    # Requires docker, task dataset, handbook, and AT LEAST ONE runner model key.
+    # R5: Requires docker daemon, upstream vendor checkout, task dataset, handbook on disk,
+    # and at least one candidate runner key.
     runner_key_present = any(creds[var]["ok"] for var in RUNNER_ENV_VARS)
     ungraded_failures = []
     if not docker_chk["ok"]:
-        ungraded_failures.append("Docker daemon must be reachable.")
+        ungraded_failures.append("Docker daemon must be reachable for containerized execution.")
+    if not vendor_chk["ok"]:
+        ungraded_failures.append(vendor_chk["detail"])
     if not data_chk["ok"]:
         ungraded_failures.append(data_chk["detail"])
     if not handbook_chk["ok"]:
@@ -340,22 +351,22 @@ def evaluate_modes(env: dict[str, str] | None = None) -> dict:
         "offline": {
             "ready": offline_ready,
             "failures": offline_failures,
-            "required_checks": ["python_version", "docker", "git"],
+            "required_checks": ["python_version", "git", "uv"],
         },
         "tools": {
             "ready": tools_ready,
             "failures": tools_failures,
-            "required_checks": ["docker"],
+            "required_checks": ["docker", "upstream_vendor"],
         },
         "ungraded": {
             "ready": ungraded_ready,
             "failures": ungraded_failures,
-            "required_checks": ["docker", "task_dataset", "handbook_access", "runner_api_key"],
+            "required_checks": ["docker", "upstream_vendor", "task_dataset", "handbook_access", "runner_api_key"],
         },
         "scored": {
             "ready": scored_ready,
             "failures": scored_failures,
-            "required_checks": ["docker", "task_dataset", "handbook_access", "runner_api_key", "env:ANTHROPIC_API_KEY"],
+            "required_checks": ["docker", "upstream_vendor", "task_dataset", "handbook_access", "runner_api_key", "env:ANTHROPIC_API_KEY"],
         },
         "all_checks": all_checks,
     }
@@ -379,14 +390,12 @@ def main() -> None:
 
     # Load env file and merge with process env
     file_env = load_env_file(args.env_file)
-    effective_env = {**file_env, **os.environ}
+    effective_env = {**os.environ, **file_env}
 
     report = evaluate_modes(effective_env)
 
     target_mode = args.mode
-    is_ready = True
     if target_mode == "all":
-        # In 'all' mode, report is ready if offline is ready, while indicating status of others
         is_ready = report["offline"]["ready"]
     else:
         is_ready = report[target_mode]["ready"]

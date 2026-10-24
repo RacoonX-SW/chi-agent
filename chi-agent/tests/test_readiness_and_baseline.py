@@ -6,18 +6,24 @@ only external boundaries (subprocess, network, filesystem artifacts, clock, os.e
 
 Covers:
   - Multi-mode readiness evaluation (offline, tools, ungraded, scored)
-  - Missing ANTHROPIC_API_KEY does NOT block offline or ungraded mode
+  - Missing ANTHROPIC_API_KEY does NOT block offline mode
   - Missing ANTHROPIC_API_KEY DOES block scored mode
-  - Handbook verified via on-disk presence or environment confirmation
+  - Handbook verified via on-disk presence; env authorization flag alone is rejected
+  - Ungraded mode requires vendor checkout, dataset, handbook on disk, runner credentials
   - Credential presence reported without exposing values
   - Credential presence distinguished from proven connectivity
+  - Offline mode does NOT require Docker socket or daemon (R4)
+  - Ungraded real execution is explicitly blocked before subprocess launch (R1)
   - Single-task enforcement in ExperimentConfig (include_task_name + n_tasks=1)
   - Rejection of multi-task / multi-attempt misconfiguration
   - Real argv construction: cb experiment run -f <experiment.yaml>
-  - Strict binary reward validation (1.0 passed, 0.0 completed unsolved, non-binary rejected)
-  - Ungraded run produces completed status with official_reward=null
-  - Subprocess failure, timeout, launch exception, and missing verdict handling
-  - Finite generation limits and budget parameter validation
+  - Forwarding finite limits into agent_kwargs (R2)
+  - Offline budget decision logic: reservation check, unverified unknown usage (R2)
+  - Trial directory resolution via config.json metadata and prefix matching (R3)
+  - Ambiguous multiple matching trials rejected (R3)
+  - Strict binary reward validation: rejects bool, str, NaN, 0.5; records actual reward path (R3)
+  - Strict finite positive numbers validation: rejects NaN, Inf, <=0 (R7)
+  - Absolute resolution of relative --env-file paths and override priority (R8)
   - Dry-run validation without subprocess or started manifest
   - No credential values ever saved in manifest
 """
@@ -25,6 +31,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -108,15 +115,17 @@ class TestReadinessChecks(unittest.TestCase):
                 self.assertTrue(res["ok"])
                 self.assertIn("verified on disk", res["detail"].lower())
 
-    def test_handbook_granted_via_env_flag(self):
+    def test_handbook_granted_via_env_flag_alone_fails(self):
+        """R5: Authorization flag alone is NOT downloaded/versioned handbook files."""
         import check_readiness as cr
         with tempfile.TemporaryDirectory() as td:
             empty_dir = Path(td) / "empty"
             empty_dir.mkdir()
             with patch.object(cr, "HANDBOOK_DIR", empty_dir):
                 res = cr.check_handbook(env={"HF_HANDBOOK_ACCESS_GRANTED": "1"})
-                self.assertTrue(res["ok"])
+                self.assertFalse(res["ok"])
                 self.assertIn("HF_HANDBOOK_ACCESS_GRANTED=1", res["detail"])
+                self.assertIn("not downloaded", res["detail"].lower())
 
     def test_handbook_missing_when_not_on_disk_and_no_flag(self):
         import check_readiness as cr
@@ -140,15 +149,31 @@ class TestReadinessChecks(unittest.TestCase):
         note = (creds["ANTHROPIC_API_KEY"].get("note") or "").lower()
         self.assertIn("not verified", note)
 
-    def test_offline_mode_does_not_require_api_keys(self):
-        """Offline mode should be READY even if no API keys are set."""
+    def test_offline_mode_does_not_require_docker_or_api_keys(self):
+        """R4: Offline mode is READY with python, git, and uv; does NOT require docker daemon/socket or keys."""
         import check_readiness as cr
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
-             patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
-             patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}):
+             patch.object(cr, "check_docker", return_value={"ok": False, "detail": "Docker daemon down"}), \
+             patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_uv", return_value={"ok": True, "detail": "OK"}):
             modes = cr.evaluate_modes(env={})
             self.assertTrue(modes["offline"]["ready"])
             self.assertEqual(modes["offline"]["failures"], [])
+
+    def test_ungraded_mode_requires_vendor_checkout(self):
+        """R5: Ungraded mode requires vendor checkout at pinned commit."""
+        import check_readiness as cr
+        with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
+             patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_uv", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_vendor", return_value={"ok": False, "detail": "vendor not cloned"}), \
+             patch.object(cr, "check_dataset", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_handbook", return_value={"ok": True, "detail": "OK"}):
+            env = {"DEEPSEEK_API_KEY": "sk-deepseek"}
+            modes = cr.evaluate_modes(env=env)
+            self.assertFalse(modes["ungraded"]["ready"])
+            self.assertTrue(any("vendor" in f.lower() for f in modes["ungraded"]["failures"]))
 
     def test_ungraded_mode_does_not_require_anthropic_key(self):
         """Ungraded mode requires a runner key (e.g. DeepSeek/Gemini), NOT Anthropic key."""
@@ -156,9 +181,10 @@ class TestReadinessChecks(unittest.TestCase):
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
              patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_uv", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_vendor", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_dataset", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_handbook", return_value={"ok": True, "detail": "OK"}):
-            # No ANTHROPIC_API_KEY, but DEEPSEEK_API_KEY is present
             env = {"DEEPSEEK_API_KEY": "sk-deepseek-123"}
             modes = cr.evaluate_modes(env=env)
             self.assertTrue(modes["ungraded"]["ready"])
@@ -171,6 +197,8 @@ class TestReadinessChecks(unittest.TestCase):
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
              patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_uv", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_vendor", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_dataset", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_handbook", return_value={"ok": True, "detail": "OK"}):
             env = {"DEEPSEEK_API_KEY": "sk-deepseek", "ANTHROPIC_API_KEY": "sk-anthropic"}
@@ -220,8 +248,11 @@ class TestRunBaselineHelpers(unittest.TestCase):
             agent="deepagents",
             model="deepseek/deepseek-chat",
             trials_dir="runs/run-1/output/trials",
-            env_file=".env",
+            env_file="/path/to/.env",
             timeout_multiplier=1.5,
+            max_rounds=25,
+            max_tokens_per_request=4096,
+            budget_cny=3.5,
         )
         self.assertEqual(cfg["dataset"], "data/prior_auth_provider/tasks")
         self.assertEqual(cfg["include_task_name"], ["pa_t018_sample"])
@@ -230,6 +261,11 @@ class TestRunBaselineHelpers(unittest.TestCase):
         self.assertEqual(cfg["concurrency"], 1)
         self.assertEqual(cfg["timeout_multiplier"], 1.5)
         self.assertEqual(cfg["environment"], "docker")
+        self.assertEqual(cfg["max_retries"], 0)
+        # R2: agent_kwargs forwards limits
+        self.assertEqual(cfg["agent_kwargs"]["max_rounds"], "25")
+        self.assertEqual(cfg["agent_kwargs"]["max_tokens_per_request"], "4096")
+        self.assertEqual(cfg["agent_kwargs"]["budget_cny"], "3.5")
 
     def test_build_experiment_config_rejects_multi_task(self):
         rb = self.rb
@@ -242,7 +278,7 @@ class TestRunBaselineHelpers(unittest.TestCase):
                 trials_dir="trials",
                 env_file=".env",
                 timeout_multiplier=1.0,
-                n_tasks=2,  # Multi-task rejected!
+                n_tasks=2,
             )
 
     def test_build_experiment_config_rejects_multi_attempt(self):
@@ -256,7 +292,7 @@ class TestRunBaselineHelpers(unittest.TestCase):
                 trials_dir="trials",
                 env_file=".env",
                 timeout_multiplier=1.0,
-                n_attempts=3,  # Multi-attempt rejected!
+                n_attempts=3,
             )
 
     def test_build_experiment_config_rejects_multi_concurrency(self):
@@ -270,20 +306,58 @@ class TestRunBaselineHelpers(unittest.TestCase):
                 trials_dir="trials",
                 env_file=".env",
                 timeout_multiplier=1.0,
-                concurrency=4,  # Concurrency > 1 rejected!
+                concurrency=4,
             )
 
     # ------------------------------------------------------------------
-    # Reward Extraction and Validation
+    # Budget Evaluation (R2)
+    # ------------------------------------------------------------------
+
+    def test_evaluate_budget_insufficient_reservation(self):
+        rb = self.rb
+        status, reason = rb.evaluate_budget(
+            budget_cny=0.000001,
+            max_rounds=1,
+            max_tokens_per_request=1,
+        )
+        self.assertEqual(status, "stopped_insufficient_budget")
+        self.assertIn("insufficient", reason)
+
+    def test_evaluate_budget_unmeasured_usage_post_execution(self):
+        rb = self.rb
+        status, reason = rb.evaluate_budget(
+            budget_cny=5.0,
+            max_rounds=30,
+            max_tokens_per_request=8192,
+            token_usage=None,
+            cost_usd=None,
+        )
+        self.assertEqual(status, "unverified_unknown_usage")
+        self.assertIn("cannot be verified", reason)
+
+    def test_evaluate_budget_within_budget(self):
+        rb = self.rb
+        status, reason = rb.evaluate_budget(
+            budget_cny=5.0,
+            max_rounds=30,
+            max_tokens_per_request=8192,
+            token_usage={"prompt_tokens": 100, "completion_tokens": 50},
+            cost_usd=0.01,
+        )
+        self.assertEqual(status, "within_budget")
+
+    # ------------------------------------------------------------------
+    # Reward Extraction and Binary Validation (R3)
     # ------------------------------------------------------------------
 
     def test_extract_reward_ungraded_mode_returns_none(self):
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            reward, sc_path, reason = rb.extract_reward(output_dir, "task-1", mode="ungraded")
+            reward, sc_path, reason, rew_path = rb.extract_reward(output_dir, "task-1", mode="ungraded")
             self.assertIsNone(reward)
             self.assertIsNone(sc_path)
+            self.assertIsNone(rew_path)
             self.assertIn("ungraded", reason)
 
     def test_extract_reward_binary_1_passed(self):
@@ -292,9 +366,11 @@ class TestRunBaselineHelpers(unittest.TestCase):
             output_dir = Path(td)
             vdir = output_dir / "trials" / "task-1" / "verifier"
             vdir.mkdir(parents=True)
-            (vdir / "reward.json").write_text('{"reward": 1.0}')
-            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            rf = vdir / "reward.json"
+            rf.write_text('{"reward": 1.0}')
+            reward, _, reason, actual_path = rb.extract_reward(output_dir, "task-1", mode="scored")
             self.assertEqual(reward, 1.0)
+            self.assertEqual(actual_path, str(rf))
             self.assertIn("passed", reason)
 
     def test_extract_reward_binary_0_completed_unsolved(self):
@@ -303,10 +379,65 @@ class TestRunBaselineHelpers(unittest.TestCase):
             output_dir = Path(td)
             vdir = output_dir / "trials" / "task-1" / "verifier"
             vdir.mkdir(parents=True)
-            (vdir / "reward.json").write_text('{"reward": 0.0}')
-            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            rf = vdir / "reward.json"
+            rf.write_text('{"reward": 0.0}')
+            reward, _, reason, actual_path = rb.extract_reward(output_dir, "task-1", mode="scored")
             self.assertEqual(reward, 0.0)
+            self.assertEqual(actual_path, str(rf))
             self.assertIn("not passed", reason)
+
+    def test_extract_reward_with_trial_suffix_and_config_json(self):
+        """R3: Resolve trial directory with random suffix and verify actual path."""
+        rb = self.rb
+        with tempfile.TemporaryDirectory() as td:
+            output_dir = Path(td)
+            trial_dir = output_dir / "trials" / "job-1" / "pa_t018__AbC123"
+            vdir = trial_dir / "verifier"
+            vdir.mkdir(parents=True)
+            (trial_dir / "config.json").write_text(json.dumps({"task": {"path": "/synthetic/pa_t018"}}))
+            rf = vdir / "reward.json"
+            rf.write_text('{"reward": 1.0}')
+            reward, _, reason, actual_path = rb.extract_reward(output_dir, "pa_t018", mode="scored")
+            self.assertEqual(reward, 1.0)
+            self.assertEqual(actual_path, str(rf))
+
+    def test_extract_reward_rejects_ambiguous_trials(self):
+        """R3: Rejects ambiguous multiple matching trial directories."""
+        rb = self.rb
+        with tempfile.TemporaryDirectory() as td:
+            output_dir = Path(td)
+            for job, rew in [("job-1", 1.0), ("job-2", 0.0)]:
+                vdir = output_dir / "trials" / job / "task-1" / "verifier"
+                vdir.mkdir(parents=True)
+                (vdir / "reward.json").write_text(json.dumps({"reward": rew}))
+            reward, sc_path, reason, actual_path = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertIsNone(reward)
+            self.assertIsNone(actual_path)
+            self.assertIn("Ambiguous", reason)
+
+    def test_extract_reward_rejects_numeric_string(self):
+        """R3: String '1' is rejected as non-numeric binary."""
+        rb = self.rb
+        with tempfile.TemporaryDirectory() as td:
+            output_dir = Path(td)
+            vdir = output_dir / "trials" / "task-1" / "verifier"
+            vdir.mkdir(parents=True)
+            (vdir / "reward.json").write_text('{"reward": "1"}')
+            reward, _, reason, _ = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertIsNone(reward)
+            self.assertIn("string", reason)
+
+    def test_extract_reward_rejects_boolean(self):
+        """R3: Boolean True is rejected."""
+        rb = self.rb
+        with tempfile.TemporaryDirectory() as td:
+            output_dir = Path(td)
+            vdir = output_dir / "trials" / "task-1" / "verifier"
+            vdir.mkdir(parents=True)
+            (vdir / "reward.json").write_text('{"reward": true}')
+            reward, _, reason, _ = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertIsNone(reward)
+            self.assertIn("boolean", reason)
 
     def test_extract_reward_rejects_non_binary_float(self):
         """0.5 is non-binary and must be rejected as invalid reward."""
@@ -316,7 +447,7 @@ class TestRunBaselineHelpers(unittest.TestCase):
             vdir = output_dir / "trials" / "task-1" / "verifier"
             vdir.mkdir(parents=True)
             (vdir / "reward.json").write_text('{"reward": 0.5}')
-            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            reward, _, reason, _ = rb.extract_reward(output_dir, "task-1", mode="scored")
             self.assertIsNone(reward)
             self.assertIn("Invalid non-binary reward", reason)
 
@@ -327,26 +458,15 @@ class TestRunBaselineHelpers(unittest.TestCase):
             vdir = output_dir / "trials" / "task-1" / "verifier"
             vdir.mkdir(parents=True)
             (vdir / "reward.json").write_text('{"reward": -1.0}')
-            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            reward, _, reason, _ = rb.extract_reward(output_dir, "task-1", mode="scored")
             self.assertIsNone(reward)
             self.assertIn("Invalid non-binary reward", reason)
-
-    def test_extract_reward_rejects_boolean(self):
-        rb = self.rb
-        with tempfile.TemporaryDirectory() as td:
-            output_dir = Path(td)
-            vdir = output_dir / "trials" / "task-1" / "verifier"
-            vdir.mkdir(parents=True)
-            (vdir / "reward.json").write_text('{"reward": true}')
-            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
-            self.assertIsNone(reward)
-            self.assertIn("boolean", reason)
 
     def test_extract_reward_missing_file_returns_none(self):
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            reward, _, reason = rb.extract_reward(output_dir, "missing-task", mode="scored")
+            reward, _, reason, _ = rb.extract_reward(output_dir, "missing-task", mode="scored")
             self.assertIsNone(reward)
             self.assertIn("not found", reason)
 
@@ -357,7 +477,7 @@ class TestRunBaselineHelpers(unittest.TestCase):
             vdir = output_dir / "trials" / "task-1" / "verifier"
             vdir.mkdir(parents=True)
             (vdir / "reward.json").write_text("NOT_VALID_JSON{")
-            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            reward, _, reason, _ = rb.extract_reward(output_dir, "task-1", mode="scored")
             self.assertIsNone(reward)
             self.assertIn("could not be parsed", reason)
 
@@ -371,7 +491,7 @@ class TestRunBaselineMain(unittest.TestCase):
     def _run_main_with_mocks(
         self,
         *,
-        mode: str = "ungraded",
+        mode: str = "scored",
         task_name: str = "pa_t018_test",
         domain: str = "pa_provider",
         agent: str = "deepagents",
@@ -457,17 +577,52 @@ class TestRunBaselineMain(unittest.TestCase):
 
         return exit_code, manifest, runs_dir
 
-    def test_ungraded_successful_run(self):
-        """Ungraded run exits 0, status is completed, official reward is null."""
-        exit_code, manifest, _ = self._run_main_with_mocks(
-            mode="ungraded",
-            subprocess_returncode=0,
-        )
-        self.assertEqual(exit_code, 0)
-        self.assertIsNotNone(manifest)
-        self.assertEqual(manifest["execution_status"], "completed")
-        self.assertIsNone(manifest["reward"])
-        self.assertIn("ungraded", manifest["reward_reason"])
+    def test_ungraded_real_execution_blocked_before_subprocess(self):
+        """R1: Ungraded real execution is explicitly blocked before subprocess launch."""
+        import run_baseline as rb
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            runs_dir = td_path / "runs"
+            env_file = td_path / ".env"
+            env_file.write_text("DEEPSEEK_API_KEY=sk-test\n")
+
+            orig_runs_dir = rb.RUNS_DIR
+            rb.RUNS_DIR = runs_dir
+            exit_code = None
+            mock_sub = MagicMock()
+            mock_sub.return_value = MagicMock(returncode=0, stdout="test-git-sha\n")
+
+            try:
+                with patch("sys.argv", [
+                    "run_baseline",
+                    "--agent", "deepagents",
+                    "--model", "deepseek/deepseek-chat",
+                    "--task-name", "pa_t018",
+                    "--mode", "ungraded",
+                    "--env-file", str(env_file),
+                ]), patch("subprocess.run", mock_sub):
+                    try:
+                        rb.main()
+                    except SystemExit as e:
+                        exit_code = e.code
+            finally:
+                rb.RUNS_DIR = orig_runs_dir
+
+            # Blocked before external process launch: no cb/uv experiment run launched
+            self.assertEqual(exit_code, 2)
+            experiment_calls = [
+                c for c in mock_sub.call_args_list
+                if c.args and isinstance(c.args[0], list) and c.args[0] and c.args[0][0] != "git"
+            ]
+            self.assertEqual(experiment_calls, [])
+
+            manifests = list(runs_dir.glob("*/manifest.json"))
+            self.assertTrue(manifests, "Blocked run must write manifest recording reason")
+            manifest = json.loads(manifests[0].read_text())
+            self.assertEqual(manifest["execution_status"], "blocked_before_execution")
+            self.assertEqual(manifest["exit_code"], 2)
+            self.assertIn("Ungraded real execution is currently unsupported", manifest["reward_reason"])
 
     def test_scored_successful_run_reward_1(self):
         exit_code, manifest, _ = self._run_main_with_mocks(
@@ -480,6 +635,8 @@ class TestRunBaselineMain(unittest.TestCase):
         self.assertEqual(manifest["execution_status"], "completed")
         self.assertEqual(manifest["reward"], 1.0)
         self.assertIn("passed", manifest["reward_reason"])
+        # R2: token usage was not measured by harness, so budget status is unverified_unknown_usage
+        self.assertEqual(manifest["budget_status"], "unverified_unknown_usage")
 
     def test_scored_evaluation_reward_0(self):
         exit_code, manifest, _ = self._run_main_with_mocks(
@@ -506,7 +663,7 @@ class TestRunBaselineMain(unittest.TestCase):
 
     def test_subprocess_failure_gives_process_failed(self):
         exit_code, manifest, _ = self._run_main_with_mocks(
-            mode="ungraded",
+            mode="scored",
             subprocess_returncode=1,
         )
         self.assertEqual(exit_code, 1)
@@ -532,7 +689,7 @@ class TestRunBaselineMain(unittest.TestCase):
         self.assertIsNone(manifest["reward"])
 
     def test_generated_config_is_single_task_experiment_yaml(self):
-        """Verify the written YAML conforms to ExperimentConfig with single task bound."""
+        """Verify the written YAML conforms to ExperimentConfig with single task bound and limits forwarded."""
         import run_baseline as rb
         import yaml
 
@@ -551,7 +708,7 @@ class TestRunBaselineMain(unittest.TestCase):
                     "--model", "deepseek/deepseek-chat",
                     "--domain", "pa_provider",
                     "--task-name", "pa_t018_sample",
-                    "--mode", "ungraded",
+                    "--mode", "scored",
                     "--env-file", str(env_file),
                 ]), patch.object(rb, "_check_prerequisites", return_value=[]), \
                    patch("subprocess.run") as mock_sub:
@@ -573,6 +730,61 @@ class TestRunBaselineMain(unittest.TestCase):
             self.assertEqual(cfg["concurrency"], 1)
             self.assertEqual(cfg["agent"], "deepagents")
             self.assertEqual(cfg["model"], "deepseek/deepseek-chat")
+            # R2: agent limits forwarded
+            self.assertIn("agent_kwargs", cfg)
+            self.assertEqual(cfg["agent_kwargs"]["max_rounds"], "30")
+            # R8: env_file is absolute
+            self.assertTrue(Path(cfg["env_file"]).is_absolute())
+
+    def test_relative_env_file_resolves_to_absolute_path(self):
+        """R8: Relative --env-file is resolved to absolute path so child process in vendor/ loads the same file."""
+        import run_baseline as rb
+        import yaml
+
+        with tempfile.TemporaryDirectory() as td:
+            td_path = Path(td)
+            rel_env = td_path / "local.env"
+            rel_env.write_text("DEEPSEEK_API_KEY=test-val\n")
+
+            runs_dir = td_path / "runs"
+            orig_runs = rb.RUNS_DIR
+            rb.RUNS_DIR = runs_dir
+
+            captured_cfg = {}
+
+            def mock_sub(argv, **kw):
+                if argv[0] == "git":
+                    proc = MagicMock()
+                    proc.returncode = 0
+                    proc.stdout = "git-sha\n"
+                    return proc
+                cfg_path = Path(argv[argv.index("-f") + 1])
+                captured_cfg.update(yaml.safe_load(cfg_path.read_text()))
+                proc = MagicMock()
+                proc.returncode = 0
+                return proc
+
+            try:
+                with patch("sys.argv", [
+                    "run_baseline",
+                    "--agent", "deepagents",
+                    "--model", "deepseek/chat",
+                    "--task-name", "pa_t018",
+                    "--mode", "scored",
+                    "--env-file", str(rel_env),
+                ]), patch.object(rb, "_check_prerequisites", return_value=[]), \
+                   patch("subprocess.run", side_effect=mock_sub):
+                    try:
+                        rb.main()
+                    except SystemExit:
+                        pass
+            finally:
+                rb.RUNS_DIR = orig_runs
+
+            self.assertTrue(captured_cfg, "Subprocess was not called")
+            resolved_env = Path(captured_cfg["env_file"])
+            self.assertTrue(resolved_env.is_absolute(), f"env_file must be absolute: {resolved_env}")
+            self.assertTrue(resolved_env.is_file(), f"resolved env file must exist: {resolved_env}")
 
     def test_dry_run_exits_zero_without_subprocess_or_started_manifest(self):
         import run_baseline as rb
@@ -631,6 +843,22 @@ class TestRunBaselineMain(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("timeout-multiplier", result.stdout + result.stderr)
 
+    def test_non_finite_parameters_rejected(self):
+        """R7: Validate that NaN and Inf are rejected across float parameters."""
+        for flag in ["--budget-cny", "--timeout-multiplier"]:
+            for bad_val in ["nan", "inf", "-inf"]:
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
+                     "--agent", "a", "--model", "m", "--task-name", "t",
+                     "--dry-run", f"{flag}={bad_val}"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertNotEqual(
+                    result.returncode, 0,
+                    f"Expected {flag}={bad_val} to be rejected with non-zero exit code"
+                )
+                self.assertIn("finite positive number", result.stdout + result.stderr)
+
     def test_missing_task_name_rejected(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
@@ -657,7 +885,7 @@ class TestRunBaselineMain(unittest.TestCase):
                     "--agent", "deepagents",
                     "--model", "deepseek/chat",
                     "--task-name", "pa_t018",
-                    "--mode", "ungraded",
+                    "--mode", "scored",
                     "--env-file", str(env_file),
                 ]), patch.object(rb, "_check_prerequisites", return_value=[]), \
                    patch("subprocess.run") as mock_sub:

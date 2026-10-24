@@ -7,7 +7,6 @@ services:
     container_name: chi-agent-dev
     volumes:
       - .:/workspace
-      - /var/run/docker.sock:/var/run/docker.sock
     working_dir: /workspace
     environment:
       - PYTHONUNBUFFERED=1

@@ -7,18 +7,19 @@ Wraps the upstream `cb experiment run` CLI at the pinned commit with:
   - Single-task enforcement via include_task_name + n_tasks=1 in the
     ExperimentConfig YAML (upstream `cb experiment run -f <yaml>`)
   - Explicit single-task validation (rejects multi-task / multi-attempt configs)
-  - Isolated run directory under runs/<run_id>/
-  - Lowercase slug-safe run IDs
-  - Outer wall-clock timeout around subprocess
-  - Honest manifest written before and after subprocess
-  - Support for both ungraded development runs and scored evaluation runs
-  - Strict binary reward extraction from verifier/reward.json:
-    * 1.0 -> passed=True, completed
-    * 0.0 -> passed=False, completed (task evaluated but unsolved)
-    * non-binary (e.g. 0.5, negative, bool, NaN) -> null with error reason
-  - Finite generation limits and budget tracking (budget_cny, max_rounds, max_tokens)
-  - Dry-run outputs real command and preview config with dry_run status without
-    starting subprocess or leaving a started manifest.
+  - Forwarding finite limits (max_rounds, max_tokens, budget) into agent_kwargs
+  - Offline budget decision logic (checks pre-request reservation and flags unknown usage)
+  - Absolute env-file resolution ensuring child process in vendor/ loads the same file
+  - Strict finite positive numbers validation (rejects NaN, Inf, <=0)
+  - Mode enforcement:
+    * 'scored': requires Anthropic key, executes with official verifier
+    * 'ungraded': real execution blocked in D0 until verified skip-verifier entry is available;
+      dry-run and offline checks fully supported
+  - Robust verdict extraction:
+    * Traverses trials inspecting config.json metadata and task directory names
+    * Rejects ambiguous trial directories (multiple matching runs)
+    * Strict binary validation: only numeric 0.0 and 1.0 accepted (rejects bool, str, NaN, 0.5)
+    * Returns actual read reward/scorecard path
 
 UPSTREAM CONTRACT (commit 4444a07fa68a4f1623f841a292a54e284fc8e7f7):
   cb experiment run -f <ExperimentConfig.yaml>
@@ -28,6 +29,7 @@ UPSTREAM CONTRACT (commit 4444a07fa68a4f1623f841a292a54e284fc8e7f7):
     n_tasks: 1
     n_attempts: 1
     concurrency: 1
+    agent_kwargs: {max_rounds: ..., max_tokens_per_request: ..., budget_cny: ...}
 
 Usage:
     python scripts/run_baseline.py \\
@@ -49,6 +51,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import re
 import shutil
@@ -76,87 +79,179 @@ DOMAIN_DATASET_MAP = {
     "cm": "care_management/tasks",
 }
 
+RUNNER_ENV_VARS = ["DEEPSEEK_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY"]
+JUDGE_ENV_VARS = ["ANTHROPIC_API_KEY"]
+
 # Slug-safe pattern: lowercase letters, digits, '-', '_'
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-_]*$")
 
+# Minimum budget reservation required to conservatively attempt a single request (CNY)
+MIN_SINGLE_REQUEST_RESERVATION_CNY = 0.001
+
 
 # ---------------------------------------------------------------------------
-# Reward extraction and binary validation
+# Parameter Validation Helpers
+# ---------------------------------------------------------------------------
+
+def _validate_positive_finite(name: str, val: float | int) -> None:
+    """Validate that val is a finite positive number. Rejects NaN, Inf, and non-positive numbers."""
+    if not (isinstance(val, (int, float)) and math.isfinite(val) and val > 0):
+        print(f"ERROR: {name} must be a finite positive number (got {val!r})")
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Budget Evaluation
+# ---------------------------------------------------------------------------
+
+def evaluate_budget(
+    budget_cny: float,
+    max_rounds: int,
+    max_tokens_per_request: int,
+    token_usage: dict | None = None,
+    cost_usd: float | None = None,
+) -> tuple[str, str]:
+    """
+    Evaluate budget status and decision.
+
+    Returns:
+        (budget_status, budget_reason)
+    """
+    # Pre-execution check: cannot conservatively fit even 1 request
+    if budget_cny < MIN_SINGLE_REQUEST_RESERVATION_CNY:
+        return (
+            "stopped_insufficient_budget",
+            f"Budget {budget_cny} CNY is insufficient for minimum single-request reservation ({MIN_SINGLE_REQUEST_RESERVATION_CNY} CNY)",
+        )
+
+    # Post-execution: if usage was not measured by harness / runner, do not claim within budget
+    if token_usage is None or cost_usd is None:
+        return (
+            "unverified_unknown_usage",
+            "Subprocess returned no measured token usage; unknown usage cannot be verified within budget",
+        )
+
+    return ("within_budget", "Token usage confirmed within planned budget")
+
+
+# ---------------------------------------------------------------------------
+# Reward Extraction & Binary Validation
 # ---------------------------------------------------------------------------
 
 def extract_reward(
     output_dir: Path,
     task_name: str,
     mode: str = "scored",
-) -> tuple[float | None, str | None, str]:
+) -> tuple[float | None, str | None, str, str | None]:
     """
     Extract and validate the binary reward from verifier/reward.json.
 
-    Returns:
-        (reward, scorecard_path, reason)
-        reward is strictly 1.0 or 0.0 for valid scored runs, or None if invalid/ungraded/missing.
+    Finds candidate trial directories by checking config.json task metadata and
+    directory names (handling random suffixes and truncated names).
+    Rejects ambiguous results if multiple matching trials are found.
+    Strictly verifies numeric binary values (0.0 or 1.0); rejects bool, str, NaN, 0.5.
 
-    Strict validation:
-        - Mode 'ungraded': returns (None, None, "ungraded run — official verifier not executed")
-        - Missing file: returns (None, None, "reward.json not found — run may have failed before verifier")
-        - Non-binary value (e.g. 0.5, negative, NaN, string, bool): returns (None, None, "Invalid non-binary reward: ...")
-        - 1.0 or 1: returns (1.0, scorecard_path, "reward=1.0 (passed)")
-        - 0.0 or 0: returns (0.0, scorecard_path, "reward=0.0 (not passed)")
+    Returns:
+        (reward, scorecard_path, reason, actual_reward_path)
     """
     if mode == "ungraded":
-        return None, None, "ungraded run — official verifier not executed"
+        return None, None, "ungraded run — official verifier not executed", None
 
-    trial_dir = output_dir / "trials" / task_name
-    reward_path = trial_dir / "verifier" / "reward.json"
-    scorecard_path = trial_dir / "verifier" / "scorecard.json"
+    output_path = Path(output_dir)
+    reward_files = list(output_path.glob("**/verifier/reward.json"))
 
-    if not reward_path.exists():
-        # Also check fallback locations if trials_dir is nested differently
-        alt_reward = list(output_dir.glob(f"**/trials/**/{task_name}/**/reward.json"))
-        if alt_reward:
-            reward_path = alt_reward[0]
-            alt_sc = reward_path.parent / "scorecard.json"
-            scorecard_path = alt_sc if alt_sc.exists() else scorecard_path
-        else:
-            return None, None, "reward.json not found — run may have failed before verifier"
+    matching: list[tuple[Path, Path]] = []
+    for rf in reward_files:
+        trial_dir = rf.parent.parent
+
+        # 1. Check config.json task metadata if present
+        cfg_path = trial_dir / "config.json"
+        matched = False
+        if cfg_path.is_file():
+            try:
+                cfg_data = json.loads(cfg_path.read_text())
+                task_info = cfg_data.get("task", {})
+                if isinstance(task_info, dict):
+                    t_path = str(task_info.get("path", ""))
+                    t_id = str(task_info.get("id", ""))
+                    t_name = str(task_info.get("name", ""))
+                    if (
+                        Path(t_path).name == task_name
+                        or t_path.endswith(f"/{task_name}")
+                        or t_id == task_name
+                        or t_name == task_name
+                    ):
+                        matched = True
+            except Exception:
+                pass
+
+        # 2. Check directory name (handling random suffixes like task-1__AbC123)
+        if not matched:
+            d_name = trial_dir.name
+            if d_name == task_name or d_name.startswith(f"{task_name}__") or d_name.startswith(f"{task_name}_"):
+                matched = True
+
+        if matched:
+            matching.append((trial_dir, rf))
+
+    # Reject missing or ambiguous results
+    if len(matching) == 0:
+        return None, None, "reward.json not found — run may have failed before verifier", None
+
+    if len(matching) > 1:
+        return (
+            None,
+            None,
+            f"Ambiguous trial results: found {len(matching)} matching trial directories for task '{task_name}'",
+            None,
+        )
+
+    trial_dir, actual_reward_path = matching[0]
 
     try:
-        data = json.loads(reward_path.read_text())
+        data = json.loads(actual_reward_path.read_text())
     except (json.JSONDecodeError, OSError) as exc:
-        return None, None, f"reward.json could not be parsed: {exc}"
+        return None, None, f"reward.json could not be parsed: {exc}", str(actual_reward_path)
 
     if not isinstance(data, dict) or "reward" not in data:
-        return None, None, f"reward.json missing 'reward' key: {data!r}"
+        return None, None, f"reward.json missing 'reward' key: {data!r}", str(actual_reward_path)
 
     raw = data["reward"]
 
-    # Reject booleans (in Python, isinstance(True, (int, float)) is True)
+    # Reject booleans (isinstance(True, int) is True in Python)
     if isinstance(raw, bool):
-        return None, None, f"reward.json 'reward' is a boolean, not a numeric binary value: {raw!r}"
+        return None, None, f"reward.json 'reward' is a boolean ({raw!r}), not a numeric binary value", str(actual_reward_path)
 
-    try:
-        val = float(raw)
-    except (TypeError, ValueError):
-        return None, None, f"reward.json 'reward' is not a number: {raw!r}"
+    # Reject strings (e.g. {"reward": "1"})
+    if isinstance(raw, str):
+        return None, None, f"reward.json 'reward' is a string ({raw!r}), not a numeric binary value", str(actual_reward_path)
+
+    if not isinstance(raw, (int, float)):
+        return None, None, f"reward.json 'reward' is not a number: {raw!r}", str(actual_reward_path)
+
+    val = float(raw)
+    if not math.isfinite(val):
+        return None, None, f"reward.json 'reward' is not a finite number: {val!r}", str(actual_reward_path)
 
     # Strict binary reward validation: strictly 0.0 or 1.0
     if val != 0.0 and val != 1.0:
-        return None, None, f"Invalid non-binary reward value: {val!r} (expected 0.0 or 1.0)"
+        return None, None, f"Invalid non-binary reward value: {val!r} (expected 0.0 or 1.0)", str(actual_reward_path)
 
-    sc_path = str(scorecard_path) if scorecard_path.exists() else None
-    passed = val == 1.0
+    scorecard_path = trial_dir / "verifier" / "scorecard.json"
+    sc_path = str(scorecard_path) if scorecard_path.is_file() else None
+    passed = (val == 1.0)
     reason = f"reward={val} ({'passed' if passed else 'not passed'})"
-    return val, sc_path, reason
+    return val, sc_path, reason, str(actual_reward_path)
 
 
 # ---------------------------------------------------------------------------
-# Prerequisite checks
+# Prerequisite & Environment Loading
 # ---------------------------------------------------------------------------
 
-def _load_env_file(env_file: str) -> dict[str, str]:
+def _load_env_file(env_file_path: Path | str) -> dict[str, str]:
     """Load KEY=VALUE pairs from env_file into a dict."""
     result: dict[str, str] = {}
-    p = Path(env_file)
+    p = Path(env_file_path).resolve()
     if not p.is_file():
         return result
     for line in p.read_text().splitlines():
@@ -168,36 +263,79 @@ def _load_env_file(env_file: str) -> dict[str, str]:
     return result
 
 
-def _check_prerequisites(env_file: str, mode: str = "ungraded") -> list[str]:
+def _check_prerequisites(
+    env_file_path: Path | str,
+    mode: str = "ungraded",
+    budget_cny: float = 5.0,
+) -> list[str]:
     """
     Return list of blocking prerequisite messages; empty = all clear.
-    Distinguishes ungraded mode from scored mode (Anthropic judge key only needed in scored mode).
+    Validates checkout, dataset, handbook on disk, environment credentials, and mode support.
     """
     blocks: list[str] = []
 
-    file_env = _load_env_file(env_file)
-    effective_env = {**file_env, **os.environ}
+    p_env = Path(env_file_path).resolve()
+    file_env = _load_env_file(p_env)
+    # File values override process environment, matching upstream load_dotenv(override=True)
+    effective_env = {**os.environ, **file_env}
 
-    # Docker daemon reachable
-    if not shutil.which("docker"):
-        blocks.append("docker CLI not found in PATH")
+    # 1. Upstream vendor clone check
+    git_dir = VENDOR_DIR / ".git"
+    if not git_dir.exists():
+        blocks.append(f"vendor/chi-bench not cloned (expected at {VENDOR_DIR})")
+    else:
+        try:
+            r = subprocess.run(
+                ["git", "-C", str(VENDOR_DIR), "rev-parse", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            actual_sha = r.stdout.strip()
+            if actual_sha != UPSTREAM_COMMIT:
+                blocks.append(
+                    f"vendor/chi-bench commit mismatch: HEAD={actual_sha}, want {UPSTREAM_COMMIT}"
+                )
+        except Exception as exc:
+            blocks.append(f"Could not verify vendor/chi-bench commit: {exc}")
 
-    # Handbook verification: on disk or confirmed via env var
+    # 2. Task dataset check
+    task_dir = DATA_DIR / "prior_auth_provider" / "tasks"
+    if not (task_dir.is_dir() and any(task_dir.iterdir())):
+        blocks.append(f"Task dataset files missing or empty at {task_dir}")
+
+    # 3. Handbook on-disk check (R5: authorization flag alone does not prove files on disk)
     skill_file = HANDBOOK_DIR / "SKILL.md"
-    handbook_on_disk = skill_file.is_file() and skill_file.stat().st_size > 0
-    handbook_granted = effective_env.get("HF_HANDBOOK_ACCESS_GRANTED", "").strip() == "1"
-    if not (handbook_on_disk or handbook_granted):
+    if not (skill_file.is_file() and skill_file.stat().st_size > 0):
         blocks.append(
-            "Managed-Care Operations Handbook not available. "
-            "Download to data/skills/managed-care-operations-handbook or set HF_HANDBOOK_ACCESS_GRANTED=1."
+            f"Managed-Care Operations Handbook not downloaded on disk at {HANDBOOK_DIR} (SKILL.md missing)"
         )
 
-    # Scored mode requires ANTHROPIC_API_KEY
-    if mode == "scored":
+    # 4. Runtime runner credential check
+    runner_key_present = any(effective_env.get(k) for k in RUNNER_ENV_VARS)
+    if not runner_key_present:
+        blocks.append(
+            f"No candidate runner API key configured. Set at least one of: {', '.join(RUNNER_ENV_VARS)}"
+        )
+
+    # 5. Budget reservation check
+    if budget_cny < MIN_SINGLE_REQUEST_RESERVATION_CNY:
+        blocks.append(
+            f"Planned budget {budget_cny} CNY is insufficient for minimum single-request reservation ({MIN_SINGLE_REQUEST_RESERVATION_CNY} CNY)"
+        )
+
+    # 6. Mode-specific check:
+    # R1: Ungraded real execution is currently unsupported by fixed upstream without verified skip-judge mechanism.
+    if mode == "ungraded":
+        blocks.append(
+            "Ungraded real execution is currently unsupported by fixed upstream cb experiment run "
+            "(no verified skip-judge mechanism). Blocked before real execution to prevent unverified scored run."
+        )
+    elif mode == "scored":
         if not effective_env.get("ANTHROPIC_API_KEY"):
             blocks.append(
-                "ANTHROPIC_API_KEY not set — required for the official Claude-based judge in scored mode. "
-                f"Set in environment or in {env_file!r}."
+                "ANTHROPIC_API_KEY not set — required for the official Claude judge in scored mode. "
+                f"Set in environment or in {str(p_env)!r}."
             )
 
     return blocks
@@ -250,6 +388,9 @@ def build_experiment_config(
     trials_dir: str,
     env_file: str,
     timeout_multiplier: float,
+    max_rounds: int = 30,
+    max_tokens_per_request: int = 8192,
+    budget_cny: float = 5.0,
     n_tasks: int = 1,
     n_attempts: int = 1,
     concurrency: int = 1,
@@ -257,7 +398,7 @@ def build_experiment_config(
 ) -> dict:
     """
     Build ExperimentConfig dictionary adhering to upstream chi-bench schema.
-    Enforces single-task bounds.
+    Enforces single-task bounds and forwards agent limits via agent_kwargs.
     """
     if n_tasks != 1:
         raise ValueError(f"Single-task baseline must have n_tasks=1 (got {n_tasks})")
@@ -267,6 +408,13 @@ def build_experiment_config(
         raise ValueError(f"Single-task baseline must have concurrency=1 (got {concurrency})")
     if not task_name:
         raise ValueError("task_name must be non-empty")
+
+    # Forward limits into ExperimentConfig agent_kwargs
+    agent_kwargs = {
+        "max_rounds": str(max_rounds),
+        "max_tokens_per_request": str(max_tokens_per_request),
+        "budget_cny": str(budget_cny),
+    }
 
     return {
         "dataset": dataset_dir,
@@ -281,6 +429,7 @@ def build_experiment_config(
         "include_task_name": [task_name],
         "n_tasks": 1,
         "max_retries": 0,
+        "agent_kwargs": agent_kwargs,
     }
 
 
@@ -318,37 +467,37 @@ def parse_args() -> argparse.Namespace:
         "--mode",
         choices=["ungraded", "scored"],
         default="ungraded",
-        help="Execution mode: 'ungraded' (default, no official judge) or 'scored' (requires Claude judge)",
+        help="Execution mode: 'ungraded' (development) or 'scored' (requires Claude judge)",
     )
     p.add_argument(
         "--budget-cny",
         type=float,
         default=5.0,
-        help="Runtime budget cap in CNY for first round (default: 5.0, must be > 0)",
+        help="Runtime budget cap in CNY for first round (default: 5.0, must be finite positive)",
     )
     p.add_argument(
         "--max-rounds",
         type=int,
         default=30,
-        help="Maximum agent conversation turns (default: 30, must be > 0)",
+        help="Maximum agent conversation turns (default: 30, must be positive integer)",
     )
     p.add_argument(
         "--max-tokens-per-request",
         type=int,
         default=8192,
-        help="Maximum generation tokens per model request (default: 8192, must be > 0)",
+        help="Maximum generation tokens per model request (default: 8192, must be positive integer)",
     )
     p.add_argument(
         "--timeout-multiplier",
         type=float,
         default=1.0,
-        help="Multiplies all task timeouts (default: 1.0, must be > 0)",
+        help="Multiplies all task timeouts (default: 1.0, must be finite positive)",
     )
     p.add_argument(
         "--outer-timeout",
         type=int,
         default=1800,
-        help="Outer wall-clock timeout in seconds (default: 1800, must be > 0)",
+        help="Outer wall-clock timeout in seconds (default: 1800, must be positive integer)",
     )
     p.add_argument(
         "--env-file",
@@ -371,33 +520,25 @@ def main() -> None:
     args = parse_args()
 
     # ------------------------------------------------------------------
-    # Parameter Validation
+    # Parameter Validation (R7: Strict finite positive checks)
     # ------------------------------------------------------------------
-    if args.timeout_multiplier <= 0:
-        print(f"ERROR: --timeout-multiplier must be > 0 (got {args.timeout_multiplier})")
-        sys.exit(1)
-    if args.outer_timeout <= 0:
-        print(f"ERROR: --outer-timeout must be > 0 (got {args.outer_timeout})")
-        sys.exit(1)
-    if args.budget_cny <= 0:
-        print(f"ERROR: --budget-cny must be > 0 (got {args.budget_cny})")
-        sys.exit(1)
-    if args.max_rounds <= 0:
-        print(f"ERROR: --max-rounds must be > 0 (got {args.max_rounds})")
-        sys.exit(1)
-    if args.max_tokens_per_request <= 0:
-        print(f"ERROR: --max-tokens-per-request must be > 0 (got {args.max_tokens_per_request})")
-        sys.exit(1)
+    _validate_positive_finite("--timeout-multiplier", args.timeout_multiplier)
+    _validate_positive_finite("--outer-timeout", args.outer_timeout)
+    _validate_positive_finite("--budget-cny", args.budget_cny)
+    _validate_positive_finite("--max-rounds", args.max_rounds)
+    _validate_positive_finite("--max-tokens-per-request", args.max_tokens_per_request)
 
     if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$", args.task_name):
         print(f"ERROR: --task-name contains invalid characters: {args.task_name!r}")
         sys.exit(1)
 
+    # R8: Early absolute resolution of env-file path
+    env_file_path = Path(args.env_file).resolve()
     dataset_rel = DOMAIN_DATASET_MAP.get(args.domain, f"{args.domain}/tasks")
     dataset_dir = str(DATA_DIR / dataset_rel)
 
     # ------------------------------------------------------------------
-    # Dry-Run
+    # Dry-Run Preview
     # ------------------------------------------------------------------
     if args.dry_run:
         preview_run_id = _make_run_id()
@@ -408,8 +549,11 @@ def main() -> None:
             agent=args.agent,
             model=args.model,
             trials_dir=preview_trials_dir,
-            env_file=args.env_file,
+            env_file=str(env_file_path),
             timeout_multiplier=args.timeout_multiplier,
+            max_rounds=args.max_rounds,
+            max_tokens_per_request=args.max_tokens_per_request,
+            budget_cny=args.budget_cny,
         )
         print("\n[dry-run] Single-task baseline — no subprocess will be started.")
         print(f"[dry-run] Execution mode:     {args.mode}")
@@ -422,6 +566,7 @@ def main() -> None:
         print(f"[dry-run] Max rounds:         {args.max_rounds}")
         print(f"[dry-run] Max tokens/req:     {args.max_tokens_per_request}")
         print(f"[dry-run] Outer timeout:      {args.outer_timeout}s")
+        print(f"[dry-run] Resolved env file:  {env_file_path}")
         print("\n[dry-run] Generated ExperimentConfig preview:")
         import yaml
         print(yaml.dump(preview_cfg, default_flow_style=False))
@@ -431,21 +576,56 @@ def main() -> None:
         sys.exit(0)
 
     # ------------------------------------------------------------------
-    # Prerequisites Gate
+    # Prerequisites & Budget Gates (R1, R2, R5)
     # ------------------------------------------------------------------
-    blocks = _check_prerequisites(args.env_file, mode=args.mode)
+    blocks = _check_prerequisites(env_file_path, mode=args.mode, budget_cny=args.budget_cny)
     if blocks:
-        print(f"ERROR: prerequisites not satisfied for mode '{args.mode}' — cannot start real run.\n")
+        # Write blocked manifest to record unsupported/blocked reason if in a run context
+        run_id = _make_run_id()
+        run_dir = RUNS_DIR / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = run_dir / "manifest.json"
+
+        # Determine budget status for blocked run
+        pre_budget_status, pre_budget_reason = evaluate_budget(
+            args.budget_cny, args.max_rounds, args.max_tokens_per_request
+        )
+
+        manifest = {
+            "run_id": run_id,
+            "mode": args.mode,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
+            "execution_status": "blocked_before_execution",
+            "exit_code": 2,
+            "project_git_sha": _project_git_sha(),
+            "upstream_git_sha": UPSTREAM_COMMIT,
+            "upstream_version": UPSTREAM_VERSION,
+            "task_name": args.task_name,
+            "domain": args.domain,
+            "dataset": dataset_dir,
+            "agent": args.agent,
+            "model": args.model,
+            "n_tasks": 1,
+            "budget_cny": args.budget_cny,
+            "max_rounds": args.max_rounds,
+            "max_tokens_per_request": args.max_tokens_per_request,
+            "budget_status": pre_budget_status if pre_budget_status != "unverified_unknown_usage" else "blocked_before_execution",
+            "budget_reason": pre_budget_reason,
+            "reward": None,
+            "reward_reason": f"Execution blocked: {'; '.join(blocks)}",
+            "blocked_prerequisites": blocks,
+        }
+        _write_manifest(manifest_path, manifest)
+
+        print(f"ERROR: prerequisites / execution gate not satisfied for mode '{args.mode}':\n")
         for b in blocks:
             print(f"  • {b}")
-        print(
-            "\nRun is BLOCKED. Complete the prerequisites above then retry.\n"
-            "Use 'python scripts/check_readiness.py' for full diagnostic details."
-        )
+        print(f"\nExecution BLOCKED. Manifest saved to: {manifest_path}")
         sys.exit(2)
 
     # ------------------------------------------------------------------
-    # Run directory & Experiment configuration
+    # Run Directory & Experiment Configuration
     # ------------------------------------------------------------------
     import yaml
 
@@ -461,8 +641,11 @@ def main() -> None:
         agent=args.agent,
         model=args.model,
         trials_dir=str(trials_dir),
-        env_file=args.env_file,
+        env_file=str(env_file_path),
         timeout_multiplier=args.timeout_multiplier,
+        max_rounds=args.max_rounds,
+        max_tokens_per_request=args.max_tokens_per_request,
+        budget_cny=args.budget_cny,
     )
 
     exp_config_path = run_dir / "experiment.yaml"
@@ -475,6 +658,11 @@ def main() -> None:
         "cb", "experiment", "run",
         "-f", str(exp_config_path),
     ]
+
+    # Pre-execution budget status
+    init_budget_status, init_budget_reason = evaluate_budget(
+        args.budget_cny, args.max_rounds, args.max_tokens_per_request
+    )
 
     # Initial manifest
     manifest: dict = {
@@ -501,7 +689,8 @@ def main() -> None:
         "budget_cny": args.budget_cny,
         "max_rounds": args.max_rounds,
         "max_tokens_per_request": args.max_tokens_per_request,
-        "budget_status": "within_budget",
+        "budget_status": init_budget_status,
+        "budget_reason": init_budget_reason,
         "output_dir": str(output_dir),
         "reward_path": None,
         "scorecard_path": None,
@@ -541,6 +730,8 @@ def main() -> None:
             "elapsed_seconds": elapsed,
             "reward": None,
             "reward_reason": "timeout — no verdict before outer timeout",
+            "budget_status": "unverified_unknown_usage",
+            "budget_reason": "Process timed out without measured token usage",
         })
         _write_manifest(manifest_path, manifest)
         print(f"\n[run] TIMEOUT after {args.outer_timeout}s. reward=null")
@@ -554,6 +745,8 @@ def main() -> None:
             "elapsed_seconds": elapsed,
             "reward": None,
             "reward_reason": f"subprocess error: {exc}",
+            "budget_status": "unverified_unknown_usage",
+            "budget_reason": "Subprocess error without measured token usage",
         })
         _write_manifest(manifest_path, manifest)
         print(f"\n[run] Subprocess error: {exc}")
@@ -562,9 +755,9 @@ def main() -> None:
     elapsed = round(time.monotonic() - t0, 1)
 
     # ------------------------------------------------------------------
-    # Reward Extraction & Completion Determination
+    # Post-Execution: Reward & Budget Evaluation
     # ------------------------------------------------------------------
-    reward, scorecard_path, reward_reason = extract_reward(
+    reward, scorecard_path, reward_reason, actual_reward_path = extract_reward(
         output_dir=output_dir,
         task_name=args.task_name,
         mode=args.mode,
@@ -580,6 +773,14 @@ def main() -> None:
     else:
         status = "process_failed"
 
+    post_budget_status, post_budget_reason = evaluate_budget(
+        args.budget_cny,
+        args.max_rounds,
+        args.max_tokens_per_request,
+        token_usage=None,  # Wrapper does not measure token usage
+        cost_usd=None,
+    )
+
     manifest.update({
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "execution_status": status,
@@ -587,8 +788,10 @@ def main() -> None:
         "elapsed_seconds": elapsed,
         "reward": reward,
         "reward_reason": reward_reason,
-        "reward_path": str(output_dir / "trials" / args.task_name / "verifier" / "reward.json") if reward is not None else None,
+        "reward_path": actual_reward_path,
         "scorecard_path": scorecard_path,
+        "budget_status": post_budget_status,
+        "budget_reason": post_budget_reason,
     })
     _write_manifest(manifest_path, manifest)
 
