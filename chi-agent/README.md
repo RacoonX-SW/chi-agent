@@ -24,7 +24,7 @@
 | 首轮参赛运行预算 | 已确认规划 | 模型工具接入验证＋一次任务试跑合计 5 元；写代码另行记账，当前未恢复付费运行 |
 | 模型与 runner | 候选待实测 | `deepseek-flash`＋官方参考 runner，Chat Completions/思考 high 为候选；协议、字段与实际限额待验证 |
 | 完整数据与环境 | 未就绪 | 本轮确认 `vendor/chi-bench` 和 `data/.chi-bench-version` 均不存在；仅有规划用任务子集。Docker 服务已核实可用，CHI 镜像与任务环境尚未建立 |
-| Docker 开发环境 | 引擎就绪；项目镜像待建立 | Docker 服务只读检查通过：29.5.3/linux/aarch64；开发/任务镜像与容器内依赖、受控构建上下文和存储挂载仍待实施，不要求宿主机安装 Python/uv/OpenSpec |
+| Docker 开发环境 | 已建立并验证 | 自有开发镜像 `chi-agent-dev:latest` 基于 Python 3.13-slim，锁定依赖于容器内 `/opt/venv`，已通过容器内 42 项离线自测；源码持久化挂载，构建上下文排除凭据与大资料 |
 | 无评分执行入口 | 待验证 | 有设计方向，尚无实际可运行证据；不提供虚构的跳过 judge 开关 |
 | 现有实现与基线 | 未验收/未实测 | 旧候选及返工未通过新验收，D0 未交付；没有已验证的真实 trial、官方 reward 或实测成本 |
 | 官方判分 | 已决定本地暂缓 | 最终私有评分交主办方；确定性检查优先、Gemini 按需辅助的集成仍待实现 |
@@ -86,6 +86,32 @@
 - [首轮目标](openspec/changes/bootstrap-baseline/proposal.md)
 - [验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md)
 - [实现任务](openspec/changes/bootstrap-baseline/tasks.md)
+
+## Docker 开发与离线自测运行
+
+本项目开发、测试与检查均在 Docker 容器内完成：
+
+```bash
+# 1. 构建开发镜像
+docker compose build dev
+
+# 2. 容器内运行全部离线单元测试
+docker compose run --rm dev
+
+# 或使用 pytest 运行
+docker compose run --rm dev pytest -v
+
+# 3. 容器内分模式就绪检查（支持 offline / tools / ungraded / scored / all）
+docker compose run --rm dev python3 scripts/check_readiness.py --mode offline
+
+# 4. 单题基线配置验证（干运行，检查生产入口、生成配置与命令）
+docker compose run --rm dev python3 scripts/run_baseline.py \
+    --agent deepagents \
+    --model deepseek/deepseek-chat \
+    --domain pa_provider \
+    --task-name pa_t018_t018_o001_p01_new_referral_provider \
+    --dry-run
+```
 
 ## 后续变更方向
 

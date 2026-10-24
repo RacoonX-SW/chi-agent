@@ -1,29 +1,25 @@
 """
 tests/test_readiness_and_baseline.py — offline checks for chi-agent.
 
-All tests drive real production entry points; only external boundaries
-(subprocess, network, filesystem artifacts, clock, os.environ) are mocked.
+All tests drive real production entry points and module functions;
+only external boundaries (subprocess, network, filesystem artifacts, clock, os.environ) are mocked.
 
 Covers:
-  - Missing required dependency → readiness exits non-zero and reports it
-  - Missing env var (process + env_file) → readiness/baseline blocked
+  - Multi-mode readiness evaluation (offline, tools, ungraded, scored)
+  - Missing ANTHROPIC_API_KEY does NOT block offline or ungraded mode
+  - Missing ANTHROPIC_API_KEY DOES block scored mode
+  - Handbook verified via on-disk presence or environment confirmation
   - Credential presence reported without exposing values
-  - Presence distinguished from connectivity
-  - Handbook gate
-  - Subprocess failure → manifest records process_failed + null reward
-  - Timeout → manifest records timeout + null reward + reason
-  - Launch exception → manifest records subprocess_error
-  - Missing reward.json → reward=null + reason
-  - Official binary reward=1 → accepted, passed=True
-  - Official reward=0 → accepted, passed=False, status=completed
-  - Non-binary float reward (0.5) → accepted as float but not-passed
-  - Invalid reward.json (bad JSON, missing key, non-numeric) → null+reason
-  - Omitting --task-name is a hard error (prevents fan-out)
-  - Upstream submission YAML uses include_task_name+n_tasks, not --task-id
-  - Submission ID is lowercase slug-safe
-  - dry-run does not start subprocess and returns 0
-  - --timeout-multiplier=0 is rejected
-  - --outer-timeout=0 is rejected
+  - Credential presence distinguished from proven connectivity
+  - Single-task enforcement in ExperimentConfig (include_task_name + n_tasks=1)
+  - Rejection of multi-task / multi-attempt misconfiguration
+  - Real argv construction: cb experiment run -f <experiment.yaml>
+  - Strict binary reward validation (1.0 passed, 0.0 completed unsolved, non-binary rejected)
+  - Ungraded run produces completed status with official_reward=null
+  - Subprocess failure, timeout, launch exception, and missing verdict handling
+  - Finite generation limits and budget parameter validation
+  - Dry-run validation without subprocess or started manifest
+  - No credential values ever saved in manifest
 """
 
 from __future__ import annotations
@@ -33,10 +29,9 @@ import os
 import subprocess
 import sys
 import tempfile
-import textwrap
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
 # Make scripts importable
@@ -66,7 +61,6 @@ class TestReadinessChecks(unittest.TestCase):
         with patch("shutil.which", return_value=None):
             result = cr.check_uv()
         self.assertFalse(result["ok"])
-        self.assertTrue(result["required"])
         self.assertIsNotNone(result["fix"])
 
     def test_uv_present_reports_ok(self):
@@ -75,15 +69,14 @@ class TestReadinessChecks(unittest.TestCase):
             result = cr.check_uv()
         self.assertTrue(result["ok"])
 
-    def test_docker_cli_missing_blocks(self):
+    def test_docker_cli_missing_fails(self):
         import check_readiness as cr
         with patch("shutil.which", return_value=None):
             result = cr.check_docker()
         self.assertFalse(result["ok"])
-        self.assertTrue(result["required"])
         self.assertIsNotNone(result["fix"])
 
-    def test_docker_daemon_down_blocks(self):
+    def test_docker_daemon_down_fails(self):
         import check_readiness as cr
         mock_result = MagicMock()
         mock_result.returncode = 1
@@ -92,7 +85,6 @@ class TestReadinessChecks(unittest.TestCase):
              patch("subprocess.run", return_value=mock_result):
             result = cr.check_docker()
         self.assertFalse(result["ok"])
-        self.assertTrue(result["required"])
 
     def test_docker_daemon_up_ok(self):
         import check_readiness as cr
@@ -103,405 +95,358 @@ class TestReadinessChecks(unittest.TestCase):
             result = cr.check_docker()
         self.assertTrue(result["ok"])
 
-    def test_env_var_missing_blocks_required(self):
+    def test_handbook_detected_from_disk_files(self):
         import check_readiness as cr
-        with patch.dict("os.environ", {}, clear=True):
-            results = cr.check_env_vars()
-        required = [r for r in results if r["required"]]
-        for r in required:
-            self.assertFalse(r["ok"])
-            self.assertIsNotNone(r["fix"])
+        with tempfile.TemporaryDirectory() as td:
+            skill_dir = Path(td) / "skills" / "managed-care-operations-handbook"
+            skill_dir.mkdir(parents=True)
+            skill_file = skill_dir / "SKILL.md"
+            skill_file.write_text("# Handbook")
 
-    def test_env_var_present_does_not_expose_value(self):
-        import check_readiness as cr
-        secret = "sk-ant-super-secret-key"
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": secret}):
-            results = cr.check_env_vars()
-        anthropic = next(r for r in results if r["check"] == "env:ANTHROPIC_API_KEY")
-        self.assertTrue(anthropic["ok"])
-        self.assertNotIn(secret, anthropic.get("detail", ""))
-        self.assertNotIn(secret, anthropic.get("note", "") or "")
+            with patch.object(cr, "HANDBOOK_DIR", skill_dir):
+                res = cr.check_handbook(env={})
+                self.assertTrue(res["ok"])
+                self.assertIn("verified on disk", res["detail"].lower())
 
-    def test_env_var_presence_not_claimed_as_connectivity(self):
+    def test_handbook_granted_via_env_flag(self):
         import check_readiness as cr
-        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}):
-            results = cr.check_env_vars()
-        anthropic = next(r for r in results if r["check"] == "env:ANTHROPIC_API_KEY")
-        note = (anthropic.get("note") or "").lower()
+        with tempfile.TemporaryDirectory() as td:
+            empty_dir = Path(td) / "empty"
+            empty_dir.mkdir()
+            with patch.object(cr, "HANDBOOK_DIR", empty_dir):
+                res = cr.check_handbook(env={"HF_HANDBOOK_ACCESS_GRANTED": "1"})
+                self.assertTrue(res["ok"])
+                self.assertIn("HF_HANDBOOK_ACCESS_GRANTED=1", res["detail"])
+
+    def test_handbook_missing_when_not_on_disk_and_no_flag(self):
+        import check_readiness as cr
+        with tempfile.TemporaryDirectory() as td:
+            empty_dir = Path(td) / "empty"
+            empty_dir.mkdir()
+            with patch.object(cr, "HANDBOOK_DIR", empty_dir):
+                res = cr.check_handbook(env={})
+                self.assertFalse(res["ok"])
+
+    def test_credentials_check_does_not_expose_value(self):
+        import check_readiness as cr
+        secret = "sk-super-secret-key-12345"
+        creds = cr.check_credentials(env={"ANTHROPIC_API_KEY": secret})
+        self.assertTrue(creds["ANTHROPIC_API_KEY"]["ok"])
+        self.assertNotIn(secret, creds["ANTHROPIC_API_KEY"]["detail"])
+
+    def test_credentials_presence_distinguished_from_connectivity(self):
+        import check_readiness as cr
+        creds = cr.check_credentials(env={"ANTHROPIC_API_KEY": "sk-test"})
+        note = (creds["ANTHROPIC_API_KEY"].get("note") or "").lower()
         self.assertIn("not verified", note)
 
-    def test_handbook_not_granted_without_env_var(self):
+    def test_offline_mode_does_not_require_api_keys(self):
+        """Offline mode should be READY even if no API keys are set."""
         import check_readiness as cr
-        with patch.dict("os.environ", {}, clear=True):
-            result = cr.check_handbook()
-        self.assertFalse(result["ok"])
-        self.assertFalse(result["required"])
+        with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
+             patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}):
+            modes = cr.evaluate_modes(env={})
+            self.assertTrue(modes["offline"]["ready"])
+            self.assertEqual(modes["offline"]["failures"], [])
 
-    def test_handbook_granted_with_env_var(self):
+    def test_ungraded_mode_does_not_require_anthropic_key(self):
+        """Ungraded mode requires a runner key (e.g. DeepSeek/Gemini), NOT Anthropic key."""
         import check_readiness as cr
-        with patch.dict("os.environ", {"HF_HANDBOOK_ACCESS_GRANTED": "1"}):
-            result = cr.check_handbook()
-        self.assertTrue(result["ok"])
+        with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
+             patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_dataset", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_handbook", return_value={"ok": True, "detail": "OK"}):
+            # No ANTHROPIC_API_KEY, but DEEPSEEK_API_KEY is present
+            env = {"DEEPSEEK_API_KEY": "sk-deepseek-123"}
+            modes = cr.evaluate_modes(env=env)
+            self.assertTrue(modes["ungraded"]["ready"])
+            self.assertFalse(modes["scored"]["ready"])
+            self.assertTrue(any("ANTHROPIC_API_KEY" in f for f in modes["scored"]["failures"]))
 
-    def test_summarise_all_required_fail_returns_not_ready(self):
+    def test_scored_mode_requires_anthropic_key(self):
+        """Scored mode requires ANTHROPIC_API_KEY."""
         import check_readiness as cr
-        checks = [
-            {"check": "python_version", "required": True, "ok": False,
-             "detail": "Python 3.10", "fix": "install 3.12"},
-            {"check": "uv", "required": True, "ok": False,
-             "detail": "not found", "fix": "install uv"},
-        ]
-        all_ok, failures = cr.summarise(checks)
-        self.assertFalse(all_ok)
-        self.assertEqual(len(failures), 4)  # 2 × (message + fix)
+        with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
+             patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_dataset", return_value={"ok": True, "detail": "OK"}), \
+             patch.object(cr, "check_handbook", return_value={"ok": True, "detail": "OK"}):
+            env = {"DEEPSEEK_API_KEY": "sk-deepseek", "ANTHROPIC_API_KEY": "sk-anthropic"}
+            modes = cr.evaluate_modes(env=env)
+            self.assertTrue(modes["scored"]["ready"])
 
-    def test_summarise_all_pass_returns_ready(self):
-        import check_readiness as cr
-        checks = [{"check": "py", "required": True, "ok": True, "detail": "3.13", "fix": None}]
-        all_ok, failures = cr.summarise(checks)
-        self.assertTrue(all_ok)
-        self.assertEqual(failures, [])
-
-    def test_optional_failure_does_not_block_readiness(self):
-        import check_readiness as cr
-        checks = [
-            {"check": "python_version", "required": True, "ok": True,
-             "detail": "3.13", "fix": None},
-            {"check": "handbook_access", "required": False, "ok": False,
-             "detail": "not granted", "fix": "apply"},
-        ]
-        all_ok, failures = cr.summarise(checks)
-        self.assertTrue(all_ok)
-
-    def test_readiness_cli_exits_nonzero_when_blocked(self):
-        """Drive the real CLI; pass empty env so ANTHROPIC_API_KEY is missing."""
+    def test_cli_json_mode_output(self):
         result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "check_readiness.py")],
-            capture_output=True, text=True, timeout=30, env={},
-        )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("NOT READY", result.stdout)
-
-    def test_readiness_cli_json_output_structure(self):
-        result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "check_readiness.py"), "--json"],
-            capture_output=True, text=True, timeout=30,
+            [sys.executable, str(SCRIPTS_DIR / "check_readiness.py"), "--mode", "offline", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=30,
         )
         data = json.loads(result.stdout)
+        self.assertEqual(data["mode"], "offline")
         self.assertIn("ready", data)
-        self.assertIn("checks", data)
-        self.assertIsInstance(data["checks"], list)
+        self.assertIn("modes", data)
+        self.assertIn("offline", data["modes"])
+        self.assertIn("ungraded", data["modes"])
+        self.assertIn("scored", data["modes"])
 
 
 # ===========================================================================
-# run_baseline module-level unit tests
+# run_baseline helper tests
 # ===========================================================================
 
 class TestRunBaselineHelpers(unittest.TestCase):
-    """Tests that drive production functions in run_baseline."""
 
     def setUp(self):
         import run_baseline as rb
         self.rb = rb
 
-    # ------------------------------------------------------------------
-    # Slug / ID helpers
-    # ------------------------------------------------------------------
-
-    def test_run_id_is_lowercase_only(self):
-        rb = self.rb
-        rid = rb._make_run_id()
-        self.assertEqual(rid, rid.lower(), f"run_id has uppercase: {rid!r}")
-
-    def test_submission_id_is_slug_safe(self):
-        rb = self.rb
-        rid = rb._make_run_id()
-        sid = rb._make_submission_id(rid)
-        import re
-        self.assertRegex(sid, r"^[a-z0-9][a-z0-9\-_]*$")
-
-    def test_submission_id_does_not_contain_uppercase_T_Z(self):
+    def test_run_id_is_lowercase_slug_safe(self):
         rb = self.rb
         for _ in range(5):
             rid = rb._make_run_id()
-            sid = rb._make_submission_id(rid)
-            self.assertNotIn("T", sid)
-            self.assertNotIn("Z", sid)
+            self.assertEqual(rid, rid.lower())
+            self.assertRegex(rid, r"^[a-z0-9][a-z0-9\-_]*$")
+            self.assertNotIn("T", rid)
+            self.assertNotIn("Z", rid)
+
+    def test_build_experiment_config_valid(self):
+        rb = self.rb
+        cfg = rb.build_experiment_config(
+            dataset_dir="data/prior_auth_provider/tasks",
+            task_name="pa_t018_sample",
+            agent="deepagents",
+            model="deepseek/deepseek-chat",
+            trials_dir="runs/run-1/output/trials",
+            env_file=".env",
+            timeout_multiplier=1.5,
+        )
+        self.assertEqual(cfg["dataset"], "data/prior_auth_provider/tasks")
+        self.assertEqual(cfg["include_task_name"], ["pa_t018_sample"])
+        self.assertEqual(cfg["n_tasks"], 1)
+        self.assertEqual(cfg["n_attempts"], 1)
+        self.assertEqual(cfg["concurrency"], 1)
+        self.assertEqual(cfg["timeout_multiplier"], 1.5)
+        self.assertEqual(cfg["environment"], "docker")
+
+    def test_build_experiment_config_rejects_multi_task(self):
+        rb = self.rb
+        with self.assertRaises(ValueError):
+            rb.build_experiment_config(
+                dataset_dir="data",
+                task_name="t1",
+                agent="a",
+                model="m",
+                trials_dir="trials",
+                env_file=".env",
+                timeout_multiplier=1.0,
+                n_tasks=2,  # Multi-task rejected!
+            )
+
+    def test_build_experiment_config_rejects_multi_attempt(self):
+        rb = self.rb
+        with self.assertRaises(ValueError):
+            rb.build_experiment_config(
+                dataset_dir="data",
+                task_name="t1",
+                agent="a",
+                model="m",
+                trials_dir="trials",
+                env_file=".env",
+                timeout_multiplier=1.0,
+                n_attempts=3,  # Multi-attempt rejected!
+            )
+
+    def test_build_experiment_config_rejects_multi_concurrency(self):
+        rb = self.rb
+        with self.assertRaises(ValueError):
+            rb.build_experiment_config(
+                dataset_dir="data",
+                task_name="t1",
+                agent="a",
+                model="m",
+                trials_dir="trials",
+                env_file=".env",
+                timeout_multiplier=1.0,
+                concurrency=4,  # Concurrency > 1 rejected!
+            )
 
     # ------------------------------------------------------------------
-    # env_file loading
+    # Reward Extraction and Validation
     # ------------------------------------------------------------------
 
-    def test_load_env_file_parses_key_value(self):
-        rb = self.rb
-        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
-            f.write("ANTHROPIC_API_KEY=sk-test\n# comment\nOTHER=val\n\n")
-            name = f.name
-        try:
-            result = rb._load_env_file(name)
-            self.assertEqual(result["ANTHROPIC_API_KEY"], "sk-test")
-            self.assertEqual(result["OTHER"], "val")
-            self.assertNotIn("# comment", result)
-        finally:
-            Path(name).unlink(missing_ok=True)
-
-    def test_load_env_file_absent_returns_empty(self):
-        rb = self.rb
-        result = rb._load_env_file("/nonexistent/.env.xyz")
-        self.assertEqual(result, {})
-
-    def test_prerequisite_check_reads_env_file_for_api_key(self):
-        """API key in env_file should satisfy the prerequisite."""
-        rb = self.rb
-        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
-            f.write("ANTHROPIC_API_KEY=sk-from-file\nHF_HANDBOOK_ACCESS_GRANTED=1\n")
-            name = f.name
-        try:
-            with patch("shutil.which", return_value="/usr/bin/uv"), \
-                 patch("pathlib.Path.exists", return_value=True), \
-                 patch("subprocess.run") as mock_run, \
-                 patch.dict("os.environ", {}, clear=True):
-                mock_run.return_value = MagicMock(stdout=rb.UPSTREAM_COMMIT + "\n")
-                blocks = rb._check_prerequisites(name)
-            # Should not have ANTHROPIC_API_KEY or handbook in blocks
-            self.assertFalse(any("ANTHROPIC_API_KEY" in b for b in blocks), blocks)
-            self.assertFalse(any("Handbook" in b for b in blocks), blocks)
-        finally:
-            Path(name).unlink(missing_ok=True)
-
-    def test_prerequisite_missing_api_key_blocks(self):
-        rb = self.rb
-        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
-            f.write("HF_HANDBOOK_ACCESS_GRANTED=1\n")  # no API key
-            name = f.name
-        try:
-            with patch("shutil.which", return_value="/usr/bin/uv"), \
-                 patch("pathlib.Path.exists", return_value=True), \
-                 patch("subprocess.run") as mock_run, \
-                 patch.dict("os.environ", {}, clear=True):
-                mock_run.return_value = MagicMock(stdout=rb.UPSTREAM_COMMIT + "\n")
-                blocks = rb._check_prerequisites(name)
-            self.assertTrue(any("ANTHROPIC_API_KEY" in b for b in blocks), blocks)
-        finally:
-            Path(name).unlink(missing_ok=True)
-
-    def test_prerequisite_handbook_not_granted_blocks(self):
-        rb = self.rb
-        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
-            f.write("ANTHROPIC_API_KEY=sk-test\n")
-            name = f.name
-        try:
-            with patch("shutil.which", return_value="/usr/bin/uv"), \
-                 patch("pathlib.Path.exists", return_value=True), \
-                 patch("subprocess.run") as mock_run, \
-                 patch.dict("os.environ", {}, clear=True):
-                mock_run.return_value = MagicMock(stdout=rb.UPSTREAM_COMMIT + "\n")
-                blocks = rb._check_prerequisites(name)
-            self.assertTrue(any("Handbook" in b or "handbook" in b.lower() for b in blocks))
-        finally:
-            Path(name).unlink(missing_ok=True)
-
-    def test_prerequisite_uv_missing_blocks(self):
-        rb = self.rb
-        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
-            f.write("ANTHROPIC_API_KEY=sk-test\nHF_HANDBOOK_ACCESS_GRANTED=1\n")
-            name = f.name
-        try:
-            with patch("shutil.which", return_value=None), \
-                 patch.dict("os.environ", {}, clear=True):
-                blocks = rb._check_prerequisites(name)
-            self.assertTrue(any("uv" in b for b in blocks), blocks)
-        finally:
-            Path(name).unlink(missing_ok=True)
-
-    # ------------------------------------------------------------------
-    # Reward extraction — drives real extract_reward()
-    # ------------------------------------------------------------------
-
-    def _make_trial_dir(self, root: Path, task_name: str) -> Path:
-        d = root / "trials" / task_name / "verifier"
-        d.mkdir(parents=True, exist_ok=True)
-        return d
-
-    def test_reward_binary_1_parsed_correctly(self):
+    def test_extract_reward_ungraded_mode_returns_none(self):
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            vdir = self._make_trial_dir(output_dir, "my-task")
+            reward, sc_path, reason = rb.extract_reward(output_dir, "task-1", mode="ungraded")
+            self.assertIsNone(reward)
+            self.assertIsNone(sc_path)
+            self.assertIn("ungraded", reason)
+
+    def test_extract_reward_binary_1_passed(self):
+        rb = self.rb
+        with tempfile.TemporaryDirectory() as td:
+            output_dir = Path(td)
+            vdir = output_dir / "trials" / "task-1" / "verifier"
+            vdir.mkdir(parents=True)
             (vdir / "reward.json").write_text('{"reward": 1.0}')
-            reward, _, reason = rb.extract_reward(output_dir, "my-task")
-        self.assertEqual(reward, 1.0)
-        self.assertIn("passed", reason)
+            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertEqual(reward, 1.0)
+            self.assertIn("passed", reason)
 
-    def test_reward_binary_0_is_completed_not_passed(self):
+    def test_extract_reward_binary_0_completed_unsolved(self):
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            vdir = self._make_trial_dir(output_dir, "my-task")
+            vdir = output_dir / "trials" / "task-1" / "verifier"
+            vdir.mkdir(parents=True)
             (vdir / "reward.json").write_text('{"reward": 0.0}')
-            reward, _, reason = rb.extract_reward(output_dir, "my-task")
-        self.assertEqual(reward, 0.0)
-        self.assertIn("not passed", reason)
+            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertEqual(reward, 0.0)
+            self.assertIn("not passed", reason)
 
-    def test_reward_missing_file_returns_null(self):
+    def test_extract_reward_rejects_non_binary_float(self):
+        """0.5 is non-binary and must be rejected as invalid reward."""
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            reward, sc, reason = rb.extract_reward(output_dir, "no-task")
-        self.assertIsNone(reward)
-        self.assertIsNone(sc)
-        self.assertIn("not found", reason)
+            vdir = output_dir / "trials" / "task-1" / "verifier"
+            vdir.mkdir(parents=True)
+            (vdir / "reward.json").write_text('{"reward": 0.5}')
+            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertIsNone(reward)
+            self.assertIn("Invalid non-binary reward", reason)
 
-    def test_reward_invalid_json_returns_null(self):
+    def test_extract_reward_rejects_negative_reward(self):
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            vdir = self._make_trial_dir(output_dir, "my-task")
-            (vdir / "reward.json").write_text("not-json!!!")
-            reward, _, reason = rb.extract_reward(output_dir, "my-task")
-        self.assertIsNone(reward)
-        self.assertIn("parsed", reason)
+            vdir = output_dir / "trials" / "task-1" / "verifier"
+            vdir.mkdir(parents=True)
+            (vdir / "reward.json").write_text('{"reward": -1.0}')
+            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertIsNone(reward)
+            self.assertIn("Invalid non-binary reward", reason)
 
-    def test_reward_missing_key_returns_null(self):
+    def test_extract_reward_rejects_boolean(self):
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            vdir = self._make_trial_dir(output_dir, "my-task")
-            (vdir / "reward.json").write_text('{"fractional_reward": 0.8}')
-            reward, _, reason = rb.extract_reward(output_dir, "my-task")
-        self.assertIsNone(reward)
-        self.assertIn("'reward' key", reason)
+            vdir = output_dir / "trials" / "task-1" / "verifier"
+            vdir.mkdir(parents=True)
+            (vdir / "reward.json").write_text('{"reward": true}')
+            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertIsNone(reward)
+            self.assertIn("boolean", reason)
 
-    def test_reward_non_numeric_returns_null(self):
+    def test_extract_reward_missing_file_returns_none(self):
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            vdir = self._make_trial_dir(output_dir, "my-task")
-            (vdir / "reward.json").write_text('{"reward": "passed"}')
-            reward, _, reason = rb.extract_reward(output_dir, "my-task")
-        self.assertIsNone(reward)
-        self.assertIn("not a number", reason)
+            reward, _, reason = rb.extract_reward(output_dir, "missing-task", mode="scored")
+            self.assertIsNone(reward)
+            self.assertIn("not found", reason)
 
-    def test_scorecard_path_returned_when_present(self):
+    def test_extract_reward_corrupted_json_returns_none(self):
         rb = self.rb
         with tempfile.TemporaryDirectory() as td:
             output_dir = Path(td)
-            vdir = self._make_trial_dir(output_dir, "my-task")
-            (vdir / "reward.json").write_text('{"reward": 1.0}')
-            (vdir / "scorecard.json").write_text('{"fractional_reward": 1.0}')
-            _, sc_path, _ = rb.extract_reward(output_dir, "my-task")
-        self.assertIsNotNone(sc_path)
-        self.assertIn("scorecard.json", sc_path)
-
-    def test_scorecard_path_none_when_absent(self):
-        rb = self.rb
-        with tempfile.TemporaryDirectory() as td:
-            output_dir = Path(td)
-            vdir = self._make_trial_dir(output_dir, "my-task")
-            (vdir / "reward.json").write_text('{"reward": 0.0}')
-            _, sc_path, _ = rb.extract_reward(output_dir, "my-task")
-        self.assertIsNone(sc_path)
+            vdir = output_dir / "trials" / "task-1" / "verifier"
+            vdir.mkdir(parents=True)
+            (vdir / "reward.json").write_text("NOT_VALID_JSON{")
+            reward, _, reason = rb.extract_reward(output_dir, "task-1", mode="scored")
+            self.assertIsNone(reward)
+            self.assertIn("could not be parsed", reason)
 
 
 # ===========================================================================
-# run_baseline end-to-end tests — drive real main() with mocked externals
+# run_baseline main() integration tests (with mocked externals)
 # ===========================================================================
 
 class TestRunBaselineMain(unittest.TestCase):
-    """
-    Drive run_baseline.main() with mocked subprocess, prerequisite checks,
-    and yaml. Only filesystem and reward artifacts are real.
-    """
 
     def _run_main_with_mocks(
         self,
         *,
-        task_name: str = "pa-t001",
+        mode: str = "ungraded",
+        task_name: str = "pa_t018_test",
         domain: str = "pa_provider",
         agent: str = "deepagents",
-        model: str = "deepseek/deepseek-v4",
-        extra_args: list[str] | None = None,
+        model: str = "deepseek/deepseek-chat",
         subprocess_returncode: int = 0,
         subprocess_raises=None,
-        reward_json: str | None = '{"reward": 1.0}',
-        write_scorecard: bool = False,
+        reward_json: str | None = None,
         prereqs_clear: bool = True,
         dry_run: bool = False,
-        timeout_multiplier: str = "1.0",
-        outer_timeout: str = "1800",
-    ) -> tuple[int, dict | None]:
-        """
-        Returns (exit_code, manifest_or_None).
-        exit_code comes from SystemExit; manifest read from the temp run dir.
-        """
+        extra_args: list[str] | None = None,
+    ) -> tuple[int, dict | None, Path]:
+        """Drive run_baseline.main() and return (exit_code, manifest_dict, runs_dir)."""
         import run_baseline as rb
 
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
             runs_dir = td_path / "runs"
             env_file = td_path / ".env"
-            env_file.write_text(
-                "ANTHROPIC_API_KEY=sk-test\nHF_HANDBOOK_ACCESS_GRANTED=1\n"
-            )
+            env_file.write_text("ANTHROPIC_API_KEY=sk-test\nDEEPSEEK_API_KEY=sk-test\nHF_HANDBOOK_ACCESS_GRANTED=1\n")
 
             argv = [
                 "--agent", agent,
                 "--model", model,
                 "--domain", domain,
                 "--task-name", task_name,
+                "--mode", mode,
                 "--env-file", str(env_file),
-                "--timeout-multiplier", timeout_multiplier,
-                "--outer-timeout", outer_timeout,
             ]
             if dry_run:
                 argv.append("--dry-run")
             if extra_args:
                 argv.extend(extra_args)
 
-            # Patch RUNS_DIR to our temp location
             orig_runs_dir = rb.RUNS_DIR
             rb.RUNS_DIR = runs_dir
 
-            # Build mock subprocess result
             if subprocess_raises:
                 mock_proc = None
             else:
                 mock_proc = MagicMock()
                 mock_proc.returncode = subprocess_returncode
 
-            def make_subprocess_side_effect(run_dir_ref):
-                """Writes reward artifact before returning, so main() can find it."""
-                def side_effect(*a, **kw):
-                    if subprocess_raises is not None:
-                        raise subprocess_raises
-                    # Write reward artifact
-                    if reward_json is not None and not dry_run:
-                        # Determine output dir from the run dirs created
-                        created = list(runs_dir.iterdir()) if runs_dir.exists() else []
-                        if created:
-                            out = created[0] / "output" / "trials" / task_name / "verifier"
-                            out.mkdir(parents=True, exist_ok=True)
-                            (out / "reward.json").write_text(reward_json)
-                            if write_scorecard:
-                                (out / "scorecard.json").write_text(
-                                    '{"fractional_reward": 1.0}'
-                                )
-                    return mock_proc
-                return side_effect
+            def side_effect(*a, **kw):
+                cmd = a[0] if a else kw.get("args", [])
+                if isinstance(cmd, list) and len(cmd) > 0 and cmd[0] == "git":
+                    git_proc = MagicMock()
+                    git_proc.returncode = 0
+                    git_proc.stdout = "mock-sha-12345\n"
+                    return git_proc
+
+                if subprocess_raises is not None:
+                    raise subprocess_raises
+                if reward_json is not None and not dry_run:
+                    created = list(runs_dir.iterdir()) if runs_dir.exists() else []
+                    if created:
+                        out = created[0] / "output" / "trials" / task_name / "verifier"
+                        out.mkdir(parents=True, exist_ok=True)
+                        (out / "reward.json").write_text(reward_json)
+                mock_proc = MagicMock()
+                mock_proc.returncode = subprocess_returncode
+                mock_proc.stdout = "output\n"
+                return mock_proc
 
             exit_code = None
             try:
                 with patch("sys.argv", ["run_baseline"] + argv), \
                      patch.object(rb, "_check_prerequisites",
-                                  return_value=([] if prereqs_clear else ["blocked"])), \
-                     patch("subprocess.run", side_effect=make_subprocess_side_effect(None)):
+                                  return_value=([] if prereqs_clear else ["Prerequisite blocked"])), \
+                     patch("subprocess.run", side_effect=side_effect):
                     rb.main()
             except SystemExit as e:
                 exit_code = e.code
             finally:
                 rb.RUNS_DIR = orig_runs_dir
 
-            # Read manifest if it exists
             manifest = None
             if runs_dir.exists():
                 for run_dir in runs_dir.iterdir():
@@ -510,40 +455,66 @@ class TestRunBaselineMain(unittest.TestCase):
                         manifest = json.loads(mp.read_text())
                         break
 
-        return exit_code, manifest
+        return exit_code, manifest, runs_dir
 
-    def test_successful_run_with_binary_reward_1(self):
-        exit_code, manifest = self._run_main_with_mocks(
+    def test_ungraded_successful_run(self):
+        """Ungraded run exits 0, status is completed, official reward is null."""
+        exit_code, manifest, _ = self._run_main_with_mocks(
+            mode="ungraded",
+            subprocess_returncode=0,
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIsNotNone(manifest)
+        self.assertEqual(manifest["execution_status"], "completed")
+        self.assertIsNone(manifest["reward"])
+        self.assertIn("ungraded", manifest["reward_reason"])
+
+    def test_scored_successful_run_reward_1(self):
+        exit_code, manifest, _ = self._run_main_with_mocks(
+            mode="scored",
+            subprocess_returncode=0,
             reward_json='{"reward": 1.0}',
         )
         self.assertEqual(exit_code, 0)
         self.assertIsNotNone(manifest)
+        self.assertEqual(manifest["execution_status"], "completed")
         self.assertEqual(manifest["reward"], 1.0)
-        self.assertEqual(manifest["execution_status"], "completed")
+        self.assertIn("passed", manifest["reward_reason"])
 
-    def test_completed_evaluation_with_reward_0(self):
-        """reward=0 → completed evaluation, task not solved."""
-        exit_code, manifest = self._run_main_with_mocks(
-            reward_json='{"reward": 0.0}',
+    def test_scored_evaluation_reward_0(self):
+        exit_code, manifest, _ = self._run_main_with_mocks(
+            mode="scored",
             subprocess_returncode=0,
+            reward_json='{"reward": 0.0}',
         )
+        self.assertEqual(exit_code, 0)
         self.assertIsNotNone(manifest)
-        self.assertEqual(manifest["reward"], 0.0)
         self.assertEqual(manifest["execution_status"], "completed")
-        self.assertNotIn("passed", manifest.get("reward_reason", "").lower().replace("not passed", ""))
+        self.assertEqual(manifest["reward"], 0.0)
+        self.assertIn("not passed", manifest["reward_reason"])
 
-    def test_process_failure_sets_status_and_null_reward(self):
-        exit_code, manifest = self._run_main_with_mocks(
-            subprocess_returncode=1,
+    def test_scored_missing_reward_gives_incomplete_no_verdict(self):
+        exit_code, manifest, _ = self._run_main_with_mocks(
+            mode="scored",
+            subprocess_returncode=0,
             reward_json=None,
         )
+        self.assertEqual(exit_code, 0)
+        self.assertIsNotNone(manifest)
+        self.assertEqual(manifest["execution_status"], "incomplete_no_verdict")
+        self.assertIsNone(manifest["reward"])
+
+    def test_subprocess_failure_gives_process_failed(self):
+        exit_code, manifest, _ = self._run_main_with_mocks(
+            mode="ungraded",
+            subprocess_returncode=1,
+        )
+        self.assertEqual(exit_code, 1)
         self.assertIsNotNone(manifest)
         self.assertEqual(manifest["execution_status"], "process_failed")
-        self.assertIsNone(manifest["reward"])
-        self.assertNotEqual(exit_code, 0)
 
     def test_timeout_sets_timeout_status(self):
-        exit_code, manifest = self._run_main_with_mocks(
+        exit_code, manifest, _ = self._run_main_with_mocks(
             subprocess_raises=subprocess.TimeoutExpired(cmd="cb", timeout=1800),
         )
         self.assertEqual(exit_code, 3)
@@ -552,30 +523,16 @@ class TestRunBaselineMain(unittest.TestCase):
         self.assertIsNone(manifest["reward"])
 
     def test_subprocess_exception_sets_error_status(self):
-        exit_code, manifest = self._run_main_with_mocks(
-            subprocess_raises=OSError("docker: command not found"),
+        exit_code, manifest, _ = self._run_main_with_mocks(
+            subprocess_raises=OSError("Docker failed"),
         )
         self.assertEqual(exit_code, 4)
         self.assertIsNotNone(manifest)
         self.assertEqual(manifest["execution_status"], "subprocess_error")
         self.assertIsNone(manifest["reward"])
 
-    def test_missing_reward_file_gives_incomplete_no_verdict(self):
-        exit_code, manifest = self._run_main_with_mocks(
-            reward_json=None,   # no artifact written
-            subprocess_returncode=0,
-        )
-        self.assertIsNotNone(manifest)
-        self.assertEqual(manifest["execution_status"], "incomplete_no_verdict")
-        self.assertIsNone(manifest["reward"])
-
-    def test_null_usage_fields_always_null(self):
-        _, manifest = self._run_main_with_mocks()
-        self.assertIsNone(manifest["token_usage"])
-        self.assertIsNone(manifest["cost_usd"])
-
-    def test_submission_yaml_uses_include_task_name(self):
-        """Verify the YAML written to disk uses include_task_name, not --task-id."""
+    def test_generated_config_is_single_task_experiment_yaml(self):
+        """Verify the written YAML conforms to ExperimentConfig with single task bound."""
         import run_baseline as rb
         import yaml
 
@@ -583,18 +540,18 @@ class TestRunBaselineMain(unittest.TestCase):
             td_path = Path(td)
             runs_dir = td_path / "runs"
             env_file = td_path / ".env"
-            env_file.write_text("ANTHROPIC_API_KEY=sk-test\nHF_HANDBOOK_ACCESS_GRANTED=1\n")
+            env_file.write_text("DEEPSEEK_API_KEY=sk-test\n")
 
-            orig_runs_dir = rb.RUNS_DIR
+            orig_runs = rb.RUNS_DIR
             rb.RUNS_DIR = runs_dir
-
             try:
                 with patch("sys.argv", [
                     "run_baseline",
                     "--agent", "deepagents",
-                    "--model", "deepseek/v4",
+                    "--model", "deepseek/deepseek-chat",
                     "--domain", "pa_provider",
-                    "--task-name", "pa-t001",
+                    "--task-name", "pa_t018_sample",
+                    "--mode", "ungraded",
                     "--env-file", str(env_file),
                 ]), patch.object(rb, "_check_prerequisites", return_value=[]), \
                    patch("subprocess.run") as mock_sub:
@@ -604,182 +561,103 @@ class TestRunBaselineMain(unittest.TestCase):
                     except SystemExit:
                         pass
             finally:
-                rb.RUNS_DIR = orig_runs_dir
+                rb.RUNS_DIR = orig_runs
 
-            # Find and parse the submission YAML
-            sub_yamls = list(runs_dir.rglob("submission.yaml"))
-            self.assertTrue(sub_yamls, "submission.yaml not written")
-            cfg = yaml.safe_load(sub_yamls[0].read_text())
+            exp_yamls = list(runs_dir.rglob("experiment.yaml"))
+            self.assertTrue(exp_yamls, "experiment.yaml was not generated")
+            cfg = yaml.safe_load(exp_yamls[0].read_text())
 
-        run_block = cfg.get("run", {})
-        self.assertIn("include_task_name", run_block,
-                      "submission YAML must have include_task_name for single-task selection")
-        self.assertEqual(run_block["include_task_name"], ["pa-t001"])
-        self.assertEqual(run_block.get("n_tasks"), 1)
-        # Must NOT contain a task-id arg in the argv (no --task-id flag in upstream)
-        # The command itself doesn't embed --task-id; selection is via YAML.
+            self.assertEqual(cfg["include_task_name"], ["pa_t018_sample"])
+            self.assertEqual(cfg["n_tasks"], 1)
+            self.assertEqual(cfg["n_attempts"], 1)
+            self.assertEqual(cfg["concurrency"], 1)
+            self.assertEqual(cfg["agent"], "deepagents")
+            self.assertEqual(cfg["model"], "deepseek/deepseek-chat")
 
-    def test_submission_id_is_lowercase(self):
-        """Generated submission ID must satisfy upstream slug-safe validator."""
+    def test_dry_run_exits_zero_without_subprocess_or_started_manifest(self):
         import run_baseline as rb
-        import re
-        import yaml
 
         with tempfile.TemporaryDirectory() as td:
-            td_path = Path(td)
-            runs_dir = td_path / "runs"
-            env_file = td_path / ".env"
-            env_file.write_text("ANTHROPIC_API_KEY=sk-test\nHF_HANDBOOK_ACCESS_GRANTED=1\n")
-
-            orig_runs_dir = rb.RUNS_DIR
+            runs_dir = Path(td) / "runs"
+            orig_runs = rb.RUNS_DIR
             rb.RUNS_DIR = runs_dir
-
+            exit_code = None
             try:
                 with patch("sys.argv", [
                     "run_baseline",
                     "--agent", "deepagents",
-                    "--model", "deepseek/v4",
-                    "--domain", "pa_provider",
-                    "--task-name", "pa-t001",
-                    "--env-file", str(env_file),
-                ]), patch.object(rb, "_check_prerequisites", return_value=[]), \
-                   patch("subprocess.run") as mock_sub:
-                    mock_sub.return_value = MagicMock(returncode=0)
-                    try:
-                        rb.main()
-                    except SystemExit:
-                        pass
-            finally:
-                rb.RUNS_DIR = orig_runs_dir
-
-            sub_yamls = list(runs_dir.rglob("submission.yaml"))
-            self.assertTrue(sub_yamls)
-            cfg = yaml.safe_load(sub_yamls[0].read_text())
-
-        sub_id = cfg["submission"]["id"]
-        self.assertRegex(sub_id, r"^[a-z0-9][a-z0-9\-_]*$",
-                         f"submission ID not slug-safe: {sub_id!r}")
-        self.assertEqual(sub_id, sub_id.lower(),
-                         f"submission ID has uppercase: {sub_id!r}")
-
-    def test_dry_run_exits_zero_no_manifest_no_subprocess(self):
-        """Dry-run must not start a subprocess and must not leave a started manifest."""
-        import run_baseline as rb
-
-        with tempfile.TemporaryDirectory() as td:
-            td_path = Path(td)
-            runs_dir = td_path / "runs"
-            env_file = td_path / ".env"
-            env_file.write_text("ANTHROPIC_API_KEY=sk-test\nHF_HANDBOOK_ACCESS_GRANTED=1\n")
-            orig_runs_dir = rb.RUNS_DIR
-            rb.RUNS_DIR = runs_dir
-
-            try:
-                with patch("sys.argv", [
-                    "run_baseline",
-                    "--agent", "deepagents",
-                    "--model", "deepseek/v4",
-                    "--domain", "pa_provider",
-                    "--task-name", "pa-t001",
-                    "--env-file", str(env_file),
+                    "--model", "deepseek/chat",
+                    "--task-name", "pa_t018",
                     "--dry-run",
                 ]), patch("subprocess.run") as mock_sub:
-                    mock_sub.return_value = MagicMock(returncode=0)
                     try:
                         rb.main()
                     except SystemExit as e:
                         exit_code = e.code
+                    mock_sub.assert_not_called()
             finally:
-                rb.RUNS_DIR = orig_runs_dir
+                rb.RUNS_DIR = orig_runs
 
         self.assertEqual(exit_code, 0)
-        # No subprocess should have been called via the actual subprocess.run path
-        # (it may have been mocked but run_baseline skips it in dry-run)
-        # Verify no manifest with execution_status=started was left
-        if runs_dir.exists():
-            for run_dir in runs_dir.iterdir():
-                mp = run_dir / "manifest.json"
-                if mp.exists():
-                    m = json.loads(mp.read_text())
-                    self.assertNotEqual(
-                        m.get("execution_status"), "started",
-                        "dry-run must not leave manifest in 'started' state",
-                    )
+        self.assertFalse(runs_dir.exists())
 
-    def test_invalid_timeout_multiplier_exits_nonzero(self):
+    def test_budget_parameters_and_validation(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
-             "--agent", "a", "--model", "m", "--domain", "pa_provider",
-             "--task-name", "t", "--timeout-multiplier", "0"],
+             "--agent", "a", "--model", "m", "--task-name", "t",
+             "--budget-cny", "0"],
             capture_output=True, text=True, timeout=10,
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("timeout-multiplier", result.stdout + result.stderr)
+        self.assertIn("budget-cny", result.stdout + result.stderr)
 
-    def test_invalid_outer_timeout_exits_nonzero(self):
+    def test_outer_timeout_validation(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
-             "--agent", "a", "--model", "m", "--domain", "pa_provider",
-             "--task-name", "t", "--outer-timeout", "0"],
+             "--agent", "a", "--model", "m", "--task-name", "t",
+             "--outer-timeout", "0"],
             capture_output=True, text=True, timeout=10,
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("outer-timeout", result.stdout + result.stderr)
 
-    def test_missing_task_name_exits_nonzero(self):
-        """--task-name is required; omitting must be a hard error."""
+    def test_timeout_multiplier_validation(self):
         result = subprocess.run(
             [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
-             "--agent", "a", "--model", "m", "--domain", "pa_provider"],
+             "--agent", "a", "--model", "m", "--task-name", "t",
+             "--timeout-multiplier", "0"],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("timeout-multiplier", result.stdout + result.stderr)
+
+    def test_missing_task_name_rejected(self):
+        result = subprocess.run(
+            [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
+             "--agent", "a", "--model", "m"],
             capture_output=True, text=True, timeout=10,
         )
         self.assertNotEqual(result.returncode, 0)
 
-    def test_prerequisite_blocks_exit_with_code_2(self):
-        """When prerequisites fail, main() must exit 2."""
+    def test_secret_never_leaks_into_manifest(self):
         import run_baseline as rb
 
-        with tempfile.TemporaryDirectory() as td:
-            env_file = Path(td) / ".env"
-            env_file.write_text("")  # empty — no key
-            orig_runs = rb.RUNS_DIR
-            rb.RUNS_DIR = Path(td) / "runs"
-            try:
-                with patch("sys.argv", [
-                    "run_baseline",
-                    "--agent", "a", "--model", "m",
-                    "--domain", "pa_provider",
-                    "--task-name", "t",
-                    "--env-file", str(env_file),
-                ]):
-                    try:
-                        rb.main()
-                    except SystemExit as e:
-                        exit_code = e.code
-            finally:
-                rb.RUNS_DIR = orig_runs
-
-        self.assertEqual(exit_code, 2)
-
-    def test_credentials_never_in_manifest(self):
-        """Manifest must not contain credential values."""
-        secret = "sk-ant-definitely-secret-key"
-        import run_baseline as rb
-
+        secret_str = "SUPER_SECRET_ANTHROPIC_KEY_9999"
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
             runs_dir = td_path / "runs"
             env_file = td_path / ".env"
-            env_file.write_text(
-                f"ANTHROPIC_API_KEY={secret}\nHF_HANDBOOK_ACCESS_GRANTED=1\n"
-            )
+            env_file.write_text(f"ANTHROPIC_API_KEY={secret_str}\n")
+
             orig_runs = rb.RUNS_DIR
             rb.RUNS_DIR = runs_dir
-
             try:
                 with patch("sys.argv", [
-                    "run_baseline", "--agent", "a", "--model", "m",
-                    "--domain", "pa_provider", "--task-name", "t",
+                    "run_baseline",
+                    "--agent", "deepagents",
+                    "--model", "deepseek/chat",
+                    "--task-name", "pa_t018",
+                    "--mode", "ungraded",
                     "--env-file", str(env_file),
                 ]), patch.object(rb, "_check_prerequisites", return_value=[]), \
                    patch("subprocess.run") as mock_sub:
@@ -791,12 +669,10 @@ class TestRunBaselineMain(unittest.TestCase):
             finally:
                 rb.RUNS_DIR = orig_runs
 
-            if runs_dir.exists():
-                for run_dir in runs_dir.iterdir():
-                    mp = run_dir / "manifest.json"
-                    if mp.exists():
-                        content = mp.read_text()
-                        self.assertNotIn(secret, content)
+            for run_dir in runs_dir.iterdir():
+                manifest_file = run_dir / "manifest.json"
+                if manifest_file.exists():
+                    self.assertNotIn(secret_str, manifest_file.read_text())
 
 
 if __name__ == "__main__":

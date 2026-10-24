@@ -1,0 +1,19 @@
+[project]
+name = "chi-agent"
+version = "0.1.0"
+description = "CHI-Bench Workflow Agent"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pyyaml>=6.0.2",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

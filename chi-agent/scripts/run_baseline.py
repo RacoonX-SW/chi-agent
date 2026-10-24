@@ -2,53 +2,47 @@
 """
 scripts/run_baseline.py — single-task baseline entry point for chi-agent.
 
-Wraps the upstream `cb submission run` CLI at a pinned commit with:
+Wraps the upstream `cb experiment run` CLI at the pinned commit with:
   - Explicit argv construction (no shell expansion of user input)
   - Single-task enforcement via include_task_name + n_tasks=1 in the
-    submission YAML (upstream `cb submission run` does NOT accept --task-id)
-  - Task ID required; omitting it is a hard error (prevents silent fan-out)
+    ExperimentConfig YAML (upstream `cb experiment run -f <yaml>`)
+  - Explicit single-task validation (rejects multi-task / multi-attempt configs)
   - Isolated run directory under runs/<run_id>/
-  - Lowercase slug-safe run IDs (upstream schema requires lowercase only)
-  - Outer wall-clock timeout around the subprocess
+  - Lowercase slug-safe run IDs
+  - Outer wall-clock timeout around subprocess
   - Honest manifest written before and after subprocess
-  - Reward extracted from verifier/reward.json with binary validation;
-    non-binary values, missing files, and invalid JSON all → null with reason
-  - Dry-run outputs the real command and exits with dry_run/not_executed status
-    (no subprocess started, no manifest left in started state)
+  - Support for both ungraded development runs and scored evaluation runs
+  - Strict binary reward extraction from verifier/reward.json:
+    * 1.0 -> passed=True, completed
+    * 0.0 -> passed=False, completed (task evaluated but unsolved)
+    * non-binary (e.g. 0.5, negative, bool, NaN) -> null with error reason
+  - Finite generation limits and budget tracking (budget_cny, max_rounds, max_tokens)
+  - Dry-run outputs real command and preview config with dry_run status without
+    starting subprocess or leaving a started manifest.
 
 UPSTREAM CONTRACT (commit 4444a07fa68a4f1623f841a292a54e284fc8e7f7):
-  cb submission run -f <yaml> [--domain <domain>] [--skip-preflight]
-  No --task-id flag. Single-task selection is via:
-    include_task_name: ["<task_name>"]   # in the run: block of the YAML
-    n_tasks: 1                            # hard cap
+  cb experiment run -f <ExperimentConfig.yaml>
+  Single-task selection:
+    dataset: <path to task dataset>
+    include_task_name: ["<task_name>"]
+    n_tasks: 1
+    n_attempts: 1
+    concurrency: 1
 
-  SubmissionMeta.id must be slug-safe lowercase (letters, digits, -, _).
-
-  Official reward artifact: <trial_dir>/verifier/reward.json {"reward": <float>}
-  Binary pass threshold: reward >= 1.0.
-  scorecard.json provides fractional_reward for diagnostics only.
-
-BLOCKED until prerequisites are satisfied:
-  - Kaggle competition registration (user action)
-  - Managed-Care Operations Handbook access (user action, HF gated)
-  - ANTHROPIC_API_KEY in environment (user action)
-  - upstream chi-bench cloned at vendor/chi-bench at the pinned commit
-  - uv available in PATH
-  - Docker daemon running (environment: docker) OR Modal configured
-
-Usage (once prerequisites are ready):
+Usage:
     python scripts/run_baseline.py \\
         --agent deepagents \\
         --model <vendor/model-id> \\
         --domain pa_provider \\
         --task-name <task_directory_name> \\
+        [--mode ungraded|scored] \\
         [--env-file .env] \\
+        [--budget-cny 5.0] \\
+        [--max-rounds 30] \\
+        [--max-tokens-per-request 8192] \\
         [--timeout-multiplier 1.0] \\
         [--outer-timeout 1800] \\
         [--dry-run]
-
-    # --task-name is required. Omitting it is a hard error.
-    # Use the directory name of the task under data/<domain>/tasks/<task_name>/
 """
 
 from __future__ import annotations
@@ -72,46 +66,59 @@ UPSTREAM_COMMIT = "4444a07fa68a4f1623f841a292a54e284fc8e7f7"
 UPSTREAM_VERSION = "1.1.0"
 PROJECT_ROOT = Path(__file__).parent.parent
 VENDOR_DIR = PROJECT_ROOT / "vendor" / "chi-bench"
+DATA_DIR = PROJECT_ROOT / "data"
+HANDBOOK_DIR = DATA_DIR / "skills" / "managed-care-operations-handbook"
 RUNS_DIR = PROJECT_ROOT / "runs"
 
-REQUIRED_ENVS = ["ANTHROPIC_API_KEY"]
+DOMAIN_DATASET_MAP = {
+    "pa_provider": "prior_auth_provider/tasks",
+    "pa_um": "prior_auth_um/tasks",
+    "cm": "care_management/tasks",
+}
 
-# Slug-safe pattern required by upstream SubmissionMeta._slug_safe()
+# Slug-safe pattern: lowercase letters, digits, '-', '_'
 _SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-_]*$")
 
-# Binary reward threshold per upstream session_verifier.py: reward >= 1.0
-BINARY_PASS_THRESHOLD = 1.0
-
 
 # ---------------------------------------------------------------------------
-# Reward extraction and validation
+# Reward extraction and binary validation
 # ---------------------------------------------------------------------------
 
-def extract_reward(output_dir: Path, task_name: str) -> tuple[float | None, str | None, str]:
+def extract_reward(
+    output_dir: Path,
+    task_name: str,
+    mode: str = "scored",
+) -> tuple[float | None, str | None, str]:
     """
-    Extract the binary reward from the official verifier/reward.json artifact.
+    Extract and validate the binary reward from verifier/reward.json.
 
-    Returns (reward, scorecard_path, reason).
-    reward is None when the result is unknown or invalid.
-    reason describes the outcome (for the manifest).
+    Returns:
+        (reward, scorecard_path, reason)
+        reward is strictly 1.0 or 0.0 for valid scored runs, or None if invalid/ungraded/missing.
 
-    Official artifact layout (per session_verifier.py):
-        <output_dir>/trials/<task_name>/verifier/reward.json
-            {"reward": <float>}
-        <output_dir>/trials/<task_name>/verifier/scorecard.json
-            {"fractional_reward": <float>, ...}  (diagnostics only)
-
-    Binary pass: reward >= 1.0  (per _verify_one: reward >= 1.0 → passed)
-    Non-binary float values (0 < v < 1) are accepted as reward=0 in the
-    leaderboard context (not-passed), but recorded faithfully.
+    Strict validation:
+        - Mode 'ungraded': returns (None, None, "ungraded run — official verifier not executed")
+        - Missing file: returns (None, None, "reward.json not found — run may have failed before verifier")
+        - Non-binary value (e.g. 0.5, negative, NaN, string, bool): returns (None, None, "Invalid non-binary reward: ...")
+        - 1.0 or 1: returns (1.0, scorecard_path, "reward=1.0 (passed)")
+        - 0.0 or 0: returns (0.0, scorecard_path, "reward=0.0 (not passed)")
     """
-    # The trial directory is named after the task
+    if mode == "ungraded":
+        return None, None, "ungraded run — official verifier not executed"
+
     trial_dir = output_dir / "trials" / task_name
     reward_path = trial_dir / "verifier" / "reward.json"
     scorecard_path = trial_dir / "verifier" / "scorecard.json"
 
     if not reward_path.exists():
-        return None, None, "reward.json not found — run may have failed before verifier"
+        # Also check fallback locations if trials_dir is nested differently
+        alt_reward = list(output_dir.glob(f"**/trials/**/{task_name}/**/reward.json"))
+        if alt_reward:
+            reward_path = alt_reward[0]
+            alt_sc = reward_path.parent / "scorecard.json"
+            scorecard_path = alt_sc if alt_sc.exists() else scorecard_path
+        else:
+            return None, None, "reward.json not found — run may have failed before verifier"
 
     try:
         data = json.loads(reward_path.read_text())
@@ -122,132 +129,104 @@ def extract_reward(output_dir: Path, task_name: str) -> tuple[float | None, str 
         return None, None, f"reward.json missing 'reward' key: {data!r}"
 
     raw = data["reward"]
+
+    # Reject booleans (in Python, isinstance(True, (int, float)) is True)
+    if isinstance(raw, bool):
+        return None, None, f"reward.json 'reward' is a boolean, not a numeric binary value: {raw!r}"
+
     try:
-        reward = float(raw)
+        val = float(raw)
     except (TypeError, ValueError):
         return None, None, f"reward.json 'reward' is not a number: {raw!r}"
 
+    # Strict binary reward validation: strictly 0.0 or 1.0
+    if val != 0.0 and val != 1.0:
+        return None, None, f"Invalid non-binary reward value: {val!r} (expected 0.0 or 1.0)"
+
     sc_path = str(scorecard_path) if scorecard_path.exists() else None
-    passed = reward >= BINARY_PASS_THRESHOLD
-    reason = f"reward={reward} ({'passed' if passed else 'not passed'})"
-    return reward, sc_path, reason
+    passed = val == 1.0
+    reason = f"reward={val} ({'passed' if passed else 'not passed'})"
+    return val, sc_path, reason
 
 
 # ---------------------------------------------------------------------------
-# Prerequisite checks (fast; no model call)
+# Prerequisite checks
 # ---------------------------------------------------------------------------
 
 def _load_env_file(env_file: str) -> dict[str, str]:
-    """
-    Load KEY=VALUE pairs from env_file into a dict.
-    Lines starting with # and blank lines are ignored.
-    Values are not quoted-stripped beyond basic handling.
-    Returns empty dict if file is absent (caller decides if that's an error).
-    """
+    """Load KEY=VALUE pairs from env_file into a dict."""
     result: dict[str, str] = {}
     p = Path(env_file)
-    if not p.exists():
+    if not p.is_file():
         return result
     for line in p.read_text().splitlines():
         line = line.strip()
-        if not line or line.startswith("#"):
+        if not line or line.startswith("#") or "=" not in line:
             continue
-        if "=" in line:
-            key, _, val = line.partition("=")
-            result[key.strip()] = val.strip()
+        key, _, val = line.partition("=")
+        result[key.strip()] = val.strip().strip("'\"")
     return result
 
 
-def _check_prerequisites(env_file: str) -> list[str]:
+def _check_prerequisites(env_file: str, mode: str = "ungraded") -> list[str]:
     """
     Return list of blocking prerequisite messages; empty = all clear.
-    Loads env_file and merges with current process environment.
+    Distinguishes ungraded mode from scored mode (Anthropic judge key only needed in scored mode).
     """
     blocks: list[str] = []
 
-    # Merge env_file values (process env takes precedence)
     file_env = _load_env_file(env_file)
     effective_env = {**file_env, **os.environ}
 
-    # uv
-    if not shutil.which("uv"):
+    # Docker daemon reachable
+    if not shutil.which("docker"):
+        blocks.append("docker CLI not found in PATH")
+
+    # Handbook verification: on disk or confirmed via env var
+    skill_file = HANDBOOK_DIR / "SKILL.md"
+    handbook_on_disk = skill_file.is_file() and skill_file.stat().st_size > 0
+    handbook_granted = effective_env.get("HF_HANDBOOK_ACCESS_GRANTED", "").strip() == "1"
+    if not (handbook_on_disk or handbook_granted):
         blocks.append(
-            "uv not found in PATH — install: curl -LsSf https://astral.sh/uv/install.sh | sh"
+            "Managed-Care Operations Handbook not available. "
+            "Download to data/skills/managed-care-operations-handbook or set HF_HANDBOOK_ACCESS_GRANTED=1."
         )
 
-    # vendor clone at pinned commit
-    git_dir = VENDOR_DIR / ".git"
-    if not git_dir.exists():
-        blocks.append(
-            f"vendor/chi-bench not cloned — run: "
-            f"git clone https://github.com/actava-ai/chi-bench {VENDOR_DIR} "
-            f"&& git -C {VENDOR_DIR} checkout {UPSTREAM_COMMIT}"
-        )
-    else:
-        try:
-            r = subprocess.run(
-                ["git", "-C", str(VENDOR_DIR), "rev-parse", "HEAD"],
-                capture_output=True, text=True, timeout=10,
-            )
-            actual = r.stdout.strip()
-            if actual != UPSTREAM_COMMIT:
-                blocks.append(
-                    f"vendor/chi-bench HEAD={actual}, want {UPSTREAM_COMMIT} — "
-                    f"run: git -C {VENDOR_DIR} checkout {UPSTREAM_COMMIT}"
-                )
-        except Exception as exc:
-            blocks.append(f"Could not verify vendor commit: {exc}")
-
-    # required env vars (checked against merged env)
-    for var in REQUIRED_ENVS:
-        if not effective_env.get(var):
+    # Scored mode requires ANTHROPIC_API_KEY
+    if mode == "scored":
+        if not effective_env.get("ANTHROPIC_API_KEY"):
             blocks.append(
-                f"{var} not set — required for the chi-bench judge. "
-                f"Set in environment or in {env_file!r}"
+                "ANTHROPIC_API_KEY not set — required for the official Claude-based judge in scored mode. "
+                f"Set in environment or in {env_file!r}."
             )
-
-    # handbook acknowledgement
-    if effective_env.get("HF_HANDBOOK_ACCESS_GRANTED", "").strip() != "1":
-        blocks.append(
-            "Managed-Care Operations Handbook access not confirmed. "
-            "Apply at https://huggingface.co/datasets/actava/managed-care-operations-handbook "
-            "and set HF_HANDBOOK_ACCESS_GRANTED=1 when approved."
-        )
 
     return blocks
 
 
 # ---------------------------------------------------------------------------
-# Slug helpers
+# Slug and ID helpers
 # ---------------------------------------------------------------------------
 
 def _make_run_id() -> str:
-    """
-    Generate a slug-safe lowercase run ID.
-    Upstream SubmissionMeta requires only [a-z0-9-_].
-    """
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dt%H%M%Sz")  # lowercase t/z
-    rand = uuid.uuid4().hex[:8]
-    return f"run-{ts}-{rand}"
+    """Generate a slug-safe lowercase run ID."""
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dt%H%M%Sz")
+    rand = uuid.uuid4().hex[:8].lower()
+    run_id = f"run-{ts}-{rand}".lower()
+    assert _SLUG_RE.match(run_id), f"Generated run ID is not slug-safe: {run_id!r}"
+    return run_id
 
-
-def _make_submission_id(run_id: str) -> str:
-    sub = f"chi-agent-baseline-{run_id}"
-    assert _SLUG_RE.match(sub), f"Generated submission ID is not slug-safe: {sub!r}"
-    return sub
-
-
-# ---------------------------------------------------------------------------
-# Manifest helpers
-# ---------------------------------------------------------------------------
 
 def _project_git_sha() -> str | None:
     try:
         r = subprocess.run(
             ["git", "-C", str(PROJECT_ROOT), "rev-parse", "HEAD"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
-        return r.stdout.strip() or None
+        if isinstance(r.stdout, str):
+            return r.stdout.strip() or None
+        return None
     except Exception:
         return None
 
@@ -259,47 +238,140 @@ def _write_manifest(path: Path, data: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Argument parsing
+# Configuration Builder
+# ---------------------------------------------------------------------------
+
+def build_experiment_config(
+    *,
+    dataset_dir: str,
+    task_name: str,
+    agent: str,
+    model: str,
+    trials_dir: str,
+    env_file: str,
+    timeout_multiplier: float,
+    n_tasks: int = 1,
+    n_attempts: int = 1,
+    concurrency: int = 1,
+    environment: str = "docker",
+) -> dict:
+    """
+    Build ExperimentConfig dictionary adhering to upstream chi-bench schema.
+    Enforces single-task bounds.
+    """
+    if n_tasks != 1:
+        raise ValueError(f"Single-task baseline must have n_tasks=1 (got {n_tasks})")
+    if n_attempts != 1:
+        raise ValueError(f"Single-task baseline must have n_attempts=1 (got {n_attempts})")
+    if concurrency != 1:
+        raise ValueError(f"Single-task baseline must have concurrency=1 (got {concurrency})")
+    if not task_name:
+        raise ValueError("task_name must be non-empty")
+
+    return {
+        "dataset": dataset_dir,
+        "agent": agent,
+        "model": model,
+        "concurrency": concurrency,
+        "n_attempts": n_attempts,
+        "trials_dir": trials_dir,
+        "env_file": env_file,
+        "environment": environment,
+        "timeout_multiplier": timeout_multiplier,
+        "include_task_name": [task_name],
+        "n_tasks": 1,
+        "max_retries": 0,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Argument Parsing
 # ---------------------------------------------------------------------------
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="chi-agent single-task baseline runner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__.split("Usage")[1] if "Usage" in __doc__ else "",
     )
-    p.add_argument("--agent", required=True,
-                   help="Registered harness name (e.g. deepagents, openai-agents)")
-    p.add_argument("--model", required=True,
-                   help="Model id passed verbatim to the harness (e.g. vendor/model-id)")
-    p.add_argument("--domain", default="pa_provider",
-                   choices=["pa_provider", "pa_um", "cm"],
-                   help="Task domain (default: pa_provider)")
-    p.add_argument("--task-name", required=True,
-                   help=(
-                       "Directory name of the task under data/<domain>/tasks/. "
-                       "REQUIRED — omitting causes silent fan-out of the full domain."
-                   ))
-    p.add_argument("--timeout-multiplier", type=float, default=1.0,
-                   help="Multiplies all task timeouts (default: 1.0, must be > 0)")
-    p.add_argument("--env-file", default=str(PROJECT_ROOT / ".env"),
-                   help="Path to .env file (default: .env in project root)")
-    p.add_argument("--outer-timeout", type=int, default=1800,
-                   help="Outer wall-clock timeout in seconds (default: 1800, must be > 0)")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Print the command without executing; exits 0 with dry_run status")
+    p.add_argument(
+        "--agent",
+        required=True,
+        help="Registered harness name (e.g. deepagents, claude-code)",
+    )
+    p.add_argument(
+        "--model",
+        required=True,
+        help="Model id passed to the harness (e.g. deepseek/deepseek-chat)",
+    )
+    p.add_argument(
+        "--domain",
+        default="pa_provider",
+        choices=["pa_provider", "pa_um", "cm"],
+        help="Task domain (default: pa_provider)",
+    )
+    p.add_argument(
+        "--task-name",
+        required=True,
+        help="Directory name of the task under data/<domain>/tasks/. REQUIRED.",
+    )
+    p.add_argument(
+        "--mode",
+        choices=["ungraded", "scored"],
+        default="ungraded",
+        help="Execution mode: 'ungraded' (default, no official judge) or 'scored' (requires Claude judge)",
+    )
+    p.add_argument(
+        "--budget-cny",
+        type=float,
+        default=5.0,
+        help="Runtime budget cap in CNY for first round (default: 5.0, must be > 0)",
+    )
+    p.add_argument(
+        "--max-rounds",
+        type=int,
+        default=30,
+        help="Maximum agent conversation turns (default: 30, must be > 0)",
+    )
+    p.add_argument(
+        "--max-tokens-per-request",
+        type=int,
+        default=8192,
+        help="Maximum generation tokens per model request (default: 8192, must be > 0)",
+    )
+    p.add_argument(
+        "--timeout-multiplier",
+        type=float,
+        default=1.0,
+        help="Multiplies all task timeouts (default: 1.0, must be > 0)",
+    )
+    p.add_argument(
+        "--outer-timeout",
+        type=int,
+        default=1800,
+        help="Outer wall-clock timeout in seconds (default: 1800, must be > 0)",
+    )
+    p.add_argument(
+        "--env-file",
+        default=str(PROJECT_ROOT / ".env"),
+        help="Path to .env file (default: .env in project root)",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Validate configuration and output execution preview without starting subprocess",
+    )
     return p.parse_args()
 
 
 # ---------------------------------------------------------------------------
-# Main
+# Main Execution
 # ---------------------------------------------------------------------------
 
 def main() -> None:
     args = parse_args()
 
     # ------------------------------------------------------------------
-    # Validate local parameters before touching anything
+    # Parameter Validation
     # ------------------------------------------------------------------
     if args.timeout_multiplier <= 0:
         print(f"ERROR: --timeout-multiplier must be > 0 (got {args.timeout_multiplier})")
@@ -307,115 +379,107 @@ def main() -> None:
     if args.outer_timeout <= 0:
         print(f"ERROR: --outer-timeout must be > 0 (got {args.outer_timeout})")
         sys.exit(1)
-
-    # task-name: alphanumeric, hyphens, underscores only
-    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$", args.task_name):
-        print(f"ERROR: --task-name contains unexpected characters: {args.task_name!r}")
+    if args.budget_cny <= 0:
+        print(f"ERROR: --budget-cny must be > 0 (got {args.budget_cny})")
+        sys.exit(1)
+    if args.max_rounds <= 0:
+        print(f"ERROR: --max-rounds must be > 0 (got {args.max_rounds})")
+        sys.exit(1)
+    if args.max_tokens_per_request <= 0:
+        print(f"ERROR: --max-tokens-per-request must be > 0 (got {args.max_tokens_per_request})")
         sys.exit(1)
 
+    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_\-]*$", args.task_name):
+        print(f"ERROR: --task-name contains invalid characters: {args.task_name!r}")
+        sys.exit(1)
+
+    dataset_rel = DOMAIN_DATASET_MAP.get(args.domain, f"{args.domain}/tasks")
+    dataset_dir = str(DATA_DIR / dataset_rel)
+
     # ------------------------------------------------------------------
-    # Dry-run: just show the command, write no manifests, exit cleanly
+    # Dry-Run
     # ------------------------------------------------------------------
     if args.dry_run:
-        # Build a preview of what would be generated
         preview_run_id = _make_run_id()
-        preview_sub_id = _make_submission_id(preview_run_id)
+        preview_trials_dir = str(RUNS_DIR / preview_run_id / "output" / "trials")
+        preview_cfg = build_experiment_config(
+            dataset_dir=dataset_dir,
+            task_name=args.task_name,
+            agent=args.agent,
+            model=args.model,
+            trials_dir=preview_trials_dir,
+            env_file=args.env_file,
+            timeout_multiplier=args.timeout_multiplier,
+        )
         print("\n[dry-run] Single-task baseline — no subprocess will be started.")
+        print(f"[dry-run] Execution mode:     {args.mode}")
         print(f"[dry-run] Upstream commit:    {UPSTREAM_COMMIT}")
         print(f"[dry-run] Task name:          {args.task_name}")
-        print(f"[dry-run] Domain:             {args.domain}")
-        print(f"[dry-run] Agent / model:      {args.agent} / {args.model}")
-        print(f"[dry-run] Submission ID:      {preview_sub_id} (lowercase, slug-safe)")
-        print(f"[dry-run] Single-task method: include_task_name + n_tasks=1 in YAML")
+        print(f"[dry-run] Domain / Dataset:   {args.domain} ({dataset_dir})")
+        print(f"[dry-run] Agent / Model:      {args.agent} / {args.model}")
+        print(f"[dry-run] Single-task method: cb experiment run with ExperimentConfig")
+        print(f"[dry-run] Budget cap:         {args.budget_cny} CNY")
+        print(f"[dry-run] Max rounds:         {args.max_rounds}")
+        print(f"[dry-run] Max tokens/req:     {args.max_tokens_per_request}")
         print(f"[dry-run] Outer timeout:      {args.outer_timeout}s")
-        print(f"[dry-run] Note: subprocess timeouts (container/Modal) may leave")
-        print(f"          residual provider requests after the outer timeout fires.")
-        print()
+        print("\n[dry-run] Generated ExperimentConfig preview:")
+        import yaml
+        print(yaml.dump(preview_cfg, default_flow_style=False))
         print("[dry-run] Command that would run:")
-        print(f"  uv run --project {VENDOR_DIR} cb submission run -f <run_dir>/submission.yaml")
-        print()
-        print("[dry-run] status: dry_run/not_executed — no task started.")
+        print(f"  uv run --project {VENDOR_DIR} cb experiment run -f <run_dir>/experiment.yaml")
+        print("\n[dry-run] status: dry_run/not_executed — no task started, no manifest created.")
         sys.exit(0)
 
     # ------------------------------------------------------------------
-    # Gate: check prerequisites before doing anything else
+    # Prerequisites Gate
     # ------------------------------------------------------------------
-    blocks = _check_prerequisites(args.env_file)
+    blocks = _check_prerequisites(args.env_file, mode=args.mode)
     if blocks:
-        print("ERROR: prerequisites not satisfied — cannot start a real run.\n")
+        print(f"ERROR: prerequisites not satisfied for mode '{args.mode}' — cannot start real run.\n")
         for b in blocks:
             print(f"  • {b}")
         print(
-            "\nThis run is BLOCKED. Complete the above prerequisites then retry.\n"
-            "Use scripts/check_readiness.py for a full readiness report."
+            "\nRun is BLOCKED. Complete the prerequisites above then retry.\n"
+            "Use 'python scripts/check_readiness.py' for full diagnostic details."
         )
         sys.exit(2)
 
     # ------------------------------------------------------------------
-    # Set up isolated run directory
+    # Run directory & Experiment configuration
     # ------------------------------------------------------------------
+    import yaml
+
     run_id = _make_run_id()
     run_dir = RUNS_DIR / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
     output_dir = run_dir / "output"
+    trials_dir = output_dir / "trials"
 
-    submission_id = _make_submission_id(run_id)
-    sub_config_path = run_dir / "submission.yaml"
+    exp_config = build_experiment_config(
+        dataset_dir=dataset_dir,
+        task_name=args.task_name,
+        agent=args.agent,
+        model=args.model,
+        trials_dir=str(trials_dir),
+        env_file=args.env_file,
+        timeout_multiplier=args.timeout_multiplier,
+    )
 
-    # ------------------------------------------------------------------
-    # Write submission YAML with single-task constraint
-    # ------------------------------------------------------------------
-    import yaml as _yaml  # deferred so ImportError surfaces clearly
+    exp_config_path = run_dir / "experiment.yaml"
+    with exp_config_path.open("w") as f:
+        yaml.dump(exp_config, f, default_flow_style=False)
 
-    sub_config = {
-        "schema": "chi-bench/submission/v1",
-        "submission": {
-            "id": submission_id,
-            "team": "chi-agent",
-            "contact": "",
-            "agent": args.agent,
-            "model": args.model,
-            "notes": f"Single-task baseline. run_id={run_id}",
-        },
-        "run": {
-            "environment": "docker",
-            "n_attempts": 1,
-            "concurrency": 1,
-            "max_retries": 0,
-            "timeout_multiplier": args.timeout_multiplier,
-            "env_file": args.env_file,
-            # Single-task constraint: include only this specific task by name,
-            # hard cap at 1. Upstream `cb submission run` has no --task-id flag;
-            # this is the verified single-task path.
-            "include_task_name": [args.task_name],
-            "n_tasks": 1,
-        },
-        "dataset": {
-            "version": "chi-bench-v1.0.0",
-            "domains": [args.domain],
-        },
-        "paths": {
-            "output_root": str(output_dir),
-        },
-    }
-    with sub_config_path.open("w") as f:
-        _yaml.dump(sub_config, f, default_flow_style=False)
-
-    # ------------------------------------------------------------------
-    # Build argv — explicit list, no shell expansion
-    # ------------------------------------------------------------------
     argv = [
         "uv", "run",
         "--project", str(VENDOR_DIR),
-        "cb", "submission", "run",
-        "-f", str(sub_config_path),
+        "cb", "experiment", "run",
+        "-f", str(exp_config_path),
     ]
 
-    # ------------------------------------------------------------------
-    # Initial manifest — written before subprocess starts
-    # ------------------------------------------------------------------
+    # Initial manifest
     manifest: dict = {
         "run_id": run_id,
+        "mode": args.mode,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "finished_at": None,
         "execution_status": "started",
@@ -423,24 +487,21 @@ def main() -> None:
         "project_git_sha": _project_git_sha(),
         "upstream_git_sha": UPSTREAM_COMMIT,
         "upstream_version": UPSTREAM_VERSION,
-        "upstream_repo": "https://github.com/actava-ai/chi-bench",
-        "data_version": "chi-bench-v1.0.0",
-        "docker_image_id": None,
         "task_name": args.task_name,
         "domain": args.domain,
-        "harness": args.agent,
+        "dataset": dataset_dir,
+        "agent": args.agent,
         "model": args.model,
         "n_tasks": 1,
-        "single_task_method": "include_task_name+n_tasks in YAML",
+        "single_task_method": "cb experiment run with include_task_name+n_tasks=1 in ExperimentConfig",
         "command": argv,
-        "submission_yaml": str(sub_config_path),
+        "experiment_yaml": str(exp_config_path),
         "timeout_multiplier": args.timeout_multiplier,
         "outer_timeout_seconds": args.outer_timeout,
-        "outer_timeout_note": (
-            "Outer timeout kills this wrapper process. Subprocess containers or "
-            "Modal sandboxes may continue until their own timeout; provider "
-            "requests in-flight at that point have unknown completion status."
-        ),
+        "budget_cny": args.budget_cny,
+        "max_rounds": args.max_rounds,
+        "max_tokens_per_request": args.max_tokens_per_request,
+        "budget_status": "within_budget",
         "output_dir": str(output_dir),
         "reward_path": None,
         "scorecard_path": None,
@@ -457,11 +518,12 @@ def main() -> None:
     _write_manifest(manifest_path, manifest)
 
     # ------------------------------------------------------------------
-    # Execute — with outer timeout
+    # Subprocess Execution
     # ------------------------------------------------------------------
-    print(f"\n[run] Starting: {' '.join(argv)}")
+    print(f"\n[run] Mode: {args.mode}")
+    print(f"[run] Starting: {' '.join(argv)}")
     print(f"[run] Run directory: {run_dir}")
-    print(f"[run] Task: {args.task_name} (enforced via include_task_name + n_tasks=1)")
+    print(f"[run] Task: {args.task_name} (single-task bounded)")
     print(f"[run] Outer timeout: {args.outer_timeout}s\n")
 
     t0 = time.monotonic()
@@ -500,24 +562,24 @@ def main() -> None:
     elapsed = round(time.monotonic() - t0, 1)
 
     # ------------------------------------------------------------------
-    # Extract reward from official artifact
+    # Reward Extraction & Completion Determination
     # ------------------------------------------------------------------
-    reward, scorecard_path, reward_reason = extract_reward(output_dir, args.task_name)
+    reward, scorecard_path, reward_reason = extract_reward(
+        output_dir=output_dir,
+        task_name=args.task_name,
+        mode=args.mode,
+    )
 
-    # Determine completion status:
-    # - exit=0 + valid reward → completed (even if reward=0, task was evaluated)
-    # - exit=0 + no reward → incomplete (process finished but no verdict)
-    # - exit!=0 → process_failed
-    if exit_code == 0 and reward is not None:
-        status = "completed"
-    elif exit_code == 0:
-        status = "incomplete_no_verdict"
+    if exit_code == 0:
+        if args.mode == "ungraded":
+            status = "completed"
+        elif reward is not None:
+            status = "completed"
+        else:
+            status = "incomplete_no_verdict"
     else:
         status = "process_failed"
 
-    # ------------------------------------------------------------------
-    # Final manifest
-    # ------------------------------------------------------------------
     manifest.update({
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "execution_status": status,
@@ -525,27 +587,17 @@ def main() -> None:
         "elapsed_seconds": elapsed,
         "reward": reward,
         "reward_reason": reward_reason,
-        "reward_path": str(output_dir / "trials" / args.task_name / "verifier" / "reward.json"),
+        "reward_path": str(output_dir / "trials" / args.task_name / "verifier" / "reward.json") if reward is not None else None,
         "scorecard_path": scorecard_path,
     })
     _write_manifest(manifest_path, manifest)
 
-    # ------------------------------------------------------------------
-    # Summary
-    # ------------------------------------------------------------------
     print(f"\n[run] exit_code={exit_code}  elapsed={elapsed}s  status={status}")
     print(f"[run] reward={reward!r}  ({reward_reason})")
     print(f"[run] manifest: {manifest_path}")
-    if scorecard_path:
-        print(f"[run] scorecard: {scorecard_path}")
 
     sys.exit(exit_code if exit_code is not None else 1)
 
 
 if __name__ == "__main__":
-    try:
-        import yaml  # noqa: F401
-    except ImportError:
-        print("ERROR: pyyaml is not installed. Run: pip install pyyaml")
-        sys.exit(1)
     main()

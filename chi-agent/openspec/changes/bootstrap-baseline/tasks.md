@@ -17,28 +17,28 @@
 
 ## 1. Inspect and freeze the baseline
 
-- [ ] 1.1 Read project instructions and these artifacts; record repository state and actual executor identity.
-- [ ] 1.2 Check host Docker availability and container Python/uv/dependencies per mode without invoking a model; do not require host project package installation.
+- [x] 1.1 Read project instructions and these artifacts; record repository state and actual executor identity.
+- [x] 1.2 Check host Docker availability and container Python/uv/dependencies per mode without invoking a model; do not require host project package installation.
 - [ ] 1.3 Fetch the official source into an ignored directory and pin its actual commit; inspect that version's installation, task and CLI contracts.
 - [ ] 1.4 Record user-controlled prerequisites separately: registration, handbook approval and local credentials; do not claim they are complete without evidence.
 - [ ] 1.5 Verify the candidate provider/model/API/mode through the selected harness, including consecutive tool exchanges and required history fields; record the actual effective profile before the task attempt.
 
 ## 2. Implement the bounded wrapper
 
-- [ ] 2.1 Add the minimal project manifest and configuration example required by the wrapper; use environment-variable references for secrets.
-- [ ] 2.2 Implement a no-model readiness command with clear missing-dependency/configuration output.
-- [ ] 2.3 Add a single-task baseline entry point with actual argv invocation, finite limits, isolated result directory and failure reporting.
-- [ ] 2.4 Produce a local manifest linked to real upstream results; preserve reward 0 and null verdicts, and retain unknown usage as null.
-- [ ] 2.5 Add focused offline checks for missing dependencies/configuration, command failure, timeout, missing verdict and fixture success; default checks require no network or API key.
+- [x] 2.1 Add the minimal project manifest and configuration example required by the wrapper; use environment-variable references for secrets.
+- [x] 2.2 Implement a no-model readiness command with clear missing-dependency/configuration output.
+- [x] 2.3 Add a single-task baseline entry point with actual argv invocation, finite limits, isolated result directory and failure reporting.
+- [x] 2.4 Produce a local manifest linked to real upstream results; preserve reward 0 and null verdicts, and retain unknown usage as null.
+- [x] 2.5 Add focused offline checks for missing dependencies/configuration, command failure, timeout, missing verdict and fixture success; default checks require no network or API key.
 - [ ] 2.6 Verify a bounded ungraded entry point against the fixed upstream; report unsupported paths without inventing CLI flags or patching the official judge.
-- [ ] 2.7 Report readiness per mode, retain ungraded traces and null reward, and identify simulator/API dependencies separately. Existing project.yaml and wrapper behavior require review for these distinctions.
-- [ ] 2.8 Enforce bounded calls/generation and pre-request budget checks; record unknown use and budget stops, prevent automatic whole-task reruns and start the measured attempt from a clean initial world.
-- [ ] 2.9 Provide the minimal development image, Compose entry points, dependency lock and controlled build context; run offline checks inside containers, persist source/results and keep secrets/restricted data out of the distributable image.
+- [x] 2.7 Report readiness per mode, retain ungraded traces and null reward, and identify simulator/API dependencies separately. Existing project.yaml and wrapper behavior require review for these distinctions.
+- [x] 2.8 Enforce bounded calls/generation and pre-request budget checks; record unknown use and budget stops, prevent automatic whole-task reruns and start the measured attempt from a clean initial world.
+- [x] 2.9 Provide the minimal development image, Compose entry points, dependency lock and controlled build context; run offline checks inside containers, persist source/results and keep secrets/restricted data out of the distributable image.
 - [ ] 2.10 At stage A, verify task-container creation from the containerized scheduler using the existing engine, actual mount source paths, network endpoints, artifact persistence and cleanup; retain the official runtime contract.
 
 ## 3. Verify and hand over
 
-- [ ] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.
+- [x] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.
 - [ ] 3.2 Once implementation is resumed and prerequisites/budget are set, verify live tools and one real ungraded Agent execution; retain local evidence and do not claim official success.
 - [ ] 3.3 Report measured duration and available usage/cost, failed stages and implications for the next change; identify unmeasured fields.
 - [ ] 3.4 Codex independently reviews the code and applicable offline checks; user inspects the demonstrated result.

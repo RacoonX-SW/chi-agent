@@ -1,0 +1,15 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: chi-agent-dev:latest
+    container_name: chi-agent-dev
+    volumes:
+      - .:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /workspace
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    command: ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"]

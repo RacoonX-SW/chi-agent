@@ -16,14 +16,21 @@ run:
   output_dir: runs
   default_n_tasks: 1
   default_domain: pa_provider        # public domain for single-task baseline
-  # Agent and model are set at runtime via environment / CLI flags.
-  # Do not hard-code a model name here; specify it when you invoke run_baseline.py.
+  execution_method: experiment_run    # uses upstream cb experiment run -f <ExperimentConfig>
+  default_budget_cny: 5.0
+  default_max_rounds: 30
+  default_max_tokens_per_request: 8192
 
 secrets:
   # All secrets come from environment variables; no values are stored here.
-  required_for_real_run:
-    - ANTHROPIC_API_KEY         # required: judge runs claude-opus-4-7
+  # Different modes require different credentials.
+  required_for_scored_run:
+    - ANTHROPIC_API_KEY         # required: official judge runs Claude
+  required_for_ungraded_run:
+    - DEEPSEEK_API_KEY          # or GEMINI_API_KEY / OPENAI_API_KEY depending on runner
   optional:
+    - GEMINI_API_KEY
+    - DEEPSEEK_API_KEY
     - OPENAI_API_KEY
     - OPENROUTER_API_KEY
 
