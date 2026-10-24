@@ -8,7 +8,8 @@
 | 协作 | 主代理协调两个 gpt-6-luna / high 子代理，控制共享文件写入、独立审核、教学和 Git 存储；无需用户转交 Gemini，不操作 Antigravity，不后台轮询 |
 | 上次独立审核候选 | `b7f894130df93ded69496576b83e6dcdcab7e56b`，见 [D0 独立验收](bootstrap-baseline-d0-review.md) |
 | 上次通过的实现提交 | `b7f894130df93ded69496576b83e6dcdcab7e56b`，仅 D0 离线代码验收，不能扩大为真实 Agent/官方任务或用户验收已通过 |
-| 存储与验收身份 | main；实现候选之后的审核/学习文档单独提交和备份，结果见交接回复，后续存储 HEAD 不自动成为新的实现验收身份 |
+| 存储与验收身份 | 历史 main 基线 `c52d2bab8a24d3baf59ab3b3dc7b6a7c6abc8089`；后续代码与所有文档在 codex 工作分支提交/推送，创建 base=main 的 PR 交用户审核合并，主代理不直接 push/合并 main；存储 HEAD 不自动成为实现验收身份 |
+| 当前文档任务 | `codex/branch-review-workflow`，从上述 origin/main 创建，起始工作区干净；本轮仅更新工作分支/PR 规则及学习记录，D0 代码和已审 SHA 不变，PR/提交身份见本轮回复与附件 |
 | 基线 | 初始规划 `c660e2699b8b972c9aa1d114a3e4d63510b8985e`；本轮起点 `35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9`，起始干净；协作约定独立提交 `83f3a8b425276cd7e987aeeb77c6a194bb79ec87` 为候选直接父提交 |
 | 实现交接 | Luna 一修 R2/R3，Luna 二先分析后修 R5；共享文件串行交接，两个子代理停止写入后固定候选，未创建下级代理 |
 | 当前证据 | 固定 git archive 快照，独立 Docker 构建成功；80/80 项目测试和 21/21 补充方法通过；锁定版本/uv pip check/真实 offline CLI 通过，无网络/无 socket/无真实凭据 |
