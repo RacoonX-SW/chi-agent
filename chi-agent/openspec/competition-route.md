@@ -1,6 +1,6 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-更新：2026-10-24。用户要求先理解一个官方任务，按竞赛要求推进；本次已仅恢复 D0 开发协作，A/B/C、参赛模型 API 和官方判分仍暂停。当前 D0 需求与交接已具备，见 [开工摘要](changes/bootstrap-baseline/handoff.md#d0-开工摘要2026-10-24-收口)；用户自行指挥 Gemini，Codex 先保存规划基线，不操作 Antigravity 或自行实现 D0。
+更新：2026-10-25。用户要求先理解一个官方任务，按竞赛要求推进；当前仅恢复 D0，A/B/C、参赛模型 API 和官方判分仍暂停。实现方式已改为 Codex 主代理协调两个 `gpt-6-luna` / `high` 子代理，见 [双 Luna 工作流](../docs/luna-subagent-workflow.md)；主代理定规格、协调、独立审核与教学，子代理接续 R2/R3/R5，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 

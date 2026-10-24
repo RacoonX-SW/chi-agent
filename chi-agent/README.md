@@ -2,7 +2,7 @@
 
 长期协作要求：**边参赛，边学习 Agent 开发。** 新对话先读 [学习约定与进度](docs/learning-agreement.md)；每轮结合设计、实际代码/轨迹和小问题推进理解，不只交付代码。
 
-当前协作：**用户已仅恢复 `bootstrap-baseline/D0`，自行指挥 Gemini 写代码，Codex 负责规格、按提交差异独立审核、教学与 GitHub 存储。** 第二份候选 `c4b410a954bde9dbef64671a1c8079d90b68b79e` 已独立复审：R1/R4/R6/R7/R8 在已测离线范围内关闭，R2/R3/R5 仍需返工，D0 尚未通过。原有 51 项测试通过，补充 18 个方法中 8 个失败；自测报告不能替代独立结论。详见 [D0 复审报告](reviews/bootstrap-baseline-d0-review.md) 与 [执行器交付报告](reviews/bootstrap-baseline-d0-handover.md)。Codex 不操作或调试 Antigravity；稳定交付后由用户通知审核，不持续轮询。新对话先接上 [审核状态](reviews/REVIEW_STATE.md)，按需读相关规格与代码，历史记录不默认全量重读。流程见 [本地与 GitHub 协作](docs/github-workflow.md)。A/B/C、参赛模型 API 和官方判分仍暂停。
+当前协作：**仅恢复 `bootstrap-baseline/D0`，用户已改用 Codex 主代理协调两个 Luna High 子代理写代码。** 两个子代理均显式使用 `gpt-6-luna` / `high`，主代理负责规格、协调、独立审核、教学与 GitHub 存储；用户无需再向 Gemini 转交任务。共享文件串行修改，分析可并行，详见 [双 Luna 开发与用法](docs/luna-subagent-workflow.md)。上次已审 `c4b410a954bde9dbef64671a1c8079d90b68b79e` 未通过，当前接续 R2/R3/R5；R1/R4/R6/R7/R8 在已测离线范围内关闭。详见 [D0 复审报告](reviews/bootstrap-baseline-d0-review.md) 与 [审核状态](reviews/REVIEW_STATE.md)。Codex 不操作或监控 Antigravity，不设置后台轮询；A/B/C、参赛模型 API 和官方判分仍暂停。
 
 ## 当前准备状态汇总（2026-10-25）
 
@@ -10,7 +10,7 @@
 
 最新环境决定（2026-10-24）：**依赖安装、下载、测试和运行全部在 Docker 内完成。** 宿主机只保留已有 Docker Desktop、编辑器/Git 与源码，不再计划在 Mac 建立项目 `.venv` 或安装项目依赖。自有开发容器已用 Python 3.13.17/aarch64 进行离线检查；固定上游 `pyproject.toml` 要求 3.12+，官方任务 Dockerfile 使用 Python 3.12，目标运行兼容性尚未验证。此前报告的宿主机默认 3.9.6 不参与项目运行。详见 [Docker 工作流与交付边界](docs/docker-workflow.md) 和本轮审核；官方任务镜像/任务世界未运行。
 
-2026-10-24 执行器更新：用户确认前次受限的是 Antigravity 中的 Claude，并报告已有 Google AI Pro。当前优先方案改为 **Antigravity + Gemini 3.8 Flash-High 写代码，DeepSeek 备用**；Codex 继续规格、独立验收、教学与 GitHub 存储。优先使用套餐内额度，具体账号限制与实际接入待核实。下文早期“DeepSeek 实现”的描述是历史安排；参赛运行时模型候选和 5 元预算不变，D0 以本次恢复指令为准，后续阶段仍暂停。
+2026-10-25 执行器更新：用户认为手工接力方式不合适，明确更换为 **两个 Luna High 子代理实现、主代理协调与独立验收**；此前 Antigravity + Gemini、DeepSeek 方案保留为历史。此变化只涉及开发协作，不更改参赛运行时模型候选和 5 元预算，也不承诺更少总 token 或固定节约比例。
 
 **规划材料和首份 D0 交接已具备，用户已恢复 D0 开发协作；环境、接口与真实运行准备尚未完成。** 下表优先于后续按时间积累的旧状态，不能把“文档完成”写成“系统已可运行”。
 
@@ -31,7 +31,7 @@
 | GitHub 存储 | 私有仓库 | [xsw932187210-cell/chi-agent](https://github.com/xsw932187210-cell/chi-agent)，保留现有目录结构；代码仍是待验收快照，见 [存储与协作约定](docs/github-workflow.md) |
 | Kaggle 入场与材料 | 已接受规则；Writeup 待创建 | 已登录 Rules 页面显示接受规则和 Team 页签；Writeup、私有程序包和技术报告均未提交。最终截止为北京时间 2026-11-16 07:59 |
 
-下一步继续 [交接包中的 D0](openspec/changes/bootstrap-baseline/handoff.md)：用户将复审中的 R2/R3/R5 交给 Gemini，稳定交付后由 Codex 增量复验；A 官方工具、B 模型工具往返、C 一次自主执行仍须另行恢复。后续业务策略与自动压缩根据真实基线再细化，不属于已完成的实现。
+下一步继续 [交接包中的 D0](openspec/changes/bootstrap-baseline/handoff.md)：主代理将 R2/R3 交给 Luna 一、R5 交给 Luna 二，安排写入交接、Docker 自测与稳定候选后的独立复验；A 官方工具、B 模型工具往返、C 一次自主执行仍须另行恢复。后续业务策略与自动压缩根据真实基线再细化，不属于已完成的实现。
 
 ## 过程记录与资料索引
 
@@ -72,7 +72,7 @@
 1. 已完成：本机登录、手册全量下载与核对、首批 3 个公开任务输入说明的阅读，以及头痛新转诊任务的静态工具/执行/评分拆解。
 2. 已确认：竞赛优先，医院侧作为起步调试任务；不据此缩小最终比赛的评分范围。
 3. 接下来确认：候选模型、harness、开发入口和实际生效限制；首轮预算已选 5 元。恢复后补全环境并取得无评分的单任务执行证据，本地官方评分暂缓。工程改进依据实际错误与轨迹，竞赛通过率保持未测。具体参数和返回值仍需实际 MCP 契约核对，不从静态文档猜测。
-4. 本次已仅恢复 D0 离线修复，范围与验收见交接包；规划基线保存后由用户自行交给 Gemini 实现，DeepSeek 备用。稳定交付后通知 Codex 审核，A/B/C 仍暂停。旧 bootstrap 实现仍是待修候选，不能代替整个项目的业务能力。
+4. 本次仅接续 D0 离线修复，使用两个 Luna High 子代理，范围与验收见交接包。由主代理协调写入与独立审核，A/B/C 仍暂停。旧 bootstrap 实现仍是待修候选，不能代替整个项目的业务能力。
 
 如需正式参赛，另核对 [Kaggle 赛事页](https://www.kaggle.com/competitions/chi-bench) 当前规则及报名状态。手册及其衍生输出的披露范围按实际授权确认，下载完成不代表可以上传 GitHub 或转发给第三方。
 

@@ -4,13 +4,14 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | `bootstrap-baseline/D0` 第二份候选已独立复审，未通过；R1/R4/R6/R7/R8 关闭，R2/R3/R5 待用户转交 Gemini 返工；A/B/C、参赛模型 API 和官方判分仍暂停 |
-| 协作 | 用户指挥 Gemini；Codex 制定规格、独立审核与教学，不操作 Antigravity |
+| 当前任务 | `bootstrap-baseline/D0` 第二份候选已独立复审，未通过；R1/R4/R6/R7/R8 关闭，R2/R3/R5 已转由两个 Luna High 子代理接续；新实现须另行固定候选并复验。A/B/C、参赛模型 API 和官方判分仍暂停 |
+| 协作 | 主代理协调两个 `gpt-6-luna` / `high` 子代理，定规格、控制共享文件写入、独立审核、教学与存储；不操作 Antigravity，用户无需转交任务 |
 | 上次独立审核候选 | `c4b410a954bde9dbef64671a1c8079d90b68b79e`；结论需返工，见 [D0 复审](bootstrap-baseline-d0-review.md)；执行器为 Antigravity + Gemini 3.8 Flash (High) |
 | 上次通过的实现提交 | 无；尚未有通过本阶段独立验收的候选 |
 | 存储与验收身份 | 复审开始时 main 为候选，origin/main 为首审文档提交 `ff2e23d72fe1ae37b41872fbae655a1498c592e0`；本轮文档存储提交与 push 结果见交接回复，不能将备份 HEAD 当成已通过实现 |
 | D0 基线与既有改动 | 规划基线 `c660e2699b8b972c9aa1d114a3e4d63510b8985e`；本候选直接基于 `ff2e23d72fe1ae37b41872fbae655a1498c592e0`。起始仅有此前 Codex 学习笔记未提交，已保留并存起始 patch；本轮只更新审核/学习/项目状态文档 |
-| 下一次审核 | 等用户提供返工后的稳定候选；优先比较本次已审 `c4b410a…` 与新候选，重点 R2/R3/R5，并核对规划基线到新候选的累计目标和受影响回归；不自动派发或轮询 |
+| 下一次审核 | 主代理收集两个子代理的短交付、停止写入并固定候选；比较本次已审 `c4b410a…` 与新候选，重点 R2/R3/R5，核对累计目标和受影响回归；有证据的返工交回原子代理，无后台轮询 |
+| 当前协作开工点 | `35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9` / main，开始切换时工作区干净；先改协作文档，两个子代理并行分析、串行改共享文件，详见 [双 Luna 工作流](../docs/luna-subagent-workflow.md) |
 | 当前证据 | 独立无缓存构建成功，原测试 51/51 通过；18 个补充方法中 10 个通过、8 个失败（含子例共 9 条失败断言，0 errors）；11 个锁定依赖及 uv pip check 通过，真实 offline CLI 退出 0。运行检查在无网络/无 socket 的 Docker 容器内 |
 | 未验证项 | OpenSpec CLI、官方 Python 3.12/其他架构、真实超时清理与 A/B/C；没有因此运行模型或 judge |
 | 真实运行 | 无真实 trial、官方 reward、实测模型费用；原有离线测试数量不能替代新候选验收 |
@@ -37,4 +38,4 @@
 | 2026-10-24 | D0 | `c660e2699b8b972c9aa1d114a3e4d63510b8985e` | `01a044fe237aff7ddcafc3332e9444d443c41999` | 未通过，R1–R8 待返工；已通过提交仍为无 | [首审固定报告](https://github.com/xsw932187210-cell/chi-agent/blob/ff2e23d72fe1ae37b41872fbae655a1498c592e0/chi-agent/reviews/bootstrap-baseline-d0-review.md) |
 | 2026-10-25 | D0 复审 | `ff2e23d72fe1ae37b41872fbae655a1498c592e0` | `c4b410a954bde9dbef64671a1c8079d90b68b79e` | 未通过；关闭 R1/R4/R6/R7/R8，R2/R3/R5 待返工；已通过提交仍为无 | [独立复审](bootstrap-baseline-d0-review.md) |
 
-历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 的未通过记录保留在原报告。Gemini 仍维护 `chi-agent/reviews/bootstrap-baseline-d0-handover.md`，下一次交付须包含代码、报告与稳定提交身份；不把本轮审核文档提交当作新的实现候选。
+历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 的未通过记录保留在原报告。沿用 `chi-agent/reviews/bootstrap-baseline-d0-handover.md`，由主代理汇总两个 Luna 子代理的实际交付；新候选须包含代码、报告与稳定提交身份。不把单纯协作文档提交或代理已派发当作新的实现验收。

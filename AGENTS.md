@@ -19,14 +19,15 @@
 - 把学习进度、用户疑问和下一步更新到学习约定文档，方便新对话继续。没有实现或没有核对的源码，不能编造函数调用链。
 - 学习嵌入竞赛推进，不把完成整套课程或通过测验设为继续开发的前提。
 
-## 当前边界（2026-10-24 更新）
+## 当前边界（2026-10-25 更新）
 
-- 用户自行操作 Antigravity，将任务和返工意见交给 Gemini；Codex 负责规格、独立审核、教学与 GitHub 存储，不再控制、调试或向 Antigravity 派发任务，也不轮询其界面。此要求撤销早先的自动派发与自动返工授权。交付后由用户发一条通知，附候选提交或报告路径；没有后台自动验收安排。
+- 用户已将 D0 实现切换为 **Codex 主代理协调两个 Luna High 子代理**，模型显式使用 `gpt-6-luna`、推理强度 `high`。主代理负责规格、任务边界、协调、独立复验、教学及 GitHub 存储；两个子代理负责有界实现与 Docker 内自测。用户无需再向 Gemini 搬运任务和返工意见。仅对已授权的开发任务启用这两个子代理，不递归扩增；模型不可用时报告，不能静默换模型。详见 `chi-agent/docs/luna-subagent-workflow.md`。
+- 同一工作区的共享文件由一个子代理独占写入；可并行分析，重叠修改必须接力。主代理待写入停止、固定候选后独立审核，再把有证据的返工交回对应子代理；不因子代理自测通过直接验收。仍不操作、调试或监控 Antigravity，不设置后台轮询或自动唤醒。
 - 审核优先比较稳定的基线/候选提交，读取差异、相关入口/调用者/配置与必要测试；不默认重读整个项目或执行器对话。首次接手、范围扩大或接口/依赖变化时按实际影响补读。记录“上次已审核”和“上次已通过”的提交，不能因摘要或 commit/push 就认定实现正确；见 `chi-agent/reviews/REVIEW_STATE.md`。
-- 用户最新要求 Docker 内开发、调试与交付：项目依赖安装、下载、测试、运行均在容器中进行，宿主机保留 Docker Desktop、编辑器/Git 与源码。不要把宿主机缺 uv/OpenSpec/PyYAML 当成必须在 Mac 安装的缺口。自有开发容器首选 Python 3.13；固定官方任务镜像实际为 Python 3.12，保持其兼容性并分别验证。详见 `chi-agent/docs/docker-workflow.md`；D0 的开发容器构建和离线自测由用户指挥 Gemini 完成，Codex 不自行实现。
+- 用户最新要求 Docker 内开发、调试与交付：项目依赖安装、下载、测试、运行均在容器中进行，宿主机保留 Docker Desktop、编辑器/Git 与源码。不要把宿主机缺 uv/OpenSpec/PyYAML 当成必须在 Mac 安装的缺口。自有开发容器首选 Python 3.13；固定官方任务镜像实际为 Python 3.12，保持其兼容性并分别验证。详见 `chi-agent/docs/docker-workflow.md`；实现由两个 Luna High 子代理承担，主代理独立检查。
 
-- 2026-10-24 用户在本次接续中明确仅恢复 `bootstrap-baseline/D0` 开发协作：先由 Codex 核对并单独本地提交规划基线，用户再自行指挥 Gemini 实现；稳定交付后提供候选 SHA 或报告路径，Codex 再审核，不持续轮询。A/B/C、参赛模型 API 和官方判分仍暂停。此前耗尽的是 Antigravity 中的 Claude 额度，用户报告已有 Google AI Pro，当前优先 Antigravity + Gemini 3.8 Flash-High，DeepSeek 备用。旧准备审计确认的客户端/额度不等于本次交付能力已验证，也不改变参赛 Agent 的运行时模型候选和 5 元预算。
-- 最新准备审计见 `chi-agent/docs/preparation-audit-2026-10-24.md`：规划可支持恢复 D0；Docker 服务已核实可用，开发镜像/容器内依赖、完整数据/官方源码 checkout 与真实接入仍缺。Kaggle 已接受规则，Writeup 尚未创建；最终材料截止为北京时间 2026-11-16 07:59。
+- 当前只恢复 `bootstrap-baseline/D0`：上次已审实现 `c4b410a954bde9dbef64671a1c8079d90b68b79e` 未通过，剩 R2/R3/R5；文档基线 `35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9`。两个子代理接续剩余修复，不重做已关闭项，受影响行为须回归。A/B/C、参赛模型 API 和官方判分仍暂停。写代码的 Luna 与参赛 Agent 的运行时模型分开，5 元参赛运行预算不变。
+- 准备审计见 `chi-agent/docs/preparation-audit-2026-10-24.md`；后续 D0 复审已验证 Python 3.13/aarch64 开发镜像、依赖锁和离线检查，但完整数据/官方源码 checkout 与真实接入仍缺。Kaggle 已接受规则，Writeup 尚未创建；最终材料截止为北京时间 2026-11-16 07:59。
 - 已完成一个官方任务的静态拆解；尚未运行真实 trial，实时 MCP schema、官方 reward、耗时和成本仍未测。
 - 用户当前不为本地判分开通 Anthropic，最终私有评分交主办方。先规划离线、工具接入与无评分的真实开发执行；官方 reward 保持未知，部分 Claude 模拟对话的本地验证也需单独记录缺口。见 chi-agent/docs/development-preparation-2026-10-21.md。
 - 判分认证更正：固定上游还支持 Claude Code 登录/OAuth，不可再断言原生 API Key 是唯一方式。用户目前仅有免费 Claude 账号，没有订阅；确定性检查可考察函数级非语义分支，完整评分仍未具备。见 chi-agent/docs/judge-access-options-2026-10-21.md。

@@ -1,6 +1,6 @@
 ## Context
 
-当前已有未通过独立验收的离线候选，真实官方任务尚未运行；本次仅恢复 D0，由用户指挥 Gemini 实现，Codex 不自行实现。A/B/C、参赛模型 API 和官方判分仍暂停。使用现有官方环境，不重写模拟器或评测器。OpenSpec 文档按标准目录组织，但尚未运行 CLI 校验。
+当前已有未通过独立验收的离线候选，真实官方任务尚未运行；本次仅恢复 D0，由 Codex 主代理协调两个 `gpt-6-luna` / `high` 子代理实现，主代理独立审核。共享文件串行写入，见 [双 Luna 工作流](../../../docs/luna-subagent-workflow.md)。A/B/C、参赛模型 API 和官方判分仍暂停。使用现有官方环境，不重写模拟器或评测器。OpenSpec 文档按标准目录组织，但尚未运行 CLI 校验。
 
 规划基线任务为 `pa_t018_t018_o001_p01_new_referral_provider`。其输入、静态工具和运行限制见 `docs/task-walkthrough-pa-t018.md`。该文档没有真实评分，不能充当完成基线的证据。
 
