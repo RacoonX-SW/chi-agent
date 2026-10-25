@@ -111,6 +111,7 @@ class Ledger:
     validated_call_ids: set[str] | None = None
     prior_cost_source: str = "synthetic-prior-spend-v1"
     error_code: str | None = None
+    cleanup_error_code: str | None = None
 
     def __post_init__(self) -> None:
         self.effects = []
@@ -885,7 +886,8 @@ async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
             except Exception:
                 cleanup_failed = True
         if cleanup_failed:
-            ledger.error_code = "cleanup_failed"
+            ledger.cleanup_error_code = "cleanup_failed"
+            ledger.error_code = ledger.error_code or "cleanup_failed"
             result_text = None
     return ledger, result_text
 
@@ -941,6 +943,7 @@ def _evidence(run_id: str, ledger: Ledger, result: str | None, sdk_identity: dic
         "outcome": {
             "status": "offline_synthetic_completion" if success else "incomplete",
             "safe_error_code": ledger.error_code,
+            "safe_cleanup_error_code": ledger.cleanup_error_code,
             "task_outcome": "unknown", "official_reward": None,
             "final_response": result,
         },

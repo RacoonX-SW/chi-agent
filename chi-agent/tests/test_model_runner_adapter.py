@@ -317,6 +317,35 @@ class ModelRunnerAdapterTests(unittest.TestCase):
                 self.assertIsNone(ledger.aggregate_input_tokens)
                 self.assertIsNone(ledger.aggregate_cost_cny)
 
+    def test_cleanup_failure_is_recorded_without_overwriting_primary_error(self):
+        import openai
+
+        async def fail_close(_client):
+            raise RuntimeError("sensitive close diagnostic")
+
+        with patch.object(openai.AsyncOpenAI, "close", fail_close):
+            failed, result = self.run_scenario("http-503")
+            self.assertIsNone(result)
+            self.assertEqual(failed.error_code, "http_unavailable")
+            self.assertEqual(failed.cleanup_error_code, "cleanup_failed")
+            failed_evidence = adapter._evidence(
+                "cleanup-primary", failed, result, adapter._sdk_identity(), adapter._upstream_identity()
+            )
+            self.assertEqual(failed_evidence["outcome"]["safe_error_code"], "http_unavailable")
+            self.assertEqual(failed_evidence["outcome"]["safe_cleanup_error_code"], "cleanup_failed")
+            self.assertNotIn("sensitive close diagnostic", json.dumps(failed_evidence))
+
+            succeeded, result = self.run_scenario("success")
+        self.assertIsNone(result)
+        self.assertEqual(succeeded.error_code, "cleanup_failed")
+        self.assertEqual(succeeded.cleanup_error_code, "cleanup_failed")
+        success_evidence = adapter._evidence(
+            "cleanup-only", succeeded, result, adapter._sdk_identity(), adapter._upstream_identity()
+        )
+        self.assertEqual(success_evidence["outcome"]["safe_error_code"], "cleanup_failed")
+        self.assertEqual(success_evidence["outcome"]["safe_cleanup_error_code"], "cleanup_failed")
+        self.assertEqual(success_evidence["outcome"]["status"], "incomplete")
+
     def test_runner_environment_converter_and_tracing_restore_after_failure(self):
         from agents.models.openai_chatcompletions import Converter
         from agents.mcp.util import MCPUtil
