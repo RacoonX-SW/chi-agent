@@ -1,5 +1,7 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
+2026-10-25 当前阶段：`bootstrap-baseline/A` 已完成官方环境及无模型只读 MCP 的独立验收，代码 `a173409`，见 [A 审核](../reviews/bootstrap-baseline-a-review.md)。B/C、参赛模型 API 和官方判分继续暂停；模型和自主任务能力不由 A 推断，下一阶段需用户明确恢复。
+
 更新：2026-10-25。用户要求按竞赛要求推进；当前候选 b7f8941 已通过开发目标下的 D0 离线代码验收，A/B/C、参赛模型 API 和官方判分仍暂停。开发方式为主代理协调两个 `gpt-6-luna` / `high` 子代理，见 [双 Luna 工作流](../docs/luna-subagent-workflow.md)；主代理定规格、协调、独立审核与教学，不操作 Antigravity。当前无 D0 代码返工，真实入口仍因缺核算依据阻断。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。

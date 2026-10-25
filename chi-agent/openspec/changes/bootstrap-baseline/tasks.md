@@ -6,6 +6,19 @@
 
 2026-10-24 环境方式按用户要求改为 Docker 内开发；依赖安装、下载和测试均在容器执行，宿主机不配置项目环境。D0 可构建/启动开发容器，不启动官方任务世界。详见 [Docker 工作流](../../../docs/docker-workflow.md)。勾选仅表示所注明阶段的实现或证据，不能代替独立审核及未运行的真实阶段。
 
+## A. Model-free official environment and read-only tools (verified 2026-10-25)
+
+User authorization: stage A only; B/C, runtime model API calls and official grading remain paused. Base `d1c9f991eda9548974838f72578078f9f9b05757`, branch `codex/bootstrap-baseline-a`; preserve the pre-existing learning document changes. The D0 summary above records the previous stage.
+
+- [x] A.1 Read current summaries, fetch origin, preserve the existing learning diff and create the work branch before writing.
+- [x] A.2 Provision pinned official source, fixed task resources and a declared Python 3.12 task environment entirely inside Docker; record their actual identities.
+- [x] A.3 Verify model-free startup and containerized scheduling, mount sources, service endpoints and isolated task state using the existing Docker engine.
+- [x] A.4 Discover live role MCP schemas and call only individually audited, allowlisted read tools; retain local raw evidence and permitted report metadata.
+- [x] A.5 Check rejection, failure/timeout reporting, resource ownership/cleanup and evidence persistence; retain B/C guards and run affected offline regressions. Normal cleanup was observed twice; abnormal branches use synthetic checks.
+- [x] A.6 Stop implementation, fix a candidate, independently review/recheck it, update learning/status records and create a base=main PR for the user to review and merge (PR #2 created; user review/merge remains the user's decision).
+
+Do not mark combined Agent execution tasks complete based on these stage A checks. OpenSpec CLI and other architectures require their own evidence.
+
 ## 0. Understand the first official task
 
 - [x] 0.1 Select the public provider task pa_t018_t018_o001_p01_new_referral_provider and read its fixed-version instruction.
@@ -19,7 +32,7 @@
 
 - [x] 1.1 Read project instructions and these artifacts; record repository state and actual executor identity.
 - [x] 1.2 Check host Docker availability and container Python/uv/dependencies per mode without invoking a model; do not require host project package installation.
-- [ ] 1.3 Fetch the official source into an ignored directory and pin its actual commit; inspect that version's installation, task and CLI contracts.
+- [x] 1.3 Fetch the official source into an ignored directory and pin its actual commit; inspect that version's installation, task and CLI contracts (A: 4444a07; official runtime/entrypoint and selected role MCP verified).
 - [ ] 1.4 Record user-controlled prerequisites separately: registration, handbook approval and local credentials; do not claim they are complete without evidence.
 - [ ] 1.5 Verify the candidate provider/model/API/mode through the selected harness, including consecutive tool exchanges and required history fields; record the actual effective profile before the task attempt.
 
@@ -34,7 +47,7 @@
 - [x] 2.7 Implement D0 mode-specific readiness with one selection/evidence policy; distinguish configured local prerequisites from overall execution readiness. Ungraded real execution remains unsupported, with null reward and a blocked manifest; no real ungraded trace is claimed. Independent review follows the candidate.
 - [x] 2.8 Implement the D0 offline cumulative-budget/next-request-reservation and round-limit decision; the production preflight stops on missing accounting evidence, and limits are forwarded via agent_kwargs. Actual per-request harness enforcement, measured usage and a clean real task attempt remain deferred to B/C, not completed by these offline checks.
 - [x] 2.9 Provide the minimal development image, Compose entry points, dependency lock and controlled build context; run offline checks inside containers, persist source/results and keep secrets/restricted data out of the distributable image (D0: requirements.lock committed, Dockerfile uses pinned image & locked dependencies, socket mount removed).
-- [ ] 2.10 At stage A, verify task-container creation from the containerized scheduler using the existing engine, actual mount source paths, network endpoints, artifact persistence and cleanup; retain the official runtime contract.
+- [x] 2.10 At stage A, verify task-container creation from the containerized scheduler using the existing engine, actual mount source paths, network endpoints, artifact persistence and cleanup; retain the official runtime contract (A: fresh-world independent verification; see stage A review).
 
 ## 3. Verify and hand over
 

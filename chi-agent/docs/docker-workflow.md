@@ -4,6 +4,8 @@
 
 ## 工作边界
 
+2026-10-25 本轮 A 已独立验收，代码 `a173409` 在 Python 3.13.17 与 3.12.15 / aarch64 中各通过 115 项测试、19 subtests 和 6 项独立方法，并完成官方 Python 3.12.15/arm64 的真实只读 MCP 复验。仅 A controller 使用 socket，默认 D0 dev 保持无 socket；证据见 [A 审核](../reviews/bootstrap-baseline-a-review.md)。B/C、模型 API、官方判分暂停；上方及下方早期“未恢复 A/未验证官方环境”的 D0 描述作为历史，不覆盖此结果。
+
 宿主机保留已有 Docker Desktop、编辑器、Git 与源码目录。主代理与子代理可编辑绑定到容器的源码，通过 Docker 命令在开发容器执行检查；不依赖 Antigravity，也不假定编辑器已附加远程容器。项目的 Python、uv、OpenSpec CLI（需要时）、测试工具、依赖安装和资料下载进程均运行在容器中。子代理的文件写入权与合成证据目录分开安排，详见 [双 Luna 工作流](luna-subagent-workflow.md)。
 
 镜像、缓存和卷仍占用这台 Mac 的磁盘，由 Docker 管理。源码与允许导出的结果需要持久保存；“容器内执行”不表示不产生本地文件，也不表示所有资料都应烘焙进镜像。
