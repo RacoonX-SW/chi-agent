@@ -249,6 +249,55 @@ The system SHALL provide a bounded synthetic Chat Completions probe while real m
 - **AND** a duplicate or unsafe run identity cannot overwrite existing evidence
 - **AND** raw local evidence remains in ignored paths and diagnostics do not emit credentials or arbitrary exception payloads
 
+### Requirement: Offline validation of the model and official runner integration layer
+
+The integration SHALL use the pinned real SDK and official runner with synthetic network/tool boundaries. Developing this layer SHALL NOT authorize real model requests, a stage C attempt or official grading.
+
+#### Scenario: An actual SDK request is serialized
+
+- **GIVEN** the pinned SDK packages, fixed official runner and an explicit candidate route
+- **WHEN** the real SDK sends into an injected mock HTTP transport
+- **THEN** the URL/client configuration is separate from the JSON body, with finite generation limits and explicit thinking/effort settings
+- **AND** no endpoint, API label or secret is sent as an application JSON field; client and Agents retries are zero and tracing is disabled
+- **AND** actual serialized requests, package/source identities and synthetic provenance are retained locally
+
+#### Scenario: The official loop performs consecutive synthetic tool exchanges
+
+- **GIVEN** an unmodified fixed official runner with synthetic MCP/local tools and mock model responses
+- **WHEN** two separate tool rounds and a normal final response occur
+- **THEN** later HTTP bodies preserve the original assistant content, opaque reasoning, original call IDs/arguments and paired tool results
+- **AND** reasoning replay is scoped to the same exact model and endpoint
+- **AND** invalid tools/arguments, missing history, duplicate IDs or invalid finish reasons reject the entire response before its tools execute
+- **AND** the thinking profile requires a string reasoning field on every assistant response, including the final response; legal empty strings remain valid, call IDs have a bounded safe shape, and not-found tool results still consume and record their original calls
+- **AND** the report distinguishes official-loop execution with synthetic boundaries from a real provider decision or medical-task execution
+
+#### Scenario: A serialized next request cannot fit its budget
+
+- **GIVEN** a shared cap including prior spend, finite request/round limits and identified accounting inputs
+- **WHEN** any actual next HTTP request exceeds a bound, exhausts rounds or lacks a valid reserve/accounting basis
+- **THEN** the request is blocked before the injected transport is invoked
+- **AND** returned usage is accounted before message validation, unknown aggregate usage/cost is null and known prefixes remain explicitly incomplete
+- **AND** an already-incomplete ledger itself blocks the next transport boundary, and evidence retains the synthetic price/conversion/source inputs needed to recompute its costs
+- **AND** missing/invalid final usage and returned over-limit usage cannot produce completion
+- **AND** local byte estimates and synthetic prices are not represented as verified provider token bounds or billing caps
+
+#### Scenario: A later transport fails after a tool effect
+
+- **GIVEN** a synthetic tool effect has already occurred
+- **WHEN** HTTP rejects, times out, fails to connect or returns an invalid response
+- **THEN** the loop stops with no SDK/client/tool/outer automatic replay and preserves the prior effect separately from the later error
+- **AND** retryable HTTP responses and connection/timeouts are exercised against the real SDK to verify actual send counts
+
+#### Scenario: The direct ungraded entry is selected
+
+- **GIVEN** the fixed runner's direct run_agent entry rather than the experiment/verifier path
+- **WHEN** offline integration is executed
+- **THEN** no judge, task world, shell/file tool, credentials or real MCP endpoint is used
+- **AND** official reward, real usage/cost and task outcome remain null/unknown
+- **AND** live mode is rejected before external effects or a real attempt claim, while existing B/C/baseline gates remain effective
+- **AND** output identities are exclusive, failures retain safe evidence, and temporary runner/environment changes are restored
+- **AND** invalid/existing output identities are rejected atomically before runner/tool effects, and setup/constructor failures restore temporary SDK patches as well as execution failures
+
 ### Requirement: Offline stage C single-attempt execution control
 
 The system SHALL prepare stage C lifecycle and single-attempt control without enabling model API calls, an official task attempt or grading. An offline rehearsal SHALL exercise control boundaries only; it SHALL NOT satisfy the real stage C execution scenario.

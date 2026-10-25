@@ -1,6 +1,6 @@
 ## Context
 
-本轮恢复 C 代码开发的离线控制部分，复用 Python 3.12 开发镜像；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。使用现有官方环境，不重写模拟器或评测器。
+本轮恢复真实模型/官方 runner 接入层代码与离线验收，复用 Python 3.12 开发镜像；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。使用现有官方环境，不重写模拟器或评测器。
 
 规划基线任务为 `pa_t018_t018_o001_p01_new_referral_provider`。其输入、静态工具和运行限制见 `docs/task-walkthrough-pa-t018.md`。该文档没有真实评分，不能充当完成基线的证据。
 
@@ -38,13 +38,25 @@
 26. 每次注入传输前复用 D0 的 `evaluate_budget`；预算、轮数、最大输入/输出、累计用量、价格/换算依据须可核对。示例价格、用量与成本明确标为 synthetic，真实 provider usage/cost 为 null，既有 B/C 预算不被重置或消费。缺失/无效证据停止后续请求；响应格式/未知工具/参数/重复 ID 在工具执行前拒绝，整批调用先校验再派发。传输拒绝/超时不自动重试，已执行效果与后续请求错误分别保留。
 27. 合成闭环成功需至少两个独立工具往返轮次，随后取得正常 `stop` 的有效最终文本；`tool_calls` 为空值可表示最终消息，但 `length`/过滤或不一致的结束原因不能算完成。所有返回响应先核算可用用量，再验证业务消息；缺失或无效用量（包括最终响应）使累计总量/总成本为 null，已知前缀另记且标明不完整。配置限额拒绝 bool/非整数，工具调用仅接受 `type=function`。
 
-### B 的参考 runner 接入缺口
+### B 离线探针的参考 runner 接入缺口
 
-固定上游 `openai_agents_runner.py` 的 `run_agent()` 通过 SDK `Runner.run()` 管理循环；`_build_model_settings()` 配置推理强度和 SDK 重试，`_agent_model_context()` 的专用 reasoning 回放只用于 Tinker 路由。当前 harness 没有合成工具替换或逐请求预算回调开关，本地工具还包含真实 shell/文件操作。因此本轮采用独立合成协议探针，**不声称官方 runner 已接入或验证通过**。后续真实 B 恢复时，再针对该 SDK/runner 核实最小扩展、关闭未授权重试并接通逐请求门禁；不能直接用本轮探针替代 C。
+固定上游 `openai_agents_runner.py` 的 `run_agent()` 通过 SDK `Runner.run()` 管理循环；`_build_model_settings()` 配置推理强度和 SDK 重试，`_agent_model_context()` 的专用 reasoning 回放只用于 Tinker 路由。原 harness 没有合成工具替换或逐请求预算回调开关，本地工具还包含真实 shell/文件操作。因此此前 B 离线阶段采用独立合成协议探针，**其证据不包含官方 runner 接入**。本轮由下一节接入层补充固定 SDK/runner 的离线验证，关闭重试并接通逐请求门禁；真实 B/C 的验证仍不能由旧探针或本轮离线结果代替。
 
 探针的 request 记录包含 `endpoint`/`api` 路由元数据，是离线配置封套，不能直接当作 SDK 关键字或 HTTP JSON body 提交。真实适配还需分离路由与 wire payload，验证 SDK 序列化、返回字段、真实 tokenizer/预算计量及服务商行为；本轮 UTF-8 字节界限只约束本地合成输入。
 
 字段依据于 2026-10-26 核对的 DeepSeek 官方 [Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/) 与 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)：带 tools 的后续请求需保留此前 `reasoning_content`。这里只据此准备请求与离线契约，不据文档推断账号、SDK 或服务商的实际响应。
+
+### 模型与官方 runner 接入层：本轮设计
+
+固定上游 `4444a07` 的 harness 明确安装 `openai-agents==0.13.6` 与 `openai==2.36.0`。本轮使用这些真实包及其依赖，在已有 Python 3.12 Docker 内准备独立、可复现的可选依赖层；不升级原 dev/controller 锁，不在宿主安装。SDK 内部行为按固定已安装源码和实际离线请求验证，不能用最新文档替代固定版本。
+
+路由配置与 HTTP JSON 分开：DeepSeek 候选的 endpoint/API/key-env 只用于客户端配置；body 保留 model/messages/tools、有限输出、thinking 和 effort。接入层通过上游 `run_agent()` 的模型 context/settings 接点提供显式 Chat Completions model 与客户端，保留官方循环；不修改 vendor，不复制官方 runner。离线验收替换 MCP 与本地 shell/文件工具为允许列表合成工具，并在 HTTP transport 注入响应，不创建任务世界。禁止追踪上传；环境与临时替换退出后恢复。
+
+预算检查位于实际序列化请求发送边界，覆盖 SDK 每次模型请求；响应可用用量先核算，再校验结束原因和整批工具，失败则不执行该批工具。HTTP 客户端重试、Agents retry、MCP 工具重试与外层重跑分别核对，均不得自动重演。缺用量/来源时 aggregate 为 null、已知前缀单列，停止后续请求；已执行效果不因下一请求错误消失。输入字节数只能作为离线界限，未验证 tokenizer/服务端 framing/真实价格时不得据此开放付费入口或承诺账单硬封顶。
+
+带工具历史逐条保留原 assistant content、opaque reasoning_content、工具 ID/参数及对应 tool 结果；thinking 经 SDK extra_body 序列化后应落在 body 顶层。回放须绑定精确模型与 endpoint，避免跨模型泄漏或静默降级。通过真实 SDK 捕获的第二/三次 HTTP body 验证，不能仅比较预先构造的 dict。
+
+无评分入口选择直接执行固定官方 runner 的 `run_agent()`，不进入 `cb experiment run`/Harbor verifier；这仅建立开发接入路径，不增加虚构 skip-judge 参数，也不修改官方 judge。生产 CLI 提供纯计划及合成离线集成，真实模式在任何 credentials/网络/MCP/claim 边界前拒绝。本轮不把它接入 C 的真实 attempt，不消耗/重置真实 B/C 预算。
 
 ### C 的离线执行控制
 
