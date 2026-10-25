@@ -34,6 +34,7 @@ MAX_ROUNDS = 30
 MAX_OUTPUT_TOKENS = 8192
 MAX_TASK_SECONDS = 900
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+_RESOURCE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,127}$")
 _SCENARIOS = frozenset({"success", "runner-rejection", "timeout", "partial-create", "cleanup-failure", "unknown-budget", "missing-usage"})
 
 
@@ -165,7 +166,7 @@ def _confirmed_owned_handle(handle: Any, spec: RunSpec) -> bool:
         and type(handle.owned) is bool
         and handle.owned is True
         and isinstance(handle.resource_id, str)
-        and bool(_ID_RE.fullmatch(handle.resource_id))
+        and bool(_RESOURCE_ID_RE.fullmatch(handle.resource_id))
         and handle.run_id == spec.run_id
         and handle.campaign_id == CAMPAIGN_ID
         and handle.namespace == "synthetic"

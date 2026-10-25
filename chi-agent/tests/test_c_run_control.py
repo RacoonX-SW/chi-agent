@@ -97,6 +97,21 @@ class TestCRunControl(unittest.TestCase):
         self.assertEqual(claim["status"], "rehearsal_completed")
         self.assertIn("synthetic-price", result["synthetic_budget"]["pricing_version"])
 
+    def test_maximum_length_run_id_cleans_normal_and_partial_worlds(self):
+        run_id = "a" * 64
+        for scenario, expected in (("success", "rehearsal_completed"), ("partial-create", "world_creation_failed")):
+            with self.subTest(scenario=scenario):
+                backend = control.SyntheticBackend(scenario)
+                result = control.rehearse(
+                    control.RunSpec(run_id, "openai-agents", "deepseek-flash"),
+                    root=self.root / scenario, backend=backend, budget=self.budget,
+                )
+                self.assertEqual(result["status"], expected)
+                self.assertEqual(backend.calls, ["create_world", "run_once", "cleanup"] if scenario == "success" else ["create_world", "cleanup"])
+                self.assertEqual(result["cleanup"]["status"], "succeeded")
+                if scenario == "partial-create":
+                    self.assertEqual(result["resource_ids_owned"], [f"synthetic-{run_id}"])
+
     def test_second_run_id_cannot_replay_campaign_scope(self):
         first_backend = RecordingBackend()
         control.rehearse(self.spec, root=self.root, backend=first_backend, budget=self.budget)
@@ -224,6 +239,15 @@ class TestCRunControl(unittest.TestCase):
         self.assertEqual(foreign_backend.calls, ["create"])
         self.assertEqual(foreign["cleanup"]["status"], "resource_state_unknown")
         self.assertEqual(foreign["status"], "world_creation_failed")
+
+        unsafe_backend = RecordingBackend(handle=control.OwnedHandle("../outside", True, "c-unsafe-resource"))
+        unsafe = control.rehearse(
+            control.RunSpec("c-unsafe-resource", "openai-agents", "deepseek-flash"),
+            root=self.root / "unsafe-resource", backend=unsafe_backend, budget=self.budget,
+        )
+        self.assertEqual(unsafe_backend.calls, ["create"])
+        self.assertEqual(unsafe["status"], "world_creation_failed")
+        self.assertEqual(unsafe["cleanup"]["status"], "resource_state_unknown")
 
         unknown_backend = RecordingBackend(create_error=control.OwnedHandleError())
         unknown_root = self.root / "unknown-resource"
