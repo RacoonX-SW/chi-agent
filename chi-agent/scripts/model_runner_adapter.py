@@ -16,6 +16,7 @@ import hashlib
 import importlib.metadata
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -40,6 +41,7 @@ EXPECTED_SOURCE_BLOBS = {
 }
 RUNS_ROOT = Path(os.environ.get("CHI_MODEL_RUNS_DIR", str(ROOT / "runs" / "model-runner")))
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+TOOL_CALL_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 SYNTHETIC_TOOLS = {
     "synthetic_lookup": {"required": {"key": str}},
     "synthetic_format": {"required": {"text": str}},
@@ -52,6 +54,8 @@ SYNTHETIC_PRIOR_SPEND_CNY = 0.0
 SYNTHETIC_INPUT_PRICE = 1.0
 SYNTHETIC_OUTPUT_PRICE = 1.0
 SYNTHETIC_USD_TO_CNY = 7.2
+MAX_USAGE_TOKEN_COUNT = 10**12
+MAX_ACCOUNTING_COST_CNY = 10**12
 
 
 class IntegrationFailure(Exception):
@@ -61,6 +65,30 @@ class IntegrationFailure(Exception):
         super().__init__(code)
         self.code = code
         self.phase = phase
+
+
+class EvidenceReservation:
+    """Exclusive local evidence identity held from preflight through completion."""
+
+    def __init__(self, path: Path, fd: int, run_id: str):
+        self.path = path
+        self.fd = fd
+        self.run_id = run_id
+        self.closed = False
+
+    def write(self, evidence: dict[str, Any]) -> None:
+        payload = (json.dumps(evidence, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
+        offset = 0
+        os.lseek(self.fd, 0, os.SEEK_SET)
+        while offset < len(payload):
+            offset += os.write(self.fd, payload[offset:])
+        os.ftruncate(self.fd, len(payload))
+        os.fsync(self.fd)
+
+    def close(self) -> None:
+        if not self.closed:
+            os.close(self.fd)
+            self.closed = True
 
 
 @dataclass
@@ -80,6 +108,8 @@ class Ledger:
     requests: list[dict[str, Any]] | None = None
     tool_exchanges: list[dict[str, Any]] | None = None
     pending_calls: list[dict[str, Any]] | None = None
+    validated_call_ids: set[str] | None = None
+    prior_cost_source: str = "synthetic-prior-spend-v1"
     error_code: str | None = None
 
     def __post_init__(self) -> None:
@@ -87,6 +117,7 @@ class Ledger:
         self.requests = []
         self.tool_exchanges = []
         self.pending_calls = []
+        self.validated_call_ids = set()
 
 
 def _upstream_identity() -> dict[str, Any]:
@@ -159,7 +190,10 @@ def _response(number: int, *, message: dict[str, Any], usage: dict[str, int] | N
 
 
 def _scenario_response(scenario: str, number: int) -> dict[str, Any]:
-    if scenario == "missing-usage" and number == 1:
+    if scenario == "huge-usage" and number == 1:
+        huge = 10**400
+        usage = {"prompt_tokens": huge, "completion_tokens": 6, "total_tokens": huge + 6}
+    elif scenario == "missing-usage" and number == 1:
         usage = None
     elif scenario == "invalid-final-usage" and number == 3:
         usage = {"prompt_tokens": 0, "completion_tokens": -1, "total_tokens": 0}
@@ -182,12 +216,28 @@ def _scenario_response(scenario: str, number: int) -> dict[str, Any]:
         elif scenario in {"empty-history", "none-history"}:
             message = _message("call-empty", "synthetic_lookup", {"key": "sample"}, "" if scenario == "empty-history" else "opaque-reason-1")
             message["content"] = "" if scenario == "empty-history" else None
+        elif scenario == "not-found-then-duplicate":
+            message = _message("call-1", "synthetic_lookup", {"key": "absent"}, "opaque-reason-1")
+        elif scenario == "invalid-call-id":
+            message = _message("call-1\nbad", "synthetic_lookup", {"key": "sample"}, "opaque-reason-1")
         elif scenario == "batch-valid-then-invalid":
             message = _message("call-batch-ok", "synthetic_lookup", {"key": "sample"}, "opaque-reason-1")
             message["tool_calls"].append({
                 "id": "call-batch-bad", "type": "function",
                 "function": {"name": "missing_tool", "arguments": "{}"},
             })
+        elif scenario == "batch-duplicate-id":
+            message = _message("same-call-id", "synthetic_lookup", {"key": "sample"}, "opaque-reason-1")
+            message["tool_calls"].append(copy.deepcopy(message["tool_calls"][0]))
+        elif scenario == "invalid-call-type":
+            message = _message("call-invalid-type", "synthetic_lookup", {"key": "sample"}, "opaque-reason-1")
+            message["tool_calls"][0]["type"] = "custom"
+        elif scenario == "invalid-call-json":
+            message = _message("call-invalid-json", "synthetic_lookup", {"key": "sample"}, "opaque-reason-1")
+            message["tool_calls"][0]["function"]["arguments"] = "{bad-json"
+        elif scenario == "invalid-call-argument-type":
+            message = _message("call-invalid-argument", "synthetic_lookup", {"key": "sample"}, "opaque-reason-1")
+            message["tool_calls"][0]["function"]["arguments"] = '{"key":7}'
         elif scenario == "invalid-finish":
             message = _message("call-invalid-finish", "synthetic_lookup", {"key": "sample"}, "opaque-reason-1")
         else:
@@ -195,13 +245,31 @@ def _scenario_response(scenario: str, number: int) -> dict[str, Any]:
         return _response(1, message=message, usage=usage,
                          finish_reason="stop" if scenario == "invalid-finish" else None)
     if number == 2:
-        call_id = "call-1" if scenario == "duplicate-call-id" else "call-2"
+        call_id = "call-1" if scenario in {"duplicate-call-id", "not-found-then-duplicate"} else "call-2"
         return _response(2, message=_message(call_id, "synthetic_format", {"text": "synthetic-value"}, "opaque-reason-2"), usage=usage)
-    return _response(3, message={
+    final_message = {
         "role": "assistant",
         "content": "Offline synthetic completion: synthetic-formatted:synthetic-value",
         "reasoning_content": "opaque-reason-final",
-    }, usage=usage)
+    }
+    finish_reason = None
+    if scenario == "final-no-reasoning":
+        final_message.pop("reasoning_content")
+    elif scenario == "final-invalid-reasoning":
+        final_message["reasoning_content"] = 3
+    if scenario == "final-content-none":
+        final_message["content"] = None
+    elif scenario == "final-content-empty":
+        final_message["content"] = ""
+    elif scenario == "final-content-whitespace":
+        final_message["content"] = " \t\n "
+    elif scenario == "final-content-absent":
+        final_message.pop("content")
+    if scenario == "finish-length":
+        finish_reason = "length"
+    elif scenario == "finish-content-filter":
+        finish_reason = "content_filter"
+    return _response(3, message=final_message, usage=usage, finish_reason=finish_reason)
 
 
 def _usage(response: dict[str, Any]) -> tuple[int, int] | None:
@@ -210,7 +278,13 @@ def _usage(response: dict[str, Any]) -> tuple[int, int] | None:
         return None
     incoming, outgoing = raw.get("prompt_tokens"), raw.get("completion_tokens")
     total = raw.get("total_tokens")
-    if any(isinstance(x, bool) or not isinstance(x, int) or x < 0 for x in (incoming, outgoing, total)):
+    if any(
+        isinstance(x, bool)
+        or not isinstance(x, int)
+        or x < 0
+        or x > MAX_USAGE_TOKEN_COUNT
+        for x in (incoming, outgoing, total)
+    ):
         return None
     if total < incoming + outgoing:
         return None
@@ -225,6 +299,9 @@ def _account_usage(ledger: Ledger, usage: tuple[int, int] | None) -> None:
         ledger.aggregate_cost_cny = None
         raise IntegrationFailure("usage_unknown", "response_accounting")
     incoming, outgoing = usage
+    if ledger.known_input_tokens > MAX_USAGE_TOKEN_COUNT - incoming or ledger.known_output_tokens > MAX_USAGE_TOKEN_COUNT - outgoing:
+        _mark_unknown_usage(ledger)
+        raise IntegrationFailure("usage_unknown", "response_accounting")
     ledger.known_input_tokens += incoming
     ledger.known_output_tokens += outgoing
     cost = ((incoming * SYNTHETIC_INPUT_PRICE + outgoing * SYNTHETIC_OUTPUT_PRICE) / 1_000_000) * SYNTHETIC_USD_TO_CNY
@@ -244,6 +321,8 @@ def _mark_unknown_usage(ledger: Ledger) -> None:
 
 def _budget_check(ledger: Ledger, request_body: dict[str, Any]) -> int:
     from run_baseline import evaluate_budget
+
+    _validate_accounting_state(ledger)
 
     estimate_bytes = len(json.dumps(request_body, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
     if estimate_bytes > MAX_INPUT_TOKENS:
@@ -269,6 +348,48 @@ def _budget_check(ledger: Ledger, request_body: dict[str, Any]) -> int:
     if request_body.get("model") != CANDIDATE_PROFILE["model"]:
         raise IntegrationFailure("request_model_mismatch", "request_guard")
     return estimate_bytes
+
+
+def _valid_nonnegative_number(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return 0 <= value <= MAX_ACCOUNTING_COST_CNY
+    return isinstance(value, float) and math.isfinite(value) and 0 <= value <= MAX_ACCOUNTING_COST_CNY
+
+
+def _valid_nonnegative_integer(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and 0 <= value <= MAX_USAGE_TOKEN_COUNT
+
+
+def _validate_accounting_state(ledger: Ledger) -> None:
+    if ledger.usage_complete is False:
+        raise IntegrationFailure("usage_unknown", "request_guard")
+    if ledger.usage_complete is not True:
+        raise IntegrationFailure("accounting_state_invalid", "request_guard")
+    if ledger.aggregate_input_tokens is None or ledger.aggregate_output_tokens is None or ledger.aggregate_cost_cny is None:
+        raise IntegrationFailure("usage_unknown", "request_guard")
+    if not all(_valid_nonnegative_integer(value) for value in (
+        ledger.known_input_tokens, ledger.known_output_tokens,
+        ledger.aggregate_input_tokens, ledger.aggregate_output_tokens,
+    )):
+        raise IntegrationFailure("accounting_state_invalid", "request_guard")
+    if ledger.aggregate_input_tokens != ledger.known_input_tokens or ledger.aggregate_output_tokens != ledger.known_output_tokens:
+        raise IntegrationFailure("accounting_state_invalid", "request_guard")
+    if not all(_valid_nonnegative_number(value) for value in (
+        ledger.initial_cost_cny, ledger.known_cost_cny,
+        ledger.aggregate_cost_cny,
+    )):
+        raise IntegrationFailure("accounting_state_invalid", "request_guard")
+    if ledger.aggregate_cost_cny != ledger.known_cost_cny:
+        raise IntegrationFailure("accounting_state_invalid", "request_guard")
+    if not isinstance(ledger.prior_cost_source, str) or not ledger.prior_cost_source.strip():
+        raise IntegrationFailure("accounting_state_invalid", "request_guard")
+    if not isinstance(ledger.validated_call_ids, set) or any(
+        not isinstance(call_id, str) or not TOOL_CALL_ID_RE.fullmatch(call_id)
+        for call_id in ledger.validated_call_ids
+    ):
+        raise IntegrationFailure("accounting_state_invalid", "request_guard")
 
 
 def _check_returned_usage(usage: tuple[int, int], ledger: Ledger) -> None:
@@ -300,7 +421,7 @@ def _validate_response(response: dict[str, Any], ledger: Ledger) -> None:
     if finish == "tool_calls":
         if not isinstance(calls, list) or not calls:
             raise IntegrationFailure("finish_reason_invalid", "response_validation")
-        seen = {effect["call_id"] for effect in ledger.effects or []}
+        seen = ledger.validated_call_ids
         parsed: list[tuple[str, str, dict[str, Any]]] = []
         batch: set[str] = set()
         for call in calls:
@@ -308,11 +429,13 @@ def _validate_response(response: dict[str, Any], ledger: Ledger) -> None:
                 raise IntegrationFailure("tool_batch_invalid", "response_validation")
             call_id = call.get("id")
             function = call.get("function")
-            if not isinstance(call_id, str) or not call_id or call_id in seen or call_id in batch:
+            if not isinstance(call_id, str) or not TOOL_CALL_ID_RE.fullmatch(call_id) or call_id in seen or call_id in batch:
                 raise IntegrationFailure("tool_call_id_invalid", "response_validation")
-            if not isinstance(function, dict) or function.get("name") not in SYNTHETIC_TOOLS:
+            if not isinstance(function, dict):
                 raise IntegrationFailure("tool_unknown", "response_validation")
-            name = function["name"]
+            name = function.get("name")
+            if not isinstance(name, str) or name not in SYNTHETIC_TOOLS:
+                raise IntegrationFailure("tool_unknown", "response_validation")
             try:
                 arguments = json.loads(function.get("arguments"))
             except (TypeError, ValueError):
@@ -322,8 +445,6 @@ def _validate_response(response: dict[str, Any], ledger: Ledger) -> None:
                 raise IntegrationFailure("tool_arguments_invalid", "response_validation")
             parsed.append((call_id, name, arguments))
             batch.add(call_id)
-        if not isinstance(message.get("reasoning_content"), str):
-            raise IntegrationFailure("reasoning_missing", "response_validation")
     elif finish == "stop":
         if calls:
             raise IntegrationFailure("finish_reason_invalid", "response_validation")
@@ -334,9 +455,15 @@ def _validate_response(response: dict[str, Any], ledger: Ledger) -> None:
         raise IntegrationFailure("usage_unknown", "response_accounting")
     if not ledger.usage_complete:
         raise IntegrationFailure("usage_unknown", "response_accounting")
+    reasoning_content = message.get("reasoning_content")
+    if not isinstance(reasoning_content, str):
+        raise IntegrationFailure("reasoning_missing", "response_validation")
+    if finish == "stop" and (not isinstance(content, str) or not content.strip()):
+        raise IntegrationFailure("final_content_invalid", "response_validation")
     if finish == "tool_calls":
         ledger.pending_calls.extend({"call_id": call_id, "tool": name, "arguments": arguments}
                                     for call_id, name, arguments in parsed)
+        ledger.validated_call_ids.update(batch)
 
 
 class MockWire:
@@ -538,15 +665,14 @@ def _tool_specs(ledger: Ledger):
     @function_tool
     async def synthetic_lookup(key: str) -> str:
         """Read one value from a fixed synthetic fixture."""
-        if key != "sample":
-            return "synthetic-key-not-found"
         pending = next((call for call in ledger.pending_calls or []
                         if call["tool"] == "synthetic_lookup" and call["arguments"] == {"key": key}), None)
         if pending is None:
             raise IntegrationFailure("tool_dispatch_unvalidated", "tool_execution")
         ledger.pending_calls.remove(pending)
-        ledger.effects.append({"tool": "synthetic_lookup", "call_id": pending["call_id"], "result": "synthetic-value"})
-        return "synthetic-value"
+        result = "synthetic-value" if key == "sample" else "synthetic-key-not-found"
+        ledger.effects.append({"tool": "synthetic_lookup", "call_id": pending["call_id"], "result": result})
+        return result
 
     @function_tool
     async def synthetic_format(text: str) -> str:
@@ -564,78 +690,79 @@ def _tool_specs(ledger: Ledger):
 
 
 async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
-    identity = _upstream_identity()
-    sdk = _sdk_identity()
-    if str(VENDOR_SRC) not in sys.path:
-        sys.path.insert(0, str(VENDOR_SRC))
-    from agents import ModelRetrySettings, ModelSettings
-    from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
-    from agents.models.openai_chatcompletions import Converter
-    from openai import AsyncOpenAI
-    import agents.mcp as agents_mcp
-    from agents.tracing import get_trace_provider
-    from chi_bench.experiment.agents import openai_agents_runner as official_runner
-    import chi_bench.experiment.agents.openai_agents_local_tools as local_tools_module
-    from agents.mcp.util import MCPUtil
-
     ledger = Ledger(scenario)
-    wire = MockWire(ledger)
-    old_env = {key: os.environ.get(key) for key in (
-        "OPENAI_AGENTS_MODEL", "OPENAI_AGENTS_API_MODE", "OPENAI_AGENTS_MAX_TURNS",
-        "OPENAI_AGENTS_REASONING_EFFORT", "OPENAI_AGENTS_MAX_RETRIES", "OPENAI_BASE_URL",
-    )}
-    old_context = official_runner._agent_model_context
-    old_settings = official_runner._build_model_settings
-    old_tools = local_tools_module.build_local_tools
-    old_mcp_class = agents_mcp.MCPServerStreamableHttp
-    old_invoke = MCPUtil.__dict__["invoke_mcp_tool"]
-    old_to_tool = MCPUtil.__dict__["to_function_tool"]
-    old_sanitizer_flag = getattr(MCPUtil, "_chi_bench_name_sanitizer_installed", False)
-    trace_provider = get_trace_provider()
-    old_tracing_state = (trace_provider._disabled, trace_provider._manual_disabled, trace_provider._env_disabled)
-    old_converter = _patch_empty_history_compatibility(
-        Converter, CANDIDATE_PROFILE["endpoint"], CANDIDATE_PROFILE["model"]
-    )
-
-    class SyntheticMCP:
-        name = "chi_bench-synthetic"
-        async def __aenter__(self):
-            return self
-        async def __aexit__(self, *_args):
-            return False
-        async def list_tools(self, *_args, **_kwargs):
-            return []
-
-    client_transport = BudgetedMockTransport(ledger, wire)
-    client_http = httpx.AsyncClient(transport=client_transport)
-    openai_client = AsyncOpenAI(
-        api_key="offline-synthetic-placeholder",
-        base_url=CANDIDATE_PROFILE["endpoint"] + "/v1",
-        http_client=client_http,
-        max_retries=0,
-    )
-    sdk_model = OpenAIChatCompletionsModel(
-        model=CANDIDATE_PROFILE["model"], openai_client=openai_client,
-        should_replay_reasoning_content=_same_route_reasoning,
-    )
-
-    @asynccontextmanager
-    async def model_context(_model: str, _api_mode: str):
-        yield sdk_model
-
-    def model_settings(_effort: str | None = None, *, separate_reasoning: bool = False):
-        del separate_reasoning
-        return ModelSettings(
-            max_tokens=MAX_OUTPUT_TOKENS,
-            reasoning={"effort": "high"},
-            extra_body={"thinking": {"type": "enabled"}},
-            retry=ModelRetrySettings(max_retries=0),
-        )
-
-    def safe_mcp_factory(*_args, **_kwargs):
-        return SyntheticMCP()
-
+    identity: dict[str, Any] | None = None
+    sdk: dict[str, str] | None = None
     try:
+        identity = _upstream_identity()
+        sdk = _sdk_identity()
+    except IntegrationFailure as exc:
+        ledger.error_code = exc.code
+        return ledger, None
+
+    vendor_path = str(VENDOR_SRC)
+    inserted_vendor_path = vendor_path not in sys.path
+    if inserted_vendor_path:
+        sys.path.insert(0, vendor_path)
+
+    old_env: dict[str, str | None] | None = None
+    restore_state: dict[str, Any] | None = None
+    client_http: httpx.AsyncClient | None = None
+    openai_client: Any = None
+    result_text: str | None = None
+    runner_started = False
+    cleanup_failed = False
+    try:
+        from agents import ModelRetrySettings, ModelSettings
+        from agents.models.openai_chatcompletions import Converter, OpenAIChatCompletionsModel
+        from openai import AsyncOpenAI
+        import agents.mcp as agents_mcp
+        from agents.tracing import get_trace_provider
+        from chi_bench.experiment.agents import openai_agents_runner as official_runner
+        import chi_bench.experiment.agents.openai_agents_local_tools as local_tools_module
+        from agents.mcp.util import MCPUtil
+
+        trace_provider = get_trace_provider()
+        old_env = {key: os.environ.get(key) for key in (
+            "OPENAI_AGENTS_MODEL", "OPENAI_AGENTS_API_MODE", "OPENAI_AGENTS_MAX_TURNS",
+            "OPENAI_AGENTS_REASONING_EFFORT", "OPENAI_AGENTS_MAX_RETRIES", "OPENAI_BASE_URL",
+        )}
+        restore_state = {
+            "official_runner": official_runner,
+            "context": official_runner._agent_model_context,
+            "settings": official_runner._build_model_settings,
+            "local_tools_module": local_tools_module,
+            "tools": local_tools_module.build_local_tools,
+            "agents_mcp": agents_mcp,
+            "mcp_class": agents_mcp.MCPServerStreamableHttp,
+            "MCPUtil": MCPUtil,
+            "invoke": MCPUtil.__dict__["invoke_mcp_tool"],
+            "to_tool": MCPUtil.__dict__["to_function_tool"],
+            "sanitizer_exists": "_chi_bench_name_sanitizer_installed" in MCPUtil.__dict__,
+            "sanitizer_value": MCPUtil.__dict__.get("_chi_bench_name_sanitizer_installed"),
+            "Converter": Converter,
+            "message_converter": Converter.__dict__["message_to_output_items"],
+            "history_converter": Converter.__dict__["items_to_messages"],
+            "trace_provider": trace_provider,
+            "trace": (trace_provider._disabled, trace_provider._manual_disabled, trace_provider._env_disabled),
+        }
+
+        class SyntheticMCP:
+            name = "chi_bench-synthetic"
+            async def __aenter__(self):
+                return self
+            async def __aexit__(self, *_args):
+                return False
+            async def list_tools(self, *_args, **_kwargs):
+                return []
+
+        wire = MockWire(ledger)
+        client_transport = BudgetedMockTransport(ledger, wire)
+        client_http = httpx.AsyncClient(transport=client_transport)
+
+        # Save descriptors before patching. The finally block can restore even
+        # if patch installation only partially succeeds.
+        _patch_empty_history_compatibility(Converter, CANDIDATE_PROFILE["endpoint"], CANDIDATE_PROFILE["model"])
         os.environ.update({
             "OPENAI_AGENTS_MODEL": CANDIDATE_PROFILE["model"],
             "OPENAI_AGENTS_API_MODE": "chat_completions",
@@ -644,14 +771,40 @@ async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
             "OPENAI_AGENTS_MAX_RETRIES": "0",
         })
         os.environ.pop("OPENAI_BASE_URL", None)
+
+        openai_client = AsyncOpenAI(
+            api_key="offline-synthetic-placeholder",
+            base_url=CANDIDATE_PROFILE["endpoint"] + "/v1",
+            http_client=client_http,
+            max_retries=0,
+        )
+        sdk_model = OpenAIChatCompletionsModel(
+            model=CANDIDATE_PROFILE["model"], openai_client=openai_client,
+            should_replay_reasoning_content=_same_route_reasoning,
+        )
+
+        @asynccontextmanager
+        async def model_context(_model: str, _api_mode: str):
+            yield sdk_model
+
+        def model_settings(_effort: str | None = None, *, separate_reasoning: bool = False):
+            del separate_reasoning
+            return ModelSettings(
+                max_tokens=MAX_OUTPUT_TOKENS,
+                reasoning={"effort": "high"},
+                extra_body={"thinking": {"type": "enabled"}},
+                retry=ModelRetrySettings(max_retries=0),
+            )
+
+        def safe_mcp_factory(*_args, **_kwargs):
+            return SyntheticMCP()
+
         official_runner._agent_model_context = model_context
         official_runner._build_model_settings = model_settings
         agents_mcp.MCPServerStreamableHttp = safe_mcp_factory
         local_tools_module.build_local_tools = lambda _logs: _tool_specs(ledger)
-        # run_agent globally patches SDK MCPUtil helpers. Restore exact class
-        # descriptors and its sentinel even when the runner raises.
-        result_text = None
         with tempfile.TemporaryDirectory(prefix="chi-model-runner-") as temp, contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            runner_started = True
             try:
                 await official_runner.run_agent(
                     "Use the supplied synthetic tools to look up sample and format the result.",
@@ -667,34 +820,74 @@ async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
                 output_path = Path(temp) / "run_output.txt"
                 if output_path.is_file():
                     result_text = output_path.read_text(encoding="utf-8")
-        if ledger.error_code is None and ledger.rounds == 3:
-            if result_text is None:
-                ledger.error_code = "final_output_missing"
+        if ledger.error_code is None and ledger.rounds == 3 and result_text is None:
+            ledger.error_code = "final_output_missing"
         if ledger.error_code is None and ledger.rounds != 3:
             ledger.error_code = "unexpected_round_count"
-        return ledger, result_text
+    except IntegrationFailure as exc:
+        ledger.error_code = ledger.error_code or exc.code
+    except Exception:
+        ledger.error_code = ledger.error_code or ("official_runner_failed" if runner_started else "offline_setup_failed")
     finally:
-        official_runner._agent_model_context = old_context
-        official_runner._build_model_settings = old_settings
-        agents_mcp.MCPServerStreamableHttp = old_mcp_class
-        local_tools_module.build_local_tools = old_tools
-        MCPUtil.invoke_mcp_tool = old_invoke
-        MCPUtil.to_function_tool = old_to_tool
-        Converter.message_to_output_items = old_converter[0]
-        Converter.items_to_messages = old_converter[1]
-        trace_provider._disabled, trace_provider._manual_disabled, trace_provider._env_disabled = old_tracing_state
-        if old_sanitizer_flag:
-            MCPUtil._chi_bench_name_sanitizer_installed = True
-        else:
-            with contextlib.suppress(AttributeError):
-                delattr(MCPUtil, "_chi_bench_name_sanitizer_installed")
-        for key, value in old_env.items():
-            if value is None:
-                os.environ.pop(key, None)
+        if restore_state is not None:
+            def attempt_restore(action):
+                nonlocal cleanup_failed
+                try:
+                    action()
+                except Exception:
+                    cleanup_failed = True
+
+            runner = restore_state["official_runner"]
+            tools_module = restore_state["local_tools_module"]
+            mcp_module = restore_state["agents_mcp"]
+            mcp_util = restore_state["MCPUtil"]
+            converter = restore_state["Converter"]
+            attempt_restore(lambda: setattr(runner, "_agent_model_context", restore_state["context"]))
+            attempt_restore(lambda: setattr(runner, "_build_model_settings", restore_state["settings"]))
+            attempt_restore(lambda: setattr(tools_module, "build_local_tools", restore_state["tools"]))
+            attempt_restore(lambda: setattr(mcp_module, "MCPServerStreamableHttp", restore_state["mcp_class"]))
+            attempt_restore(lambda: setattr(mcp_util, "invoke_mcp_tool", restore_state["invoke"]))
+            attempt_restore(lambda: setattr(mcp_util, "to_function_tool", restore_state["to_tool"]))
+            attempt_restore(lambda: setattr(converter, "message_to_output_items", restore_state["message_converter"]))
+            attempt_restore(lambda: setattr(converter, "items_to_messages", restore_state["history_converter"]))
+            if restore_state["sanitizer_exists"]:
+                attempt_restore(lambda: setattr(mcp_util, "_chi_bench_name_sanitizer_installed", restore_state["sanitizer_value"]))
             else:
-                os.environ[key] = value
-        with contextlib.suppress(Exception):
-            await openai_client.close()
+                attempt_restore(lambda: delattr(mcp_util, "_chi_bench_name_sanitizer_installed")
+                                if hasattr(mcp_util, "_chi_bench_name_sanitizer_installed") else None)
+            trace_provider = restore_state["trace_provider"]
+            old_trace = restore_state["trace"]
+            attempt_restore(lambda: setattr(trace_provider, "_disabled", old_trace[0]))
+            attempt_restore(lambda: setattr(trace_provider, "_manual_disabled", old_trace[1]))
+            attempt_restore(lambda: setattr(trace_provider, "_env_disabled", old_trace[2]))
+        if old_env is not None:
+            for key, value in old_env.items():
+                attempt = (lambda key=key: os.environ.pop(key, None)) if value is None else (lambda key=key, value=value: os.environ.__setitem__(key, value))
+                try:
+                    attempt()
+                except Exception:
+                    cleanup_failed = True
+        if openai_client is not None:
+            try:
+                await openai_client.close()
+            except Exception:
+                cleanup_failed = True
+        elif client_http is not None:
+            try:
+                await client_http.aclose()
+            except Exception:
+                cleanup_failed = True
+        if inserted_vendor_path:
+            try:
+                sys.path.remove(vendor_path)
+            except ValueError:
+                pass
+            except Exception:
+                cleanup_failed = True
+        if cleanup_failed:
+            ledger.error_code = "cleanup_failed"
+            result_text = None
+    return ledger, result_text
 
 
 def _evidence(run_id: str, ledger: Ledger, result: str | None, sdk_identity: dict[str, str], upstream: dict[str, Any]) -> dict[str, Any]:
@@ -726,12 +919,23 @@ def _evidence(run_id: str, ledger: Ledger, result: str | None, sdk_identity: dic
         "accounting": {
             "provenance": "synthetic_fixture_only",
             "synthetic_prior_spend_cny": ledger.initial_cost_cny,
+            "synthetic_prior_spend_source": ledger.prior_cost_source,
+            "synthetic_input_price_usd_per_million": SYNTHETIC_INPUT_PRICE,
+            "synthetic_output_price_usd_per_million": SYNTHETIC_OUTPUT_PRICE,
+            "synthetic_usd_to_cny": SYNTHETIC_USD_TO_CNY,
+            "pricing_version": "synthetic-model-runner-profile-v1",
+            "pricing_source": "synthetic_fixture_profile_v1",
+            "fx_rate_source": "synthetic-profile-v1",
+            "cost_scope": "aggregate_cost_cny covers returned SDK responses only; budget_cumulative_cost_cny adds synthetic prior spend",
             "known_prefix_usage": {"input_tokens": ledger.known_input_tokens, "output_tokens": ledger.known_output_tokens},
             "known_prefix_cost_cny": ledger.known_cost_cny,
+            "budget_known_prefix_cost_cny": ledger.initial_cost_cny + ledger.known_cost_cny,
             "usage_complete": ledger.usage_complete,
             "aggregate_usage": ({"input_tokens": ledger.aggregate_input_tokens, "output_tokens": ledger.aggregate_output_tokens}
                                 if ledger.aggregate_input_tokens is not None and ledger.aggregate_output_tokens is not None else None),
             "aggregate_cost_cny": ledger.aggregate_cost_cny,
+            "budget_aggregate_cost_cny": (ledger.initial_cost_cny + ledger.aggregate_cost_cny
+                                           if ledger.aggregate_cost_cny is not None else None),
             "real_usage": None, "real_cost_cny": None,
         },
         "outcome": {
@@ -743,16 +947,51 @@ def _evidence(run_id: str, ledger: Ledger, result: str | None, sdk_identity: dic
     }
 
 
-def _write_evidence(run_id: str, evidence: dict[str, Any]) -> Path:
-    if not RUN_ID_RE.fullmatch(run_id):
+def _failure_evidence(run_id: str, code: str) -> dict[str, Any]:
+    return {
+        "schema": "model-runner-offline-evidence-v1",
+        "provenance": "offline_synthetic_mocktransport_official_runner",
+        "run_id": run_id,
+        "outcome": {
+            "status": "incomplete", "safe_error_code": code,
+            "task_outcome": "unknown", "official_reward": None,
+        },
+        "accounting": {
+            "provenance": "synthetic_fixture_only", "usage_complete": False,
+            "aggregate_usage": None, "aggregate_cost_cny": None,
+            "real_usage": None, "real_cost_cny": None,
+        },
+    }
+
+
+def _reserve_evidence(run_id: str) -> EvidenceReservation:
+    if not isinstance(run_id, str) or RUN_ID_RE.fullmatch(run_id) is None:
         raise IntegrationFailure("run_id_invalid", "preflight")
-    RUNS_ROOT.mkdir(parents=True, exist_ok=True)
-    target = RUNS_ROOT / f"{run_id}.json"
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump(evidence, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
-    return target
+    try:
+        RUNS_ROOT.mkdir(parents=True, exist_ok=True)
+        target = RUNS_ROOT / f"{run_id}.json"
+        flags = os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(target, flags, 0o600)
+    except FileExistsError:
+        raise IntegrationFailure("run_id_exists", "preflight") from None
+    except OSError:
+        raise IntegrationFailure("evidence_reservation_failed", "preflight") from None
+    reservation = EvidenceReservation(target, fd, run_id)
+    try:
+        reservation.write(_failure_evidence(run_id, "run_reserved"))
+    except Exception:
+        reservation.close()
+        raise IntegrationFailure("evidence_reservation_failed", "preflight") from None
+    return reservation
+
+
+def _write_evidence(run_id: str, evidence: dict[str, Any]) -> Path:
+    reservation = _reserve_evidence(run_id)
+    try:
+        reservation.write(evidence)
+        return reservation.path
+    finally:
+        reservation.close()
 
 
 def _plan() -> dict[str, Any]:
@@ -773,7 +1012,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scenario", default="success", choices=(
         "success", "http-429", "http-503", "connect-error", "timeout", "missing-usage",
         "invalid-final-usage", "over-output", "over-cap", "over-input", "batch-valid-then-invalid",
-        "invalid-finish", "duplicate-call-id",
+        "huge-usage", "invalid-finish", "duplicate-call-id", "not-found-then-duplicate",
+        "invalid-call-id", "batch-duplicate-id", "invalid-call-type", "invalid-call-json",
+        "invalid-call-argument-type", "final-no-reasoning", "final-invalid-reasoning",
+        "final-content-none", "final-content-empty", "final-content-whitespace", "final-content-absent",
+        "finish-length", "finish-content-filter",
         "empty-history", "none-history",
         "mismatched-response-model",
         "post-tool-429", "post-tool-503", "post-tool-connect-error", "post-tool-timeout",
@@ -788,18 +1031,50 @@ def main(argv: list[str] | None = None) -> int:
     if not args.run_id:
         parser.error("offline mode requires --run-id")
     try:
+        reservation = _reserve_evidence(args.run_id)
+    except IntegrationFailure as exc:
+        print(json.dumps({"status": "rejected", "code": exc.code}, indent=2))
+        return 2
+
+    exit_code = 1
+    output: dict[str, Any]
+    try:
         upstream = _upstream_identity()
         sdk = _sdk_identity()
         ledger, result = asyncio.run(_run_offline(args.scenario))
         evidence = _evidence(args.run_id, ledger, result, sdk, upstream)
-        path = _write_evidence(args.run_id, evidence)
+        reservation.write(evidence)
+        output = {
+            "status": evidence["outcome"]["status"], "evidence": str(reservation.path),
+            "transport_send_count": ledger.transport_calls,
+            "safe_error_code": ledger.error_code,
+        }
+        exit_code = 0 if evidence["outcome"]["status"] == "offline_synthetic_completion" else 1
     except IntegrationFailure as exc:
-        print(json.dumps({"status": "rejected", "code": exc.code}, indent=2))
-        return 2
-    print(json.dumps({"status": evidence["outcome"]["status"], "evidence": str(path),
-                      "transport_send_count": ledger.transport_calls,
-                      "safe_error_code": ledger.error_code}, indent=2))
-    return 0 if evidence["outcome"]["status"] == "offline_synthetic_completion" else 1
+        try:
+            reservation.write(_failure_evidence(args.run_id, exc.code))
+        except Exception:
+            pass
+        output = {"status": "incomplete", "evidence": str(reservation.path), "safe_error_code": exc.code}
+        exit_code = 2 if exc.phase == "preflight" else 1
+    except Exception:
+        try:
+            reservation.write(_failure_evidence(args.run_id, "offline_runner_failed"))
+        except Exception:
+            pass
+        output = {"status": "incomplete", "evidence": str(reservation.path), "safe_error_code": "offline_runner_failed"}
+        exit_code = 1
+    try:
+        reservation.close()
+    except Exception:
+        try:
+            reservation.write(_failure_evidence(args.run_id, "evidence_close_failed"))
+        except Exception:
+            pass
+        output = {"status": "incomplete", "evidence": str(reservation.path), "safe_error_code": "evidence_close_failed"}
+        exit_code = 1
+    print(json.dumps(output, ensure_ascii=False, indent=2))
+    return exit_code
 
 
 if __name__ == "__main__":

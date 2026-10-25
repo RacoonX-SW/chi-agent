@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import tempfile
 import unittest
 from types import SimpleNamespace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 try:
     import model_runner_adapter as adapter
@@ -87,6 +88,131 @@ class ModelRunnerAdapterTests(unittest.TestCase):
         self.assertEqual(ledger.transport_calls, 2)
         self.assertEqual(len(ledger.effects), 1)
         self.assertEqual(ledger.effects[0]["call_id"], "call-1")
+
+    def test_not_found_tool_effect_consumes_id_and_prevents_duplicate(self):
+        ledger, result = self.run_scenario("not-found-then-duplicate")
+        self.assertIsNone(result)
+        self.assertEqual(ledger.transport_calls, 2)
+        self.assertEqual(ledger.error_code, "tool_call_id_invalid")
+        self.assertEqual(ledger.validated_call_ids, {"call-1"})
+        self.assertEqual(ledger.effects, [{
+            "tool": "synthetic_lookup", "call_id": "call-1", "result": "synthetic-key-not-found",
+        }])
+
+    def test_call_id_shape_and_tool_batch_validation(self):
+        scenarios = {
+            "invalid-call-id": "tool_call_id_invalid",
+            "batch-duplicate-id": "tool_call_id_invalid",
+            "invalid-call-type": "tool_batch_invalid",
+            "invalid-call-json": "tool_arguments_invalid",
+            "invalid-call-argument-type": "tool_arguments_invalid",
+            "batch-valid-then-invalid": "tool_unknown",
+        }
+        for scenario, code in scenarios.items():
+            with self.subTest(scenario=scenario):
+                ledger, result = self.run_scenario(scenario)
+                self.assertIsNone(result)
+                self.assertEqual(ledger.error_code, code)
+                self.assertEqual(ledger.effects, [])
+                self.assertEqual(ledger.validated_call_ids, set())
+
+    def test_final_assistant_requires_nonblank_content_and_reasoning(self):
+        for scenario, code in (
+            ("final-no-reasoning", "reasoning_missing"),
+            ("final-invalid-reasoning", "reasoning_missing"),
+            ("final-content-none", "final_content_invalid"),
+            ("final-content-empty", "final_content_invalid"),
+            ("final-content-whitespace", "final_content_invalid"),
+            ("final-content-absent", "final_content_invalid"),
+            ("finish-length", "finish_reason_invalid"),
+            ("finish-content-filter", "finish_reason_invalid"),
+        ):
+            with self.subTest(scenario=scenario):
+                ledger, result = self.run_scenario(scenario)
+                self.assertIsNone(result)
+                self.assertEqual(ledger.error_code, code)
+                self.assertEqual(len(ledger.effects), 2)
+
+    def test_huge_usage_is_unknown_without_overflow_or_fake_aggregate(self):
+        ledger, result = self.run_scenario("huge-usage")
+        self.assertIsNone(result)
+        self.assertEqual(ledger.error_code, "usage_unknown")
+        self.assertFalse(ledger.usage_complete)
+        self.assertEqual(ledger.known_input_tokens, 0)
+        self.assertEqual(ledger.known_cost_cny, 0.0)
+        self.assertIsNone(ledger.aggregate_input_tokens)
+        self.assertIsNone(ledger.aggregate_cost_cny)
+
+    def test_unknown_or_invalid_ledger_blocks_before_transport(self):
+        request_body = {"model": "deepseek-flash", "max_tokens": 128,
+                        "messages": [{"role": "user", "content": "synthetic"}]}
+        bad_states = (
+            ("unknown", lambda ledger: adapter._mark_unknown_usage(ledger), "usage_unknown"),
+            ("bool_prior", lambda ledger: setattr(ledger, "initial_cost_cny", True), "accounting_state_invalid"),
+            ("nan_cost", lambda ledger: setattr(ledger, "known_cost_cny", math.nan), "accounting_state_invalid"),
+            ("huge_cost", lambda ledger: setattr(ledger, "known_cost_cny", 10**400), "accounting_state_invalid"),
+            ("missing_source", lambda ledger: setattr(ledger, "prior_cost_source", ""), "accounting_state_invalid"),
+        )
+        for name, mutate, code in bad_states:
+            with self.subTest(state=name):
+                ledger = adapter.Ledger("success")
+                mutate(ledger)
+                transport = adapter.BudgetedMockTransport(ledger, adapter.MockWire(ledger))
+                request = adapter.httpx.Request(
+                    "POST", "https://api.deepseek.com/v1/chat/completions",
+                    content=json.dumps(request_body),
+                )
+                with self.assertRaises(adapter.IntegrationFailure) as error:
+                    asyncio.run(transport.handle_async_request(request))
+                self.assertEqual(error.exception.code, code)
+                self.assertEqual(ledger.transport_calls, 0)
+                self.assertEqual(ledger.rounds, 0)
+
+    def test_failure_during_async_openai_setup_restores_every_scoped_change(self):
+        from agents.models.openai_chatcompletions import Converter
+        from agents.mcp.util import MCPUtil
+        from agents.tracing import get_trace_provider
+        import chi_bench.experiment.agents.openai_agents_runner as upstream
+        import chi_bench.experiment.agents.openai_agents_local_tools as tools
+        import agents.mcp as agents_mcp
+        import openai
+
+        vendor_path = str(adapter.VENDOR_SRC)
+        while vendor_path in __import__("sys").path:
+            __import__("sys").path.remove(vendor_path)
+        sys_path_before = list(__import__("sys").path)
+        before = {
+            "env": {k: os.environ.get(k) for k in (
+                "OPENAI_AGENTS_MODEL", "OPENAI_AGENTS_API_MODE", "OPENAI_AGENTS_MAX_TURNS",
+                "OPENAI_AGENTS_REASONING_EFFORT", "OPENAI_AGENTS_MAX_RETRIES", "OPENAI_BASE_URL")},
+            "context": upstream._agent_model_context,
+            "settings": upstream._build_model_settings,
+            "tools": tools.build_local_tools,
+            "mcp": agents_mcp.MCPServerStreamableHttp,
+            "invoke": MCPUtil.__dict__["invoke_mcp_tool"],
+            "to_tool": MCPUtil.__dict__["to_function_tool"],
+            "message_converter": Converter.__dict__["message_to_output_items"],
+            "history_converter": Converter.__dict__["items_to_messages"],
+            "trace": (get_trace_provider()._disabled, get_trace_provider()._manual_disabled,
+                      get_trace_provider()._env_disabled),
+        }
+        with patch.object(openai, "AsyncOpenAI", side_effect=RuntimeError("secret-like diagnostic")):
+            ledger, result = self.run_scenario("success")
+        self.assertIsNone(result)
+        self.assertEqual(ledger.error_code, "offline_setup_failed")
+        self.assertEqual(ledger.transport_calls, 0)
+        self.assertEqual(__import__("sys").path, sys_path_before)
+        self.assertIs(upstream._agent_model_context, before["context"])
+        self.assertIs(upstream._build_model_settings, before["settings"])
+        self.assertIs(tools.build_local_tools, before["tools"])
+        self.assertIs(agents_mcp.MCPServerStreamableHttp, before["mcp"])
+        self.assertIs(MCPUtil.__dict__["invoke_mcp_tool"], before["invoke"])
+        self.assertIs(MCPUtil.__dict__["to_function_tool"], before["to_tool"])
+        self.assertIs(Converter.__dict__["message_to_output_items"], before["message_converter"])
+        self.assertIs(Converter.__dict__["items_to_messages"], before["history_converter"])
+        self.assertEqual((get_trace_provider()._disabled, get_trace_provider()._manual_disabled,
+                          get_trace_provider()._env_disabled), before["trace"])
+        self.assertEqual({k: os.environ.get(k) for k in before["env"]}, before["env"])
 
     def test_reasoning_replay_requires_exact_model_and_endpoint(self):
         reasoning = SimpleNamespace(origin_model="deepseek-flash", provider_data={"origin_endpoint": "https://api.deepseek.com"})
@@ -240,6 +366,17 @@ class ModelRunnerAdapterTests(unittest.TestCase):
         self.assertIsNone(evidence["accounting"]["real_cost_cny"])
         self.assertIsNone(evidence["outcome"]["official_reward"])
         self.assertEqual(evidence["outcome"]["task_outcome"], "unknown")
+        accounting = evidence["accounting"]
+        for key in ("synthetic_input_price_usd_per_million", "synthetic_output_price_usd_per_million",
+                    "synthetic_usd_to_cny", "pricing_version", "pricing_source", "fx_rate_source",
+                    "synthetic_prior_spend_cny", "synthetic_prior_spend_source", "budget_aggregate_cost_cny"):
+            self.assertIn(key, accounting)
+        recomputed = accounting["synthetic_prior_spend_cny"] + (
+            (accounting["aggregate_usage"]["input_tokens"] * accounting["synthetic_input_price_usd_per_million"]
+             + accounting["aggregate_usage"]["output_tokens"] * accounting["synthetic_output_price_usd_per_million"])
+            / 1_000_000 * accounting["synthetic_usd_to_cny"]
+        )
+        self.assertAlmostEqual(accounting["budget_aggregate_cost_cny"], recomputed)
 
     def test_evidence_run_identity_is_exclusive_and_live_creates_nothing(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -247,12 +384,46 @@ class ModelRunnerAdapterTests(unittest.TestCase):
             with patch.object(adapter, "RUNS_ROOT", root):
                 path = adapter._write_evidence("exclusive-1", {"provenance": "synthetic"})
                 self.assertTrue(path.is_file())
-                with self.assertRaises(FileExistsError):
+                with self.assertRaises(adapter.IntegrationFailure):
                     adapter._write_evidence("exclusive-1", {"provenance": "overwrite"})
                 untouched = Path(temp) / "live-must-not-create"
                 with patch.object(adapter, "RUNS_ROOT", untouched):
                     self.assertEqual(adapter.main(["live"]), 2)
                 self.assertFalse(untouched.exists())
+
+    def test_offline_id_is_reserved_before_runner_and_collisions_preserve_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "runs"
+            with patch.object(adapter, "RUNS_ROOT", root), patch.object(adapter, "_run_offline", new=AsyncMock()) as runner:
+                self.assertEqual(adapter.main(["offline", "--run-id", "../unsafe"]), 2)
+                runner.assert_not_awaited()
+                self.assertFalse(root.exists())
+
+                root.mkdir()
+                existing = root / "duplicate.json"
+                existing.write_bytes(b"preserve-exactly")
+                self.assertEqual(adapter.main(["offline", "--run-id", "duplicate"]), 2)
+                runner.assert_not_awaited()
+                self.assertEqual(existing.read_bytes(), b"preserve-exactly")
+
+                reservation = adapter._reserve_evidence("concurrent")
+                with self.assertRaises(adapter.IntegrationFailure) as error:
+                    adapter._reserve_evidence("concurrent")
+                self.assertEqual(error.exception.code, "run_id_exists")
+                reservation.close()
+
+    def test_async_openai_init_failure_leaves_safe_terminal_evidence(self):
+        import openai
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "runs"
+            with patch.object(adapter, "RUNS_ROOT", root), patch.object(
+                openai, "AsyncOpenAI", side_effect=RuntimeError("secret-like diagnostic")
+            ):
+                self.assertEqual(adapter.main(["offline", "--run-id", "init-failure"]), 1)
+            evidence = json.loads((root / "init-failure.json").read_text(encoding="utf-8"))
+            self.assertEqual(evidence["outcome"]["status"], "incomplete")
+            self.assertEqual(evidence["outcome"]["safe_error_code"], "offline_setup_failed")
+            self.assertNotIn("secret-like diagnostic", json.dumps(evidence))
 
 
 if __name__ == "__main__":
