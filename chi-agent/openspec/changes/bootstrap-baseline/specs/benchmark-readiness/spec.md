@@ -47,6 +47,37 @@ The baseline report SHALL distinguish official static inputs and tool references
 - **AND** unobserved live schemas, execution steps and official reward are explicitly unverified
 - **AND** no illustrative workflow is presented as a real trajectory
 
+### Requirement: Bounded model-free stage A tool integration
+
+Stage A SHALL provision the fixed official task environment and observe real MCP exchanges without starting an Agent runner, invoking a model or running an official verifier. The stage SHALL use the selected public task and record environment/data identity separately from task completion.
+
+#### Scenario: Stage A is resumed while B and C remain paused
+
+- **GIVEN** only official environment and model-free read-only tool integration are authorized
+- **WHEN** the scheduler prepares or starts the selected task world
+- **THEN** installation, downloads, debugging and checks execute inside Docker
+- **AND** startup hooks and selected tool handlers are checked against the pinned official source before execution
+- **AND** no model/judge credentials are forwarded and no runner, simulated model conversation or verifier is invoked
+- **AND** runtime model usage and official reward remain unmeasured/null rather than inferred from tool success
+
+#### Scenario: A script probes a live role tool
+
+- **GIVEN** the official service is running in an isolated development world
+- **WHEN** the script initializes an MCP session, discovers live tools and performs a query
+- **THEN** the called tool is both present in the live schema and individually allowlisted after checking its handler for model calls and business writes
+- **AND** unknown tools, missing or incompatible schemas and prohibited calls stop before tool execution
+- **AND** arguments derive only from public Agent input or schema-valid general queries
+- **AND** raw schemas and responses stay in ignored local evidence, while shared reports contain only permitted metadata
+- **AND** the report identifies the script as caller and does not claim model selection or autonomous task execution
+
+#### Scenario: An environment or probe fails
+
+- **GIVEN** task resources are created with a unique stage A identity
+- **WHEN** startup, a query or a bounded wait fails or times out
+- **THEN** evidence records the failing stage without inventing a tool result or official verdict
+- **AND** cleanup targets only resources owned by this run and retained evidence survives removal
+- **AND** the next task attempt uses a fresh world rather than reusing this development state
+
 ### Requirement: Explicit readiness status
 
 The system SHALL report dependency and configuration readiness without invoking a model by default.

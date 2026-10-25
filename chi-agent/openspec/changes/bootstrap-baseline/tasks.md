@@ -6,6 +6,19 @@
 
 2026-10-24 环境方式按用户要求改为 Docker 内开发；依赖安装、下载和测试均在容器执行，宿主机不配置项目环境。D0 可构建/启动开发容器，不启动官方任务世界。详见 [Docker 工作流](../../../docs/docker-workflow.md)。勾选仅表示所注明阶段的实现或证据，不能代替独立审核及未运行的真实阶段。
 
+## A. Model-free official environment and read-only tools (resumed 2026-10-25)
+
+User authorization: stage A only; B/C, runtime model API calls and official grading remain paused. Base `d1c9f991eda9548974838f72578078f9f9b05757`, branch `codex/bootstrap-baseline-a`; preserve the pre-existing learning document changes. The D0 summary above records the previous stage.
+
+- [x] A.1 Read current summaries, fetch origin, preserve the existing learning diff and create the work branch before writing.
+- [ ] A.2 Provision pinned official source, fixed task resources and a declared Python 3.12 task environment entirely inside Docker; record their actual identities.
+- [ ] A.3 Verify model-free startup and containerized scheduling, mount sources, service endpoints and isolated task state using the existing Docker engine.
+- [ ] A.4 Discover live role MCP schemas and call only individually audited, allowlisted read tools; retain local raw evidence and permitted report metadata.
+- [ ] A.5 Check rejection, failure/timeout reporting, resource ownership/cleanup and evidence persistence; retain B/C guards and run affected offline regressions.
+- [ ] A.6 Stop implementation, fix a candidate, independently review/recheck it, update learning/status records and create a base=main PR for the user to review and merge.
+
+Do not mark combined Agent execution tasks complete based on these stage A checks. OpenSpec CLI and other architectures require their own evidence.
+
 ## 0. Understand the first official task
 
 - [x] 0.1 Select the public provider task pa_t018_t018_o001_p01_new_referral_provider and read its fixed-version instruction.
