@@ -9,7 +9,7 @@
 - [x] B.3 Implement the bounded adapter and synthetic probe without a live transport, credentials, official world or relaxed production gate.
 - [x] B.4 Self-test the production probe and affected regressions in the existing Python 3.12 Docker image with networking disabled; retain local evidence and distinguish synthetic usage from unmeasured provider usage.
 - [x] B.5 Freeze the candidate; independently review/recheck normal, invalid-call, post-tool rejection, limits and unknown-usage paths; record one review and learning entry.
-- [ ] B.6 Push the bounded work branch and create a base=main PR for user review/merge; do not merge or enable a later stage.
+- [x] B.6 Push the bounded work branch and create a base=main PR for user review/merge; do not merge or enable a later stage. PR identity and next action are recorded only in REVIEW_STATE.
 
 ## E. Align development and controller Python with the official runtime
 

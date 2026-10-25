@@ -14,7 +14,7 @@
 | 参赛预算 | 首轮真实 B/C 合计 5 元人民币的规划不变，写代码另计；本轮仅 synthetic 核算，不消费或重置该预算，真实模型调用未恢复 |
 | 本轮验证 | 固定快照独立回归、补充边界、实际 CLI、原离线入口及 README 示例通过；首审失败和最终命令/结果集中在 B 审核，不由子代理自测替代 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #4](https://github.com/xsw932187210-cell/chi-agent/pull/4) 已由用户合并至上列主线；B 离线验收后待推送并创建 base=main PR，由用户决定合并。下一步先审核本轮产物/学习；真实 B/模型 API、C 与官方判分不自动恢复 |
+| PR 与下一步 | [PR #4](https://github.com/xsw932187210-cell/chi-agent/pull/4) 已由用户合并至上列主线；[B 离线 PR #5](https://github.com/xsw932187210-cell/chi-agent/pull/5) 已推送并创建，base=main、head=codex/bootstrap-baseline-b-offline，待用户审核/决定合并。下一步先审核本轮产物/学习；真实 B/模型 API、C 与官方判分不自动恢复 |
 | 未验证项 | 真实 transport、SDK/官方 runner 的思考历史与逐请求预算接入、真实 tokenizer/用量/价格/账单、无评分 Agent 入口及判分认证；其他架构、OpenSpec CLI 与真实 daemon/网络故障清理分支仍未补验 |
 | 真实运行 | 无真实 trial、官方 reward、实测模型用量/费用；当前真实入口因缺核算依据仍阻断，ungraded 另明确 unsupported |
 
