@@ -1,10 +1,18 @@
 # 执行器交接：bootstrap-baseline
 
-当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮恢复 B 规格与离线实现，按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理；主代理负责规格、独立审核、教学与 GitHub。真实参赛模型 API、C 与官方判分继续暂停。下方 A/D0 授权及旧双代理安排为历史记录。
+当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮恢复 C 代码开发的离线控制部分，按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理；主代理负责规格、独立审核、教学与 GitHub。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。下方 B/A/D0 交接保留其阶段范围。
 
 后续代码及文档交付统一使用 `codex/<任务名>` 工作分支：主代理先建分支、协调实现并独立检查，再推送和创建目标为 main 的 PR；用户审核并决定是否合并。主代理不直接开发/推送 main、不自行合并。下方历史 main 身份只记录已发生的交付，不能当作后续继续在 main 工作的授权，详见 [GitHub 工作流](../../../docs/github-workflow.md)。
 
-## 当前 B 离线交接（2026-10-26）
+## 当前 C 离线交接（2026-10-26）
+
+验收按 [C 控制契约](specs/benchmark-readiness/spec.md#requirement-offline-stage-c-single-attempt-execution-control)、[C 任务](tasks.md#c-offline-single-attempt-lifecycle-control) 和 [C 设计](design.md#c-的离线执行控制)。唯一实现子代理负责 `scripts/c_run_control.py` 与 `tests/test_c_run_control.py`，主代理负责其余文档与独立审核。不改 B 代码、既有真实 gate 或官方源码，不安装 SDK，不把合成控制演练写成实际任务执行。
+
+先从用户已合并的最新主线开始；`plan` 不写文件或占用机会，`rehearse` 只创建独立 synthetic claim、调用纯 Python 环境/runner 边界并核对清理，`live` 明确拒绝。不同 run-id 在同一 campaign/task/upstream 下仍只能开始一次；失败/超时/未知终态不自动重演，真实 C namespace 不被演练消耗。共享预算、部分资源创建失败、所有权、主错/清理错及未知用量都要留可检查的证据。
+
+复用现有 Python 3.12 dev 镜像，所有测试/调试在无网络 Docker 中，只挂源码和本轮输出，不提供凭据、官方资源或 socket。子代理自测后停止，主代理固定候选独立复验，再创建 base=main PR 交用户审核。真实 B、无评分 runner 和正式 C 依赖仍单独待验证。
+
+## B 离线交接（2026-10-26）
 
 目标和行为以 [spec 的 Offline-only preparation for stage B](specs/benchmark-readiness/spec.md#requirement-offline-only-preparation-for-stage-b)、[B 任务](tasks.md#b-offline-preparation-of-modeltool-exchanges) 和 [设计取舍/参考 runner 缺口](design.md#b-的参考-runner-接入缺口) 为准。候选是独立合成协议探针，不是已接通的官方 Agent runner。
 
@@ -75,7 +83,7 @@ A 的调试世界不能当作 C 的起点，工具查询成功不能证明模型
 
 ## 恢复后分四份交付
 
-本表保留完整 D0/A/B/C 阶段及证据；当前增量授权以上方 B 离线交接及 REVIEW_STATE 为准。每份交付由子代理停止写入，主代理固定候选并独立验收、统一回复用户。真实接入及任务执行只有用户恢复对应范围才启动，不需用户转发子代理整段对话。
+本表保留完整 D0/A/B/C 阶段及证据；当前增量授权以上方 C 离线交接及 REVIEW_STATE 为准。每份交付由子代理停止写入，主代理固定候选并独立验收、统一回复用户。真实接入及任务执行只有用户恢复对应范围才启动，不需用户转发子代理整段对话。
 
 | 阶段 | 实现/验证范围 | 独立验收要看什么 | 参赛模型费用 |
 | --- | --- | --- | --- |
@@ -137,7 +145,7 @@ B 的合成数据不是官方病例；A 的调试世界不能直接作为 C 的�
 
 ## 新对话衔接文字
 
-从根 AGENTS.md 指定的最小摘要和 [当前 B 离线交接](#当前-b-离线交接2026-10-26) 接续；历史 [D0 Prompt](../../../docs/d0-handoff-prompts.md) 不覆盖当前单实现代理、Python 3.12 和阶段授权。文档本身不触发真实模型请求、任务执行或后台唤醒。稳定候选交付后先停止写入，再由主代理独立审核；需要返工时交回同一实现代理。
+从根 AGENTS.md 指定的最小摘要和 [当前 C 离线交接](#当前-c-离线交接2026-10-26) 接续；历史 [D0 Prompt](../../../docs/d0-handoff-prompts.md) 不覆盖当前单实现代理、Python 3.12 和阶段授权。文档本身不触发真实模型请求、任务执行或后台唤醒。稳定候选交付后先停止写入，再由主代理独立审核；需要返工时交回同一实现代理。
 
 ## 文档验证状态
 
