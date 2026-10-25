@@ -3,7 +3,7 @@
 FROM chi-agent-dev:latest
 
 COPY docker/a/requirements.lock /tmp/a-requirements.lock
-RUN uv venv /opt/a-venv --python 3.13 \
+RUN uv venv /opt/a-venv --python 3.12 \
     && uv pip install --python /opt/a-venv/bin/python --no-cache -r /tmp/a-requirements.lock
 
 WORKDIR /workspace

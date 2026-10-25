@@ -1,4 +1,14 @@
-状态：2026-10-25 双 Luna 候选 b7f8941 已通过当前 Python 3.13/aarch64 开发目标下的 D0 离线代码验收：80 项项目测试与 21 项独立补充检查通过，R1–R8 在报告范围内关闭。主代理协调两个 Luna High 子代理实现与 Docker 自测后独立复验。A/B/C、参赛模型 API 和官方判分仍暂停；OpenSpec CLI/官方 Python 3.12/其他架构未验证，用户完整验收未记录，不代勾未执行项。
+当前阶段、授权与已通过身份以 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md) 为准。以下已勾选项保留其历史验收范围；旧双代理人数与开发版本不覆盖现行协作约定。
+
+## E. Align development and controller Python with the official runtime
+
+用户于 2026-10-25 授权本项环境收尾：默认一个 Luna High 实现、主代理独立审核。仅对齐开发/调度环境至官方 Python 3.12；不恢复 B/C、参赛模型 API 或官方判分。
+
+- [x] E.1 Fetch the merged main, preserve existing changes, and create `codex/align-python312` before writing (base `925d34b`).
+- [ ] E.2 Pin the development image to Python 3.12, select the same minor version for the controller venv, and resolve/check both dependency locks inside Docker without unrelated upgrades.
+- [ ] E.3 Build the changed images with existing caches; verify actual interpreters, installed distributions, dependency consistency, offline project tests and production readiness/dry-run entry points. Default dev remains without a Docker socket.
+- [ ] E.4 Reuse an existing fixed official image and local resources for a fresh model-free A probe from the migrated controller. Do not rebuild/download official fixtures, handbooks or browser binaries; verify image identity, MCP response, cleanup and retained evidence.
+- [ ] E.5 Freeze the candidate, independently verify it, record one bounded review and the user's learning feedback, then push a base=main PR for user review/merge. Do not treat the environment migration as a new Agent trial or official score.
 
 最新取舍：本地官方评分暂缓，先做离线与无评分开发验证；缺 Anthropic 不阻塞全部开发。已核对的 cb CLI 未见直接跳过 judge 的开关，开发入口需实际验证。见 `docs/development-preparation-2026-10-21.md`。
 

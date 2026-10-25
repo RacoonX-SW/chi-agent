@@ -4,6 +4,14 @@
 
 The workflow SHALL install project dependencies, download resources and execute project checks inside containers, without requiring project Python/uv/Node packages on the host. Containerized development SHALL preserve the official task runtime contract and separate distributable code images from restricted data.
 
+#### Scenario: Align development and controller Python with the pinned official runtime
+
+- **GIVEN** the pinned official task runtime uses Python 3.12 and the environment alignment is authorized
+- **WHEN** the development and controller images are rebuilt
+- **THEN** their actual interpreters and controller venv use Python 3.12 and their locked dependencies pass consistency and affected offline checks
+- **AND** an existing official image and local resources are reused for a fresh model-free read probe, with cleanup and retained evidence verified
+- **AND** official resource/browser downloads, model calls, Agent trials and grading are not performed by this migration
+
 #### Scenario: The host has Docker but no project runtime packages
 
 - **GIVEN** Docker is available on the host and the development image's inputs and dependencies are declared
