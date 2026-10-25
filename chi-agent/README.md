@@ -68,6 +68,25 @@ A controller 通过 `HOST_PROJECT_ROOT=${PWD}` 解析引擎看到的挂载源；
 
 用户已明确允许官方启动必需的 `fixtures/expectations.json` 仅供无 Agent 的隔离服务初始化。探针不读取评分文件。下载只含固定 7 文件子集，完整数据集仍未补齐；本地官方任务镜像含授权手册，不上传 GitHub 或镜像仓库。默认开发/调度镜像通过 `.dockerignore` 排除受限资料。
 
+## B：离线合成模型工具往返
+
+复用已构建的 `chi-agent-dev:latest`，从本项目目录执行。只挂载脚本和输出目录，显式使用镜像内的 venv；不需要 `.env`、官方资料或 Docker socket。
+
+```sh
+mkdir -p runs/b-model
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -v "$PWD/scripts:/workspace/scripts:ro" \
+  -v "$PWD/runs/b-model:/workspace/runs/b-model:rw" \
+  -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python scripts/b_model_probe.py \
+  --run-id b-offline-example-001 --scenario success
+```
+
+每次使用新的 run-id；同名输出会拒绝覆盖。可将 `--scenario` 改为 `post-tool-rejection`、`post-tool-timeout`、`missing-usage` 或 `invalid-call` 观察失败记录；`--mode live` 会明确拒绝。成功退出 0，受控停止/失败退出 1，非法或重复 run-id 退出 2。输出位于 `runs/b-model/<run-id>/evidence.json`。
+
+成功示例经过两轮合成工具往返和最终响应。请求中的工具选择与返回都来自手写 fixture；候选模型/模式字段、用量及价格只作离线协议和合成核算检查，真实 provider usage/cost 与 official reward 为 null。真实模型传输、官方 runner 集成与任务执行须另行恢复并验证，实际验收范围见 [审核状态](reviews/REVIEW_STATE.md)。
+
 ## 资料来源
 
 核对日期：2026-10-19。

@@ -190,6 +190,65 @@ The system SHALL distinguish basic model connectivity from verified multi-turn t
 - **AND** the complete model-tool loop is not reported as verified
 - **AND** the wrapper does not replay an executed business write solely to recover from that model request rejection
 
+### Requirement: Offline-only preparation for stage B
+
+The system SHALL provide a bounded synthetic Chat Completions probe while real model API calls, stage C and official grading remain paused. Offline results SHALL NOT establish provider or reference-runner compatibility.
+
+#### Scenario: B specifications and offline implementation are resumed
+
+- **GIVEN** only offline B preparation is authorized
+- **WHEN** the production B probe runs in the existing Python 3.12 development container
+- **THEN** it uses only synthetic responses and allowlisted synthetic tools, with network disabled and without credentials, a Docker socket or official task resources
+- **AND** no live HTTP/SDK transport is installed or selected, a live-mode request is refused, and the original task entry-point guards remain in place
+- **AND** its local evidence declares offline/synthetic provenance, unverified provider/harness integration, null real usage/cost and null official reward
+
+#### Scenario: Two consecutive synthetic tool exchanges complete
+
+- **GIVEN** an explicit candidate model, endpoint, API, thinking mode, effort and finite request/round limits
+- **WHEN** the probe receives two successive tool-call responses followed by a final assistant response
+- **THEN** every captured request contains the intended profile and finite output limit
+- **AND** subsequent histories retain assistant content, opaque reasoning fields and original tool-call IDs/arguments, followed by results matched through `tool_call_id`
+- **AND** the result is called an offline synthetic completion, without claiming a real model chose the tools or the official runner executed them
+- **AND** absent/null/empty `tool_calls` are handled as a final-message shape; completion additionally requires at least two separate successful tool-exchange rounds, usable final content and a normal `stop` finish reason
+
+#### Scenario: A response ends early or is truncated
+
+- **GIVEN** fewer than two completed tool-exchange rounds, a truncated/filtered response or an inconsistent finish reason
+- **WHEN** the probe considers its terminal result
+- **THEN** it records an incomplete/rejected outcome and preserves prior effects rather than reporting synthetic completion
+
+#### Scenario: A response contains an invalid tool batch
+
+- **GIVEN** an unknown tool, unsupported call type, malformed/invalid arguments, missing reasoning history or duplicate/invalid call ID
+- **WHEN** the response is validated
+- **THEN** the entire batch is rejected before any of its tool calls execute
+- **AND** evidence identifies the invalid response without inventing effects or continuing with a substituted mode
+
+#### Scenario: A later request fails after a tool executes
+
+- **GIVEN** a synthetic tool has executed and its result is recorded
+- **WHEN** the next injected model transport rejects, errors or times out
+- **THEN** the executed tool/result and later transport failure are recorded separately
+- **AND** the probe stops without automatic retries or replay, retains evidence and does not report full-loop completion
+
+#### Scenario: Request budget or limits cannot be established
+
+- **GIVEN** each next request requires cumulative usage/cost, versioned prices and conversion evidence plus finite input/output/round limits
+- **WHEN** usage is missing/invalid, a bound is exceeded, a limit is exhausted or the next reserve cannot fit
+- **THEN** the probe stops before the next injected transport call, never treating unknown usage as zero
+- **AND** synthetic accounting remains separate from real provider usage and the shared B/C runtime budget
+- **AND** missing/invalid usage on the final response also prevents completion; unknown aggregate usage/cost is null, with any known prefix totals explicitly labeled incomplete
+- **AND** valid usage from a returned request is accounted even when message/tool validation later rejects that response, and synthetic cap, price and conversion values/sources are retained for recomputation
+- **AND** round/input/output limits require positive non-boolean integers within their hard ceilings, with malformed configuration rejected before transport
+
+#### Scenario: Evidence is written or an output identity already exists
+
+- **GIVEN** a run identity and local output path
+- **WHEN** a probe completes or fails
+- **THEN** its candidate settings, requests/results, terminal state and failure phase remain readable after the container exits
+- **AND** a duplicate or unsafe run identity cannot overwrite existing evidence
+- **AND** raw local evidence remains in ignored paths and diagnostics do not emit credentials or arbitrary exception payloads
+
 ### Requirement: Respect the selected first-round runtime budget
 
 The system SHALL account for the selected 5 CNY first-round runtime budget across integration checks and the one task attempt, separately from coding costs. A budget plan SHALL NOT lift an active implementation or paid-run pause.

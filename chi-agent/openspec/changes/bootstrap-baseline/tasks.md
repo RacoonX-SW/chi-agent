@@ -1,5 +1,16 @@
 当前阶段、授权与已通过身份以 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md) 为准。以下已勾选项保留其历史验收范围；旧双代理人数与开发版本不覆盖现行协作约定。
 
+## B. Offline preparation of model/tool exchanges
+
+用户于 2026-10-26 恢复 B 规格与离线实现，一个 `gpt-6-luna` / `high` 实现子代理，主代理独立审核。真实参赛模型 API、C 与官方判分继续暂停；本节不代勾 1.5 的真实 provider/harness 验证。
+
+- [x] B.1 Verify PR #4 merged and create a B work branch from the latest `origin/main` before writing.
+- [x] B.2 Specify offline-only transport, candidate profile, at least two synthetic tool exchanges, history preservation, budget gates, failure boundaries and reference-runner gaps.
+- [x] B.3 Implement the bounded adapter and synthetic probe without a live transport, credentials, official world or relaxed production gate.
+- [x] B.4 Self-test the production probe and affected regressions in the existing Python 3.12 Docker image with networking disabled; retain local evidence and distinguish synthetic usage from unmeasured provider usage.
+- [x] B.5 Freeze the candidate; independently review/recheck normal, invalid-call, post-tool rejection, limits and unknown-usage paths; record one review and learning entry.
+- [x] B.6 Push the bounded work branch and create a base=main PR for user review/merge; do not merge or enable a later stage. PR identity and next action are recorded only in REVIEW_STATE.
+
 ## E. Align development and controller Python with the official runtime
 
 用户于 2026-10-25 授权本项环境收尾：默认一个 Luna High 实现、主代理独立审核。仅对齐开发/调度环境至官方 Python 3.12；不恢复 B/C、参赛模型 API 或官方判分。
