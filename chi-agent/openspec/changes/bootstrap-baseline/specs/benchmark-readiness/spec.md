@@ -261,6 +261,7 @@ The system SHALL prepare stage C lifecycle and single-attempt control without en
 - **AND** `rehearse` uses an explicitly synthetic, pure-Python backend with no network, Docker API, MCP, credentials or official task resources
 - **AND** `live` is refused before an attempt claim or backend call, without weakening the existing baseline gate
 - **AND** the manifest labels candidate settings as configured/unverified, real usage/cost/reward as null and official task success as unknown
+- **AND** CLI exit zero is limited to a valid plan or completed rehearsal; blocked/conflicting/failed rehearsals exit one, while invalid input and live refusal exit two
 
 #### Scenario: One campaign is invoked using different run identities
 
@@ -285,6 +286,7 @@ The system SHALL prepare stage C lifecycle and single-attempt control without en
 - **WHEN** the controller checks entry to the attempted run
 - **THEN** it reuses the existing budget decision with B spend included rather than resetting the cap for C
 - **AND** missing/invalid spend, usage, pricing or conversion stops the relevant next boundary and is not treated as zero
+- **AND** spend/pricing/conversion source identifiers are non-empty, non-whitespace strings; a returned total exceeding the shared cap is recorded as exceeded rather than rehearsal completion
 - **AND** synthetic amounts and sources remain separate from real B/C accounting, with any unknown totals null
 - **AND** entry-level checks and requested model limits are not reported as verified per-request enforcement inside the official runner
 
@@ -296,6 +298,8 @@ The system SHALL prepare stage C lifecycle and single-attempt control without en
 - **AND** primary failure, timeout and cleanup failure are recorded separately without automatic retries or replay
 - **AND** a partial-creation failure can provide an explicit owned cleanup handle; missing or foreign handles are not guessed or deleted
 - **AND** evidence and claim remain readable after cleanup; only allowlisted metadata and fixed error classifications are persisted
+- **AND** confirmed ownership includes valid handle shape and the current run/campaign/namespace identity, including on partial creation; malformed handles yield a controlled terminal result without cleanup of unknown resources
+- **AND** evidence-write failure after resource creation does not prevent attempted cleanup; persistence errors are separate from primary and cleanup errors, retained claims prevent replay, and incomplete evidence is never reported as complete
 
 #### Scenario: The runner returns or a limit is reached
 

@@ -88,11 +88,9 @@ class RunSpec:
         _positive_int("max_output_tokens", self.max_output_tokens, MAX_OUTPUT_TOKENS)
         _positive_int("max_input_tokens", self.max_input_tokens, 1_000_000)
         _positive_int("timeout_seconds", self.timeout_seconds, MAX_TASK_SECONDS)
-        if self.attempts != 1 or isinstance(self.attempts, bool):
-            raise ControlError("attempts must equal 1")
-        if self.concurrency != 1 or isinstance(self.concurrency, bool):
-            raise ControlError("concurrency must equal 1")
-        if self.retries != 0 or isinstance(self.retries, bool):
+        _positive_int("attempts", self.attempts, 1)
+        _positive_int("concurrency", self.concurrency, 1)
+        if isinstance(self.retries, bool) or not isinstance(self.retries, int) or self.retries != 0:
             raise ControlError("retries must equal 0")
 
 
@@ -107,6 +105,12 @@ class BudgetEvidence:
     fx_source: str | None
 
     def evaluate(self, spec: RunSpec) -> tuple[str, str]:
+        if not isinstance(self.prior_b_source, str) or not self.prior_b_source.strip():
+            return "unverified_unknown_usage", "prior B spend source is missing or invalid"
+        if not isinstance(self.pricing_version, str) or not self.pricing_version.strip():
+            return "unverified_unknown_pricing", "pricing version is missing or invalid"
+        if not isinstance(self.fx_source, str) or not self.fx_source.strip():
+            return "unverified_unknown_conversion", "FX conversion source is missing or invalid"
         return evaluate_budget(
             CAP_CNY,
             spec.max_rounds,
@@ -125,10 +129,13 @@ class BudgetEvidence:
 class OwnedHandle:
     resource_id: str
     owned: bool
+    run_id: str
+    campaign_id: str = CAMPAIGN_ID
+    namespace: str = "synthetic"
 
 
 class OwnedHandleError(RuntimeError):
-    def __init__(self, handle: OwnedHandle | None = None):
+    def __init__(self, handle: Any = None):
         super().__init__("synthetic world creation failed")
         self.handle = handle
 
@@ -148,6 +155,23 @@ class Backend(Protocol):
     def cleanup(self, handle: OwnedHandle) -> None: ...
 
 
+def _synthetic_handle(spec: RunSpec) -> OwnedHandle:
+    return OwnedHandle(f"synthetic-{spec.run_id}", True, spec.run_id)
+
+
+def _confirmed_owned_handle(handle: Any, spec: RunSpec) -> bool:
+    return (
+        type(handle) is OwnedHandle
+        and type(handle.owned) is bool
+        and handle.owned is True
+        and isinstance(handle.resource_id, str)
+        and bool(_ID_RE.fullmatch(handle.resource_id))
+        and handle.run_id == spec.run_id
+        and handle.campaign_id == CAMPAIGN_ID
+        and handle.namespace == "synthetic"
+    )
+
+
 class SyntheticBackend:
     """Tiny in-memory fixture backend; it has no external service hooks."""
 
@@ -160,8 +184,8 @@ class SyntheticBackend:
     def create_world(self, spec: RunSpec) -> OwnedHandle:
         self.calls.append("create_world")
         if self.scenario == "partial-create":
-            raise OwnedHandleError(OwnedHandle(f"synthetic-{spec.run_id}", True))
-        return OwnedHandle(f"synthetic-{spec.run_id}", True)
+            raise OwnedHandleError(_synthetic_handle(spec))
+        return _synthetic_handle(spec)
 
     def run_once(self, handle: OwnedHandle, spec: RunSpec) -> BackendResult:
         self.calls.append("run_once")
@@ -311,6 +335,20 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
             pass
 
 
+def _record_write_error(errors: list[dict[str, str]], phase: str, exc: Exception) -> None:
+    errors.append({"phase": phase, "error_type": type(exc).__name__})
+
+
+def _try_atomic_json(path: Path, payload: dict[str, Any], phase: str,
+                     errors: list[dict[str, str]]) -> bool:
+    try:
+        _atomic_json(path, payload)
+        return True
+    except Exception as exc:
+        _record_write_error(errors, phase, exc)
+        return False
+
+
 def _synthetic_budget() -> BudgetEvidence:
     return BudgetEvidence(0.25, "fixed-local-synthetic-fixture-v1", 1.0, 1.0, "fixed-local-synthetic-fixture-v1", 7.2, "fixed-local-synthetic-fixture-v1")
 
@@ -346,11 +384,13 @@ def _synthetic_accounting(result: BackendResult, budget: BudgetEvidence) -> dict
         and bool(result.synthetic_cost_source.strip())
     )
     complete = valid_usage and cost_matches and prior is not None
+    total = prior + float(reported_cost) if complete else None
     return {
         "provenance": "synthetic_fixture_only",
         "status": "complete" if complete else "incomplete_unknown",
+        "budget_status": "exceeded" if complete and total > CAP_CNY else "within_cap" if complete else "unknown",
         "synthetic_usage": result.usage if valid_usage else None,
-        "synthetic_total_cost_cny": prior + float(reported_cost) if complete else None,
+        "synthetic_total_cost_cny": total,
         "synthetic_known_prefix_usage": known_prefix,
         "synthetic_known_prefix_cost_cny": known_prefix_total,
         "synthetic_cost_source": result.synthetic_cost_source if complete else None,
@@ -470,19 +510,26 @@ def rehearse(
     manifest_path = run_dir / "manifest.json"
     _atomic_json(manifest_path, manifest)
     handle: OwnedHandle | None = None
+    resource_state_unknown = False
+    evidence_write_errors: list[dict[str, str]] = []
     terminal = "rehearsal_failed"
     primary_error: dict[str, str] | None = None
     started = time.monotonic()
     try:
         manifest["phase"] = "world_creation"
         _atomic_json(manifest_path, manifest)
+        resource_state_unknown = True
         try:
-            handle = backend.create_world(spec)
+            raw_handle = backend.create_world(spec)
         except OwnedHandleError as exc:
-            handle = exc.handle
+            if _confirmed_owned_handle(exc.handle, spec):
+                handle = exc.handle
+                manifest["resource_ids_owned"] = [handle.resource_id]
             raise
-        if not isinstance(handle, OwnedHandle) or not handle.owned:
-            raise ControlError("backend did not return a confirmed owned handle")
+        if not _confirmed_owned_handle(raw_handle, spec):
+            raise ControlError("backend did not return a confirmed campaign-owned handle")
+        handle = raw_handle
+        resource_state_unknown = False
         manifest["resource_ids_owned"] = [handle.resource_id]
         manifest["phase"] = "runner"
         _atomic_json(manifest_path, manifest)
@@ -508,6 +555,9 @@ def rehearse(
         elif accounting["status"] != "complete":
             terminal = "accounting_unknown"
             primary_error = {"phase": "accounting", "error_type": "MissingOrInvalidUsage"}
+        elif accounting["budget_status"] == "exceeded":
+            terminal = "budget_exceeded"
+            primary_error = {"phase": "accounting", "error_type": "SharedBudgetExceeded"}
         else:
             terminal = "rehearsal_completed"
         manifest["synthetic_result"] = {
@@ -527,9 +577,9 @@ def rehearse(
             terminal = "runner_failed"
         primary_error = {"phase": manifest["phase"], "error_type": type(exc).__name__}
     finally:
-        if handle is not None and handle.owned:
+        if handle is not None:
             manifest["cleanup"] = {"attempted": True, "status": "started"}
-            _atomic_json(manifest_path, manifest)
+            _try_atomic_json(manifest_path, manifest, "cleanup_started", evidence_write_errors)
             try:
                 backend.cleanup(handle)
                 manifest["cleanup"] = {"attempted": True, "status": "succeeded"}
@@ -538,24 +588,37 @@ def rehearse(
                 manifest["cleanup_error"] = {"error_type": type(exc).__name__}
                 if terminal == "rehearsal_completed":
                     terminal = "cleanup_failed"
-        elif handle is not None:
-            manifest["cleanup"] = {"attempted": False, "status": "foreign_handle_not_removed"}
         else:
-            manifest["cleanup"] = {"attempted": False, "status": "resource_state_unknown" if primary_error else "not_created"}
+            manifest["cleanup"] = {
+                "attempted": False,
+                "status": "resource_state_unknown" if resource_state_unknown else "not_created",
+            }
         manifest["elapsed_seconds"] = round(time.monotonic() - started, 3)
         manifest["finished_at"] = _utc_now()
+        if evidence_write_errors:
+            terminal = "evidence_write_failed"
         manifest["status"] = terminal
         manifest["phase"] = "cleanup" if manifest["cleanup"]["attempted"] else manifest["phase"]
         manifest["primary_error"] = primary_error
-        _atomic_json(manifest_path, manifest)
+        manifest["evidence_write_errors"] = evidence_write_errors
+        manifest["evidence_complete"] = not evidence_write_errors
+        if not _try_atomic_json(manifest_path, manifest, "manifest_final", evidence_write_errors):
+            manifest["status"] = terminal = "evidence_write_failed"
+            manifest["evidence_complete"] = False
+            manifest["evidence_write_errors"] = evidence_write_errors
+            _try_atomic_json(manifest_path, manifest, "manifest_final_retry", evidence_write_errors)
         claim["status"] = terminal
         claim["finished_at"] = manifest["finished_at"]
-        _atomic_json(claim_path, claim)
+        if not _try_atomic_json(claim_path, claim, "claim_final", evidence_write_errors):
+            manifest["status"] = terminal = "evidence_write_failed"
+            manifest["evidence_complete"] = False
+            manifest["evidence_write_errors"] = evidence_write_errors
+            _try_atomic_json(manifest_path, manifest, "manifest_after_claim_error", evidence_write_errors)
     return manifest
 
 
 def _valid_usage(usage: Any) -> bool:
-    return isinstance(usage, dict) and all(
+    return isinstance(usage, dict) and set(usage) == {"input_tokens", "output_tokens"} and all(
         key in usage and isinstance(usage[key], int) and not isinstance(usage[key], bool) and usage[key] >= 0
         for key in ("input_tokens", "output_tokens")
     )
@@ -587,7 +650,7 @@ def main(argv: list[str] | None = None) -> int:
             raise LiveExecutionDisabled("live execution is disabled: no verified B transport, ungraded runner or runtime authorization")
         result = rehearse(spec, root=Path(__file__).resolve().parents[1] / "runs" / "c-control", scenario=args.scenario)
         print(json.dumps(result, indent=2, sort_keys=True))
-        return 0 if result["status"] in {"rehearsal_completed", "preflight_blocked", "claim_conflict"} else 1
+        return 0 if result["status"] == "rehearsal_completed" else 1
     except LiveExecutionDisabled as exc:
         print(json.dumps({"status": "live_disabled", "reason": str(exc), "attempt_claimed": False}, sort_keys=True))
         return 2
