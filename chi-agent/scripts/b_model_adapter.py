@@ -145,6 +145,8 @@ def validate_tool_batch(
     for call in calls:
         if not isinstance(call, dict):
             raise ProbeFailure("invalid_tool_call", "response_validation")
+        if call.get("type") != "function":
+            raise ProbeFailure("unsupported_tool_call_type", "response_validation")
         call_id = call.get("id")
         if not isinstance(call_id, str) or not CALL_ID_RE.fullmatch(call_id):
             raise ProbeFailure("invalid_tool_call_id", "response_validation")

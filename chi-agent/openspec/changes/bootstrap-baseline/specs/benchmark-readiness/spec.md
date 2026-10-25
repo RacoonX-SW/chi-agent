@@ -209,10 +209,17 @@ The system SHALL provide a bounded synthetic Chat Completions probe while real m
 - **THEN** every captured request contains the intended profile and finite output limit
 - **AND** subsequent histories retain assistant content, opaque reasoning fields and original tool-call IDs/arguments, followed by results matched through `tool_call_id`
 - **AND** the result is called an offline synthetic completion, without claiming a real model chose the tools or the official runner executed them
+- **AND** absent/null/empty `tool_calls` are handled as a final-message shape; completion additionally requires at least two separate successful tool-exchange rounds, usable final content and a normal `stop` finish reason
+
+#### Scenario: A response ends early or is truncated
+
+- **GIVEN** fewer than two completed tool-exchange rounds, a truncated/filtered response or an inconsistent finish reason
+- **WHEN** the probe considers its terminal result
+- **THEN** it records an incomplete/rejected outcome and preserves prior effects rather than reporting synthetic completion
 
 #### Scenario: A response contains an invalid tool batch
 
-- **GIVEN** an unknown tool, malformed/invalid arguments, missing reasoning history or duplicate/invalid call ID
+- **GIVEN** an unknown tool, unsupported call type, malformed/invalid arguments, missing reasoning history or duplicate/invalid call ID
 - **WHEN** the response is validated
 - **THEN** the entire batch is rejected before any of its tool calls execute
 - **AND** evidence identifies the invalid response without inventing effects or continuing with a substituted mode
@@ -230,6 +237,9 @@ The system SHALL provide a bounded synthetic Chat Completions probe while real m
 - **WHEN** usage is missing/invalid, a bound is exceeded, a limit is exhausted or the next reserve cannot fit
 - **THEN** the probe stops before the next injected transport call, never treating unknown usage as zero
 - **AND** synthetic accounting remains separate from real provider usage and the shared B/C runtime budget
+- **AND** missing/invalid usage on the final response also prevents completion; unknown aggregate usage/cost is null, with any known prefix totals explicitly labeled incomplete
+- **AND** valid usage from a returned request is accounted even when message/tool validation later rejects that response, and synthetic cap, price and conversion values/sources are retained for recomputation
+- **AND** round/input/output limits require positive non-boolean integers within their hard ceilings, with malformed configuration rejected before transport
 
 #### Scenario: Evidence is written or an output identity already exists
 

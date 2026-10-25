@@ -122,6 +122,60 @@ def _budget_eval(profile: BudgetProfile, rounds_used: int, cumulative_cost: floa
     )
 
 
+def _accounting_record(profile: BudgetProfile) -> dict[str, Any]:
+    return {
+        "provenance": "synthetic_fixture_only",
+        "synthetic_usage": None,
+        "synthetic_cost_cny": None,
+        "known_prefix_usage": {"input_tokens": 0, "output_tokens": 0},
+        "known_prefix_cost_cny": 0.0,
+        "usage_complete": True,
+        "status": "not_yet_measured",
+        "synthetic_budget_cap_cny": profile.cap_cny,
+        "synthetic_input_price_usd_per_million": profile.input_price_usd_per_million,
+        "synthetic_output_price_usd_per_million": profile.output_price_usd_per_million,
+        "synthetic_usd_to_cny": profile.usd_to_cny,
+        "pricing_version": profile.pricing_version,
+        "pricing_source": "synthetic_fixture_profile",
+        "fx_rate_source": profile.fx_rate_source,
+    }
+
+
+def _record_usage(
+    evidence: dict[str, Any], response: Any, profile: BudgetProfile
+) -> tuple[int, int] | None:
+    accounting = evidence["accounting"]
+    usage = parse_usage(response)
+    if usage is None:
+        accounting.update(
+            synthetic_usage=None,
+            synthetic_cost_cny=None,
+            usage_complete=False,
+            status="unknown_usage",
+        )
+        return None
+
+    input_tokens, output_tokens = usage
+    prefix = accounting["known_prefix_usage"]
+    prefix["input_tokens"] += input_tokens
+    prefix["output_tokens"] += output_tokens
+    cost = (
+        (
+            input_tokens * profile.input_price_usd_per_million
+            + output_tokens * profile.output_price_usd_per_million
+        )
+        / 1_000_000
+    ) * profile.usd_to_cny
+    accounting["known_prefix_cost_cny"] = round(
+        accounting["known_prefix_cost_cny"] + cost, 12
+    )
+    if accounting["usage_complete"]:
+        accounting["synthetic_usage"] = dict(prefix)
+        accounting["synthetic_cost_cny"] = accounting["known_prefix_cost_cny"]
+        accounting["status"] = "known_for_returned_responses"
+    return input_tokens, output_tokens
+
+
 def run_probe(
     *,
     run_dir: Path,
@@ -134,6 +188,11 @@ def run_probe(
 ) -> dict[str, Any]:
     """Execute only injected synthetic transport, saving evidence incrementally."""
 
+    profile = BudgetProfile(
+        max_rounds=max_rounds,
+        max_input_tokens=max_input_tokens,
+        max_output_tokens=max_tokens,
+    )
     evidence: dict[str, Any] = {
         "schema_version": 1,
         "provenance": "offline_synthetic",
@@ -149,13 +208,7 @@ def run_probe(
             "input_bound_method": "serialized_request_utf8_byte_count",
             "input_bound_note": "Conservative local bound; tokenizer and provider framing are unverified.",
         },
-        "accounting": {
-            "provenance": "synthetic_fixture_only",
-            "synthetic_usage": {"input_tokens": 0, "output_tokens": 0},
-            "synthetic_cost_cny": 0.0,
-            "pricing_version": "synthetic-profile-v1",
-            "fx_rate_source": "synthetic-profile-v1",
-        },
+        "accounting": _accounting_record(profile),
         "real_provider_usage": None,
         "real_provider_cost_cny": None,
         "official_reward": None,
@@ -164,6 +217,7 @@ def run_probe(
         "requests": [],
         "responses": [],
         "tool_executions": [],
+        "tool_exchange_rounds": 0,
         "status": "running",
         "terminal_phase": None,
         "failure_code": None,
@@ -178,28 +232,26 @@ def run_probe(
         evidence.update(status="refused_live_mode", terminal_phase="mode_guard", failure_code="live_mode_disabled")
         save()
         return evidence
-    if not (1 <= max_rounds <= HARD_MAX_ROUNDS):
+    if type(max_rounds) is not int or not (1 <= max_rounds <= HARD_MAX_ROUNDS):
         evidence.update(status="stopped_invalid_limits", terminal_phase="configuration", failure_code="invalid_round_limit")
         save()
         return evidence
-    if not (1 <= max_tokens <= HARD_MAX_OUTPUT_TOKENS):
+    if type(max_tokens) is not int or not (1 <= max_tokens <= HARD_MAX_OUTPUT_TOKENS):
         evidence.update(status="stopped_invalid_limits", terminal_phase="configuration", failure_code="invalid_output_limit")
         save()
         return evidence
-    if not (1 <= max_input_tokens <= HARD_MAX_INPUT_TOKENS):
+    if type(max_input_tokens) is not int or not (1 <= max_input_tokens <= HARD_MAX_INPUT_TOKENS):
         evidence.update(status="stopped_invalid_limits", terminal_phase="configuration", failure_code="invalid_input_limit")
         save()
         return evidence
 
-    profile = BudgetProfile(max_rounds=max_rounds, max_input_tokens=max_input_tokens, max_output_tokens=max_tokens)
     messages: list[dict[str, Any]] = [{"role": "user", "content": "Perform a synthetic two-step tool exchange."}]
     seen_call_ids: set[str] = set()
-    total_input = 0
-    total_output = 0
-    cumulative_cost = 0.0
 
     for request_index in range(max_rounds):
-        budget_status, _budget_reason = _budget_eval(profile, request_index, cumulative_cost)
+        budget_status, _budget_reason = _budget_eval(
+            profile, request_index, evidence["accounting"]["known_prefix_cost_cny"]
+        )
         evidence["accounting"]["last_budget_status"] = budget_status
         if budget_status != "within_budget":
             evidence.update(status=budget_status, terminal_phase="budget_before_request", failure_code=budget_status)
@@ -231,6 +283,7 @@ def run_probe(
             return evidence
 
         evidence["responses"].append({"request_index": request_index, "transport_status": "returned", "response": copy.deepcopy(response)})
+        usage = _record_usage(evidence, response, profile)
         try:
             message = extract_assistant_message(response)
         except ProbeFailure as failure:
@@ -238,8 +291,37 @@ def run_probe(
             save()
             return evidence
 
-        usage = parse_usage(response)
-        if "tool_calls" in message:
+        raw_calls = message.get("tool_calls")
+        if raw_calls is None or raw_calls == []:
+            has_tool_calls = False
+        elif isinstance(raw_calls, list):
+            has_tool_calls = True
+        else:
+            evidence.update(status="rejected_response", terminal_phase="response_validation", failure_code="invalid_tool_batch")
+            save()
+            return evidence
+        choice = response["choices"][0]
+        finish_reason = choice.get("finish_reason")
+        if has_tool_calls != (finish_reason == "tool_calls"):
+            evidence.update(status="rejected_response", terminal_phase="response_validation", failure_code="finish_reason_tool_call_mismatch")
+            save()
+            return evidence
+
+        if usage is None:
+            evidence.update(status="unverified_unknown_usage", terminal_phase="response_accounting", failure_code="missing_synthetic_usage")
+            save()
+            return evidence
+        input_tokens, output_tokens = usage
+        if input_tokens > input_bound or output_tokens > max_tokens:
+            evidence.update(status="stopped_response_usage_limit", terminal_phase="response_accounting", failure_code="synthetic_usage_exceeded_request_bound")
+            save()
+            return evidence
+        if evidence["accounting"]["known_prefix_cost_cny"] > profile.cap_cny:
+            evidence.update(status="stopped_budget_exhausted", terminal_phase="response_accounting", failure_code="synthetic_cost_exceeded_cap")
+            save()
+            return evidence
+
+        if has_tool_calls:
             try:
                 validated_calls = validate_tool_batch(message, seen_call_ids)
             except ProbeFailure as failure:
@@ -255,59 +337,26 @@ def run_probe(
                 tool_record = {"name": name, "tool_call_id": call_id, "arguments": copy.deepcopy(arguments), "result": result, "provenance": "synthetic"}
                 evidence["tool_executions"].append(tool_record)
                 messages.append({"role": "tool", "tool_call_id": call_id, "content": result})
-            if usage is None:
-                evidence.update(status="unverified_unknown_usage", terminal_phase="budget_before_request", failure_code="missing_synthetic_usage")
-                save()
-                return evidence
-            input_tokens, output_tokens = usage
-            if input_tokens > input_bound or output_tokens > max_tokens:
-                evidence.update(status="stopped_response_usage_limit", terminal_phase="response_accounting", failure_code="synthetic_usage_exceeded_request_bound")
-                save()
-                return evidence
-            total_input += input_tokens
-            total_output += output_tokens
-            cost = ((input_tokens * profile.input_price_usd_per_million + output_tokens * profile.output_price_usd_per_million) / 1_000_000) * profile.usd_to_cny
-            cumulative_cost += cost
-            evidence["accounting"].update(
-                synthetic_usage={"input_tokens": total_input, "output_tokens": total_output},
-                synthetic_cost_cny=round(cumulative_cost, 12),
-                last_usage_source="synthetic_fixture",
-            )
-            if cumulative_cost > profile.cap_cny:
-                evidence.update(status="stopped_budget_exhausted", terminal_phase="response_accounting", failure_code="synthetic_cost_exceeded_cap")
-                save()
-                return evidence
+            evidence["tool_exchange_rounds"] += 1
             save()
             continue
 
-        # Final assistant response: preserve every returned field verbatim.
+        # Empty/null tool_calls are normal SDK final-message shapes.
         if "reasoning_content" not in message or not isinstance(message["reasoning_content"], str):
             evidence.update(status="rejected_response", terminal_phase="response_validation", failure_code="missing_reasoning_content")
             save()
             return evidence
         messages.append(copy.deepcopy(message))
-        if usage is not None:
-            input_tokens, output_tokens = usage
-            if input_tokens > input_bound or output_tokens > max_tokens:
-                evidence.update(status="stopped_response_usage_limit", terminal_phase="response_accounting", failure_code="synthetic_usage_exceeded_request_bound")
-                save()
-                return evidence
-            total_input += input_tokens
-            total_output += output_tokens
-            cost = ((input_tokens * profile.input_price_usd_per_million + output_tokens * profile.output_price_usd_per_million) / 1_000_000) * profile.usd_to_cny
-            cumulative_cost += cost
-            evidence["accounting"].update(
-                synthetic_usage={"input_tokens": total_input, "output_tokens": total_output},
-                synthetic_cost_cny=round(cumulative_cost, 12),
-                last_usage_source="synthetic_fixture",
-            )
-            if cumulative_cost > profile.cap_cny:
-                evidence.update(status="stopped_budget_exhausted", terminal_phase="response_accounting", failure_code="synthetic_cost_exceeded_cap")
-                save()
-                return evidence
-        evidence.update(status="offline_synthetic_completion", terminal_phase="complete", failure_code=None)
         evidence["final_message"] = copy.deepcopy(message)
         evidence["history"] = copy.deepcopy(messages)
+        if finish_reason != "stop":
+            evidence.update(status="incomplete_response", terminal_phase="final_response", failure_code="final_finish_reason_not_stop")
+        elif not isinstance(message["content"], str) or not message["content"].strip():
+            evidence.update(status="incomplete_response", terminal_phase="final_response", failure_code="final_content_unavailable")
+        elif evidence["tool_exchange_rounds"] < 2:
+            evidence.update(status="incomplete_response", terminal_phase="final_response", failure_code="insufficient_tool_exchange_rounds")
+        else:
+            evidence.update(status="offline_synthetic_completion", terminal_phase="complete", failure_code=None)
         save()
         return evidence
 

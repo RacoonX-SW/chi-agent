@@ -36,6 +36,7 @@
 24. B 离线入口独立于任务入口：轻量 Chat Completions 适配层接受注入的合成传输，生产 CLI 只提供离线 fixture，没有 HTTP/SDK 客户端、凭据加载、官方 MCP 或真实任务通路。离线环境使用 `--network none`，不挂 Docker socket、手册、病例或 verifier；不调整原 `run_baseline.py` 的真实执行门禁。
 25. 候选请求显式记录 `deepseek-flash`、`https://api.deepseek.com`、Chat Completions、`thinking={type:enabled}`、`reasoning_effort=high` 和有限 `max_tokens`，只表示已准备的格式。逐条保留 assistant 的 `content`、不透明 `reasoning_content` 与工具调用，再按 `tool_call_id` 追加结果。至少两次连续工具往返及最终响应才证明本轮合成示例闭环；模型字段是 fixture 值，真实模式、返回模型和兼容性仍未知。
 26. 每次注入传输前复用 D0 的 `evaluate_budget`；预算、轮数、最大输入/输出、累计用量、价格/换算依据须可核对。示例价格、用量与成本明确标为 synthetic，真实 provider usage/cost 为 null，既有 B/C 预算不被重置或消费。缺失/无效证据停止后续请求；响应格式/未知工具/参数/重复 ID 在工具执行前拒绝，整批调用先校验再派发。传输拒绝/超时不自动重试，已执行效果与后续请求错误分别保留。
+27. 合成闭环成功需至少两个独立工具往返轮次，随后取得正常 `stop` 的有效最终文本；`tool_calls` 为空值可表示最终消息，但 `length`/过滤或不一致的结束原因不能算完成。所有返回响应先核算可用用量，再验证业务消息；缺失或无效用量（包括最终响应）使累计总量/总成本为 null，已知前缀另记且标明不完整。配置限额拒绝 bool/非整数，工具调用仅接受 `type=function`。
 
 ### B 的参考 runner 接入缺口
 

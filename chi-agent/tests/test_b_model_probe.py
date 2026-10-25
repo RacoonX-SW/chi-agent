@@ -28,6 +28,15 @@ class TestBModelProbe(unittest.TestCase):
     def evidence(self):
         return json.loads((self.run_dir / "evidence.json").read_text(encoding="utf-8"))
 
+    def modified_success_transport(self, modify):
+        base = probe.SyntheticScenarioTransport("success")
+
+        def transport(request):
+            response = base(request)
+            return modify(base.calls, response)
+
+        return transport, base
+
     def test_success_preserves_candidate_fields_history_and_tool_call_links(self):
         transport = probe.SyntheticScenarioTransport("success")
         result = probe.run_probe(run_dir=self.run_dir, transport=transport, scenario="success")
@@ -59,6 +68,10 @@ class TestBModelProbe(unittest.TestCase):
         self.assertIsNone(result["real_provider_cost_cny"])
         self.assertEqual(result["official_reward"], None)
         self.assertEqual(result["accounting"]["provenance"], "synthetic_fixture_only")
+        self.assertEqual(result["accounting"]["synthetic_budget_cap_cny"], 5.0)
+        self.assertEqual(result["accounting"]["synthetic_input_price_usd_per_million"], 1.0)
+        self.assertEqual(result["accounting"]["synthetic_output_price_usd_per_million"], 1.0)
+        self.assertEqual(result["accounting"]["synthetic_usd_to_cny"], 7.2)
 
     def test_invalid_batch_is_rejected_before_any_call_executes(self):
         class BatchTransport:
@@ -74,7 +87,7 @@ class TestBModelProbe(unittest.TestCase):
                     content=None, reasoning_content="reason", call_id="second", name="unknown", arguments={}
                 )["tool_calls"][0]
                 return {
-                    "choices": [{"message": {"role": "assistant", "content": "", "reasoning_content": "reason", "tool_calls": [first, second]}}],
+                    "choices": [{"message": {"role": "assistant", "content": "", "reasoning_content": "reason", "tool_calls": [first, second]}, "finish_reason": "tool_calls"}],
                     "usage": {"prompt_tokens": 1, "completion_tokens": 1},
                 }
 
@@ -83,6 +96,7 @@ class TestBModelProbe(unittest.TestCase):
         self.assertEqual(result["status"], "rejected_response")
         self.assertEqual(result["failure_code"], "unknown_tool")
         self.assertEqual(result["tool_executions"], [])
+        self.assertEqual(result["accounting"]["synthetic_usage"], {"input_tokens": 1, "output_tokens": 1})
         self.assertEqual(transport.calls, 1)
 
     def test_missing_reasoning_is_rejected_before_tool_execution(self):
@@ -93,7 +107,7 @@ class TestBModelProbe(unittest.TestCase):
                     "tool_calls": make_assistant_message(
                         content=None, reasoning_content="unused", call_id="call-1", name="synthetic_lookup", arguments={"key": "sample"}
                     )["tool_calls"],
-                }}],
+                }, "finish_reason": "tool_calls"}],
                 "usage": {"prompt_tokens": 1, "completion_tokens": 1},
             }
 
@@ -114,7 +128,7 @@ class TestBModelProbe(unittest.TestCase):
                     "choices": [{"message": make_assistant_message(
                         content="step", reasoning_content="synthetic reasoning",
                         call_id="reused-id", name=name, arguments=arguments,
-                    )}],
+                    ), "finish_reason": "tool_calls"}],
                     "usage": {"prompt_tokens": 1, "completion_tokens": 1},
                 }
 
@@ -124,14 +138,114 @@ class TestBModelProbe(unittest.TestCase):
         self.assertEqual(transport.calls, 2)
         self.assertEqual(len(result["tool_executions"]), 1)
 
-    def test_missing_usage_stops_before_next_request_after_recording_tool_effect(self):
+    def test_missing_usage_stops_before_next_request_without_zero_accounting(self):
         transport = probe.SyntheticScenarioTransport("missing-usage")
         result = probe.run_probe(run_dir=self.run_dir, transport=transport, scenario="missing-usage")
         self.assertEqual(result["status"], "unverified_unknown_usage")
         self.assertEqual(transport.calls, 1)
         self.assertEqual(len(result["requests"]), 1)
-        self.assertEqual(len(result["tool_executions"]), 1)
-        self.assertEqual(result["tool_executions"][0]["tool_call_id"], "synthetic-call-1")
+        self.assertEqual(result["tool_executions"], [])
+        self.assertIsNone(result["accounting"]["synthetic_usage"])
+        self.assertIsNone(result["accounting"]["synthetic_cost_cny"])
+        self.assertFalse(result["accounting"]["usage_complete"])
+        self.assertEqual(result["accounting"]["known_prefix_usage"], {"input_tokens": 0, "output_tokens": 0})
+
+    def test_missing_final_usage_makes_total_usage_and_cost_unknown(self):
+        transport, _ = self.modified_success_transport(
+            lambda call, response: {key: value for key, value in response.items() if key != "usage"} if call == 3 else response
+        )
+        result = probe.run_probe(run_dir=self.run_dir, transport=transport, scenario="missing-final-usage")
+        self.assertEqual(result["status"], "unverified_unknown_usage")
+        self.assertIsNone(result["accounting"]["synthetic_usage"])
+        self.assertIsNone(result["accounting"]["synthetic_cost_cny"])
+        self.assertEqual(result["accounting"]["known_prefix_usage"], {"input_tokens": 32, "output_tokens": 11})
+
+    def test_immediate_final_response_is_not_a_probe_completion(self):
+        def without_tools(call, response):
+            if call == 1:
+                response["choices"][0]["message"] = {
+                    "role": "assistant", "content": "synthetic early final", "reasoning_content": "opaque fixture"
+                }
+                response["choices"][0]["finish_reason"] = "stop"
+            return response
+
+        transport, _ = self.modified_success_transport(without_tools)
+        result = probe.run_probe(run_dir=self.run_dir, transport=transport, scenario="no-tool-exchange")
+        self.assertEqual(result["status"], "incomplete_response")
+        self.assertEqual(result["failure_code"], "insufficient_tool_exchange_rounds")
+        self.assertEqual(result["tool_exchange_rounds"], 0)
+
+    def test_truncated_final_response_is_not_reported_complete(self):
+        def truncated_final(call, response):
+            if call == 3:
+                response["choices"][0]["finish_reason"] = "length"
+            return response
+
+        transport, _ = self.modified_success_transport(truncated_final)
+        result = probe.run_probe(run_dir=self.run_dir, transport=transport, scenario="truncated-final")
+        self.assertEqual(result["status"], "incomplete_response")
+        self.assertEqual(result["failure_code"], "final_finish_reason_not_stop")
+        self.assertEqual(result["tool_exchange_rounds"], 2)
+
+    def test_final_null_tool_calls_is_accepted_as_normal_completion_shape(self):
+        def nullable_calls(call, response):
+            if call == 3:
+                response["choices"][0]["message"]["tool_calls"] = None
+            return response
+
+        transport, _ = self.modified_success_transport(nullable_calls)
+        result = probe.run_probe(run_dir=self.run_dir, transport=transport, scenario="nullable-final-calls")
+        self.assertEqual(result["status"], "offline_synthetic_completion")
+        self.assertIsNone(result["history"][-1]["tool_calls"])
+
+    def test_unsupported_tool_call_type_is_rejected_before_any_tool_runs(self):
+        def unsupported_type(call, response):
+            if call == 1:
+                response["choices"][0]["message"]["tool_calls"][0]["type"] = "unsupported"
+            return response
+
+        transport, _ = self.modified_success_transport(unsupported_type)
+        result = probe.run_probe(run_dir=self.run_dir, transport=transport, scenario="unsupported-tool-type")
+        self.assertEqual(result["status"], "rejected_response")
+        self.assertEqual(result["failure_code"], "unsupported_tool_call_type")
+        self.assertEqual(result["tool_executions"], [])
+
+    def test_finish_reason_must_match_tool_call_presence(self):
+        def wrong_tool_reason(call, response):
+            if call == 1:
+                response["choices"][0]["finish_reason"] = "stop"
+            return response
+
+        transport, _ = self.modified_success_transport(wrong_tool_reason)
+        result = probe.run_probe(run_dir=self.run_dir, transport=transport, scenario="finish-reason-mismatch")
+        self.assertEqual(result["failure_code"], "finish_reason_tool_call_mismatch")
+        self.assertEqual(result["tool_executions"], [])
+
+        final_dir = Path(self.tempdir.name) / "final-mismatch"
+        final_dir.mkdir()
+
+        def wrong_final_reason(call, response):
+            if call == 3:
+                response["choices"][0]["finish_reason"] = "tool_calls"
+            return response
+
+        transport, _ = self.modified_success_transport(wrong_final_reason)
+        result = probe.run_probe(run_dir=final_dir, transport=transport, scenario="final-finish-reason-mismatch")
+        self.assertEqual(result["failure_code"], "finish_reason_tool_call_mismatch")
+
+    def test_boolean_and_fractional_limits_are_rejected_with_evidence(self):
+        cases = (("max_rounds", True), ("max_rounds", 1.5), ("max_tokens", False), ("max_input_tokens", 1.5))
+        for index, (name, value) in enumerate(cases):
+            with self.subTest(name=name, value=value):
+                case_dir = Path(self.tempdir.name) / f"invalid-{index}"
+                case_dir.mkdir()
+                transport = probe.SyntheticScenarioTransport("success")
+                kwargs = {"max_rounds": 30, "max_tokens": 8192, "max_input_tokens": 65_536}
+                kwargs[name] = value
+                result = probe.run_probe(run_dir=case_dir, transport=transport, scenario="invalid-limit", **kwargs)
+                self.assertEqual(result["status"], "stopped_invalid_limits")
+                self.assertEqual(transport.calls, 0)
+                self.assertEqual(result["failure_code"], "invalid_" + ("round" if name == "max_rounds" else "output" if name == "max_tokens" else "input") + "_limit")
 
     def test_post_tool_transport_rejection_is_separate_and_never_retried(self):
         transport = probe.SyntheticScenarioTransport("post-tool-rejection")

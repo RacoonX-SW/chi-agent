@@ -6,8 +6,8 @@
 
 - [x] B.1 Verify PR #4 merged and create a B work branch from the latest `origin/main` before writing.
 - [x] B.2 Specify offline-only transport, candidate profile, at least two synthetic tool exchanges, history preservation, budget gates, failure boundaries and reference-runner gaps.
-- [ ] B.3 Implement the bounded adapter and synthetic probe without a live transport, credentials, official world or relaxed production gate.
-- [ ] B.4 Self-test the production probe and affected regressions in the existing Python 3.12 Docker image with networking disabled; retain local evidence and distinguish synthetic usage from unmeasured provider usage.
+- [x] B.3 Implement the bounded adapter and synthetic probe without a live transport, credentials, official world or relaxed production gate.
+- [x] B.4 Self-test the production probe and affected regressions in the existing Python 3.12 Docker image with networking disabled; retain local evidence and distinguish synthetic usage from unmeasured provider usage.
 - [ ] B.5 Freeze the candidate; independently review/recheck normal, invalid-call, post-tool rejection, limits and unknown-usage paths; record one review and learning entry.
 - [ ] B.6 Push the bounded work branch and create a base=main PR for user review/merge; do not merge or enable a later stage.
 
