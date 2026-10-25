@@ -122,6 +122,149 @@ def test_source_tree_identity_changes_when_build_input_changes(tmp_path: Path) -
     assert a._source_manifest(checkout)["tree_sha256"] != before
 
 
+class _BuildStream:
+    def __init__(self, events, *, delay_on_index: int | None = None, delay: float = 0.0):
+        self.events = list(events)
+        self.delay_on_index = delay_on_index
+        self.delay = delay
+        self.index = 0
+        self.closed = False
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.index >= len(self.events):
+            raise StopIteration
+        if self.index == self.delay_on_index:
+            time.sleep(self.delay)
+        event = self.events[self.index]
+        self.index += 1
+        return event
+
+    def close(self):
+        self.closed = True
+
+
+class _InterruptingBuildStream(_BuildStream):
+    def __next__(self):
+        if self.index == 1:
+            raise KeyboardInterrupt
+        return super().__next__()
+
+
+class _BuildClient:
+    def __init__(self, stream):
+        self.api = SimpleNamespace(timeout=30, build=self._build)
+        self.stream = stream
+        self.build_kwargs = None
+        self.image_get_count = 0
+        self.high_level_build_calls = 0
+        self.images = SimpleNamespace(get=self._image_get, build=self._forbidden_high_level_build)
+
+    def _build(self, **kwargs):
+        self.build_kwargs = kwargs
+        return self.stream
+
+    def _image_get(self, _tag):
+        self.image_get_count += 1
+        if self.image_get_count == 1:
+            return _not_found("image tag absent")
+        return SimpleNamespace(
+            attrs={
+                "Id": "sha256:synthetic-image",
+                "Config": {"Labels": a._resource_labels(self.build_kwargs["tag"].split(":", 1)[1])},
+            }
+        )
+
+    def _forbidden_high_level_build(self, **_kwargs):
+        self.high_level_build_calls += 1
+        raise AssertionError("high-level images.build must not be called")
+
+
+def _synthetic_build_context(root: Path) -> Path:
+    context = root / "build-context"
+    docker = context / "docker"
+    docker.mkdir(parents=True)
+    (docker / "Dockerfile").write_text("FROM python:3.12-slim\n")
+    return context
+
+
+def test_low_level_build_stream_succeeds_and_never_calls_high_level_build(tmp_path: Path) -> None:
+    stream = _BuildStream([{"status": "building"}, {"stream": "finished"}])
+    client = _BuildClient(stream)
+    tag, image_id, log_relative = a._build_image(
+        tmp_path, "build-success", client=client,
+        deadline=time.monotonic() + 2, context=_synthetic_build_context(tmp_path),
+    )
+    assert tag == "chi-agent-a-world:build-success"
+    assert image_id == "sha256:synthetic-image"
+    assert client.build_kwargs["rm"] is True
+    assert client.build_kwargs["forcerm"] is True
+    assert client.build_kwargs["decode"] is True
+    assert client.build_kwargs["labels"] == a._resource_labels("build-success")
+    assert client.high_level_build_calls == 0
+    assert stream.closed
+    log_path = tmp_path / log_relative
+    assert [json.loads(line) for line in log_path.read_text().splitlines()] == [
+        {"status": "building"}, {"stream": "finished"}
+    ]
+
+
+def test_low_level_build_deadline_closes_stream_and_preserves_raw_events(tmp_path: Path) -> None:
+    stream = _BuildStream(
+        [{"status": "first"}, {"status": "late"}], delay_on_index=1, delay=0.08
+    )
+    client = _BuildClient(stream)
+    with pytest.raises(a.AEnvironmentError, match="TimeoutError.*builds/.*jsonl"):
+        a._build_image(
+            tmp_path, "build-timeout", client=client,
+            deadline=time.monotonic() + 0.04, context=_synthetic_build_context(tmp_path),
+        )
+    assert stream.closed
+    logs = list((tmp_path / "runs" / "a-environment" / "builds").glob("build-timeout-*.jsonl"))
+    assert len(logs) == 1
+    assert json.loads(logs[0].read_text().splitlines()[0]) == {"status": "first"}
+
+
+def test_low_level_build_error_event_closes_stream_and_preserves_raw_event(tmp_path: Path) -> None:
+    stream = _BuildStream([{"error": "synthetic engine error"}])
+    client = _BuildClient(stream)
+    with pytest.raises(a.AEnvironmentError, match="AEnvironmentError.*builds/.*jsonl"):
+        a._build_image(
+            tmp_path, "build-error", client=client,
+            deadline=time.monotonic() + 2, context=_synthetic_build_context(tmp_path),
+        )
+    assert stream.closed
+    logs = list((tmp_path / "runs" / "a-environment" / "builds").glob("build-error-*.jsonl"))
+    assert len(logs) == 1
+    assert json.loads(logs[0].read_text()) == {"error": "synthetic engine error"}
+
+
+def test_low_level_build_interrupt_is_recorded_cancelled_and_propagated(tmp_path: Path) -> None:
+    stream = _InterruptingBuildStream([{"status": "first"}, {"status": "unreachable"}])
+    client = _BuildClient(stream)
+    with pytest.raises(KeyboardInterrupt):
+        a._build_image(
+            tmp_path, "build-interrupted", client=client,
+            deadline=time.monotonic() + 2, context=_synthetic_build_context(tmp_path),
+        )
+    assert stream.closed
+    status_files = list(
+        (tmp_path / "runs" / "a-environment" / "builds").glob("build-interrupted-*.status.json")
+    )
+    assert len(status_files) == 1
+    status = json.loads(status_files[0].read_text())
+    assert status["status"] == "cancelled"
+    assert status["cancelled"] is True
+    assert status["error_type"] == "KeyboardInterrupt"
+    log_files = list(
+        (tmp_path / "runs" / "a-environment" / "builds").glob("build-interrupted-*.jsonl")
+    )
+    assert len(log_files) == 1
+    assert json.loads(log_files[0].read_text()) == {"status": "first"}
+
+
 def test_checkout_rejects_dirty_or_untracked_source(tmp_path: Path, monkeypatch) -> None:
     checkout = tmp_path / "vendor" / "chi-bench"
     checkout.mkdir(parents=True)

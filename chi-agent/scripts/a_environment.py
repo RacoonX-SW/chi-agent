@@ -364,7 +364,7 @@ def _dockerfile(context: Path) -> None:
         raise AEnvironmentError("official Dockerfile is missing from build context")
 
 
-def build_image(root: Path, run_id: str) -> tuple[str, str]:
+def build_image(root: Path, run_id: str) -> tuple[str, str, str]:
     _validate_run_id(run_id)
     context = prepare_build_context(root)
     _dockerfile(context)
@@ -375,7 +375,9 @@ def build_image(root: Path, run_id: str) -> tuple[str, str]:
         client.close()
 
 
-def _build_image(root: Path, run_id: str, *, client, deadline: float, context: Path | None = None) -> tuple[str, str]:
+def _build_image(
+    root: Path, run_id: str, *, client, deadline: float, context: Path | None = None
+) -> tuple[str, str, str]:
     context = context or prepare_build_context(root)
     _dockerfile(context)
     tag = f"{IMAGE_TAG_PREFIX}:{run_id}"
@@ -387,22 +389,102 @@ def _build_image(root: Path, run_id: str, *, client, deadline: float, context: P
             raise
     else:
         raise AEnvironmentError("refusing to replace an image tag from an existing A-stage run")
-    with _api_timeout(client, deadline):
-        image, stream = client.images.build(path=str(context), dockerfile="docker/Dockerfile", tag=tag, rm=True)
-    # Consume bounded Engine progress without forwarding command output.
-    progress = iter(stream)
-    while True:
-        try:
+
+    build_dir = root / "runs" / "a-environment" / "builds"
+    build_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"{run_id}-{uuid.uuid4().hex}"
+    log_path = build_dir / f"{stem}.jsonl"
+    status_path = build_dir / f"{stem}.status.json"
+    stream = None
+    event_count = 0
+    failure: BaseException | None = None
+    cancelled = False
+    close_error_type: str | None = None
+    image_id: str | None = None
+
+    try:
+        # Use the low-level API: unlike ImageCollection.build(), it returns the
+        # response stream without first consuming the whole build internally.
+        with log_path.open("x", encoding="utf-8") as log:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("A-stage overall build deadline expired")
+            request_timeout = min(API_TIMEOUT_SEC, remaining)
             with _api_timeout(client, deadline):
-                next(progress)
-        except StopIteration:
-            break
-    if not image.attrs.get("Id"):
+                stream = client.api.build(
+                    path=str(context),
+                    dockerfile="docker/Dockerfile",
+                    tag=tag,
+                    rm=True,
+                    forcerm=True,
+                    labels=_resource_labels(run_id),
+                    decode=True,
+                    timeout=request_timeout,
+                )
+
+            progress = iter(stream)
+            while True:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("A-stage overall build deadline expired")
+                try:
+                    with _api_timeout(client, deadline):
+                        event = next(progress)
+                except StopIteration:
+                    if time.monotonic() >= deadline:
+                        raise TimeoutError("A-stage overall build deadline expired")
+                    break
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("A-stage overall build deadline expired")
+                log.write(json.dumps(event, sort_keys=True, separators=(",", ":"), default=str) + "\n")
+                log.flush()
+                event_count += 1
+                if not isinstance(event, dict):
+                    raise AEnvironmentError("Docker build returned an invalid progress event")
+                if event.get("error") is not None or event.get("errorDetail") is not None:
+                    raise AEnvironmentError("Docker build reported an error")
+
         with _api_timeout(client, deadline):
-            image.reload()
-    if not image.attrs.get("Id"):
-        raise AEnvironmentError("Docker build completed without an image identity")
-    return tag, image.attrs["Id"]
+            image = client.images.get(tag)
+        image_id = image.attrs.get("Id")
+        if not image_id:
+            raise AEnvironmentError("Docker build completed without an image identity")
+        image_labels = (image.attrs.get("Config") or {}).get("Labels") or {}
+        if any(image_labels.get(key) != value for key, value in _resource_labels(run_id).items()):
+            raise AEnvironmentError("built image does not carry this run's ownership labels")
+    except Exception as exc:
+        failure = exc
+    except (KeyboardInterrupt, SystemExit) as exc:
+        failure = exc
+        cancelled = True
+        raise
+    finally:
+        if stream is not None:
+            close = getattr(stream, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception as exc:
+                    close_error_type = type(exc).__name__
+                    if failure is None:
+                        failure = exc
+        status = {
+            "run_id": run_id,
+            "status": "cancelled" if cancelled else ("success" if failure is None else "failed"),
+            "cancelled": cancelled,
+            "event_count": event_count,
+            "image_id": image_id,
+            "error_type": type(failure).__name__ if failure is not None else None,
+            "stream_close_error_type": close_error_type,
+            "log_path": str(log_path.relative_to(root)),
+        }
+        _safe_write_json(status_path, status)
+
+    log_relative = str(log_path.relative_to(root))
+    if failure is not None:
+        raise AEnvironmentError(
+            f"official task image build failed ({type(failure).__name__}); log={log_relative}"
+        ) from None
+    return tag, image_id, log_relative
 
 
 def _resource_labels(run_id: str) -> dict[str, str]:
@@ -827,7 +909,11 @@ def run_probe(root: Path, run_id: str, probe_script: Path, *, use_local_hf_auth:
         except Exception as exc:
             if getattr(exc, "status_code", None) != 404:
                 raise
-            _build_image(root, run_id, client=client, deadline=deadline)
+            _, image_id, build_log_path = _build_image(
+                root, run_id, client=client, deadline=deadline
+            )
+            report["image_id"] = image_id
+            report["build_log_path"] = build_log_path
         phase = "start"
         identity = start_world(root, run_id, probe_script=probe_script, client=client, run_dir=run_dir, deadline=deadline)
         started = True
@@ -926,8 +1012,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"dataset_revision={DATASET_REVISION} selected_task={TASK_ID}")
             return 0
         if args.command == "build-image":
-            tag, image_id = build_image(root, args.run_id)
-            print(f"image={tag} image_id={image_id}")
+            tag, image_id, build_log_path = build_image(root, args.run_id)
+            print(f"image={tag} image_id={image_id} build_log={build_log_path}")
             return 0
         if args.command == "start":
             identity = start_world(root, args.run_id, probe_script=args.probe_script)
