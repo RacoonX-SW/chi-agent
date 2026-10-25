@@ -1,6 +1,6 @@
 ## Context
 
-本轮恢复 B 规格与离线实现，复用 Python 3.12 开发镜像；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、C 与官方判分继续暂停。使用现有官方环境，不重写模拟器或评测器。
+本轮恢复 C 代码开发的离线控制部分，复用 Python 3.12 开发镜像；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。使用现有官方环境，不重写模拟器或评测器。
 
 规划基线任务为 `pa_t018_t018_o001_p01_new_referral_provider`。其输入、静态工具和运行限制见 `docs/task-walkthrough-pa-t018.md`。该文档没有真实评分，不能充当完成基线的证据。
 
@@ -45,6 +45,16 @@
 探针的 request 记录包含 `endpoint`/`api` 路由元数据，是离线配置封套，不能直接当作 SDK 关键字或 HTTP JSON body 提交。真实适配还需分离路由与 wire payload，验证 SDK 序列化、返回字段、真实 tokenizer/预算计量及服务商行为；本轮 UTF-8 字节界限只约束本地合成输入。
 
 字段依据于 2026-10-26 核对的 DeepSeek 官方 [Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/) 与 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)：带 tools 的后续请求需保留此前 `reasoning_content`。这里只据此准备请求与离线契约，不据文档推断账号、SDK 或服务商的实际响应。
+
+### C 的离线执行控制
+
+新增集中式 `c_run_control.py`，职责是单题尝试的生命周期与证据控制，不新增第二套模型工具循环。`plan` 纯验证/预览，不写目录或 claim；`rehearse` 只调用注入的纯 Python 合成 backend；`live` 在 claim/外部边界前明确拒绝。既有 `build_experiment_config()` 和 `evaluate_budget()` 分别提供单题形状及保守入场核算，`run_baseline.py` 与 D0 gate 不改。agent/model 显式保存为候选，不能从历史命令示例推断已冻结 DeepAgents 或真实 runner。
+
+运行目录按 run-id 独占，尝试按 synthetic namespace 下的 campaign/task/upstream 身份独占，防止换 run-id 重试。claim 用独占文件创建并在外部动作前持久化；进程不确定退出也保留 claim，不加自动过期/重置。演练消耗的只是 synthetic claim，真实 C 机会不被占用。完整输出与 claim 留在忽略目录。
+
+backend 仅表示创建新世界、运行一次和清理边界。返回的资源必须核对本次所有权；部分创建失败通过显式 handle 交还清理信息，未知/外来资源不猜测删除。清理放 finally，主失败和清理失败分栏记录，退出零也仅称演练结束。用量缺失不按零计，合成费用、已知前缀与真实 null 结果分开；B 已花费参与同一 5 元规划，不给 C 另加预算。此处是入场控制，不能声称已接上官方 runner 内的逐请求拦截或实现对任意阻塞函数的硬取消。
+
+真实 C 前置仍包括真实 B profile/harness 往返、逐请求预算/重试接点、实际价格/用量来源以及已核实的无评分入口。当前 `cb experiment run` 未有已验证的跳过 judge 路径；本轮不伪造参数、修改 judge 或把合成 C 演练当作自主任务。后续正式接入须单独核对这些边界。
 
 ## Suggested Evidence
 

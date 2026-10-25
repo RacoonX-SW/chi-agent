@@ -249,6 +249,66 @@ The system SHALL provide a bounded synthetic Chat Completions probe while real m
 - **AND** a duplicate or unsafe run identity cannot overwrite existing evidence
 - **AND** raw local evidence remains in ignored paths and diagnostics do not emit credentials or arbitrary exception payloads
 
+### Requirement: Offline stage C single-attempt execution control
+
+The system SHALL prepare stage C lifecycle and single-attempt control without enabling model API calls, an official task attempt or grading. An offline rehearsal SHALL exercise control boundaries only; it SHALL NOT satisfy the real stage C execution scenario.
+
+#### Scenario: C code development is resumed while real execution stays paused
+
+- **GIVEN** only C code and offline verification are authorized
+- **WHEN** the C CLI is used
+- **THEN** `plan` validates and previews without filesystem mutations or backend calls
+- **AND** `rehearse` uses an explicitly synthetic, pure-Python backend with no network, Docker API, MCP, credentials or official task resources
+- **AND** `live` is refused before an attempt claim or backend call, without weakening the existing baseline gate
+- **AND** the manifest labels candidate settings as configured/unverified, real usage/cost/reward as null and official task success as unknown
+- **AND** CLI exit zero is limited to a valid plan or completed rehearsal; blocked/conflicting/failed rehearsals exit one, while invalid input and live refusal exit two
+
+#### Scenario: One campaign is invoked using different run identities
+
+- **GIVEN** a campaign, selected task and fixed upstream identity in the synthetic namespace
+- **WHEN** a rehearsal passes preflight and is about to start an external boundary
+- **THEN** a persistent attempt claim is acquired by atomic exclusive creation before that boundary
+- **AND** another run-id or concurrent process in the same scope cannot start a second attempt
+- **AND** existing, incomplete or malformed claims fail closed; claims are not deleted or expired after success, failure, timeout or uncertain termination
+- **AND** synthetic claims never occupy or modify a real stage C attempt namespace
+
+#### Scenario: The plan or evidence identity is invalid
+
+- **GIVEN** malformed identifiers, non-integer/bool limits, more than one task/attempt/concurrent run, retries or an existing output directory
+- **WHEN** preflight or output allocation occurs
+- **THEN** the controller rejects the request before backend calls and preserves existing evidence
+- **AND** preflight-blocked plans do not consume an attempt
+- **AND** the candidate configuration reuses the existing single-task builder without inventing an upstream skip-grading option
+
+#### Scenario: Shared B and C budget evidence is incomplete
+
+- **GIVEN** one shared cap, prior B spend, input/output reservation limits and identified pricing/conversion evidence
+- **WHEN** the controller checks entry to the attempted run
+- **THEN** it reuses the existing budget decision with B spend included rather than resetting the cap for C
+- **AND** missing/invalid spend, usage, pricing or conversion stops the relevant next boundary and is not treated as zero
+- **AND** spend/pricing/conversion source identifiers are non-empty, non-whitespace strings; a returned total exceeding the shared cap is recorded as exceeded rather than rehearsal completion
+- **AND** synthetic amounts and sources remain separate from real B/C accounting, with any unknown totals null
+- **AND** entry-level checks and requested model limits are not reported as verified per-request enforcement inside the official runner
+
+#### Scenario: Rehearsal provisions a fresh world and runs once
+
+- **GIVEN** valid synthetic inputs and an acquired claim
+- **WHEN** the injected backend is invoked
+- **THEN** the order is fresh-world creation, one runner invocation and finally cleanup of confirmed owned resources
+- **AND** primary failure, timeout and cleanup failure are recorded separately without automatic retries or replay
+- **AND** a partial-creation failure can provide an explicit owned cleanup handle; missing or foreign handles are not guessed or deleted
+- **AND** evidence and claim remain readable after cleanup; only allowlisted metadata and fixed error classifications are persisted
+- **AND** confirmed ownership includes valid handle shape and the current run/campaign/namespace identity, including on partial creation; malformed handles yield a controlled terminal result without cleanup of unknown resources
+- **AND** evidence-write failure after resource creation does not prevent attempted cleanup; persistence errors are separate from primary and cleanup errors, retained claims prevent replay, and incomplete evidence is never reported as complete
+
+#### Scenario: The runner returns or a limit is reached
+
+- **GIVEN** a synthetic result or injected timeout
+- **WHEN** the controller records its terminal state
+- **THEN** exit zero represents at most rehearsal completion, never official task success
+- **AND** bad/missing usage or invalid results cannot produce a successful rehearsal accounting record
+- **AND** task time and model limits are passed as candidate constraints, with real blocking-call cancellation, request hooks and actual official environment integration explicitly unverified
+
 ### Requirement: Respect the selected first-round runtime budget
 
 The system SHALL account for the selected 5 CNY first-round runtime budget across integration checks and the one task attempt, separately from coding costs. A budget plan SHALL NOT lift an active implementation or paid-run pause.

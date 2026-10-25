@@ -1,5 +1,15 @@
 当前阶段、授权与已通过身份以 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md) 为准。以下已勾选项保留其历史验收范围；旧双代理人数与开发版本不覆盖现行协作约定。
 
+## C. Offline single-attempt lifecycle control
+
+用户于 2026-10-26 恢复 C 代码开发；本轮先实现单题执行控制的离线部分，不恢复真实模型、官方任务试跑或判分，不代勾真实 C 的 3.2。一个 Luna High 实现，主代理独立审核。
+
+- [x] C.1 Verify the user's merged B PR, fast-forward the untouched C branch to latest origin/main, and specify offline/live boundaries.
+- [x] C.2 Implement a pure plan and an explicitly synthetic rehearsal controller, reusing the existing single-task builder and budget gate without modifying the real baseline guard.
+- [x] C.3 Persist an exclusive attempt claim scoped by campaign/task/upstream, isolated from real attempts; prevent duplicate/concurrent replay and evidence overwrite.
+- [x] C.4 Verify shared-budget provenance, one fresh-world/runner invocation, partial-failure/timeout/cleanup handling and retained null real outcomes in Docker (implementation self-test; independent acceptance follows C.5).
+- [x] C.5 Freeze and independently verify the candidate, update the existing learning ledger and one phase report, then push a base=main PR for user review/merge. PR identity and next action are recorded only in REVIEW_STATE; user merge remains pending.
+
 ## B. Offline preparation of model/tool exchanges
 
 用户于 2026-10-26 恢复 B 规格与离线实现，一个 `gpt-6-luna` / `high` 实现子代理，主代理独立审核。真实参赛模型 API、C 与官方判分继续暂停；本节不代勾 1.5 的真实 provider/harness 验证。

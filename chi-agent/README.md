@@ -87,6 +87,34 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 成功示例经过两轮合成工具往返和最终响应。请求中的工具选择与返回都来自手写 fixture；候选模型/模式字段、用量及价格只作离线协议和合成核算检查，真实 provider usage/cost 与 official reward 为 null。真实模型传输、官方 runner 集成与任务执行须另行恢复并验证，实际验收范围见 [审核状态](reviews/REVIEW_STATE.md)。
 
+## C：离线单次执行控制
+
+`scripts/c_run_control.py` 的 `plan` 只预览候选单题配置，不写文件或取得 attempt claim；`rehearse` 在纯 Python 合成 backend 上演练创建、运行一次和清理；`live` 明确拒绝。复用现有镜像，从本项目目录执行：
+
+```sh
+# 只读计划；没有真实 B 花费等证据时，预算就绪状态仍为 unknown
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD/scripts:/workspace/scripts:ro" \
+  -w /workspace chi-agent-dev:latest /opt/venv/bin/python \
+  scripts/c_run_control.py plan --run-id c-plan-001 \
+  --agent openai-agents --model deepseek-flash
+
+# 独立的合成演练账本，只挂脚本和输出
+mkdir -p runs/c-demo-001
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD/scripts:/workspace/scripts:ro" \
+  -v "$PWD/runs/c-demo-001:/workspace/runs/c-control:rw" \
+  -w /workspace chi-agent-dev:latest /opt/venv/bin/python \
+  scripts/c_run_control.py rehearse --run-id c-demo-001 \
+  --agent openai-agents --model deepseek-flash --scenario success
+```
+
+同一输出根目录对应一个持久合成账本，按固定 campaign/task/upstream 限制一次尝试；换 run-id 仍会 `claim_conflict`，相同 run-id 则拒绝覆盖原证据。失败、超时和清理错误也保留 claim。需要独立测试场景时使用另外的隔离合成目录；这些目录不接入真实执行机会或账单。
+
+其他 `--scenario`：`runner-rejection`、`timeout`、`partial-create`、`cleanup-failure`、`unknown-budget`、`missing-usage`。manifest 位于映射输出中的 `runs/<run-id>/manifest.json`，claim 位于 `claims/synthetic/`。有效 plan/完整演练退出 0，阻断、claim 冲突或受控失败退出 1，非法输入/已有 run-id/live 拒绝退出 2。
+
+配置中的 harness、模型轮数和时限均为 `configured_unverified`；此处没有运行官方世界或 Agent，也未实现官方 runner 的逐请求预算 hook、硬取消或跨目录/跨主机全局幂等。真实 usage/cost/reward 为 null，任务结果 unknown；实际验收及真实接入缺口只查 [审核状态](reviews/REVIEW_STATE.md)。
+
 ## 资料来源
 
 核对日期：2026-10-19。

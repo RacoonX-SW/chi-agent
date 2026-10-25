@@ -1,6 +1,6 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline/B` 的规格与离线实现，真实模型 API、C 与官方判分继续暂停。实现分工按 [当前工作流](../docs/luna-subagent-workflow.md)，不操作 Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline/C` 的离线执行控制开发，真实模型 API、真实 C 尝试与官方判分继续暂停。实现分工按 [当前工作流](../docs/luna-subagent-workflow.md)，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 
