@@ -14,7 +14,7 @@
 | 参赛预算 | 首轮真实 B/C 合计 5 元人民币的规划不变，写代码另计；本轮仅 synthetic 核算，不消费或重置该预算，真实模型调用未恢复 |
 | 本轮验证 | 最终固定快照的全量、补充协议/预算/错误、实际 CLI/跨进程身份、README、原 offline/dry-run 均通过；完整命令/结果/限制只见接入层审核，不由子代理自测替代 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [C 离线 PR #6](https://github.com/xsw932187210-cell/chi-agent/pull/6) 已由用户合并；本轮离线通过，准备推送接入层分支并创建 base=main PR 交用户审核合并。真实模型、真实 C 与判分不自动恢复 |
+| PR 与下一步 | [C 离线 PR #6](https://github.com/xsw932187210-cell/chi-agent/pull/6) 已由用户合并；[接入层 PR #7](https://github.com/xsw932187210-cell/chi-agent/pull/7) 已推送创建并附加本聊天，base=main、head=codex/model-runner-integration，待用户审核决定合并。真实模型、真实 C 与判分不自动恢复 |
 | 未验证项 | 真实 provider transport/认证、真实 tokenizer/framing/用量/价格/账单、官方世界中的 B/C 及判分认证；其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 无真实 trial、official reward 或实测模型费用；新直接 runner 入口只完成离线验证，live 固定拒绝，原 cb/Harbor 的 ungraded gate 继续 unsupported |
 

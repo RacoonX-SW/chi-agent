@@ -86,7 +86,7 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] I.2 Separate route/client and wire body; verify actual SDK serialization and same-model/endpoint reasoning plus tool-result history through the fixed official loop.
 - [x] I.3 Enforce per-request budget/input/output/round guards, account returned usage before validation, and verify zero HTTP/Agents/tool/outer retries including failure paths.
 - [x] I.4 Prepare direct-runner ungraded plan/offline entries with synthetic tools/HTTP only, preserved evidence and live rejection; leave real B/C and grading paused.
-- [ ] I.5 Freeze implementation, independently review in Docker, record limitations in one stage report and create a base=main PR for user review/merge.
+- [x] I.5 Freeze implementation, independently review in Docker, record limitations in one stage report and create a base=main PR for user review/merge. PR identity and next action are recorded only in REVIEW_STATE; user merge remains separate.
 
 ## 3. Verify and hand over
 
