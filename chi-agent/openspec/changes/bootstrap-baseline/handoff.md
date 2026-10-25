@@ -1,5 +1,7 @@
 # 执行器交接：bootstrap-baseline
 
+当前验收（2026-10-25）：A 官方环境与无模型只读 MCP 已在 `a173409416cf111ec2f2cc45247aa592b5ddd77e` 独立通过；30 个实时工具、合法空参数读取、正常清理及证据持久化已实测，见 [A 审核](../../../reviews/bootstrap-baseline-a-review.md)。B/C、参赛模型 API 与官方判分继续暂停；以下 D0 更新和历史授权按当时状态保留，不覆盖当前 A 结果。
+
 更新：2026-10-25（Asia/Shanghai）。**当前由主代理协调两个 Luna High 子代理实现/Docker 自测，再独立审核、教学与 GitHub 存储；候选 b7f8941 已通过当前开发目标下的 D0 离线代码验收。** 显式 `gpt-6-luna` / `high`，共享文件串行改、分析可并行，不操作或监控 Antigravity。R1–R8 在报告范围内关闭，当前无 D0 代码返工；OpenSpec CLI、官方 Python 3.12/其他架构与真实接入未验证，真实入口仍因缺核算依据阻断。A/B/C、参赛模型 API 和官方判分继续暂停，见 [双 Luna 工作流](../../../docs/luna-subagent-workflow.md)。
 
 后续代码及文档交付统一使用 `codex/<任务名>` 工作分支：主代理先建分支、协调实现并独立检查，再推送和创建目标为 main 的 PR；用户审核并决定是否合并。主代理不直接开发/推送 main、不自行合并。下方历史 main 身份只记录已发生的交付，不能当作后续继续在 main 工作的授权，详见 [GitHub 工作流](../../../docs/github-workflow.md)。

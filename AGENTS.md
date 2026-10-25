@@ -27,9 +27,10 @@
 - 审核优先比较稳定的基线/候选提交，读取差异、相关入口/调用者/配置与必要测试；不默认重读整个项目或执行器对话。首次接手、范围扩大或接口/依赖变化时按实际影响补读。记录“上次已审核”和“上次已通过”的提交，不能因摘要或 commit/push 就认定实现正确；见 `chi-agent/reviews/REVIEW_STATE.md`。
 - 用户最新要求 Docker 内开发、调试与交付：项目依赖安装、下载、测试、运行均在容器中进行，宿主机保留 Docker Desktop、编辑器/Git 与源码。不要把宿主机缺 uv/OpenSpec/PyYAML 当成必须在 Mac 安装的缺口。自有开发容器首选 Python 3.13；固定官方任务镜像实际为 Python 3.12，保持其兼容性并分别验证。详见 `chi-agent/docs/docker-workflow.md`；实现由两个 Luna High 子代理承担，主代理独立检查。
 
-- 当前只恢复 `bootstrap-baseline/D0`；双 Luna 实现候选 `b7f894130df93ded69496576b83e6dcdcab7e56b` 已通过当前 Python 3.13/aarch64 开发目标下的离线代码验收（80 项项目测试、21 项独立补充检查），R1–R8 在报告范围内关闭，当前无 D0 代码返工。OpenSpec CLI、官方 Python 3.12/其他架构及真实接入未验证；真实执行因缺核算依据仍阻断。A/B/C、参赛模型 API 和官方判分仍暂停，用户完整验收未单独记录。写代码的 Luna 与参赛 Agent 的运行时模型分开，5 元参赛运行预算不变。
-- 准备审计见 `chi-agent/docs/preparation-audit-2026-10-24.md`；后续 D0 复审已验证 Python 3.13/aarch64 开发镜像、依赖锁和离线检查，但完整数据/官方源码 checkout 与真实接入仍缺。Kaggle 已接受规则，Writeup 尚未创建；最终材料截止为北京时间 2026-11-16 07:59。
-- 已完成一个官方任务的静态拆解；尚未运行真实 trial，实时 MCP schema、官方 reward、耗时和成本仍未测。
+- 用户本轮明确恢复 `bootstrap-baseline/A`：仅官方环境与不触发模型的只读 MCP 接入；B/C、参赛模型 API 与官方判分继续暂停。工作分支 `codex/bootstrap-baseline-a` 从最新 `origin/main` `d1c9f991eda9548974838f72578078f9f9b05757` 建立，接手时学习文档差异已完整保存到 `a1b505d`。两个 `gpt-6-luna` / `high` 子代理按环境与探针接力实现，主代理独立审核；真实环境/工具状态以本轮审核记录为准，不能由离线测试推断。
+- D0 通过身份仍为 `b7f894130df93ded69496576b83e6dcdcab7e56b`（Python 3.13/aarch64，80 项项目测试、21 项独立补充检查）；当前无 D0 代码返工。无评分 Agent 入口和模型核算仍有缺口，用户完整验收未单独记录。开发子代理与参赛运行时模型分开，5 元参赛运行预算不变。
+- 准备审计见 `chi-agent/docs/preparation-audit-2026-10-24.md`；本轮 A 已在 Docker 取得固定官方 checkout 和 7 文件任务子集，完整数据集未下载。Python 3.13/3.12 aarch64 的离线检查已独立通过；实际官方镜像/任务世界/MCP 以 `chi-agent/reviews/bootstrap-baseline-a-review.md` 为准。Kaggle 已接受规则，Writeup 尚未创建；最终材料截止为北京时间 2026-11-16 07:59。
+- A 的官方环境与无模型只读 MCP 已在 `a173409416cf111ec2f2cc45247aa592b5ddd77e` 独立验收：Python 3.12.15/arm64，30 个实时工具，`cases.list_cases({})` 返回有效空列表，正常清理与证据持久化已复验；原始 schema/响应留在忽略目录，见 A 报告。尚无 Agent trial、模型往返、官方 reward 或实测模型成本；B/C 仍暂停。
 - 用户当前不为本地判分开通 Anthropic，最终私有评分交主办方。先规划离线、工具接入与无评分的真实开发执行；官方 reward 保持未知，部分 Claude 模拟对话的本地验证也需单独记录缺口。见 chi-agent/docs/development-preparation-2026-10-21.md。
 - 判分认证更正：固定上游还支持 Claude Code 登录/OAuth，不可再断言原生 API Key 是唯一方式。用户目前仅有免费 Claude 账号，没有订阅；确定性检查可考察函数级非语义分支，完整评分仍未具备。见 chi-agent/docs/judge-access-options-2026-10-21.md。
 - 网页工作台等独立产品形态已经搁置。医院侧是起步调试方向，不代表整个竞赛最终范围。
