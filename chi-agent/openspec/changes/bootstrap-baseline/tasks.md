@@ -8,7 +8,7 @@
 - [x] C.2 Implement a pure plan and an explicitly synthetic rehearsal controller, reusing the existing single-task builder and budget gate without modifying the real baseline guard.
 - [x] C.3 Persist an exclusive attempt claim scoped by campaign/task/upstream, isolated from real attempts; prevent duplicate/concurrent replay and evidence overwrite.
 - [x] C.4 Verify shared-budget provenance, one fresh-world/runner invocation, partial-failure/timeout/cleanup handling and retained null real outcomes in Docker (implementation self-test; independent acceptance follows C.5).
-- [ ] C.5 Freeze and independently verify the candidate, update the existing learning ledger and one phase report, then push a base=main PR for user review/merge.
+- [x] C.5 Freeze and independently verify the candidate, update the existing learning ledger and one phase report, then push a base=main PR for user review/merge. PR identity and next action are recorded only in REVIEW_STATE; user merge remains pending.
 
 ## B. Offline preparation of model/tool exchanges
 
