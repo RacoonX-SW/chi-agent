@@ -15,7 +15,7 @@ User authorization: stage A only; B/C, runtime model API calls and official grad
 - [x] A.3 Verify model-free startup and containerized scheduling, mount sources, service endpoints and isolated task state using the existing Docker engine.
 - [x] A.4 Discover live role MCP schemas and call only individually audited, allowlisted read tools; retain local raw evidence and permitted report metadata.
 - [x] A.5 Check rejection, failure/timeout reporting, resource ownership/cleanup and evidence persistence; retain B/C guards and run affected offline regressions. Normal cleanup was observed twice; abnormal branches use synthetic checks.
-- [ ] A.6 Stop implementation, fix a candidate, independently review/recheck it, update learning/status records and create a base=main PR for the user to review and merge.
+- [x] A.6 Stop implementation, fix a candidate, independently review/recheck it, update learning/status records and create a base=main PR for the user to review and merge (PR #2 created; user review/merge remains the user's decision).
 
 Do not mark combined Agent execution tasks complete based on these stage A checks. OpenSpec CLI and other architectures require their own evidence.
 

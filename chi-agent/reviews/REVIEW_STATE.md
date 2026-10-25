@@ -14,7 +14,7 @@
 | 实现交接 | Luna 一修 R2/R3，Luna 二先分析后修 R5；共享文件串行交接，两个子代理停止写入后固定候选，未创建下级代理 |
 | 当前 A 离线证据 | 固定 git archive 快照；Python 3.13.17 与 3.12.15 / aarch64 各 115 项项目测试、19 subtests 和 6 项独立方法通过；A controller 20 项锁定依赖 uv pip check 通过，Compose 校验通过；离线检查无网络/无 socket/无真实凭据 |
 | A 真实证据 | Python 3.12.15/arm64；30 个实时工具；cases.list_cases({}) 返回有效空列表；新世界独立复验与自测 schema/响应哈希一致；两次正常清理且证据保留 |
-| 下一步 | 交付本轮 PR，由用户审核并决定合并；下一独立阶段从用户合并后的最新 origin/main 新建分支。B/C、模型 API 与官方判分不自动恢复 |
+| PR 与下一步 | [PR #2](https://github.com/xsw932187210-cell/chi-agent/pull/2)，base=main、head=codex/bootstrap-baseline-a，已创建并交付；用户审核/决定合并，主代理未合并或启用 auto-merge。下一独立阶段从用户合并后的最新 origin/main 新建分支；B/C、模型 API 与官方判分不自动恢复 |
 | 未验证项 | OpenSpec CLI、其他架构、真实 daemon 中断/网络故障的全部清理分支、模型往返、无评分 Agent 入口及判分认证；正常清理已实测，异常/超时用合成检查 |
 | 真实运行 | 无真实 trial、官方 reward、实测模型用量/费用；当前真实入口因缺核算依据仍阻断，ungraded 另明确 unsupported |
 

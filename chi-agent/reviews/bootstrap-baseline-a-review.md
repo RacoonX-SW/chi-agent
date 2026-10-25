@@ -92,4 +92,6 @@ docker compose -f compose.a.yaml run --rm a-control python scripts/a_environment
 
 ## 保留边界
 
+交付入口：[PR #2](https://github.com/xsw932187210-cell/chi-agent/pull/2)，base=main，head=codex/bootstrap-baseline-a；代码通过身份仍为 a173409，后续审核/学习/PR 记录提交不冒充新实现验收。
+
 不运行 B/C、模型 API、模拟对话或官方判分，不生成 scorecard，不消耗或扩大 5 元参赛运行预算。OpenSpec CLI、其他架构、模型限额/账单、无评分 Agent 入口与正式任务能力仍需各自阶段验证。PR 由用户审核并决定合并；主代理不合并、不启用 auto-merge。
