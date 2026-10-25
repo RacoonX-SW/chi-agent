@@ -42,6 +42,8 @@
 
 固定上游 `openai_agents_runner.py` 的 `run_agent()` 通过 SDK `Runner.run()` 管理循环；`_build_model_settings()` 配置推理强度和 SDK 重试，`_agent_model_context()` 的专用 reasoning 回放只用于 Tinker 路由。当前 harness 没有合成工具替换或逐请求预算回调开关，本地工具还包含真实 shell/文件操作。因此本轮采用独立合成协议探针，**不声称官方 runner 已接入或验证通过**。后续真实 B 恢复时，再针对该 SDK/runner 核实最小扩展、关闭未授权重试并接通逐请求门禁；不能直接用本轮探针替代 C。
 
+探针的 request 记录包含 `endpoint`/`api` 路由元数据，是离线配置封套，不能直接当作 SDK 关键字或 HTTP JSON body 提交。真实适配还需分离路由与 wire payload，验证 SDK 序列化、返回字段、真实 tokenizer/预算计量及服务商行为；本轮 UTF-8 字节界限只约束本地合成输入。
+
 字段依据于 2026-10-26 核对的 DeepSeek 官方 [Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/) 与 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)：带 tools 的后续请求需保留此前 `reasoning_content`。这里只据此准备请求与离线契约，不据文档推断账号、SDK 或服务商的实际响应。
 
 ## Suggested Evidence
