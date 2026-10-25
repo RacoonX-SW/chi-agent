@@ -8,7 +8,7 @@
 - [x] E.2 Pin the development image to Python 3.12, select the same minor version for the controller venv, and resolve/check both dependency locks inside Docker without unrelated upgrades.
 - [x] E.3 Build the changed images with existing caches; verify actual interpreters, installed distributions, dependency consistency, offline project tests and production readiness/dry-run entry points. Default dev remains without a Docker socket.
 - [x] E.4 Reuse an existing fixed official image and local resources for a fresh model-free A probe from the migrated controller. Do not rebuild/download official fixtures, handbooks or browser binaries; verify image identity, MCP response, cleanup and retained evidence.
-- [ ] E.5 Freeze the candidate, independently verify it, record one bounded review and the user's learning feedback, then push a base=main PR for user review/merge. Do not treat the environment migration as a new Agent trial or official score.
+- [x] E.5 Freeze the candidate, independently verify it, record one bounded review and the user's learning feedback, then push a base=main PR for user review/merge (PR #4 created; merge remains the user's decision). Do not treat the environment migration as a new Agent trial or official score.
 
 最新取舍：本地官方评分暂缓，先做离线与无评分开发验证；缺 Anthropic 不阻塞全部开发。已核对的 cb CLI 未见直接跳过 judge 的开关，开发入口需实际验证。见 `docs/development-preparation-2026-10-21.md`。
 
