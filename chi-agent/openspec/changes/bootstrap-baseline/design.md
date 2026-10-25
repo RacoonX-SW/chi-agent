@@ -1,8 +1,6 @@
 ## Context
 
-2026-10-25 A 已独立验收：用户授权两个 `gpt-6-luna` / `high` 子代理实现官方环境及无模型只读 MCP；最终代码 `a173409` 的真实证据见 A 审核。B/C、参赛模型 API 与官方判分继续暂停。工作分支 `codex/bootstrap-baseline-a` 从最新 `origin/main` `d1c9f991eda9548974838f72578078f9f9b05757` 创建，保留接手时学习文档差异。下方旧“仅 D0”状态作为历史，不覆盖本次结果。
-
-候选 b7f8941 已通过当前 Python 3.13/aarch64 开发目标下的 D0 离线代码验收，真实官方任务尚未运行；实现由主代理协调两个 `gpt-6-luna` / `high` 子代理完成，再独立审核。共享文件串行写入，见 [双 Luna 工作流](../../../docs/luna-subagent-workflow.md)。A/B/C、参赛模型 API 和官方判分仍暂停，真实入口仍因缺核算依据阻断。使用现有官方环境，不重写模拟器或评测器。OpenSpec CLI 尚未运行，官方 Python 3.12/其他架构未验证。
+本轮恢复 B 规格与离线实现，复用 Python 3.12 开发镜像；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、C 与官方判分继续暂停。使用现有官方环境，不重写模拟器或评测器。
 
 规划基线任务为 `pa_t018_t018_o001_p01_new_referral_provider`。其输入、静态工具和运行限制见 `docs/task-walkthrough-pa-t018.md`。该文档没有真实评分，不能充当完成基线的证据。
 
@@ -35,6 +33,15 @@
 21. 自有交付镜像的受控构建上下文排除秘密与受限资料，运行时由有权限方提供。固定官方镜像包含手册，不能直接当作无受限内容的分发镜像。最终复现不依赖开发容器临时手装的包，且记录目标架构与实际镜像身份。
 22. A 使用独立入口，不绕过 `run_baseline.py` 对 B/C 的预算/判分阻断。只在 A 调度容器提供引擎权限，默认离线 `dev` 保持无 socket。先核对固定官方启动钩子与具体工具 handler，再允许无模型环境启动和脚本查询；不向任何容器提供参赛模型或 judge 凭据。静态源码、实时发现、具体调用和业务任务完成分别取证。
 23. A 探针只接受经源码核实的逐工具允许列表及现场兼容 schema；不按命名空间整类放行，不执行提交、发送、模拟对话或评分。未知工具/参数契约停止并记录；原始响应留在忽略目录。每次独立检查创建新的调试世界并只清理自己拥有的容器/网络，已保存证据须在清理后仍可读取。
+24. B 离线入口独立于任务入口：轻量 Chat Completions 适配层接受注入的合成传输，生产 CLI 只提供离线 fixture，没有 HTTP/SDK 客户端、凭据加载、官方 MCP 或真实任务通路。离线环境使用 `--network none`，不挂 Docker socket、手册、病例或 verifier；不调整原 `run_baseline.py` 的真实执行门禁。
+25. 候选请求显式记录 `deepseek-flash`、`https://api.deepseek.com`、Chat Completions、`thinking={type:enabled}`、`reasoning_effort=high` 和有限 `max_tokens`，只表示已准备的格式。逐条保留 assistant 的 `content`、不透明 `reasoning_content` 与工具调用，再按 `tool_call_id` 追加结果。至少两次连续工具往返及最终响应才证明本轮合成示例闭环；模型字段是 fixture 值，真实模式、返回模型和兼容性仍未知。
+26. 每次注入传输前复用 D0 的 `evaluate_budget`；预算、轮数、最大输入/输出、累计用量、价格/换算依据须可核对。示例价格、用量与成本明确标为 synthetic，真实 provider usage/cost 为 null，既有 B/C 预算不被重置或消费。缺失/无效证据停止后续请求；响应格式/未知工具/参数/重复 ID 在工具执行前拒绝，整批调用先校验再派发。传输拒绝/超时不自动重试，已执行效果与后续请求错误分别保留。
+
+### B 的参考 runner 接入缺口
+
+固定上游 `openai_agents_runner.py` 的 `run_agent()` 通过 SDK `Runner.run()` 管理循环；`_build_model_settings()` 配置推理强度和 SDK 重试，`_agent_model_context()` 的专用 reasoning 回放只用于 Tinker 路由。当前 harness 没有合成工具替换或逐请求预算回调开关，本地工具还包含真实 shell/文件操作。因此本轮采用独立合成协议探针，**不声称官方 runner 已接入或验证通过**。后续真实 B 恢复时，再针对该 SDK/runner 核实最小扩展、关闭未授权重试并接通逐请求门禁；不能直接用本轮探针替代 C。
+
+字段依据于 2026-10-26 核对的 DeepSeek 官方 [Thinking Mode](https://api-docs.deepseek.com/guides/thinking_mode/) 与 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)：带 tools 的后续请求需保留此前 `reasoning_content`。这里只据此准备请求与离线契约，不据文档推断账号、SDK 或服务商的实际响应。
 
 ## Suggested Evidence
 
