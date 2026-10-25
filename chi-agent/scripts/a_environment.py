@@ -29,6 +29,8 @@ RESOURCE_LABEL = "org.chi-agent.a-environment"
 PROBE_CONTAINER_PATH = "/tmp/a_tools_probe.py"
 API_TIMEOUT_SEC = 30
 RUN_TIMEOUT_SEC = 900
+BUILD_IDLE_TIMEOUT_SEC = 300
+BUILD_TIMEOUT_SEC = 1800
 STARTUP_TIMEOUT_SEC = 180
 PROBE_TIMEOUT_SEC = 45
 CLEANUP_TIMEOUT_SEC = 30
@@ -370,7 +372,10 @@ def build_image(root: Path, run_id: str) -> tuple[str, str, str]:
     _dockerfile(context)
     client = _docker()
     try:
-        return _build_image(root, run_id, client=client, deadline=time.monotonic() + RUN_TIMEOUT_SEC, context=context)
+        return _build_image(
+            root, run_id, client=client,
+            deadline=time.monotonic() + BUILD_TIMEOUT_SEC, context=context,
+        )
     finally:
         client.close()
 
@@ -401,16 +406,19 @@ def _build_image(
     cancelled = False
     close_error_type: str | None = None
     image_id: str | None = None
+    request_timeout_sec: float | None = None
 
     try:
         # Use the low-level API: unlike ImageCollection.build(), it returns the
         # response stream without first consuming the whole build internally.
+        # The overall deadline is checked between events; an in-flight read is
+        # bounded by its request's idle timeout, up to BUILD_IDLE_TIMEOUT_SEC.
         with log_path.open("x", encoding="utf-8") as log:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError("A-stage overall build deadline expired")
-            request_timeout = min(API_TIMEOUT_SEC, remaining)
-            with _api_timeout(client, deadline):
+            with _build_api_timeout(client, deadline) as request_timeout:
+                request_timeout_sec = request_timeout
                 stream = client.api.build(
                     path=str(context),
                     dockerfile="docker/Dockerfile",
@@ -427,7 +435,7 @@ def _build_image(
                 if time.monotonic() >= deadline:
                     raise TimeoutError("A-stage overall build deadline expired")
                 try:
-                    with _api_timeout(client, deadline):
+                    with _build_api_timeout(client, deadline):
                         event = next(progress)
                 except StopIteration:
                     if time.monotonic() >= deadline:
@@ -472,6 +480,9 @@ def _build_image(
             "status": "cancelled" if cancelled else ("success" if failure is None else "failed"),
             "cancelled": cancelled,
             "event_count": event_count,
+            "build_idle_timeout_sec": BUILD_IDLE_TIMEOUT_SEC,
+            "request_timeout_sec": request_timeout_sec,
+            "deadline_checked": "between_build_events",
             "image_id": image_id,
             "error_type": type(failure).__name__ if failure is not None else None,
             "stream_close_error_type": close_error_type,
@@ -531,6 +542,22 @@ def _api_timeout(client, deadline: float):
     api.timeout = min(API_TIMEOUT_SEC, remaining)
     try:
         yield
+    finally:
+        api.timeout = previous
+
+
+@contextmanager
+def _build_api_timeout(client, deadline: float):
+    """Bound one build request/read by its idle limit and remaining run time."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("A-stage overall build deadline expired")
+    api = client.api
+    previous = getattr(api, "timeout", API_TIMEOUT_SEC)
+    timeout = min(BUILD_IDLE_TIMEOUT_SEC, remaining)
+    api.timeout = timeout
+    try:
+        yield timeout
     finally:
         api.timeout = previous
 

@@ -195,7 +195,8 @@ def test_low_level_build_stream_succeeds_and_never_calls_high_level_build(tmp_pa
     client = _BuildClient(stream)
     tag, image_id, log_relative = a._build_image(
         tmp_path, "build-success", client=client,
-        deadline=time.monotonic() + 2, context=_synthetic_build_context(tmp_path),
+        deadline=time.monotonic() + a.BUILD_IDLE_TIMEOUT_SEC + 120,
+        context=_synthetic_build_context(tmp_path),
     )
     assert tag == "chi-agent-a-world:build-success"
     assert image_id == "sha256:synthetic-image"
@@ -203,12 +204,46 @@ def test_low_level_build_stream_succeeds_and_never_calls_high_level_build(tmp_pa
     assert client.build_kwargs["forcerm"] is True
     assert client.build_kwargs["decode"] is True
     assert client.build_kwargs["labels"] == a._resource_labels("build-success")
+    assert client.build_kwargs["timeout"] == a.BUILD_IDLE_TIMEOUT_SEC
+    assert client.api.timeout == a.API_TIMEOUT_SEC
     assert client.high_level_build_calls == 0
     assert stream.closed
     log_path = tmp_path / log_relative
     assert [json.loads(line) for line in log_path.read_text().splitlines()] == [
         {"status": "building"}, {"stream": "finished"}
     ]
+
+
+def test_standalone_image_build_gets_a_long_finite_deadline_and_other_apis_stay_30s(
+    tmp_path: Path, monkeypatch
+) -> None:
+    context = _synthetic_build_context(tmp_path)
+    client = SimpleNamespace(close=lambda: None)
+    observed = {}
+
+    def fake_build(_root, _run_id, *, client, deadline, context):
+        observed["remaining"] = deadline - time.monotonic()
+        observed["client"] = client
+        observed["context"] = context
+        return "tag", "sha256:id", "runs/a-environment/builds/log.jsonl"
+
+    monkeypatch.setattr(a, "prepare_build_context", lambda _root: context)
+    monkeypatch.setattr(a, "_docker", lambda: client)
+    monkeypatch.setattr(a, "_build_image", fake_build)
+    assert a.build_image(tmp_path, "bounded-build") == (
+        "tag", "sha256:id", "runs/a-environment/builds/log.jsonl"
+    )
+    assert a.BUILD_TIMEOUT_SEC == 1800
+    assert a.BUILD_IDLE_TIMEOUT_SEC == 300
+    assert a.RUN_TIMEOUT_SEC == 900
+    assert 1798 < observed["remaining"] <= a.BUILD_TIMEOUT_SEC
+    assert observed["client"] is client
+    assert observed["context"] == context
+
+    api_client = SimpleNamespace(api=SimpleNamespace(timeout=60))
+    with a._api_timeout(api_client, time.monotonic() + 60):
+        assert api_client.api.timeout == a.API_TIMEOUT_SEC
+    assert api_client.api.timeout == 60
 
 
 def test_low_level_build_deadline_closes_stream_and_preserves_raw_events(tmp_path: Path) -> None:
