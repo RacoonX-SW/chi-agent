@@ -305,6 +305,45 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             self.assertEqual(stored["pending"]["run_id"], "pending-authority")
             journal.close()
 
+    def test_released_or_closed_journal_cannot_bind_or_send_with_a_guard(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first = transport.SyntheticJournal(root, "finished-owner")
+            first.finish(success=False)
+            second = transport.SyntheticJournal(root, "current-owner")
+            lower = _CountingTransport(httpx.Response(200, json={}))
+            for label in ("released", "closed"):
+                if label == "closed":
+                    first.close()
+                with self.subTest(state=label), self.assertRaises(transport.GuardFailure) as error:
+                    transport.GuardedTransport(profile=profile, journal=first, lower=lower,
+                                               ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
+                                               validate_response=lambda _payload: None,
+                                               allowed_tool_names={"synthetic_lookup", "synthetic_format"})
+                self.assertEqual(error.exception.code, "journal_lock_not_owned")
+                self.assertEqual(lower.calls, 0)
+            second.finish(success=False)
+            second.close()
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first = transport.SyntheticJournal(root, "guarded-owner")
+            lower = _CountingTransport(httpx.Response(200, json={}))
+            guard = transport.GuardedTransport(profile=profile, journal=first, lower=lower,
+                                               ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
+                                               validate_response=lambda _payload: None,
+                                               allowed_tool_names={"synthetic_lookup", "synthetic_format"})
+            first.finish(success=False)
+            first.close()
+            second = transport.SyntheticJournal(root, "replacement-owner")
+            with self.assertRaises(transport.GuardFailure) as error:
+                asyncio.run(guard.handle_async_request(_request()))
+            self.assertEqual(error.exception.code, "journal_lock_not_owned")
+            self.assertEqual(lower.calls, 0)
+            second.finish(success=False)
+            second.close()
+
     def test_missing_shared_journal_cannot_reset_prior_spend_from_other_run_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

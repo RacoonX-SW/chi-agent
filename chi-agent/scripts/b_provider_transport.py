@@ -85,6 +85,7 @@ class SyntheticJournal:
         self.state_path = root / "synthetic-accounting.json"
         self.lock_path = root / ".synthetic-namespace.lock"
         self.lock_fd: int | None = None
+        self._lock_owned = False
         self.closed = False
         self.run_doc: dict[str, Any] = {
             "schema": "chi-b-synthetic-journal-v1", "namespace": "synthetic",
@@ -103,10 +104,12 @@ class SyntheticJournal:
                 raise GuardFailure("synthetic_journal_path_invalid", "preflight")
             self.lock_fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
             fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            self._lock_owned = True
         except BlockingIOError:
             if self.lock_fd is not None:
                 os.close(self.lock_fd)
                 self.lock_fd = None
+                self._lock_owned = False
             raise GuardFailure("synthetic_namespace_busy_or_pending", "preflight") from None
         except OSError:
             if self.lock_fd is not None:
@@ -115,6 +118,7 @@ class SyntheticJournal:
                 except OSError:
                     pass
                 self.lock_fd = None
+                self._lock_owned = False
             raise GuardFailure("synthetic_journal_unavailable", "preflight") from None
         try:
             if not self.state_path.exists() and any(root.glob("*.json")):
@@ -197,11 +201,17 @@ class SyntheticJournal:
             raise GuardFailure("synthetic_journal_invalid", "preflight") from None
 
     def _write_state(self) -> None:
+        self._require_active_lock()
         _atomic_replace(self.state_path, _json_bytes(self.state))
         self._persist_run()
 
     def _persist_run(self) -> None:
+        self._require_active_lock()
         _atomic_replace(self.run_path, _json_bytes(self.run_doc))
+
+    def _require_active_lock(self) -> None:
+        if self.closed or not self._lock_owned or self.lock_fd is None:
+            raise GuardFailure("journal_lock_not_owned", "persistence")
 
     @property
     def cumulative_spend(self) -> Decimal:
@@ -209,6 +219,7 @@ class SyntheticJournal:
 
     def reserve(self, profile: ProviderProfile, request: httpx.Request, body: dict[str, Any], raw: bytes,
                 max_output: int, round_number: int) -> Decimal:
+        self._require_active_lock()
         if not is_validated_profile(profile):
             raise GuardFailure("profile_untrusted_or_stale", "request_guard")
         # The persisted namespace is authoritative, even if this Guard/Ledger
@@ -254,6 +265,7 @@ class SyntheticJournal:
         return reserve
 
     def settle(self, actual_cost: Decimal, incoming: int, outgoing: int) -> bool:
+        self._require_active_lock()
         pending = self.state.get("pending")
         if not isinstance(pending, dict) or pending.get("run_id") != self.run_id:
             raise GuardFailure("journal_pending_missing", "response_accounting")
@@ -276,6 +288,7 @@ class SyntheticJournal:
         return within_reserve
 
     def mark_unknown(self, code: str) -> None:
+        self._require_active_lock()
         pending = self.state.get("pending")
         if isinstance(pending, dict):
             pending["status"] = "unknown"
@@ -292,6 +305,7 @@ class SyntheticJournal:
             self.run_doc["persistence_error_code"] = "journal_write_failed"
 
     def mark_error(self, code: str) -> None:
+        self._require_active_lock()
         self.run_doc["primary_error_code"] = code
         if self.state.get("pending") is None:
             self.run_doc["state"] = "incomplete"
@@ -301,6 +315,7 @@ class SyntheticJournal:
             self.run_doc["persistence_error_code"] = "journal_write_failed"
 
     def set_metadata(self, metadata: dict[str, Any]) -> None:
+        self._require_active_lock()
         self.run_doc["metadata"] = metadata
         try:
             self._persist_run()
@@ -310,6 +325,7 @@ class SyntheticJournal:
 
     def set_result(self, *, send_count: int, effects: list[dict[str, Any]],
                    observed_tool_history: list[dict[str, Any]], final_response: str | None) -> None:
+        self._require_active_lock()
         self.run_doc["transport_send_count"] = send_count
         self.run_doc["effects"] = effects
         self.run_doc["observed_tool_history"] = observed_tool_history
@@ -340,6 +356,7 @@ class SyntheticJournal:
             raise GuardFailure("journal_write_failed", "persistence") from None
 
     def record_effect(self, effect: dict[str, Any]) -> None:
+        self._require_active_lock()
         if (not isinstance(effect, dict) or set(effect) != {"tool", "call_id", "result"}
                 or not isinstance(effect["tool"], str) or not isinstance(effect["call_id"], str)
                 or not isinstance(effect["result"], str)):
@@ -354,6 +371,7 @@ class SyntheticJournal:
             raise GuardFailure("journal_write_failed", "tool_execution") from None
 
     def finish(self, *, success: bool, cleanup_error_code: str | None = None) -> None:
+        self._require_active_lock()
         self.run_doc["cleanup_error_code"] = cleanup_error_code
         if self.state.get("pending") is not None:
             self.run_doc["state"] = "unknown"
@@ -363,7 +381,7 @@ class SyntheticJournal:
             self.run_doc["state"] = "incomplete"
         complete = success and self.state.get("pending") is None and self.run_doc.get("primary_error_code") is None and cleanup_error_code is None
         if complete:
-            self.run_doc["state"] = "finalizing"
+            self.run_doc["state"] = "complete"
         self._persist_run()
         if self.state.get("pending") is None:
             try:
@@ -372,14 +390,12 @@ class SyntheticJournal:
                 self.run_doc["cleanup_error_code"] = "namespace_lock_release_failed"
                 self.run_doc["persistence_error_code"] = "namespace_lock_release_failed"
                 self.run_doc["state"] = "incomplete"
-                try:
-                    self._persist_run()
-                except Exception:
-                    pass
+                if self._lock_owned:
+                    try:
+                        self._persist_run()
+                    except Exception:
+                        pass
                 raise
-            if complete:
-                self.run_doc["state"] = "complete"
-                self._persist_run()
 
     def _release_lock(self, *, strict: bool = False) -> None:
         failure = False
@@ -390,6 +406,7 @@ class SyntheticJournal:
             except OSError:
                 failure = True
             self.lock_fd = None
+            self._lock_owned = False
         if failure and strict:
             raise GuardFailure("namespace_lock_release_failed", "persistence")
 
@@ -405,6 +422,7 @@ class SyntheticJournal:
             except OSError:
                 pass
             self.lock_fd = None
+            self._lock_owned = False
 
 
 class GuardedTransport(httpx.AsyncBaseTransport):
@@ -417,6 +435,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                  observe_request: Callable[[dict[str, Any]], None] | None = None):
         if not is_validated_profile(profile):
             raise GuardFailure("profile_untrusted_or_stale", "preflight")
+        journal._require_active_lock()
         if (type(cap_cny) is not Decimal or not cap_cny.is_finite() or cap_cny <= 0
                 or cap_cny > profile.budget_cap_cny or cap_cny != journal.cap_cny):
             raise GuardFailure("synthetic_cap_invalid", "preflight")
@@ -574,6 +593,11 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         return incoming, outgoing
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        try:
+            self.journal._require_active_lock()
+        except GuardFailure as exc:
+            self.ledger.error_code = exc.code
+            raise
         try:
             raw = request.content
             body = self._validate_request(request, raw)
