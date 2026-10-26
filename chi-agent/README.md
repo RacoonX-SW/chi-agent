@@ -247,7 +247,9 @@ docker run --rm --network none --read-only --tmpfs /tmp \
   /package/scripts/evaluation_entry.py plan
 ```
 
-独立 SDK/vendor 只读挂载和多任务合成运行命令见包内 `RUN_EVALUATION.md`，源文件为 [运行说明](docs/evaluation-entry-runbook.md)。输出根须与包路径双向无重叠；同 evaluation 可继续另一合法 task/attempt，换 run-id 不能重演占用的 attempt。默认合成场景每 trial 估算超过 5 元，不会触发开发限额。包验证/完整演练退出 0，受控演练失败退出 1，输入或身份拒绝/live 退出 2；缺 SDK/vendor 时 `plan` 报告缺口仍退出 0，`preflight` 退出 1，完整依赖核对后 preflight 才退出 0。认证和执行许可始终分别报告。
+空依赖卷安装、独立 SDK/vendor 挂载和多任务合成命令见包内 `RUN_EVALUATION.md`，源文件为 [运行说明](docs/evaluation-entry-runbook.md)。新增 `launch-rehearse` 接受官方 runner 形态的 `--instruction-file`、`--mcp-url`、`--logs-dir`，实际传入已有受控 runner，保留独立日志；该模式仍固定合成 HTTP/MCP/本地工具，URL 不触发联网。运行可用 `/usr/local/bin/python -S` 和新依赖卷，避免借用基础开发 venv 的包。
+
+输出根须与包路径双向无重叠；日志目标必须新建并与包、输入和账目隔离。同 evaluation 可继续另一合法 task/attempt，换 run-id 不能重演占用的 attempt。默认合成场景每 trial 估算超过 5 元，不会触发开发限额。包验证/完整演练退出 0，受控演练失败退出 1，输入或身份拒绝/live 退出 2；缺 SDK/vendor 时 `plan` 报告缺口仍退出 0，`preflight` 退出 1，完整依赖核对后 preflight 才退出 0。认证和执行许可始终分别报告；实际官方服务/模型/C/判分与 F.5 完整正式冻结仍须后续验收。
 
 ## 资料来源
 

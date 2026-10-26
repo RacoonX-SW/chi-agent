@@ -112,9 +112,13 @@ def _read_regular_bounded(path: Path, limit: int, code: str, *, expected_size: i
     """Read a regular no-follow file with a hard byte bound and stable size checks."""
     fd = None
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        path_details = os.lstat(path)
+        if not stat.S_ISREG(path_details.st_mode) or path_details.st_size > limit:
+            raise ValueError
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
         before = os.fstat(fd)
-        if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+        if (not stat.S_ISREG(before.st_mode) or before.st_size > limit
+                or before.st_dev != path_details.st_dev or before.st_ino != path_details.st_ino):
             raise ValueError
         if expected_size is not None and before.st_size != expected_size:
             raise BundleFailure(size_mismatch_code or code)

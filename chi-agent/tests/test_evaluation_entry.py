@@ -4,7 +4,10 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import shutil
+import socket
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -188,6 +191,106 @@ class EvaluationEntryBundleTests(unittest.TestCase):
         self.assertEqual(result["safe_error_code"], "real_execution_paused")
         self.assertFalse(result["config_read"])
         self.assertFalse(result["bundle_read"])
+
+    def test_launch_inputs_accept_bounded_utf8_and_http_mcp_but_reject_unsafe_paths(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = self.build(temp)
+            input_dir = Path(temp) / "external-input"
+            input_dir.mkdir()
+            instruction_file = input_dir / "task.txt"
+            instruction_file.write_text("Use the tools to help the user.", encoding="utf-8")
+            output_root = Path(temp) / "output"
+            logs_dir = Path(temp) / "logs" / "one"
+            logs_dir.parent.mkdir()
+            instruction, url, normalized_logs = entry._read_launch_inputs(
+                instruction_file, "http://localhost:8020/mcp", logs_dir, root, output_root)
+            self.assertEqual(instruction, "Use the tools to help the user.")
+            self.assertEqual(url, "http://localhost:8020/mcp")
+            self.assertTrue(normalized_logs.is_absolute())
+
+            for invalid in ("http://user:pass@localhost:8020/mcp", "http://localhost:8020/mcp?x=1",
+                            "http://localhost:8020/health", "http://localhost/mcp",
+                            "file:///tmp/mcp", "http://localhost:99999/mcp"):
+                with self.subTest(url=invalid), self.assertRaises(entry.EntryFailure) as error:
+                    entry._read_launch_inputs(instruction_file, invalid, logs_dir, root, output_root)
+                self.assertEqual(error.exception.code, "evaluation_mcp_url_invalid")
+
+            fixture = input_dir / "tasks.jsonl"
+            fixture.write_text("{}\n", encoding="utf-8")
+            with self.assertRaises(entry.EntryFailure) as error:
+                entry._read_launch_inputs(fixture, "http://localhost:8020/mcp", logs_dir, root, output_root)
+            self.assertEqual(error.exception.code, "evaluation_fixture_input_forbidden")
+
+            instruction_file.write_bytes(b"\xff")
+            with self.assertRaises(entry.EntryFailure) as error:
+                entry._read_launch_inputs(instruction_file, "http://localhost:8020/mcp", logs_dir, root, output_root)
+            self.assertEqual(error.exception.code, "evaluation_instruction_invalid")
+
+    def test_launch_logs_destination_must_be_new_disjoint_and_external(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = self.build(temp)
+            input_dir = Path(temp) / "input"
+            input_dir.mkdir()
+            instruction_file = input_dir / "instruction.txt"
+            instruction_file.write_text("instruction", encoding="utf-8")
+            output_root = Path(temp) / "output"
+            for logs_dir in (root / "logs", output_root / "logs", input_dir):
+                with self.subTest(logs=logs_dir), self.assertRaises(entry.EntryFailure):
+                    entry._read_launch_inputs(instruction_file, "https://docker-host:8020/mcp",
+                                              logs_dir, root, output_root)
+            existing = Path(temp) / "existing-logs"
+            existing.mkdir()
+            with self.assertRaises(entry.EntryFailure) as error:
+                entry._read_launch_inputs(instruction_file, "https://docker-host:8020/mcp",
+                                          existing, root, output_root)
+            self.assertEqual(error.exception.code, "evaluation_logs_destination_exists")
+
+    def test_fifo_instruction_is_rejected_promptly_and_other_nonregular_inputs_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = self.build(temp)
+            external = Path(temp) / "external"
+            external.mkdir()
+            fifo = external / "instruction.fifo"
+            os.mkfifo(fifo)
+            logs_parent = Path(temp) / "logs"
+            logs_parent.mkdir()
+            command = (
+                "import sys; from pathlib import Path; "
+                "sys.path.insert(0, sys.argv[1]); import evaluation_entry as e; "
+                "import b_provider_profile as p; "
+                "e.ROOT=Path(sys.argv[2]); e.ENTRY_CONFIG_PATH=Path(sys.argv[2])/'profiles/evaluation-entry.json'; "
+                "p.PROFILE_PATH=Path(sys.argv[2])/'profiles/deepseek-flash-prepared.json'; "
+                "raise SystemExit(e.main(['launch-rehearse','--evaluation-id','fifo-test',"
+                "'--task-id','task','--attempt-id','attempt','--run-id','fifo-run',"
+                "'--output-root',sys.argv[3],'--instruction-file',sys.argv[4],"
+                "'--mcp-url','http://localhost:8020/mcp','--logs-dir',sys.argv[5]]))"
+            )
+            completed = subprocess.run(
+                [sys.executable, "-c", command, str(PROJECT_ROOT / "scripts"), str(root),
+                 str(Path(temp) / "output"), str(fifo), str(logs_parent / "runner")],
+                capture_output=True, text=True, timeout=3,
+            )
+            self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["safe_error_code"], "evaluation_instruction_invalid")
+            self.assertFalse((logs_parent / "runner").exists())
+
+            directory = external / "instruction-directory"
+            directory.mkdir()
+            with self.assertRaises(entry.EntryFailure) as error:
+                entry._read_launch_inputs(directory, "http://localhost:8020/mcp",
+                                          logs_parent / "directory-logs", root, Path(temp) / "output")
+            self.assertEqual(error.exception.code, "evaluation_instruction_invalid")
+
+            socket_path = external / "instruction.socket"
+            local_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                local_socket.bind(str(socket_path))
+            finally:
+                local_socket.close()
+            with self.assertRaises(entry.EntryFailure) as error:
+                entry._read_launch_inputs(socket_path, "http://localhost:8020/mcp",
+                                          logs_parent / "socket-logs", root, Path(temp) / "output")
+            self.assertEqual(error.exception.code, "evaluation_instruction_invalid")
 
     def test_plan_can_report_missing_runtime_but_preflight_is_nonzero(self):
         with tempfile.TemporaryDirectory() as temp:

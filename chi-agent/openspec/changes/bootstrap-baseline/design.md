@@ -98,6 +98,16 @@ entry 必须从自身包路径解析资源，不能依赖 cwd 或开发文件回
 
 验收在无原仓库挂载的干净包上实际启动 CLI，以同一默认策略完成多条估算超过 5 元的合成链路；覆盖 unknown 后独立任务、重复 attempt、换包/config、文件/manifest 篡改、禁止参数、源/目标 symlink 或父目录跳转、构建部分失败以及只读/暂停边界。包是 identified/offline preparation，实际官方任务和正式配送继续单独核对，不上传本地导出包或受限产物。
 
+### H：官方启动接点与独立安装复现
+
+核对固定上游 `4444a07` 的 `openai_agents_harness.run()`、runner 的 `parse_args/main/run_agent/write_result` 和 `docker/entrypoint.sh`。harness 将 instruction 写至 `/tmp/instruction.md`，选择 task 配置中首个有 URL 的 MCP server；runner 接受 `--instruction-file`、`--mcp-url`、`--logs-dir`（默认 `/logs/agent` 或 `OPENAI_AGENTS_LOGS_DIR`），写 `run_result.json`、可用的 `run_output.txt` 与 `trace.jsonl`，harness 另将 stdout/stderr 保存为 `run_log.txt`。所选 provider task.toml 指向 `http://localhost:8020/mcp`；该 localhost 属于官方任务容器。entrypoint 分别等待 provider 8020、payer 8100、CM 8200 的 `/mcp`，8023 health 不等于 MCP endpoint。调用方跨容器时必须显式提供从其网络位置可达的地址；本轮 URL 只传给合成 MCP factory，并不证明网络可达。
+
+H 沿 G 的包/策略/claim 链路添加外部启动输入，最小扩展已有 `_rehearse`/`_run_offline` 参数，不复制官方 runner 或改上游 harness。instruction 只从明确的有界 UTF-8 普通文件读取；拒绝路径跳转/symlink、评分 fixtures 路径与非法 URL，不依赖内容关键词猜测是否是隐藏答案。合法 HTTP(S) `/mcp` 地址不得含凭据/query/fragment；地址不决定 transport，所有离线调用仍固定 MockTransport 与 synthetic MCP/本地工具。元数据保存输入 hash/URL/日志归属与合成来源，原始任务/轨迹只留本地。
+
+日志目录必须新建独占，禁止覆盖包、输入或持久账目；与 output root 的账目/claim 子树隔离。读取输入/验证配置和依赖之后才预留尝试，runner 前持久 claim；预留后的失败保留证据与日志，重复 task/attempt 不因换 run-id 或日志目录重跑。保留 runner 原生产物和 stdout/stderr，不能用自写成功文件替代 runner 输出，也不能把 runner 的合成成本称为官方账单。live 在读文件/配置/client/claim 前继续拒绝。
+
+独立安装使用本轮新建空 Docker 卷，以干净包内 `requirements-model.lock` 和安装脚本执行哈希校验安装，检查实际 Python、SDK、完整锁定版本与依赖一致性；不使用既有 SDK 安装目录，不改变锁、不在宿主安装。复用基础镜像意味着基础层没有重新构建，包仍需要独立授权的固定 vendor，不称自包含镜像或新机器/其他架构通过。安装后禁网运行只读干净包，分别挂载外部输入/输出/vendor/新依赖，换 cwd，验证正常、失败、重复和暂停边界。F.5 涉及的当前主办方限制、最终模型/资源/正式启动与实际运行授权继续另行验收。
+
 ### C 的离线执行控制
 
 新增集中式 `c_run_control.py`，职责是单题尝试的生命周期与证据控制，不新增第二套模型工具循环。`plan` 纯验证/预览，不写目录或 claim；`rehearse` 只调用注入的纯 Python 合成 backend；`live` 在 claim/外部边界前明确拒绝。既有 `build_experiment_config()` 和 `evaluate_budget()` 分别提供单题形状及保守入场核算，`run_baseline.py` 与 D0 gate 不改。agent/model 显式保存为候选，不能从历史命令示例推断已冻结 DeepAgents 或真实 runner。

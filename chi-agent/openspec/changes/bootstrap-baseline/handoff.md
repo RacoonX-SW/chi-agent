@@ -1,10 +1,16 @@
 # 执行器交接：bootstrap-baseline
 
-当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮开发 G 的评测专用默认入口与干净目录包，并做 Docker 离线验收；按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理，主代理负责规格、独立审核、教学与 GitHub。真实 API、真实 C 尝试与官方判分继续暂停，F.5 完整最终系统冻结留待后续。下方 F/接入层/C/B/A/D0 交接保留其阶段范围。
+当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮开发 H 官方启动接点与空依赖安装复现；按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理，主代理负责规格、独立审核、教学与 GitHub。G 已通过范围保留，真实 API、真实 C 和官方判分继续暂停，F.5 完整正式冻结留待后续。
 
 后续代码及文档交付统一使用 `codex/<任务名>` 工作分支：主代理先建分支、协调实现并独立检查，再推送和创建目标为 main 的 PR；用户审核并决定是否合并。主代理不直接开发/推送 main、不自行合并。下方历史 main 身份只记录已发生的交付，不能当作后续继续在 main 工作的授权，详见 [GitHub 工作流](../../../docs/github-workflow.md)。
 
-## 当前 G 专用入口与干净目录包交接（2026-10-26）
+## 当前 H 官方启动与独立安装交接（2026-10-27）
+
+按 [H 契约](specs/benchmark-readiness/spec.md#requirement-official-launch-contract-through-the-guarded-offline-runner) 与 H 任务。实现代理独占 scripts、tests、必要 JSON，主代理独占 Markdown/Git；固定 vendor 与既有锁不改。外部 instruction 文件、MCP URL 和外部日志目录实际传入已有官方 run_agent，模型 transport、MCP 与本地工具仍是合成边界。不得由参数创建真实客户端、调用官方世界或 verifier；live 最先拒绝。输入有界读取，拒绝无效编码/类型/路径；URL 不含凭据、query 或 fragment，明确记录它未被联网访问。日志独占且不覆盖包、输入或账目，失败仍保留已有产物；无日志不得误报成功。
+
+主代理负责新建本轮空依赖卷，以包内已有哈希锁安装并检查一致性，再从固定候选导出的只读包、不同 cwd 实际验收。依赖可从包仓库下载，不注入模型凭据，不复用已安装 SDK 卷或读取宿主 Python 环境。vendor 作为独立有权限的只读资源，不随包上传；受限数据和隐藏评分输入不得进入模型上下文。程序可启动、依赖复现、真实执行许可与 F.5 最终冻结分别判断。
+
+## G 专用入口与干净目录包交接（2026-10-26）
 
 按 [专用交付入口契约](specs/benchmark-readiness/spec.md#requirement-dedicated-evaluation-delivery-entry-without-development-fallback)、[G 设计](design.md#g评测专用入口与干净目录包) 和 G 任务。实现代理负责 entry、bundle/config/manifest、相应测试以及必要的公共 helper 参数接点；root独占 Markdown/Git，包括作为包输入的 [运行说明](../../../docs/evaluation-entry-runbook.md)。默认固定 evaluation record_only，无 local/cap/prior 参数回退；live 最先拒绝。
 

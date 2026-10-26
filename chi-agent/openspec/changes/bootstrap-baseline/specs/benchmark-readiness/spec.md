@@ -484,6 +484,34 @@ The delivery SHALL provide one explicit evaluation entry and a clean, identified
 - **AND** the evaluation registry binds verified entry/configuration/package identity as well as policy/profile; changing the package cannot silently continue the same evaluation
 - **AND** all usage/cost/reward claims remain synthetic/unknown as appropriate, with no real task world, credentials, external model or judge invoked
 
+### Requirement: Official launch contract through the guarded offline runner
+
+The evaluation entry SHALL accept the pinned runner's instruction-file, MCP URL and logs-directory contract without bypassing the existing record_only policy, attempt claims, protocol guards or actual-execution pause. The offline launch SHALL use the real pinned SDK/official loop with synthetic HTTP, MCP and local-tool boundaries only.
+
+#### Scenario: External task input reaches the official loop
+
+- **GIVEN** a clean package, independently mounted fixed vendor/locked SDK, a bounded UTF-8 instruction file and a valid streamable-http MCP URL
+- **WHEN** the actual evaluation CLI rehearses the launch from an unrelated cwd
+- **THEN** that instruction and URL reach the official run_agent call, and the captured serialized model input contains that instruction
+- **AND** no MCP/model network connection, protected fixture, credential or verifier is used
+- **AND** uniquely reserved external logs retain run_result.json, available run_output.txt/trace.jsonl and run_log.txt, with synthetic provenance and null real usage/cost/reward
+
+#### Scenario: Invalid input, failure or repeated attempt
+
+- **GIVEN** missing/oversized/invalid-encoding/nonregular/unsafe input, an invalid URL, overlapping logs, an existing log destination or an occupied task/attempt
+- **WHEN** launch is requested
+- **THEN** it is rejected without overwriting input/package/evidence or replaying the occupied attempt
+- **AND** a failure after reservation retains its evidence and claim; missing runner artifacts cannot be reported as successful launch
+- **AND** live still refuses before input/configuration/credential/client/claim access, regardless of provided launch arguments
+
+#### Scenario: Independent dependency installation and isolated startup
+
+- **GIVEN** a newly created empty Docker dependency volume and the unchanged hashed model lock/installer from the clean package
+- **WHEN** dependencies are installed inside the existing Python 3.12 Docker environment and the package is then launched offline without the original repository or installed SDK layer mounted
+- **THEN** the actual installation, versions, consistency check, instruction/URL flow, retained artifacts and failure boundaries are recorded independently
+- **AND** record_only/null cap and local shared 5 CNY behavior are preserved
+- **AND** this evidence is reported as offline installation/startup reproduction, leaving F.5, real API/C and official grading unverified
+
 ### Requirement: Preserve official outcomes
 
 The system SHALL preserve official verifier outcomes and distinguish process failures from scored task failures.
