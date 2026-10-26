@@ -26,7 +26,7 @@ class PreparationFailure(Exception):
 
 ROOT = Path(__file__).resolve().parents[1]
 SYNTHETIC_RUNS = ROOT / "runs" / "b-provider-preflight" / "synthetic"
-SYNTHETIC_REHEARSAL_CAP = Decimal("10")
+SYNTHETIC_REHEARSAL_CAP = Decimal("5")
 APPLICATION_SOURCE_FILES = (
     "scripts/model_runner_adapter.py", "scripts/b_provider_profile.py",
     "scripts/b_provider_transport.py", "scripts/b_live_preflight.py",

@@ -12,13 +12,14 @@ import json
 import os
 import re
 import tempfile
+import fcntl
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable
 
 import httpx
 
-from b_provider_profile import ProviderProfile, is_validated_profile
+from b_provider_profile import ProviderProfile, is_validated_profile, load_profile
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -63,14 +64,20 @@ class SyntheticJournal:
     """Exclusive bounded journal for synthetic rehearsals; never a real ledger."""
 
     def __init__(self, root: Path, run_id: str, *, initial_prior_cny: Decimal = Decimal(0),
-                 prior_source: str = "synthetic-rehearsal-prior-v1", cap_cny: Decimal = Decimal("10")):
+                 prior_source: str = "synthetic-rehearsal-prior-v1", cap_cny: Decimal = Decimal("5")):
         if not isinstance(run_id, str) or RUN_ID_RE.fullmatch(run_id) is None:
             raise GuardFailure("run_id_invalid", "preflight")
-        if (not isinstance(prior_source, str) or re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", prior_source) is None
-                or not isinstance(initial_prior_cny, Decimal) or not initial_prior_cny.is_finite()
-                or initial_prior_cny < 0 or not isinstance(cap_cny, Decimal)
+        if (type(prior_source) is not str or re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", prior_source) is None
+                or type(initial_prior_cny) is not Decimal or not initial_prior_cny.is_finite()
+                or initial_prior_cny < 0 or type(cap_cny) is not Decimal
                 or not cap_cny.is_finite() or cap_cny <= 0):
             raise GuardFailure("synthetic_prior_invalid", "preflight")
+        try:
+            pinned_cap = Decimal(load_profile().raw["budget"]["cap_cny"])
+        except Exception:
+            raise GuardFailure("profile_untrusted_or_stale", "preflight") from None
+        if cap_cny > pinned_cap:
+            raise GuardFailure("synthetic_cap_invalid", "preflight")
         self.root = root
         self.run_id = run_id
         self.cap_cny = cap_cny
@@ -94,10 +101,20 @@ class SyntheticJournal:
             root.mkdir(parents=True, exist_ok=True)
             if self.state_path.is_symlink():
                 raise GuardFailure("synthetic_journal_path_invalid", "preflight")
-            self.lock_fd = os.open(self.lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
-        except FileExistsError:
+            self.lock_fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            if self.lock_fd is not None:
+                os.close(self.lock_fd)
+                self.lock_fd = None
             raise GuardFailure("synthetic_namespace_busy_or_pending", "preflight") from None
         except OSError:
+            if self.lock_fd is not None:
+                try:
+                    os.close(self.lock_fd)
+                except OSError:
+                    pass
+                self.lock_fd = None
             raise GuardFailure("synthetic_journal_unavailable", "preflight") from None
         try:
             if not self.state_path.exists() and any(root.glob("*.json")):
@@ -113,15 +130,19 @@ class SyntheticJournal:
                     "prior_spend_cny": str(initial_prior_cny), "prior_source": prior_source.strip(),
                     "known_settled_cost_cny": "0", "known_input_tokens": 0,
                     "known_output_tokens": 0, "usage_complete": True, "pending": None,
-                    "profile_sha256": None,
+                    "profile_sha256": None, "cap_cny": str(cap_cny),
                 }
                 self._write_state()
             else:
                 self.state = self._read_state()
-                if self.state.get("pending") is not None:
+                if self.state.get("pending") is not None or self.state.get("usage_complete") is not True:
                     raise GuardFailure("synthetic_prior_pending_unknown", "preflight")
                 if self.state.get("namespace") != "synthetic":
                     raise GuardFailure("synthetic_journal_invalid", "preflight")
+                stored_cap = Decimal(self.state["cap_cny"])
+                if cap_cny != stored_cap:
+                    raise GuardFailure("synthetic_cap_invalid", "preflight")
+                self.cap_cny = stored_cap
         except GuardFailure:
             self._release_lock()
             raise
@@ -136,29 +157,36 @@ class SyntheticJournal:
         try:
             data = json.loads(self.state_path.read_text(encoding="utf-8"), parse_constant=lambda _s: (_ for _ in ()).throw(ValueError()))
             required = {"schema", "namespace", "prior_spend_cny", "prior_source", "known_settled_cost_cny",
-                        "known_input_tokens", "known_output_tokens", "usage_complete", "pending", "profile_sha256"}
-            legacy = required - {"profile_sha256"}
-            if isinstance(data, dict) and set(data) == legacy and data.get("pending") is None:
-                # Add only the new profile identity slot; prior spend and usage
-                # aggregates remain byte-for-byte values from the old state.
-                data["profile_sha256"] = None
+                        "known_input_tokens", "known_output_tokens", "usage_complete", "pending", "profile_sha256", "cap_cny"}
             if (not isinstance(data, dict) or set(data) != required
                     or data.get("schema") != "chi-b-synthetic-accounting-v1"
                     or data.get("namespace") != "synthetic"
-                    or not isinstance(data.get("prior_source"), str) or not data["prior_source"].strip()
+                    or type(data.get("prior_source")) is not str
+                    or re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", data["prior_source"]) is None
                     or type(data.get("usage_complete")) is not bool):
+                raise ValueError
+            if type(data.get("prior_spend_cny")) is not str or type(data.get("known_settled_cost_cny")) is not str or type(data.get("cap_cny")) is not str:
                 raise ValueError
             prior = Decimal(data["prior_spend_cny"])
             settled = Decimal(data["known_settled_cost_cny"])
-            if not prior.is_finite() or not settled.is_finite() or prior < 0 or settled < 0:
+            cap = Decimal(data["cap_cny"])
+            pinned_cap = Decimal(load_profile().raw["budget"]["cap_cny"])
+            if (not prior.is_finite() or not settled.is_finite() or not cap.is_finite()
+                    or prior < 0 or settled < 0 or cap <= 0 or cap > pinned_cap):
                 raise ValueError
             if any(type(data.get(key)) is not int or not 0 <= data[key] <= 10**12
                    for key in ("known_input_tokens", "known_output_tokens")):
                 raise ValueError
             if (data["profile_sha256"] is not None
-                    and (not isinstance(data["profile_sha256"], str) or len(data["profile_sha256"]) != 64)):
+                    and (type(data["profile_sha256"]) is not str or re.fullmatch(r"[0-9a-f]{64}", data["profile_sha256"]) is None)):
+                raise ValueError
+            if (settled > 0 or data["known_input_tokens"] > 0 or data["known_output_tokens"] > 0) and data["profile_sha256"] is None:
                 raise ValueError
             if data["pending"] is not None and not isinstance(data["pending"], dict):
+                raise ValueError
+            if data["pending"] is not None and (data["usage_complete"] is not False
+                    or type(data["pending"].get("run_id")) is not str
+                    or type(data["pending"].get("reserve_upper_cost_cny")) is not str):
                 raise ValueError
             if data["pending"] is None and data["usage_complete"] is not True:
                 raise GuardFailure("synthetic_prior_usage_unknown", "preflight")
@@ -181,6 +209,19 @@ class SyntheticJournal:
 
     def reserve(self, profile: ProviderProfile, request: httpx.Request, body: dict[str, Any], raw: bytes,
                 max_output: int, round_number: int) -> Decimal:
+        if not is_validated_profile(profile):
+            raise GuardFailure("profile_untrusted_or_stale", "request_guard")
+        # The persisted namespace is authoritative, even if this Guard/Ledger
+        # instance was freshly constructed after another request became pending.
+        persisted = self._read_state()
+        if persisted.get("pending") is not None or persisted.get("usage_complete") is not True:
+            raise GuardFailure("synthetic_prior_pending_unknown", "request_guard")
+        if persisted != self.state:
+            raise GuardFailure("synthetic_journal_state_changed", "request_guard")
+        if type(self.cap_cny) is not Decimal or not self.cap_cny.is_finite() or self.cap_cny <= 0:
+            raise GuardFailure("synthetic_cap_invalid", "request_guard")
+        if self.cap_cny != Decimal(self.state["cap_cny"]):
+            raise GuardFailure("synthetic_cap_invalid", "request_guard")
         reserve = (
             Decimal(profile.input_reserve_tokens) * profile.input_price
             + Decimal(max_output) * profile.output_price
@@ -344,21 +385,11 @@ class SyntheticJournal:
         failure = False
         if self.lock_fd is not None:
             try:
+                fcntl.flock(self.lock_fd, fcntl.LOCK_UN)
                 os.close(self.lock_fd)
             except OSError:
                 failure = True
             self.lock_fd = None
-        try:
-            self.lock_path.unlink()
-            directory_fd = os.open(self.root, os.O_RDONLY)
-            try:
-                os.fsync(directory_fd)
-            finally:
-                os.close(directory_fd)
-        except FileNotFoundError:
-            failure = failure or strict
-        except OSError:
-            failure = True
         if failure and strict:
             raise GuardFailure("namespace_lock_release_failed", "persistence")
 
@@ -386,6 +417,9 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                  observe_request: Callable[[dict[str, Any]], None] | None = None):
         if not is_validated_profile(profile):
             raise GuardFailure("profile_untrusted_or_stale", "preflight")
+        if (type(cap_cny) is not Decimal or not cap_cny.is_finite() or cap_cny <= 0
+                or cap_cny > profile.budget_cap_cny or cap_cny != journal.cap_cny):
+            raise GuardFailure("synthetic_cap_invalid", "preflight")
         self.profile = profile
         self.journal = journal
         self.lower = lower
@@ -509,18 +543,24 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             details = raw["prompt_tokens_details"]
             if not isinstance(details, dict):
                 raise GuardFailure("usage_unknown", "response_accounting")
-            if "cached_tokens" in details or "cache_miss_tokens" in details:
-                hits = details.get("cached_tokens")
-                misses = details.get("cache_miss_tokens")
-                if (isinstance(hits, bool) or not isinstance(hits, int) or hits < 0
-                        or isinstance(misses, bool) or not isinstance(misses, int) or misses < 0
-                        or hits + misses != incoming):
+            if "cached_tokens" in details:
+                hits = details["cached_tokens"]
+                if type(hits) is not int or not 0 <= hits <= incoming:
+                    raise GuardFailure("usage_unknown", "response_accounting")
+            if "cache_miss_tokens" in details:
+                misses = details["cache_miss_tokens"]
+                if type(misses) is not int or not 0 <= misses <= incoming:
+                    raise GuardFailure("usage_unknown", "response_accounting")
+                if "cached_tokens" in details and misses + details["cached_tokens"] != incoming:
                     raise GuardFailure("usage_unknown", "response_accounting")
         if "prompt_cache_hit_tokens" in raw or "prompt_cache_miss_tokens" in raw:
             hit_direct, miss_direct = raw.get("prompt_cache_hit_tokens"), raw.get("prompt_cache_miss_tokens")
-            if (isinstance(hit_direct, bool) or not isinstance(hit_direct, int) or hit_direct < 0
-                    or isinstance(miss_direct, bool) or not isinstance(miss_direct, int) or miss_direct < 0
+            if (type(hit_direct) is not int or hit_direct < 0
+                    or type(miss_direct) is not int or miss_direct < 0
                     or hit_direct + miss_direct != incoming):
+                raise GuardFailure("usage_unknown", "response_accounting")
+            details = raw.get("prompt_tokens_details")
+            if isinstance(details, dict) and "cached_tokens" in details and details["cached_tokens"] != hit_direct:
                 raise GuardFailure("usage_unknown", "response_accounting")
         if "completion_tokens_details" in raw:
             completion_details = raw["completion_tokens_details"]
@@ -528,7 +568,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                 raise GuardFailure("usage_unknown", "response_accounting")
             if "reasoning_tokens" in completion_details:
                 reasoning = completion_details["reasoning_tokens"]
-                if (isinstance(reasoning, bool) or not isinstance(reasoning, int)
+                if (type(reasoning) is not int
                         or reasoning < 0 or reasoning > outgoing):
                     raise GuardFailure("usage_unknown", "response_accounting")
         return incoming, outgoing
@@ -539,7 +579,6 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             body = self._validate_request(request, raw)
             max_output = body["max_tokens"]
             next_round = self.ledger.rounds + 1
-            self.journal.cap_cny = self.cap_cny
             self.journal.reserve(self.profile, request, body, raw, max_output, next_round)
         except GuardFailure as exc:
             self.ledger.error_code = exc.code
@@ -608,15 +647,16 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             self.ledger.aggregate_output_tokens = self.ledger.known_output_tokens
             self.ledger.known_cost_cny = Decimal(str(self.ledger.known_cost_cny)) + actual_cost
             self.ledger.aggregate_cost_cny = self.ledger.known_cost_cny
-            if incoming > self.profile.input_reserve_tokens or outgoing > max_output or not within_reserve:
+            if (incoming > self.profile.input_reserve_tokens or outgoing > max_output
+                    or incoming + outgoing > self.profile.input_reserve_tokens or not within_reserve):
                 self.ledger.error_code = "returned_usage_over_limit"
                 self.journal.mark_error("returned_usage_over_limit")
                 raise GuardFailure("returned_usage_over_limit", "response_accounting")
             self.validate_response(payload)
-            content = response_bytes
-            rebuilt = httpx.Response(response.status_code, headers=response.headers, content=content,
-                                     request=request, extensions=response.extensions)
-            return rebuilt
+            # aread() already applies httpx's content decoder. Returning the
+            # consumed response preserves cached decoded bytes; rebuilding it
+            # with content-encoding would decode gzip a second time.
+            return response
         except GuardFailure as exc:
             self.ledger.error_code = exc.code
             if self.journal.state.get("pending") is not None:

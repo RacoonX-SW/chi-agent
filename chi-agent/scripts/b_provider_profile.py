@@ -140,7 +140,19 @@ def is_validated_profile(profile: Any) -> bool:
         current = load_profile()
     except ProfileFailure:
         return False
-    return profile.sha256 == current.sha256 and _same_typed_value(profile.raw, EXPECTED)
+    # A frozen dataclass is not sufficient: callers can use dataclasses.replace
+    # to change derived accounting values while retaining the pinned raw blob.
+    return (
+        type(profile.sha256) is str and profile.sha256 == current.sha256
+        and _same_typed_value(profile.raw, EXPECTED)
+        and type(profile.input_price) is Decimal and profile.input_price == current.input_price
+        and type(profile.output_price) is Decimal and profile.output_price == current.output_price
+        and type(profile.input_reserve_tokens) is int
+        and profile.input_reserve_tokens == current.input_reserve_tokens
+        and type(profile.max_output_tokens) is int and profile.max_output_tokens == current.max_output_tokens
+        and type(profile.max_rounds) is int and profile.max_rounds == current.max_rounds
+        and type(profile.budget_cap_cny) is Decimal and profile.budget_cap_cny == current.budget_cap_cny
+    )
 
 
 def validate_budget_evidence(path: Path | None, *, today: dt.date | None = None) -> dict[str, Any]:

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import dataclasses
+import gzip
 import json
 import multiprocessing
+import sys
 import tempfile
 import unittest
 from decimal import Decimal
@@ -11,15 +14,17 @@ from pathlib import Path
 from unittest.mock import patch
 from unittest.mock import AsyncMock
 
-import httpx
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+
+import b_provider_profile as profiles
+import b_live_preflight as preflight
 
 try:
-    import b_live_preflight as preflight
-    import b_provider_profile as profiles
+    import httpx
     import b_provider_transport as transport
     import model_runner_adapter as runner_adapter
 except ModuleNotFoundError as exc:
-    preflight = profiles = transport = runner_adapter = None
+    httpx = transport = runner_adapter = None
     _OPTIONAL_IMPORT_ERROR = exc
 else:
     _OPTIONAL_IMPORT_ERROR = None
@@ -38,7 +43,38 @@ def _hold_journal(root: str, run_id: str, acquired, release, results):
     journal.close()
 
 
-@unittest.skipIf(preflight is None, f"optional model dependencies unavailable: {_OPTIONAL_IMPORT_ERROR}")
+def _lock_handoff(root: str, acquired, close_old, old_closed, done, results):
+    journal = transport.SyntheticJournal(Path(root), "first-owner")
+    journal.finish(success=False)
+    results.put("first-released")
+    acquired.set()
+    close_old.wait(10)
+    journal.close()
+    old_closed.set()
+    done.wait(10)
+
+
+class ProfileReadOnlyTests(unittest.TestCase):
+    def test_profile_source_and_documented_bounds_are_available_without_model_sdk(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        self.assertEqual(profile.model, "deepseek-flash")
+        self.assertEqual(profile.input_reserve_tokens, 1_048_576)
+        self.assertEqual(profile.budget_cap_cny, Decimal("5"))
+
+    def test_plan_and_preflight_report_optional_sdk_missing_without_import_traceback(self):
+        with patch.object(preflight, "_source_and_sdk", side_effect=preflight.PreparationFailure("sdk_package_missing")):
+            plan = preflight.build_plan()
+            status = preflight.build_preflight()
+        self.assertEqual(plan["identity"]["status"], "unavailable")
+        self.assertEqual(plan["identity"]["safe_error_code"], "sdk_package_missing")
+        self.assertEqual(status["readiness"], "blocked_or_unknown")
+        self.assertEqual(status["identity"]["safe_error_code"], "sdk_package_missing")
+
+
+_HTTPX_TRANSPORT_BASE = httpx.AsyncBaseTransport if httpx is not None else object
+
+
+@unittest.skipIf(transport is None, f"optional model dependencies unavailable: {_OPTIONAL_IMPORT_ERROR}")
 class ProviderProfileAndTransportTests(unittest.TestCase):
     def test_prepared_profile_is_source_pinned_fresh_and_uses_documented_bounds(self):
         profile = profiles.load_profile(today=dt.date(2026, 10, 26))
@@ -63,6 +99,18 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
                 path.write_text(json.dumps(altered), encoding="utf-8")
                 with self.subTest(field=field_path), self.assertRaises(profiles.ProfileFailure):
                     profiles.load_profile(path, today=dt.date(2026, 10, 26))
+
+    def test_verified_profile_runtime_fields_are_bound_to_pinned_raw_profile(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        for changed in (
+            dataclasses.replace(profile, input_price=Decimal("0")),
+            dataclasses.replace(profile, output_price=Decimal("0")),
+            dataclasses.replace(profile, input_reserve_tokens=1),
+            dataclasses.replace(profile, max_output_tokens=1),
+            dataclasses.replace(profile, max_rounds=1),
+            dataclasses.replace(profile, budget_cap_cny=Decimal("Infinity")),
+        ):
+            self.assertFalse(profiles.is_validated_profile(changed))
 
     def test_budget_evidence_missing_stale_and_bool_are_unknown(self):
         missing = profiles.validate_budget_evidence(None, today=dt.date(2026, 10, 26))
@@ -133,7 +181,7 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             journal = transport.SyntheticJournal(Path(temp), "bad-route")
             guard = transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
-                                                ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("10"),
+                                                ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
                                                 validate_response=lambda _payload: None,
                                                 allowed_tool_names={"synthetic_lookup", "synthetic_format"})
             request = _request(url="https://user@api.deepseek.com/v1/chat/completions")
@@ -152,10 +200,25 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             journal = transport.SyntheticJournal(Path(temp), "changed-profile")
             with self.assertRaises(transport.GuardFailure) as error:
                 transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
-                                           ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("10"),
+                                           ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
                                            validate_response=lambda _payload: None,
                                            allowed_tool_names={"synthetic_lookup", "synthetic_format"})
             self.assertEqual(error.exception.code, "profile_untrusted_or_stale")
+            self.assertEqual(lower.calls, 0)
+            journal.finish(success=False)
+            journal.close()
+
+    def test_guard_rejects_arbitrary_or_nonfinite_cap_before_any_send(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        lower = _CountingTransport(httpx.Response(200, json={}))
+        with tempfile.TemporaryDirectory() as temp:
+            journal = transport.SyntheticJournal(Path(temp), "bad-cap")
+            for cap in (Decimal("10"), Decimal("Infinity"), Decimal("0")):
+                with self.subTest(cap=cap), self.assertRaises(transport.GuardFailure):
+                    transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
+                                               ledger=runner_adapter.Ledger("success"), cap_cny=cap,
+                                               validate_response=lambda _payload: None,
+                                               allowed_tool_names={"synthetic_lookup", "synthetic_format"})
             self.assertEqual(lower.calls, 0)
             journal.finish(success=False)
             journal.close()
@@ -175,7 +238,7 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
                 lower = _CountingTransport(httpx.Response(200, json={}))
                 journal = transport.SyntheticJournal(Path(temp), "unsupported")
                 guard = transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
-                                                    ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("10"),
+                                                    ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
                                                     validate_response=lambda _payload: None,
                                                     allowed_tool_names={"synthetic_lookup", "synthetic_format"})
                 with self.assertRaises(transport.GuardFailure) as error:
@@ -191,7 +254,7 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             journal = transport.SyntheticJournal(Path(temp), "write-failure")
             guard = transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
-                                                ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("10"),
+                                                ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
                                                 validate_response=lambda _payload: None,
                                                 allowed_tool_names={"synthetic_lookup", "synthetic_format"})
             with patch.object(transport, "_atomic_replace", side_effect=OSError("not persisted")):
@@ -229,6 +292,19 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
                 transport.SyntheticJournal(root, "new-run-id")
             self.assertIn(error.exception.code, {"synthetic_namespace_busy_or_pending", "synthetic_prior_pending_unknown"})
 
+    def test_fresh_guard_cannot_overwrite_authoritative_pending_state(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        with tempfile.TemporaryDirectory() as temp:
+            journal = transport.SyntheticJournal(Path(temp), "pending-authority")
+            request = _request()
+            journal.reserve(profile, request, json.loads(request.content), request.content, 128, 1)
+            with self.assertRaises(transport.GuardFailure) as error:
+                journal.reserve(profile, request, json.loads(request.content), request.content, 128, 1)
+            self.assertEqual(error.exception.code, "synthetic_prior_pending_unknown")
+            stored = json.loads(journal.state_path.read_text(encoding="utf-8"))
+            self.assertEqual(stored["pending"]["run_id"], "pending-authority")
+            journal.close()
+
     def test_missing_shared_journal_cannot_reset_prior_spend_from_other_run_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -241,20 +317,35 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             self.assertEqual(error.exception.code, "synthetic_journal_missing")
             self.assertTrue((root / "first-complete.json").exists())
 
-    def test_completed_legacy_synthetic_state_migration_preserves_cost(self):
+    def test_legacy_or_bool_money_state_fails_closed_without_rewrite(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             (root / "old-complete.json").write_text("{}", encoding="utf-8")
-            (root / "synthetic-accounting.json").write_text(json.dumps({
+            path = root / "synthetic-accounting.json"
+            original = json.dumps({
                 "schema": "chi-b-synthetic-accounting-v1", "namespace": "synthetic",
                 "prior_spend_cny": "0.2", "prior_source": "synthetic-rehearsal-prior-v1",
                 "known_settled_cost_cny": "0.3", "pending": None,
                 "known_input_tokens": 3, "known_output_tokens": 4, "usage_complete": True,
-            }), encoding="utf-8")
-            journal = transport.SyntheticJournal(root, "migrated")
-            self.assertEqual(journal.cumulative_spend, Decimal("0.5"))
+            })
+            path.write_text(original, encoding="utf-8")
+            with self.assertRaises(transport.GuardFailure):
+                transport.SyntheticJournal(root, "must-not-migrate")
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            journal = transport.SyntheticJournal(root, "valid-seed")
             journal.finish(success=False)
             journal.close()
+            path = root / "synthetic-accounting.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data["prior_spend_cny"] = True
+            original = json.dumps(data)
+            path.write_text(original, encoding="utf-8")
+            with self.assertRaises(transport.GuardFailure):
+                transport.SyntheticJournal(root, "bool-money")
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
 
     def test_actual_official_runner_and_sdk_use_generic_guard_for_three_turn_rehearsal(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -355,6 +446,11 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
 
     def test_usage_breakdown_must_be_consistent_and_reasoning_is_not_added_twice(self):
         use = transport.GuardedTransport._usage
+        self.assertEqual(use({"usage": {"prompt_tokens": 16, "completion_tokens": 10, "total_tokens": 26,
+                                         "prompt_tokens_details": {"cached_tokens": 0},
+                                         "prompt_cache_hit_tokens": 0, "prompt_cache_miss_tokens": 16}}), (16, 10))
+        self.assertEqual(use({"usage": {"prompt_tokens": 16, "completion_tokens": 10, "total_tokens": 26,
+                                         "prompt_tokens_details": {"cached_tokens": 5}}}), (16, 10))
         self.assertEqual(use({"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15,
                                          "prompt_cache_hit_tokens": 4, "prompt_cache_miss_tokens": 6,
                                          "completion_tokens_details": {"reasoning_tokens": 3}}}), (10, 5))
@@ -365,10 +461,61 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15,
              "prompt_cache_hit_tokens": None, "prompt_cache_miss_tokens": None},
             {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15,
+             "prompt_tokens_details": {"cached_tokens": 2},
+             "prompt_cache_hit_tokens": 3, "prompt_cache_miss_tokens": 7},
+            {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15,
              "completion_tokens_details": {"reasoning_tokens": 6}},
         ):
             with self.subTest(usage=usage), self.assertRaises(transport.GuardFailure):
                 use({"usage": usage})
+
+    def test_usage_total_context_ceiling_accounts_before_stopping(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        payload = {"usage": {"prompt_tokens": 1_048_575, "completion_tokens": 2,
+                             "total_tokens": 1_048_577}}
+        lower = _CountingTransport(httpx.Response(200, json=payload))
+        with tempfile.TemporaryDirectory() as temp:
+            journal = transport.SyntheticJournal(Path(temp), "total-context-over")
+            ledger = runner_adapter.Ledger("success")
+            guard = transport.GuardedTransport(profile=profile, journal=journal, lower=lower, ledger=ledger,
+                                               cap_cny=Decimal("5"), validate_response=lambda _payload: None,
+                                               allowed_tool_names={"synthetic_lookup", "synthetic_format"})
+            with self.assertRaises(transport.GuardFailure) as error:
+                asyncio.run(guard.handle_async_request(_request()))
+            self.assertEqual(error.exception.code, "returned_usage_over_limit")
+            self.assertEqual(lower.calls, 1)
+            self.assertTrue(ledger.usage_complete)
+            self.assertEqual(journal.run_doc["requests"][0]["status"], "settled")
+            journal.finish(success=False)
+            journal.close()
+
+    def test_gzip_response_is_not_decoded_twice(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        payload = {"usage": {"prompt_tokens": 12, "completion_tokens": 5, "total_tokens": 17}}
+        wire = gzip.compress(json.dumps(payload).encode("utf-8"))
+
+        class GzipTransport(httpx.AsyncBaseTransport):
+            calls = 0
+
+            async def handle_async_request(self, request):
+                self.calls += 1
+                return httpx.Response(200, headers={"content-encoding": "gzip"}, content=wire, request=request)
+
+            async def aclose(self):
+                return None
+
+        lower = GzipTransport()
+        with tempfile.TemporaryDirectory() as temp:
+            journal = transport.SyntheticJournal(Path(temp), "gzip-response")
+            guard = transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
+                                               ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
+                                               validate_response=lambda _payload: None,
+                                               allowed_tool_names={"synthetic_lookup", "synthetic_format"})
+            response = asyncio.run(guard.handle_async_request(_request()))
+            self.assertEqual(response.json(), payload)
+            self.assertEqual(lower.calls, 1)
+            journal.finish(success=False)
+            journal.close()
 
     def test_cli_run_identity_is_exclusive_before_official_runner(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -403,8 +550,29 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             self.assertEqual(first.exitcode, 0)
             self.assertEqual(second.exitcode, 0)
 
+    def test_old_process_close_cannot_unlink_new_flock_owner(self):
+        context = multiprocessing.get_context("spawn")
+        with tempfile.TemporaryDirectory() as temp:
+            released, close_old, old_closed, done = (context.Event() for _ in range(4))
+            results = context.Queue()
+            first = context.Process(target=_lock_handoff, args=(temp, released, close_old, old_closed, done, results))
+            first.start()
+            self.assertTrue(released.wait(10))
+            self.assertEqual(results.get(timeout=10), "first-released")
+            second = transport.SyntheticJournal(Path(temp), "second-owner")
+            close_old.set()
+            self.assertTrue(old_closed.wait(10))
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.SyntheticJournal(Path(temp), "third-owner")
+            self.assertEqual(error.exception.code, "synthetic_namespace_busy_or_pending")
+            second.finish(success=False)
+            second.close()
+            done.set()
+            first.join(10)
+            self.assertEqual(first.exitcode, 0)
 
-class _CountingTransport(httpx.AsyncBaseTransport):
+
+class _CountingTransport(_HTTPX_TRANSPORT_BASE):
     def __init__(self, response: httpx.Response):
         self.response = response
         self.calls = 0
