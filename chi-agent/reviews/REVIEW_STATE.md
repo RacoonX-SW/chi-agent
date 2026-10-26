@@ -4,17 +4,18 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 真实 B 运行准备代码通过离线独立验收：source-pinned profile、通用受控传输、synthetic 请求账目和只读预检；见 [B 准备审核](b-live-preflight-review.md)。真实 API/C/判分继续暂停 |
+| 当前任务 | 本轮仅补充本地开发预算与正式评测的文档边界及待办；既有 B 准备的本地离线结论见 [B 准备审核](b-live-preflight-review.md)。真实 API/C/判分继续暂停 |
 | 协作 | 默认一个 Luna High 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-25) |
 | 上次独立审核候选 | `2244220638830dec3ef1bba36d562d7258870e79`，首审 R1–R5、已关闭 journal 和磁盘收尾问题已独立复验关闭，详情只见 B 准备审核 |
 | 上次通过的实现提交 | `2244220638830dec3ef1bba36d562d7258870e79`，仅真实 B 运行准备的离线代码，不代表 provider/B 实际调用通过。接入层/C/B/环境/A 身份保留在各阶段报告 |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 已核对 PR #7 merged=true，并从最新 `origin/main` `3d4f9db09d0a623b925ec0a3c43e29ff7f06e0db` 建立 `codex/live-b-preflight`；写入前工作区干净，继续一个 `gpt-6-luna` / `high` 实现、主代理独立审核 |
+| 当前分支与接手改动 | 已核对 PR #8 merged=true，并从最新 `origin/main` `72dcbfb2cb234c8bc416fbdd0527ee1798d82ace` 建立 `codex/evaluation-budget-scope`；写入前干净，本轮纯文档由主代理完成 |
 | 环境目标与实际 | 复用 Python 3.12 dev，SDK 在 Docker 独立可选依赖卷中安装/验收，固定包与环境身份见接入层审核；原镜像/两份基础锁未改，开发/调度对齐历史见 [环境审核](python312-alignment-review.md) |
-| 参赛预算 | 首轮真实 B/C 合计 5 元人民币的规划不变，写代码另计；本轮仅 synthetic 核算，不消费或重置该预算，真实模型调用未恢复 |
-| 本轮验证 | 最终模型层/基础 dev 全量、补充协议/预算/生命周期、实际进程退出/锁接力、README 与基础只读 CLI 均独立通过；数目/命令/限制只见 B 准备审核 |
+| 本地开发预算 | 首轮 B/C 共享 5 元人民币，写代码另计；该开发限额不自动适用于正式私有评测，依据见 [预算策略设计](../openspec/changes/bootstrap-baseline/design.md#本地开发预算与正式私有评测)。真实调用未恢复 |
+| 正式提交前置 | [F：预算策略分离与隔离验收](../openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation) 尚未实现/通过；正式入口不能继承本地余额/账本/5 元限额，既有本地验收不等于正式评测就绪 |
+| 本轮验证 | 本次只核对文档差异、引用及与源码的边界，无实现改动或新运行验收；既有模型层/基础 dev 与补充边界结果只见 B 准备审核 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [接入层 PR #7](https://github.com/xsw932187210-cell/chi-agent/pull/7) 已合并；[B 准备 PR #8](https://github.com/xsw932187210-cell/chi-agent/pull/8) 已推送创建并附加本聊天，base=main、head=codex/live-b-preflight，待用户审核决定合并。即使准备通过也不恢复真实 API/C/判分 |
+| PR 与下一步 | [B 准备 PR #8](https://github.com/xsw932187210-cell/chi-agent/pull/8) 已由用户合并；[预算边界文档 PR #9](https://github.com/xsw932187210-cell/chi-agent/pull/9) 已创建并附加本聊天，base=main，待用户审核决定合并。F 是正式提交前待办，不因记录或合并文档恢复真实 API/C/判分 |
 | 未验证项 | 真实 provider transport/认证、真实 tokenizer/framing/用量/价格/账单、官方世界中的 B/C 及判分认证；其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 无真实 trial、official reward 或实测模型费用；新直接 runner 入口只完成离线验证，live 固定拒绝，原 cb/Harbor 的 ungraded gate 继续 unsupported |
 

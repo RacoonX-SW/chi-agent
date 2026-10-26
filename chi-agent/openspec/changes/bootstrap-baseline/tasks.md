@@ -96,6 +96,16 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] P.4 Rehearse the same boundary through the pinned real SDK/official loop in network-disabled Docker; preserve existing integration behavior and verify failure/restart/race/history/budget paths.
 - [x] P.5 Freeze candidate, independently verify it, update the learning ledger and one stage report, then create a base=main PR for user review/merge. Actual B/C/grading remain paused; PR identity is recorded only in REVIEW_STATE, and user merge remains separate.
 
+## F. Separate development budgets from official evaluation
+
+正式提交前的必需前置；[行为契约](specs/benchmark-readiness/spec.md#requirement-separate-local-development-budgets-from-official-private-evaluation) 和 [设计依据](design.md#本地开发预算与正式私有评测) 区分本地首轮限额与正式冻结策略。本节实现/验收尚未完成；记录待办不恢复 API、真实 C 或判分，也不替代既有本地准备验收。
+
+- [x] F.1 Record the user's scope concern, official rule basis and the explicit boundary between local-development acceptance and final-evaluation readiness.
+- [ ] F.2 Separate usage/cost recording and monetary stop policy from the provider profile; preserve the local shared 5 CNY guard, and define an explicit frozen evaluation policy that does not inherit development balances/prior files or synthetic ledgers.
+- [ ] F.3 Scope evaluation accounting/evidence by legitimate task/attempt identity; preserve uncertain/duplicate-attempt protection without allowing one trial's pending state to poison unrelated trials. Retain null unknown totals and existing request/history/tool/retry controls.
+- [ ] F.4 Independently verify production entry/configuration selection, sequential tasks, independent attempts, unknown-usage isolation and duplicate-attempt rejection in Docker with synthetic transports; rerun affected local-cap and protocol regressions.
+- [ ] F.5 Before final submission, review the current organizer limits, freeze one evaluation policy for all private tasks and document the runnable entry/configuration; exclude local ledgers, credentials and protected materials from the package. Actual-run authorization remains separate.
+
 ## 3. Verify and hand over
 
 - [x] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.

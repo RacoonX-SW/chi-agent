@@ -152,6 +152,8 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 `scripts/b_live_preflight.py` 提供 `plan`、`preflight`、`rehearse` 和固定拒绝的 `live`。profile 在 `profiles/deepseek-flash-prepared.json`，来源/核对日期、CNY 峰值上界、完整上下文预留及有限生成参数均明确保存；不把文档推断写成 tokenizer 或账单实测。使用前核对 [当前授权](reviews/REVIEW_STATE.md)。
 
+本节入口用于本地开发；5 元是首轮 B/C 的共享开发限额。正式私有评测入口须先完成 [预算策略分离与隔离验收](openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation)，不能直接携带本地余额、账本或该限额作为最终评测配置；当前没有可用的正式策略切换开关。
+
 从本项目目录执行。基础镜像即可读取 plan/preflight；没有可选 SDK 或真实预算证据时会受控报告缺口。以下命令不挂凭据、模型依赖、官方资源或结果目录：
 
 ```sh
