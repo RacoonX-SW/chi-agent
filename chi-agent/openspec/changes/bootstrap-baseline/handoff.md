@@ -1,10 +1,16 @@
 # 执行器交接：bootstrap-baseline
 
-当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮开发 F.2–F.4 的预算策略分离与 trial 隔离，并做 Docker 离线验收；按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理，主代理负责规格、独立审核、教学与 GitHub。真实 API、真实 C 尝试与官方判分继续暂停，F.5 最终提交冻结留待后续。下方接入层/C/B/A/D0 交接保留其阶段范围。
+当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮开发 G 的评测专用默认入口与干净目录包，并做 Docker 离线验收；按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理，主代理负责规格、独立审核、教学与 GitHub。真实 API、真实 C 尝试与官方判分继续暂停，F.5 完整最终系统冻结留待后续。下方 F/接入层/C/B/A/D0 交接保留其阶段范围。
 
 后续代码及文档交付统一使用 `codex/<任务名>` 工作分支：主代理先建分支、协调实现并独立检查，再推送和创建目标为 main 的 PR；用户审核并决定是否合并。主代理不直接开发/推送 main、不自行合并。下方历史 main 身份只记录已发生的交付，不能当作后续继续在 main 工作的授权，详见 [GitHub 工作流](../../../docs/github-workflow.md)。
 
-## 当前 F 预算策略分离交接（2026-10-26）
+## 当前 G 专用入口与干净目录包交接（2026-10-26）
+
+按 [专用交付入口契约](specs/benchmark-readiness/spec.md#requirement-dedicated-evaluation-delivery-entry-without-development-fallback)、[G 设计](design.md#g评测专用入口与干净目录包) 和 G 任务。实现代理负责 entry、bundle/config/manifest、相应测试以及必要的公共 helper 参数接点；root独占 Markdown/Git，包括作为包输入的 [运行说明](../../../docs/evaluation-entry-runbook.md)。默认固定 evaluation record_only，无 local/cap/prior 参数回退；live 最先拒绝。
+
+目录包仅包含固定公开 allowlist、内容 manifest 和运行说明，不包含 local policy、原始 runs、凭据、vendor、数据、手册或测试。干净包只读挂载，SDK/vendor 独立只读挂载，输出另行可写，从无原仓库挂载/不同 cwd 实际验证多 trial 超过 5 元仍完成、unknown 隔离、重复 attempt、换包/config 拒绝及故障/路径边界；包身份必须实际绑定进 registry。所有运行使用既有 Python 3.12 Docker，固定依赖/官方源码，不安装/下载/重建，不自行提交最终材料或恢复 API/C/判分。
+
+## F 预算策略分离交接（2026-10-26）
 
 按 [预算策略契约](specs/benchmark-readiness/spec.md#requirement-separate-local-development-budgets-from-official-private-evaluation)、[设计](design.md#本地开发预算与正式私有评测) 和 F.2–F.4。实现代理独占 scripts、相应测试及必要 public JSON 配置，主代理独占 Markdown/Git。策略从 provider 配置独立出来，默认保留本地共享 5 元及 pending 保护；评测演练显式选择 record_only 或每 trial capped 策略，使用 evaluation/task/attempt 身份、独立持久 claim 与同一 evaluation 的策略/profile 登记，不继承开发 prior 或账目。plan/preflight 只读，live 在配置/凭据/client/claim 前拒绝；真实 SDK/官方循环仍用 MockTransport 与合成工具。
 

@@ -1,0 +1,11 @@
+{
+  "schema": "chi-evaluation-entry-config-v1",
+  "entry_id": "identified-evaluation-record-only-v1",
+  "execution_scope": "evaluation_rehearsal",
+  "policy_mode": "record_only",
+  "hard_cap_cny": null,
+  "provider_profile_id": "deepseek-flash-prepared-2026-10-26-v1",
+  "status": "identified_offline_preparation",
+  "real_api_enabled": false,
+  "actual_calls_authorized": false
+}

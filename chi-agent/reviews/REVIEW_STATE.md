@@ -4,18 +4,18 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | F.2–F.4 的预算策略分离、trial 隔离代码通过 Docker 离线独立验收；见 [预算策略审核](evaluation-budget-policy-review.md)。F.5 最终提交冻结仍待后续，真实 API/C/判分继续暂停 |
+| 当前任务 | G 评测专用默认入口与干净目录包已独立离线验收通过，固定 record_only、无开发预算回退；PR #11 待用户审核合并。F.5 完整正式冻结仍待后续，真实 API/C/判分继续暂停 |
 | 协作 | 默认一个 Luna High 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-25) |
-| 上次独立审核候选 | `5c65d15a05e39c194b1efbddf14683eedeac3ded`，R1–R4 及路径规范化回归均关闭；历史候选/证据只见预算策略审核 |
-| 上次通过的实现提交 | `5c65d15a05e39c194b1efbddf14683eedeac3ded`，仅策略分离与隔离的离线代码，不代表正式评测/真实调用通过。B 准备及接入层/C/B/环境/A 身份保留在各阶段报告 |
+| 上次独立审核候选 | `d4003cac37cad5396ef9b977914ff07c5367a0e1`，G 复验通过，首审 R1–R3 已关闭；见 [专用入口/包审核](evaluation-entry-bundle-review.md) |
+| 上次通过的实现提交 | `d4003cac37cad5396ef9b977914ff07c5367a0e1`，仅评测专用入口/干净包的离线代码，不代表正式评测/真实调用通过。F/B 准备及接入层/C/B/环境/A 身份保留在各阶段报告 |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 已核对 PR #9 merged=true，并从最新 `origin/main` `ab4cd870cc2fea2e32fd5cdf99ee7e513b5994cc` 建立 `codex/evaluation-budget-policy`；写入前干净，复用一个 `gpt-6-luna` / `high` 实现，主代理负责规格、独立审核、教学和 GitHub |
+| 当前分支与接手改动 | 已核对 PR #10 merged=true，并从最新 `origin/main` `07c377cb173ce2a3eb5447742e547f97547c0610` 建立 `codex/evaluation-entry-bundle`；写入前干净，复用一个 `gpt-6-luna` / `high` 实现，主代理负责规格、独立审核、教学和 GitHub |
 | 环境目标与实际 | 复用 Python 3.12 dev，SDK 在 Docker 独立可选依赖卷中安装/验收，固定包与环境身份见接入层审核；原镜像/两份基础锁未改，开发/调度对齐历史见 [环境审核](python312-alignment-review.md) |
 | 本地开发预算 | 首轮 B/C 共享 5 元人民币，写代码另计；该开发限额不自动适用于正式私有评测，依据见 [预算策略设计](../openspec/changes/bootstrap-baseline/design.md#本地开发预算与正式私有评测)。真实调用未恢复 |
-| 正式提交前置 | [F.2–F.4](../openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation) 离线通过；评测演练不继承开发余额/账本/5 元限额，F.5 的完整冻结/正式启动与真实运行仍未完成 |
-| 本轮验证 | 最终固定快照的全量、实际 CLI、组件/进程/故障、路径及 README 最小挂载均独立通过；详细结果与证据只见预算策略审核 |
+| 正式提交前置 | F.2–F.4 与 [G 专用入口与干净包](../openspec/changes/bootstrap-baseline/tasks.md#g-dedicated-evaluation-entry-and-clean-bundle-offline) 离线通过。F.5 完整最终冻结和真实运行仍未完成 |
+| 本轮验证 | 修复候选全量、干净包实际默认多任务、unknown/replay/换包、只读/暂停及故障边界通过，详细结果只见专用入口/包审核 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [预算边界文档 PR #9](https://github.com/xsw932187210-cell/chi-agent/pull/9) 已由用户合并；[策略分离 PR #10](https://github.com/xsw932187210-cell/chi-agent/pull/10) 已推送创建并附加本聊天，base=main、head=codex/evaluation-budget-policy，待用户审核决定合并。代码/文档通过不恢复真实 API/C/判分 |
+| PR 与下一步 | [专用入口/干净包 PR #11](https://github.com/xsw932187210-cell/chi-agent/pull/11) 已创建，base=main，待用户审核合并；[策略分离 PR #10](https://github.com/xsw932187210-cell/chi-agent/pull/10) 已由用户合并。后续核对完整官方启动/依赖复现缺口及 F.5，不因本轮代码/文档通过恢复真实 API/C/判分 |
 | 未验证项 | 真实 provider transport/认证、真实 tokenizer/framing/用量/价格/账单、官方世界中的 B/C 及判分认证；其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 无真实 trial、official reward 或实测模型费用；新直接 runner 入口只完成离线验证，live 固定拒绝，原 cb/Harbor 的 ungraded gate 继续 unsupported |
 
@@ -27,6 +27,7 @@
 - [模型/官方 runner 接入层独立审核](model-runner-integration-review.md)
 - [真实 B 运行准备独立审核](b-live-preflight-review.md)
 - [本地与评测预算策略分离独立审核](evaluation-budget-policy-review.md)
+- [评测专用入口与干净目录包独立审核](evaluation-entry-bundle-review.md)
 - [实现子代理与独立审核](../docs/luna-subagent-workflow.md)
 - [D0 接续 Prompt](../docs/d0-handoff-prompts.md)
 - [当前交接规格](../openspec/changes/bootstrap-baseline/handoff.md)
@@ -46,5 +47,6 @@
 | 2026-10-26 | 模型/官方 runner 接入层 | `4fe5092c74508ca1a96e6d27c53bd76ee384b9de` | `b5f60ddd744a4f60497bd1e19f4fec01f76fd2dc` | 固定真实包/官方循环的合成边界通过；真实 API/C/判分未运行 | [接入层独立审核](model-runner-integration-review.md) |
 | 2026-10-26 | 真实 B 运行准备 | `3d4f9db09d0a623b925ec0a3c43e29ff7f06e0db` | `2244220638830dec3ef1bba36d562d7258870e79` | profile/guard/journal/preflight 离线通过；实际调用继续暂停 | [B 准备独立审核](b-live-preflight-review.md) |
 | 2026-10-26 | F 预算策略分离与 trial 隔离 | `ab4cd870cc2fea2e32fd5cdf99ee7e513b5994cc` | `5c65d15a05e39c194b1efbddf14683eedeac3ded` | F.2–F.4 离线通过；F.5 和真实调用未完成 | [预算策略独立审核](evaluation-budget-policy-review.md) |
+| 2026-10-26 | G 评测专用入口与干净目录包 | `07c377cb173ce2a3eb5447742e547f97547c0610` | `d4003cac37cad5396ef9b977914ff07c5367a0e1` | 固定默认 record_only/干净包离线通过；F.5 和真实启动未完成 | [专用入口/包独立审核](evaluation-entry-bundle-review.md) |
 
 历史未通过候选及原始合成证据保留；原始日志在忽略目录，不上传 GitHub。沿用一份 D0 交付报告，区分子代理自测与主代理独立证据。历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 仍不是已通过候选。

@@ -45,7 +45,7 @@ def _json(value: dict[str, Any]) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)
 
 
-def _source_and_sdk() -> tuple[dict[str, Any], dict[str, str]]:
+def _source_and_sdk(application_files: tuple[str, ...] = APPLICATION_SOURCE_FILES) -> tuple[dict[str, Any], dict[str, str]]:
     try:
         import model_runner_adapter as adapter
         vendor = adapter._upstream_identity()
@@ -53,7 +53,7 @@ def _source_and_sdk() -> tuple[dict[str, Any], dict[str, str]]:
         if sdk.get("httpx") != "0.28.1":
             raise PreparationFailure("sdk_version_mismatch")
         sources = {}
-        for relative in APPLICATION_SOURCE_FILES:
+        for relative in application_files:
             path = ROOT / relative
             sources[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
         return {"vendor": vendor, "application_identity": "sha256_of_explicit_runner_guard_sources",
@@ -211,7 +211,10 @@ def build_preflight(budget_path: Path | None = None, *, policy: ExecutionPolicy 
 async def _rehearse(scenario: str, run_id: str, *, initial_prior: Decimal = Decimal("0"),
                     synthetic_cap: Decimal | None = None, output_tokens: int | None = None,
                     policy: ExecutionPolicy | None = None, evaluation_id: str | None = None,
-                    task_id: str | None = None, attempt_id: str | None = None) -> tuple[Any, Any, str | None]:
+                    task_id: str | None = None, attempt_id: str | None = None,
+                    output_root: Path | None = None,
+                    application_files: tuple[str, ...] = APPLICATION_SOURCE_FILES,
+                    execution_identity_sha256: str | None = None) -> tuple[Any, Any, str | None]:
     try:
         from b_provider_transport import EvaluationJournal, GuardFailure, SyntheticJournal
     except Exception:
@@ -235,12 +238,15 @@ async def _rehearse(scenario: str, run_id: str, *, initial_prior: Decimal = Deci
                                             or not synthetic_cap.is_finite()
                                             or synthetic_cap != policy.hard_cap_cny))):
         raise PreparationFailure("execution_policy_scope_invalid")
-    upstream, sdk = _source_and_sdk()
+    upstream, sdk = _source_and_sdk(application_files)
     try:
         if policy.scope == "evaluation_rehearsal":
-            journal = EvaluationJournal(EVALUATION_RUNS, run_id, evaluation_id=evaluation_id,
-                                        task_id=task_id, attempt_id=attempt_id, policy=policy, profile=profile)
+            journal = EvaluationJournal(output_root or EVALUATION_RUNS, run_id, evaluation_id=evaluation_id,
+                                        task_id=task_id, attempt_id=attempt_id, policy=policy, profile=profile,
+                                        execution_identity_sha256=execution_identity_sha256)
         else:
+            if output_root is not None or execution_identity_sha256 is not None:
+                raise PreparationFailure("execution_identity_scope_invalid")
             journal = SyntheticJournal(SYNTHETIC_RUNS, run_id, initial_prior_cny=initial_prior,
                                        prior_source="synthetic-rehearsal-prior-v1",
                                        cap_cny=policy.hard_cap_cny, policy=policy)

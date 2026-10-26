@@ -450,6 +450,40 @@ The system SHALL separate usage/cost recording from monetary stop policy and ide
 - **AND** local-development cap regressions and shared request/history/retry validation still pass
 - **AND** the frozen policy and reproduction instructions are included without development ledgers, credentials or protected artifacts
 
+### Requirement: Dedicated evaluation delivery entry without development fallback
+
+The delivery SHALL provide one explicit evaluation entry and a clean, identified offline directory bundle. Its default accounting policy SHALL be evaluation record_only with no monetary cap, while protocol/model limits and attempt safeguards remain active. This requirement SHALL NOT authorize actual model calls or establish final-system freeze/readiness.
+
+#### Scenario: The dedicated entry is selected without budget flags
+
+- **GIVEN** the candidate entry and its strictly validated configuration
+- **WHEN** it inspects or rehearses an evaluation trial
+- **THEN** it selects record_only with a null monetary cap without requiring a policy-selection flag
+- **AND** development policy, balance/prior files, working-directory contents and budget environment variables cannot cause fallback to the local 5 CNY policy
+- **AND** prohibited scope/cap/prior overrides fail explicitly; model/round/output/history/usage/tool/retry safeguards remain effective
+- **AND** plan/preflight are read-only and report package/configuration, SDK/source, authentication and active execution pause separately
+- **AND** successful preflight requires verified package/configuration and available pinned SDK/source identity; missing dependencies return a controlled nonzero technical-readiness result without granting execution permission
+- **AND** live is refused before configuration, manifest, identity, credentials, client or output/claim access
+
+#### Scenario: The program is exported for independent reproduction
+
+- **GIVEN** the explicitly allowlisted participant-owned files, provider/entry configuration, model dependency lock/install script and runbook
+- **WHEN** an offline bundle is built
+- **THEN** only those files and an identified content manifest are exported into an exclusively acquired destination
+- **AND** local-development policy, ledgers/runs, credentials, vendor checkout, data, protected handbook, tests and raw evidence are excluded without recursively copying the repository
+- **AND** symlink/traversal/invalid destinations and source aliases are rejected before unsafe reads/writes, an existing destination is preserved, and partial failure cannot produce a complete bundle
+- **AND** manifest parsing uses fixed allowed paths, rejects duplicate/unknown/malformed entries and never supplies arbitrary paths to read
+- **AND** content hashes identify the candidate package without being represented as a signature or execution permission
+
+#### Scenario: The clean package starts from an unrelated directory
+
+- **GIVEN** only the exported package mounted read-only, fixed SDK/vendor as separate read-only dependencies and an independent writable output root
+- **WHEN** its actual default evaluation CLI rehearses multiple legitimate task/attempt identities from an unrelated cwd
+- **THEN** each legal above-5-CNY synthetic chain can complete without loading the development policy or original repository
+- **AND** unknown usage affects its own trial while unrelated legitimate trials remain runnable, and changing run-id cannot replay an occupied attempt
+- **AND** the evaluation registry binds verified entry/configuration/package identity as well as policy/profile; changing the package cannot silently continue the same evaluation
+- **AND** all usage/cost/reward claims remain synthetic/unknown as appropriate, with no real task world, credentials, external model or judge invoked
+
 ### Requirement: Preserve official outcomes
 
 The system SHALL preserve official verifier outcomes and distinguish process failures from scored task failures.

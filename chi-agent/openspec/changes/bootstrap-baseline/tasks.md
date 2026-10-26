@@ -106,6 +106,16 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] F.4 Independently verify production entry/configuration selection for offline rehearsals, sequential tasks, independent attempts, unknown-usage isolation and duplicate-attempt rejection in Docker with synthetic transports; rerun affected local-cap and protocol regressions.
 - [ ] F.5 Before final submission, review the current organizer limits, freeze one evaluation policy for all private tasks and document the runnable entry/configuration; exclude local ledgers, credentials and protected materials from the package. Actual-run authorization remains separate.
 
+## G. Dedicated evaluation entry and clean bundle (offline)
+
+本轮针对“底层支持 record_only，但交付默认入口仍可能落回本地 5 元”的缺口。只完成专用入口与干净目录包的离线准备，不能代勾 F.5 完整正式冻结，也不恢复真实 API/C/判分。
+
+- [x] G.1 Verify PR #10 merged, branch from latest origin/main, and specify the dedicated-entry/default-policy and clean-package boundaries.
+- [x] G.2 Implement a dedicated plan/preflight/rehearse/live entry with default fixed evaluation record_only and null monetary cap, no development budget/scope/prior fallback, explicit trial identities/output root and earliest live refusal.
+- [x] G.3 Export a fixed-allowlist directory bundle with strictly validated config/content manifest and runbook; exclude development policy/ledgers, credentials, vendor/data/handbook, tests and raw evidence. Bind verified entry/package identity to the evaluation registry; reject existing/unsafe destinations and retain incomplete builds without false completion.
+- [x] G.4 In offline Docker, run the actual dedicated CLI from a read-only exported package at an unrelated cwd without the original repository mounted; verify multiple above-5-CNY synthetic trials, unknown/replay isolation, identity/config/file tampering, prohibited overrides, build failures, read-only modes and live refusal, with existing local regressions preserved.
+- [x] G.5 Freeze the candidate, independently review/recheck it, record one phase report and learning entry, then create a base=main PR for user review/merge. This delivery is an identified offline package, not final submission or real execution acceptance.
+
 ## 3. Verify and hand over
 
 - [x] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.

@@ -143,6 +143,24 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
                 with self.subTest(field=field_path), self.assertRaises(profiles.ProfileFailure):
                     profiles.load_profile(path, today=dt.date(2026, 10, 26))
 
+    def test_oversized_profile_is_rejected_without_unbounded_path_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "large-profile.json"
+            path.write_bytes(b"x" * (profiles.MAX_PROFILE_BYTES + 1))
+            original_read_bytes = Path.read_bytes
+            reads = []
+
+            def record_read(candidate):
+                if candidate == path:
+                    reads.append(candidate)
+                return original_read_bytes(candidate)
+
+            with patch.object(Path, "read_bytes", new=record_read):
+                with self.assertRaises(profiles.ProfileFailure) as error:
+                    profiles.load_profile(path, today=dt.date(2026, 10, 26))
+            self.assertEqual(error.exception.code, "profile_unreadable")
+            self.assertEqual(reads, [])
+
     def test_verified_profile_runtime_fields_are_bound_to_pinned_raw_profile(self):
         profile = profiles.load_profile(today=dt.date(2026, 10, 26))
         for changed in (
@@ -668,6 +686,25 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
                                                         evaluation_id="eval-bound", task_id="task-b", attempt_id="a1"))
             self.assertEqual(error.exception.code, "evaluation_policy_conflict")
             run.assert_not_awaited()
+
+    def test_evaluation_registry_binds_optional_entry_bundle_identity(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        policy = policies.make_evaluation_policy("record_only")
+        with tempfile.TemporaryDirectory() as temp:
+            first = transport.EvaluationJournal(
+                Path(temp), "entry-one", evaluation_id="eval-entry-identity", task_id="task-a",
+                attempt_id="attempt-1", policy=policy, profile=profile,
+                execution_identity_sha256="a" * 64,
+            )
+            first.finish(success=False)
+            first.close()
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.EvaluationJournal(
+                    Path(temp), "entry-two", evaluation_id="eval-entry-identity", task_id="task-b",
+                    attempt_id="attempt-1", policy=policy, profile=profile,
+                    execution_identity_sha256="b" * 64,
+                )
+            self.assertEqual(error.exception.code, "evaluation_policy_conflict")
 
     def test_two_processes_cannot_claim_same_evaluation_attempt(self):
         with tempfile.TemporaryDirectory() as temp:

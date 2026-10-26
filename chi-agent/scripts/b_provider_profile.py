@@ -5,7 +5,9 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import os
 import re
+import stat
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -17,6 +19,7 @@ PROFILE_PATH = ROOT / "profiles" / "deepseek-flash-prepared.json"
 PRICE_SOURCE = "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/"
 MODEL_SOURCE = "https://api-docs.deepseek.com/zh-cn/api/list-models/"
 PROFILE_FRESHNESS_DAYS = 30
+MAX_PROFILE_BYTES = 65_536
 
 EXPECTED: dict[str, Any] = {
     "schema": "chi-prepared-provider-profile-v1",
@@ -104,12 +107,26 @@ class ProviderProfile:
 
 
 def load_profile(path: Path = PROFILE_PATH, *, today: dt.date | None = None) -> ProviderProfile:
+    fd = None
     try:
-        raw_bytes = path.read_bytes()
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_size > MAX_PROFILE_BYTES:
+            raise ValueError
+        with os.fdopen(fd, "rb") as handle:
+            fd = None
+            raw_bytes = handle.read(MAX_PROFILE_BYTES + 1)
+            after = os.fstat(handle.fileno())
+        if (len(raw_bytes) > MAX_PROFILE_BYTES or before.st_dev != after.st_dev
+                or before.st_ino != after.st_ino or before.st_size != after.st_size):
+            raise ValueError
         data = json.loads(raw_bytes, object_pairs_hook=_object_without_duplicates,
                           parse_constant=lambda _s: (_ for _ in ()).throw(ValueError("constant")))
     except Exception:
         raise ProfileFailure("profile_unreadable") from None
+    finally:
+        if fd is not None:
+            os.close(fd)
     if not isinstance(data, dict) or not _same_typed_value(data, EXPECTED):
         raise ProfileFailure("profile_untrusted_or_mismatched")
     checked_date = dt.date.fromisoformat(data["pricing"]["checked_on"])
