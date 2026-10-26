@@ -1,6 +1,6 @@
 ## Context
 
-本轮目标是完成 F.2–F.4 的本地/评测预算策略分离、任务/尝试隔离代码与离线验收，实际调用继续暂停。复用 Python 3.12 开发镜像和已锁模型依赖；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停，F.5 最终提交冻结留待后续。使用现有官方环境，不重写模拟器或评测器。
+本轮目标是 G：评测专用默认入口与干净目录包的代码和离线验收，实际调用继续暂停。复用 Python 3.12 开发镜像和已锁模型依赖；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停，F.5 完整正式冻结留待后续。使用现有官方环境，不重写模拟器或评测器。
 
 规划基线任务为 `pa_t018_t018_o001_p01_new_referral_provider`。其输入、静态工具和运行限制见 `docs/task-walkthrough-pa-t018.md`。该文档没有真实评分，不能充当完成基线的证据。
 
@@ -85,6 +85,18 @@ F 开发前，`b_provider_profile.py` 严格固定了 5 元 profile，`b_live_pr
 F.2–F.4 的实现边界：使用独立且可验证身份的策略表达 local_development、evaluation record_only 和显式每 trial capped。record_only 无金额硬停止，仍记录合成 usage/估算、保留协议/工具/轮数/输出/重试约束；未知用量停止受影响 trial，其他合法 trial 可继续。evaluation preflight 不读取开发 prior 文件，不能据此填造真实花费为零。
 
 评测演练以 evaluation_id/task_id/attempt_id 确定固定状态归属，run_id 仅管理输出。同一 evaluation 持久绑定策略与 provider profile 身份，不能靠更换 policy、cap 或 run_id 绕过已有 attempt。claim 在 runner/client/tool 前独占并持久化；所有记录只在与本地账本分离的合成演练 namespace 中创建，旧账本不静默迁移或清零。完整提交冻结和主办方正式启动路径仍由 F.5 与后续真实阶段单独验收。
+
+### G：评测专用入口与干净目录包
+
+F 的策略组件只证明显式选择 record_only 后不会继承本地金额上限；直接沿用开发默认启动命令仍会选择本地策略。G 将交付入口固定为 evaluation record_only/null cap，不暴露 local scope、金额上限或开发 prior 参数；默认只读计划，rehearse 明确提供 trial 身份和外部输出根，live 在读取配置/manifest/身份/凭据前拒绝。此处只冻结可核对的离线候选入口，不提前完成 F.5 的最终模型/资源/完整正式启动验证。
+
+目录包采用明确的公开文件 allowlist，包含必要 participant 代码、provider/entry 配置、模型锁/安装脚本和主代理维护的 [运行说明](../../../docs/evaluation-entry-runbook.md)，不复制整个仓库。local-development-policy.json、开发账本、凭据、vendor、数据、手册、测试和审核原始材料不进入包；已有 SDK/vendor 在验收时作为独立只读资源挂载。manifest 使用严格固定路径与内容 digest 表示身份，不能成为任意文件读取列表或实际调用授权，也不宣称具有真实性签名。
+
+entry 必须从自身包路径解析资源，不能依赖 cwd 或开发文件回退；输出与只读包隔离。包/config digest 实际进入同一 evaluation 的持久登记，不能只写日志而不约束后续任务。复用既有 registry/claim/guard/SDK 官方循环，通过明确参数注入 output root/执行身份，避免临时修改全局路径来选择模式。原本地入口与 F 的身份/金额/锁/路径防护保留回归。
+
+目录导出先持久写入未完成标记，所有允许文件及 manifest 写入并 fsync 成功后，删除该标记作为完成提交点。提交点前失败即使 manifest 清理也失败，验证仍拒绝；失败目标继续占用。源文件、manifest、entry/provider 配置均检查实际类型/大小并有界读取。输出根与包的祖先/后代路径均不得重叠，拒绝 symlink/父目录跳转。
+
+验收在无原仓库挂载的干净包上实际启动 CLI，以同一默认策略完成多条估算超过 5 元的合成链路；覆盖 unknown 后独立任务、重复 attempt、换包/config、文件/manifest 篡改、禁止参数、源/目标 symlink 或父目录跳转、构建部分失败以及只读/暂停边界。包是 identified/offline preparation，实际官方任务和正式配送继续单独核对，不上传本地导出包或受限产物。
 
 ### C 的离线执行控制
 

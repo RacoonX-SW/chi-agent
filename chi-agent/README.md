@@ -152,7 +152,7 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 `scripts/b_live_preflight.py` 提供 `plan`、`preflight`、`rehearse` 和固定拒绝的 `live`。profile 在 `profiles/deepseek-flash-prepared.json`，来源/核对日期、CNY 峰值上界、完整上下文预留及有限生成参数均明确保存；不把文档推断写成 tokenizer 或账单实测。使用前核对 [当前授权](reviews/REVIEW_STATE.md)。
 
-默认策略在 `profiles/local-development-policy.json`，用于本地开发；5 元是首轮 B/C 的共享开发限额。下方评测策略入口仅提供只读预检与合成演练，使用独立身份和状态，不继承本地余额/账本/限额。真实评测入口与最终冻结仍需完成 [F.5 及后续真实验收](openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation)，`live` 在所有策略下继续拒绝。
+本通用入口的默认策略在 `profiles/local-development-policy.json`，用于本地开发；5 元是首轮 B/C 的共享开发限额。下方评测策略参数用于只读预检与合成演练，使用独立身份和状态，不继承本地余额/账本/限额。交付包的固定默认入口见下节“评测专用入口与干净目录包”；完整最终冻结和真实启动仍需完成 [F.5 及后续真实验收](openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation)，`live` 在所有策略下继续拒绝。
 
 从本项目目录执行。基础镜像即可读取 plan/preflight；没有可选 SDK 或真实预算证据时会受控报告缺口。以下命令不挂凭据、模型依赖、官方资源或结果目录：
 
@@ -211,6 +211,43 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 ```
 
 同一 evaluation 固定 policy/profile 身份，不能在后续任务换模式或 cap；演练另一策略时用新的 evaluation-id。每个 task/attempt 的状态独立，换 run-id 不能重跑已占用尝试，失败/pending 的证据也保留；另一个合法 task/attempt 可继续。`plan`/`preflight` 支持相同策略参数且只读；evaluation preflight 的退出 0 只表示策略检查结束，SDK 身份可能仍 unavailable，完整运行就绪须分别核对。`live` 始终退出 2，正式提交配置与主办方真实运行结果仍未冻结/验证。
+
+## 评测专用入口与干净目录包
+
+`scripts/evaluation_entry.py` 是包内固定入口，默认使用 evaluation `record_only`、金额上限 `null`，不提供开发预算、scope 或 cap 参数。默认模式为只读 `plan`；`rehearse` 仍使用真实 SDK/官方循环和合成 HTTP/工具。包和 entry 配置经严格核对后，内容身份会绑定到 evaluation 的 registry/claim。`live` 固定拒绝；本节提供离线交付准备方法，完整正式冻结与实际接入范围见 [审核状态](reviews/REVIEW_STATE.md)。
+
+从项目 `chi-agent/` 目录导出。复用现有基础镜像，无需 SDK、凭据或官方资源；目标目录必须尚不存在：
+
+```sh
+mkdir -p runs/evaluation-entry-bundle/exports
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -v "$PWD/scripts:/workspace/scripts:ro" \
+  -v "$PWD/profiles:/workspace/profiles:ro" \
+  -v "$PWD/docs/evaluation-entry-runbook.md:/workspace/docs/evaluation-entry-runbook.md:ro" \
+  -v "$PWD/requirements-model.lock:/workspace/requirements-model.lock:ro" \
+  -v "$PWD/runs/evaluation-entry-bundle/exports:/exports:rw" \
+  -w /workspace chi-agent-dev:latest /opt/venv/bin/python \
+  scripts/evaluation_bundle.py build --target /exports/evaluation-entry-001
+```
+
+导出只读取固定允许文件，不遍历整个仓库；开发 policy/账本、凭据、vendor、数据、手册、测试及原始轨迹不进入包。目标已存在时拒绝且保留原文件；构建中断的目标保持占用，未完成标记会阻止验证。manifest 中的 hash 标识内容，不提供签名或执行许可。
+
+进入导出的包目录后，可用基础镜像验证与查看只读计划：
+
+```sh
+cd runs/evaluation-entry-bundle/exports/evaluation-entry-001
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD:/package:ro" \
+  -w /tmp chi-agent-dev:latest /opt/venv/bin/python \
+  /package/scripts/evaluation_bundle.py verify --root /package
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 -v "$PWD:/package:ro" \
+  -w /tmp chi-agent-dev:latest /opt/venv/bin/python \
+  /package/scripts/evaluation_entry.py plan
+```
+
+独立 SDK/vendor 只读挂载和多任务合成运行命令见包内 `RUN_EVALUATION.md`，源文件为 [运行说明](docs/evaluation-entry-runbook.md)。输出根须与包路径双向无重叠；同 evaluation 可继续另一合法 task/attempt，换 run-id 不能重演占用的 attempt。默认合成场景每 trial 估算超过 5 元，不会触发开发限额。包验证/完整演练退出 0，受控演练失败退出 1，输入或身份拒绝/live 退出 2；缺 SDK/vendor 时 `plan` 报告缺口仍退出 0，`preflight` 退出 1，完整依赖核对后 preflight 才退出 0。认证和执行许可始终分别报告。
 
 ## 资料来源
 

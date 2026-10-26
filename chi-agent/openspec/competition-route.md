@@ -1,6 +1,6 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline` 的 F.2–F.4：本地/评测预算策略分离、任务/尝试隔离代码与 Docker 离线验收；F.5 最终提交冻结仍待后续。实际模型 API、真实 C 尝试与官方判分继续暂停。实现分工按 [当前工作流](../docs/luna-subagent-workflow.md)，不操作 Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline` 的 G：评测专用默认入口与干净目录包的代码和 Docker 离线验收，防止交付入口回落到本地 5 元策略；F.5 完整最终系统冻结仍待后续。实际模型 API、真实 C 尝试与官方判分继续暂停。实现分工按 [当前工作流](../docs/luna-subagent-workflow.md)，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 
