@@ -1,6 +1,6 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline` 的 H：固定官方启动契约接入受控 runner，以及空依赖卷安装后的干净包独立离线复现；保留 G 的专用默认入口及 record_only/null cap，不重做 G。F.5 完整正式冻结仍待后续；真实 API、真实 C 和官方判分继续暂停。实现分工按 [当前工作流](../docs/luna-subagent-workflow.md)，不操作 Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline` 的 J：5 元共享开发预算内的真实 B 联调，以及通过后的唯一一次无评分 C。开发以首次真实试跑必需接入为边界，先独立审核代码，再真实运行；G/H 已通过范围和正式入口 record_only/null cap 保留。官方判分继续暂停，F.5 最终提交冻结留待真实运行反馈后处理。实现分工按 [当前工作流](../docs/luna-subagent-workflow.md)，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 

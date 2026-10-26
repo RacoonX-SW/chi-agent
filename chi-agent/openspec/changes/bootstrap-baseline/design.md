@@ -108,6 +108,22 @@ H 沿 G 的包/策略/claim 链路添加外部启动输入，最小扩展已有 
 
 独立安装使用本轮新建空 Docker 卷，以干净包内 `requirements-model.lock` 和安装脚本执行哈希校验安装，检查实际 Python、SDK、完整锁定版本与依赖一致性；不使用既有 SDK 安装目录，不改变锁、不在宿主安装。复用基础镜像意味着基础层没有重新构建，包仍需要独立授权的固定 vendor，不称自包含镜像或新机器/其他架构通过。安装后禁网运行只读干净包，分别挂载外部输入/输出/vendor/新依赖，换 cwd，验证正常、失败、重复和暂停边界。F.5 涉及的当前主办方限制、最终模型/资源/正式启动与实际运行授权继续另行验收。
 
+### J：首次真实 B/C 的受控接入
+
+用户明确恢复真实模型联调与满足条件后的唯一一次无评分 C，首轮 B/C 共享 5 元；官方判分仍暂停。新增独立本地真实开发入口，不改 G 正式包的固定 record_only/null cap、允许文件或旧 live 暂停。先完成必要代码与合成外部边界测试，固定候选后由主代理独立审核，实际 metadata/API 和 C 由主代理执行；实现代理不读真实密钥、不调用模型。B/C 失败或未知不自动重演。
+
+当前固定 profile 为 DeepSeek Flash thinking/high、Chat Completions、有限 30 轮/每轮 8192 输出上限。2026-10-27 主代理重新核对官方 [价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/)、[模型元数据](https://api-docs.deepseek.com/zh-cn/api/list-models/)、[思考模式](https://api-docs.deepseek.com/zh-cn/guides/thinking_mode) 与 [请求契约](https://api-docs.deepseek.com/zh-cn/api/create-chat-completion/)：与既有 profile 的模型、1M context、high 档和峰值 CNY 输入 2/百万、输出 8/百万一致。仍用高峰/未命中上界，不以时段折扣增加预算；响应用量是 provider 回报，费用是按价目估算而非账单。thinking 不支持 required/指定单个 tool_choice，使用 auto 和有依赖的 smoke 目标，不靠强制工具掩盖真实模型行为。实际 model metadata、认证与响应模型另行核对；未知/不符先停止，不静默更换模型、模式或放宽身份。
+
+真实账目使用固定 first-B/C campaign，与 synthetic/evaluation 完全分离；日志根可变化，预算/claim 根不随之新建。主代理核对本项目此前只有离线/无模型记录后，显式初始化有来源的 prior=0；缺账目保持 unknown，不由 b-smoke/c-once 自动补零。复用现有 guard 的请求结构、历史/ID、保守预留与 Decimal 核算，真实 journal 采用独立 schema/状态身份和原子持久锁，不能把合成标签换成实测。每请求先落盘 reserve，再传输，响应 usage 先结算再校验整批工具参数；HTTP/SDK/MCP/外层重试为零。超时/中断/未知用量保留 pending，完整总量为 null，已知前缀单列；后续 C 不得放行。5 元约束建立在已核对容量/价格和实际返回用量的假设上，不夸称已实测账单硬封顶。
+
+B 使用真实 SDK/模型、固定 transport、少量确定性本地测试工具，由模型自己调用；第二个工具依赖首个返回值，至少两次工具往返后有非空最终结果才标记成功。B 不创建官方世界或消耗 C claim。每次实际请求/工具结果具有来源，保留 reasoning_content、assistant content 和 tool call IDs，不能用 fixture 回答代替缺失的真实回执。B 可采用低于 profile ceiling 的小轮数限制，实际限制必须进入证据。
+
+C 仅针对已选 provider task，复用固定官方 world 镜像、entrypoint 与 A 的所有权/清理逻辑，不重建受限镜像或把旧调试世界当初始世界。先核对真实 B 的 source/SDK/profile/budget 身份与已知余额，再持久 claim，之后才创建 world。controller 仅调度 Docker；模型 runner 使用独立容器，不挂 socket、整个原项目、.env 或 task fixtures。代码/vendor/SDK 分别只读挂载，但本地工具不可读这些目录；只投影公开 instruction/tool_reference 与已授权 handbook，scratch/logs 独立可写。world 仅内部任务网络且无 provider/judge 凭据；runner 可连接任务 MCP 与固定 provider。最终清理本轮拥有的 runner/world/network，保留所有证据，主错与清理错分别报告。
+
+固定官方 local-tool factory 提供不受限 shell/Python/文件读写；直接放进有 socket 的 controller 会暴露权限，单纯换 MCP 地址无法解决。因此 participant adapter 在独立 runner 中只提供范围受限的读/list（确需时提供 scratch 写/edit）及 claim_done/sleep，不暴露 shell/Python、环境变量和评分目录；这是自有受控配置，与原版全部本地工具能力不同。MCP 业务工具来自官方运行时 schema，正常病例动作仍由模型自主决定；整批参数在任何动作前检查。运行途中不让人工补业务动作或修结果，官方 reward 为 null，不运行 verifier/judge。
+
+验收包括真实路径的 mock transport/MCP/Docker 边界、跨 B/C 累计账目与 pending、并发/重复 claim、整批 schema 校验、目录/凭据泄露、异常清理与 G/H 回归。只有真实 B 成功且预算足够才执行 C；凭据、网络、认证或模型行为的真实失败如实保留，不能据代码通过代勾真实成功。最终冻结 F.5 在有真实试跑反馈后处理，本轮不扩业务策略或其他任务。
+
 ### C 的离线执行控制
 
 新增集中式 `c_run_control.py`，职责是单题尝试的生命周期与证据控制，不新增第二套模型工具循环。`plan` 纯验证/预览，不写目录或 claim；`rehearse` 只调用注入的纯 Python 合成 backend；`live` 在 claim/外部边界前明确拒绝。既有 `build_experiment_config()` 和 `evaluate_budget()` 分别提供单题形状及保守入场核算，`run_baseline.py` 与 D0 gate 不改。agent/model 显式保存为候选，不能从历史命令示例推断已冻结 DeepAgents 或真实 runner。
