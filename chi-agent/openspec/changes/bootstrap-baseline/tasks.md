@@ -116,6 +116,17 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] G.4 In offline Docker, run the actual dedicated CLI from a read-only exported package at an unrelated cwd without the original repository mounted; verify multiple above-5-CNY synthetic trials, unknown/replay isolation, identity/config/file tampering, prohibited overrides, build failures, read-only modes and live refusal, with existing local regressions preserved.
 - [x] G.5 Freeze the candidate, independently review/recheck it, record one phase report and learning entry, then create a base=main PR for user review/merge. This delivery is an identified offline package, not final submission or real execution acceptance.
 
+## H. Official launch contract and clean dependency reproduction (offline)
+
+本轮不代勾 F.5、1.5 或 3.2；沿用 G 默认 record_only/null cap 与本地 B/C 共享 5 元。所有安装/运行/调试均在复用的 Python 3.12 Docker 内，真实模型 API、真实 C 和判分保持暂停。
+
+- [x] H.1 Verify PR #11 merged, branch from latest origin/main, inspect the pinned official instruction/MCP URL/output/log contract, and define the offline boundary.
+- [x] H.2 Pass validated external instruction-file content and MCP URL through the existing guarded SDK/official runner, retaining uniquely reserved external runner logs/artifacts on success and failure; keep live refusal before input, configuration, credential, client or claim access.
+- [x] H.3 Extend only the necessary clean-package allowlist and evidence metadata; preserve package/policy identity, attempt exclusion, unknown usage and local budget behavior, without importing protected resources (the existing allowlist already contains all changed modules).
+- [x] H.4 Install the unchanged locked model dependencies in a newly created empty Docker volume without reusing an installed dependency layer; record environment, actual install result and dependency consistency.
+- [x] H.5 Independently run a frozen candidate's clean read-only package from an unrelated cwd, with only separate authorized vendor/dependency/input/output mounts; verify actual instruction/URL/log flow, success/failure and replay/pause boundaries using synthetic external services.
+- [ ] H.6 Record the bounded independent review and learning progress, push the work branch and create a base=main PR for user review/merge; retain F.5 and real-run limitations.
+
 ## 3. Verify and hand over
 
 - [x] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.
