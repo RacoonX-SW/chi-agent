@@ -192,4 +192,3 @@ def validate_budget_evidence(path: Path | None, *, today: dt.date | None = None)
     if not valid:
         return {"status": "unknown", "prior_spend_cny": None, "source": None, "code": "budget_evidence_invalid_or_stale"}
     return {"status": "known", "prior_spend_cny": str(Decimal(str(amount))), "source": source.strip(), "code": None}
-

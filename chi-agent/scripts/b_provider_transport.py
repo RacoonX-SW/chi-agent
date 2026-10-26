@@ -719,4 +719,3 @@ class GuardedTransport(httpx.AsyncBaseTransport):
 
     async def aclose(self) -> None:
         await self.lower.aclose()
-

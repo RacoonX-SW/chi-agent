@@ -659,4 +659,3 @@ def _request(*, url: str = "https://api.deepseek.com/v1/chat/completions",
 
 if __name__ == "__main__":
     unittest.main()
-
