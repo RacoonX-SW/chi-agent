@@ -4,7 +4,10 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import shutil
+import socket
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -241,6 +244,53 @@ class EvaluationEntryBundleTests(unittest.TestCase):
                 entry._read_launch_inputs(instruction_file, "https://docker-host:8020/mcp",
                                           existing, root, output_root)
             self.assertEqual(error.exception.code, "evaluation_logs_destination_exists")
+
+    def test_fifo_instruction_is_rejected_promptly_and_other_nonregular_inputs_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = self.build(temp)
+            external = Path(temp) / "external"
+            external.mkdir()
+            fifo = external / "instruction.fifo"
+            os.mkfifo(fifo)
+            logs_parent = Path(temp) / "logs"
+            logs_parent.mkdir()
+            command = (
+                "import sys; from pathlib import Path; "
+                "sys.path.insert(0, sys.argv[1]); import evaluation_entry as e; "
+                "import b_provider_profile as p; "
+                "e.ROOT=Path(sys.argv[2]); e.ENTRY_CONFIG_PATH=Path(sys.argv[2])/'profiles/evaluation-entry.json'; "
+                "p.PROFILE_PATH=Path(sys.argv[2])/'profiles/deepseek-flash-prepared.json'; "
+                "raise SystemExit(e.main(['launch-rehearse','--evaluation-id','fifo-test',"
+                "'--task-id','task','--attempt-id','attempt','--run-id','fifo-run',"
+                "'--output-root',sys.argv[3],'--instruction-file',sys.argv[4],"
+                "'--mcp-url','http://localhost:8020/mcp','--logs-dir',sys.argv[5]]))"
+            )
+            completed = subprocess.run(
+                [sys.executable, "-c", command, str(PROJECT_ROOT / "scripts"), str(root),
+                 str(Path(temp) / "output"), str(fifo), str(logs_parent / "runner")],
+                capture_output=True, text=True, timeout=3,
+            )
+            self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["safe_error_code"], "evaluation_instruction_invalid")
+            self.assertFalse((logs_parent / "runner").exists())
+
+            directory = external / "instruction-directory"
+            directory.mkdir()
+            with self.assertRaises(entry.EntryFailure) as error:
+                entry._read_launch_inputs(directory, "http://localhost:8020/mcp",
+                                          logs_parent / "directory-logs", root, Path(temp) / "output")
+            self.assertEqual(error.exception.code, "evaluation_instruction_invalid")
+
+            socket_path = external / "instruction.socket"
+            local_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                local_socket.bind(str(socket_path))
+            finally:
+                local_socket.close()
+            with self.assertRaises(entry.EntryFailure) as error:
+                entry._read_launch_inputs(socket_path, "http://localhost:8020/mcp",
+                                          logs_parent / "socket-logs", root, Path(temp) / "output")
+            self.assertEqual(error.exception.code, "evaluation_instruction_invalid")
 
     def test_plan_can_report_missing_runtime_but_preflight_is_nonzero(self):
         with tempfile.TemporaryDirectory() as temp:
