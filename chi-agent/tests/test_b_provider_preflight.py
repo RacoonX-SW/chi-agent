@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import dataclasses
+import fcntl
 import gzip
 import json
 import multiprocessing
@@ -71,6 +72,29 @@ def _evaluation_attempt_worker(root: str, run_id: str, acquired, release, result
     release.wait(10)
     journal.finish(success=False)
     journal.close()
+
+
+def _concurrent_evaluation_task_worker(root: str, run_id: str, task_id: str, barrier, results):
+    original_mkdir = Path.mkdir
+
+    def synchronized_mkdir(path, *args, **kwargs):
+        if path.name == "claims":
+            barrier.wait(10)
+        return original_mkdir(path, *args, **kwargs)
+
+    with patch.object(Path, "mkdir", synchronized_mkdir):
+        try:
+            journal = transport.EvaluationJournal(
+                Path(root), run_id, evaluation_id="eval-shared-init", task_id=task_id,
+                attempt_id="attempt-1", policy=policies.make_evaluation_policy("record_only"),
+                profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+            )
+        except transport.GuardFailure as exc:
+            results.put((task_id, exc.code))
+            return
+        journal.finish(success=False)
+        journal.close()
+        results.put((task_id, "acquired"))
 
 
 class ProfileReadOnlyTests(unittest.TestCase):
@@ -254,6 +278,65 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             self.assertEqual(lower.calls, 0)
             journal.finish(success=False)
             journal.close()
+
+    def test_guard_rejects_dynamic_policy_forgery_and_boolean_evaluation_cap(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        lower = _CountingTransport(httpx.Response(200, json={}))
+        with tempfile.TemporaryDirectory() as temp:
+            local_policy = policies.load_local_policy()
+            journal = transport.SyntheticJournal(Path(temp) / "local", "dynamic-policy",
+                                                 initial_prior_cny=Decimal("4"), policy=local_policy)
+            guard = transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
+                                               ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
+                                               validate_response=lambda _payload: None,
+                                               allowed_tool_names={"synthetic_lookup", "synthetic_format"})
+            journal.policy = dataclasses.replace(local_policy, mode="record_only")
+            with self.assertRaises(transport.GuardFailure) as error:
+                asyncio.run(guard.handle_async_request(_request()))
+            self.assertEqual(error.exception.code, "execution_policy_invalid")
+            self.assertEqual(lower.calls, 0)
+            journal.close()
+
+        with tempfile.TemporaryDirectory() as temp:
+            policy = policies.make_evaluation_policy("capped", "1")
+            journal = transport.EvaluationJournal(
+                Path(temp), "bool-cap", evaluation_id="eval-bool-cap", task_id="task-a",
+                attempt_id="attempt-1", policy=policy, profile=profile,
+            )
+            with self.assertRaises(transport.GuardFailure):
+                transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
+                                           ledger=runner_adapter.Ledger("success"), cap_cny=True,
+                                           validate_response=lambda _payload: None,
+                                           allowed_tool_names={"synthetic_lookup", "synthetic_format"})
+            self.assertEqual(lower.calls, 0)
+            journal.finish(success=False)
+            journal.close()
+
+    def test_journal_construction_rejects_symlink_in_deep_ancestor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "real-target"
+            target.mkdir()
+            (root / "alias").symlink_to(target, target_is_directory=True)
+            deep = root / "alias" / "a" / "b" / "c" / "d" / "e" / "f" / "g" / "h"
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.EvaluationJournal(
+                    deep, "deep-symlink", evaluation_id="eval-path", task_id="task-a", attempt_id="a1",
+                    policy=policies.make_evaluation_policy("record_only"),
+                    profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+                )
+            self.assertEqual(error.exception.code, "evaluation_path_invalid")
+            self.assertEqual(list(target.iterdir()), [])
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "real-target"
+            target.mkdir()
+            (root / "alias").symlink_to(target, target_is_directory=True)
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.SyntheticJournal(root / "alias" / "a" / "b" / "c" / "d" / "e", "local-link")
+            self.assertEqual(error.exception.code, "synthetic_journal_path_invalid")
+            self.assertEqual(list(target.iterdir()), [])
 
     def test_guard_rejects_streaming_multiple_completions_and_ambiguous_limits_pre_send(self):
         profile = profiles.load_profile(today=dt.date(2026, 10, 26))
@@ -585,6 +668,94 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             release.set()
             first.join(10)
             self.assertFalse(first.is_alive())
+
+    def test_concurrent_distinct_tasks_share_initial_evaluation_directories_safely(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / "eval-shared-init").mkdir()
+            ctx = multiprocessing.get_context("spawn")
+            barrier, results = ctx.Barrier(2), ctx.Queue()
+            workers = [ctx.Process(target=_concurrent_evaluation_task_worker,
+                                   args=(temp, f"concurrent-{task}", task, barrier, results))
+                       for task in ("task-a", "task-b")]
+            for worker in workers:
+                worker.start()
+            outcomes = sorted(results.get(timeout=15) for _ in workers)
+            for worker in workers:
+                worker.join(15)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(worker.exitcode, 0)
+            self.assertEqual(outcomes, [("task-a", "acquired"), ("task-b", "acquired")])
+
+    def test_evaluation_constructor_persist_failure_keeps_claim_and_releases_namespace_lock(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            policy = policies.make_evaluation_policy("record_only")
+            profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+            original_persist = transport.SyntheticJournal._persist_run
+            count = 0
+
+            def fail_identity_write(journal):
+                nonlocal count
+                count += 1
+                if count == 2:
+                    raise OSError("synthetic identity persistence failure")
+                return original_persist(journal)
+
+            with patch.object(transport.SyntheticJournal, "_persist_run", fail_identity_write):
+                with self.assertRaises(transport.GuardFailure) as error:
+                    transport.EvaluationJournal(root, "persist-fail", evaluation_id="eval-persist",
+                                                task_id="task-a", attempt_id="attempt-1",
+                                                policy=policy, profile=profile)
+            self.assertEqual(error.exception.code, "evaluation_identity_persist_failed")
+            attempt_root = root / "eval-persist" / "attempts" / "task-a" / "attempt-1"
+            evidence = json.loads((attempt_root / "persist-fail.json").read_text(encoding="utf-8"))
+            self.assertEqual(evidence["state"], "incomplete")
+            self.assertEqual(evidence["primary_error_code"], "evaluation_identity_persist_failed")
+            self.assertEqual(evidence["persistence_error_code"], "journal_write_failed")
+            self.assertTrue((root / "eval-persist" / "claims" / "task-a" / "attempt-1.json").exists())
+            lock_fd = os.open(attempt_root / ".synthetic-namespace.lock", os.O_RDWR)
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            finally:
+                os.close(lock_fd)
+
+    def test_registry_lock_acquisition_error_closes_descriptor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original_open = os.open
+            original_close = os.close
+            original_flock = fcntl.flock
+            registry_fds = set()
+            closed = set()
+
+            def tracked_open(path, *args, **kwargs):
+                fd = original_open(path, *args, **kwargs)
+                if Path(path).name == ".registry.lock":
+                    registry_fds.add(fd)
+                return fd
+
+            def failing_registry_flock(fd, operation):
+                if fd in registry_fds and operation == fcntl.LOCK_EX:
+                    raise OSError("synthetic flock failure")
+                return original_flock(fd, operation)
+
+            def tracked_close(fd):
+                if fd in registry_fds:
+                    closed.add(fd)
+                return original_close(fd)
+
+            with patch.object(transport.os, "open", tracked_open), patch.object(
+                    transport.os, "close", tracked_close), patch.object(
+                    transport.fcntl, "flock", failing_registry_flock):
+                with self.assertRaises(transport.GuardFailure) as error:
+                    transport.EvaluationJournal(
+                        Path(temp), "registry-lock-fail", evaluation_id="eval-lock-fail", task_id="task-a",
+                        attempt_id="attempt-1", policy=policies.make_evaluation_policy("record_only"),
+                        profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+                    )
+            self.assertEqual(error.exception.code, "evaluation_journal_unavailable")
+            self.assertTrue(registry_fds)
+            self.assertEqual(closed, registry_fds)
 
     def test_evaluation_preflight_does_not_require_or_read_development_budget(self):
         policy = policies.make_evaluation_policy("record_only")

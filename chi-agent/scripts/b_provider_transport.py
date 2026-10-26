@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import tempfile
 import fcntl
 from decimal import Decimal
@@ -62,6 +63,28 @@ def _atomic_replace(path: Path, payload: bytes) -> None:
         raise
 
 
+def _strict_cap_matches(value: Any, expected: Decimal | None) -> bool:
+    if expected is None:
+        return value is None
+    return type(value) is Decimal and value.is_finite() and value == expected
+
+
+def _reject_symlink_ancestors(path: Path, code: str) -> None:
+    """Reject links in every existing path component without resolving them."""
+    absolute = Path(os.path.abspath(path))
+    current = Path(absolute.anchor)
+    for part in absolute.parts[1:]:
+        current = current / part
+        try:
+            details = current.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            raise GuardFailure(code, "preflight") from None
+        if not stat.S_ISDIR(details.st_mode):
+            raise GuardFailure(code, "preflight")
+
+
 class SyntheticJournal:
     """Exclusive bounded journal for synthetic rehearsals; never a real ledger."""
 
@@ -78,7 +101,7 @@ class SyntheticJournal:
                 or (policy.scope == "evaluation_rehearsal" and not _allow_evaluation)
                 or policy.scope not in {"local_development", "evaluation_rehearsal"}):
             raise GuardFailure("execution_policy_invalid", "preflight")
-        if cap_cny is not None and (type(cap_cny) is not Decimal or cap_cny != policy.hard_cap_cny):
+        if cap_cny is not None and not _strict_cap_matches(cap_cny, policy.hard_cap_cny):
             raise GuardFailure("execution_policy_cap_mismatch", "preflight")
         if (type(prior_source) is not str or re.fullmatch(r"[A-Za-z0-9_.:-]{1,80}", prior_source) is None
                 or type(initial_prior_cny) is not Decimal or not initial_prior_cny.is_finite()
@@ -104,12 +127,9 @@ class SyntheticJournal:
             "real_usage": None, "real_cost_cny": None, "official_reward": None,
         }
         try:
-            cursor = root
-            for _ in range(3):
-                if cursor.is_symlink():
-                    raise GuardFailure("synthetic_journal_path_invalid", "preflight")
-                cursor = cursor.parent
+            _reject_symlink_ancestors(root, "synthetic_journal_path_invalid")
             root.mkdir(parents=True, exist_ok=True)
+            _reject_symlink_ancestors(root, "synthetic_journal_path_invalid")
             if self.state_path.is_symlink():
                 raise GuardFailure("synthetic_journal_path_invalid", "preflight")
             self.lock_fd = os.open(self.lock_path, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
@@ -250,6 +270,10 @@ class SyntheticJournal:
     def reserve(self, profile: ProviderProfile, request: httpx.Request, body: dict[str, Any], raw: bytes,
                 max_output: int, round_number: int) -> Decimal:
         self._require_active_lock()
+        if not is_validated_policy(self.policy):
+            raise GuardFailure("execution_policy_invalid", "request_guard")
+        if not _strict_cap_matches(self.cap_cny, self.policy.hard_cap_cny):
+            raise GuardFailure("synthetic_cap_invalid", "request_guard")
         if not is_validated_profile(profile):
             raise GuardFailure("profile_untrusted_or_stale", "request_guard")
         # The persisted namespace is authoritative, even if this Guard/Ledger
@@ -259,8 +283,6 @@ class SyntheticJournal:
             raise GuardFailure("synthetic_prior_pending_unknown", "request_guard")
         if persisted != self.state:
             raise GuardFailure("synthetic_journal_state_changed", "request_guard")
-        if self.cap_cny != self.policy.hard_cap_cny:
-            raise GuardFailure("synthetic_cap_invalid", "request_guard")
         reserve = (
             Decimal(profile.input_reserve_tokens) * profile.input_price
             + Decimal(max_output) * profile.output_price
@@ -489,30 +511,23 @@ class EvaluationJournal(SyntheticJournal):
         }
 
         try:
-            cursor = base.absolute()
-            for _ in range(5):
-                if cursor.is_symlink():
-                    raise GuardFailure("evaluation_path_invalid", "preflight")
-                cursor = cursor.parent
-            if base.is_symlink():
-                raise GuardFailure("evaluation_path_invalid", "preflight")
+            _reject_symlink_ancestors(base, "evaluation_path_invalid")
             self._ensure_directory(base)
+            _reject_symlink_ancestors(base, "evaluation_path_invalid")
             for path in (eval_root, eval_root / "claims", claim_dir,
                          eval_root / "attempts", eval_root / "attempts" / task_id):
-                if path.is_symlink():
-                    raise GuardFailure("evaluation_path_invalid", "preflight")
-                if not path.exists():
-                    path.mkdir()
-                    self._fsync_directory(path.parent)
+                self._ensure_one_directory(path)
+                _reject_symlink_ancestors(path, "evaluation_path_invalid")
             if attempt_root.exists() or attempt_root.is_symlink():
                 raise GuardFailure("evaluation_attempt_path_conflict", "preflight")
             registry_fd = os.open(registry_lock, os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            registry_locked = False
             try:
-                fcntl.flock(registry_fd, fcntl.LOCK_EX)
-            except BlockingIOError:
-                os.close(registry_fd)
-                raise GuardFailure("evaluation_registry_busy", "preflight") from None
-            try:
+                try:
+                    fcntl.flock(registry_fd, fcntl.LOCK_EX)
+                    registry_locked = True
+                except BlockingIOError:
+                    raise GuardFailure("evaluation_registry_busy", "preflight") from None
                 if registry_path.is_symlink():
                     raise GuardFailure("evaluation_policy_registry_invalid", "preflight")
                 if registry_path.exists():
@@ -537,7 +552,8 @@ class EvaluationJournal(SyntheticJournal):
                 self._write_exclusive(claim_path, _json_bytes(claim), "evaluation_attempt_claim_exists")
             finally:
                 try:
-                    fcntl.flock(registry_fd, fcntl.LOCK_UN)
+                    if registry_locked:
+                        fcntl.flock(registry_fd, fcntl.LOCK_UN)
                 finally:
                     os.close(registry_fd)
         except GuardFailure:
@@ -561,7 +577,25 @@ class EvaluationJournal(SyntheticJournal):
             "evaluation_id": evaluation_id, "task_id": task_id, "attempt_id": attempt_id,
             "run_id_is_output_label_only": True, "claim_path": str(claim_path),
         }
-        self._persist_run()
+        try:
+            self._persist_run()
+        except Exception:
+            self.run_doc["state"] = "incomplete"
+            self.run_doc["primary_error_code"] = "evaluation_identity_persist_failed"
+            self.run_doc["persistence_error_code"] = "journal_write_failed"
+            try:
+                self._persist_finalization()
+            except GuardFailure:
+                pass
+            try:
+                self._release_lock(strict=True)
+            except GuardFailure:
+                self.run_doc["cleanup_error_code"] = "namespace_lock_release_failed"
+                try:
+                    self._persist_finalization()
+                except GuardFailure:
+                    pass
+            raise GuardFailure("evaluation_identity_persist_failed", "persistence") from None
 
     @staticmethod
     def _write_exclusive(path: Path, payload: bytes, failure_code: str) -> None:
@@ -591,6 +625,7 @@ class EvaluationJournal(SyntheticJournal):
 
     @classmethod
     def _ensure_directory(cls, path: Path) -> None:
+        _reject_symlink_ancestors(path, "evaluation_path_invalid")
         missing: list[Path] = []
         cursor = path
         while not cursor.exists():
@@ -601,8 +636,21 @@ class EvaluationJournal(SyntheticJournal):
         if not cursor.is_dir() or cursor.is_symlink():
             raise GuardFailure("evaluation_path_invalid", "preflight")
         for directory in reversed(missing):
+            cls._ensure_one_directory(directory)
+
+    @classmethod
+    def _ensure_one_directory(cls, directory: Path) -> None:
+        if directory.is_symlink():
+            raise GuardFailure("evaluation_path_invalid", "preflight")
+        try:
             directory.mkdir()
-            cls._fsync_directory(directory.parent)
+        except FileExistsError:
+            if directory.is_symlink() or not directory.is_dir():
+                raise GuardFailure("evaluation_path_invalid", "preflight") from None
+            return
+        except OSError:
+            raise GuardFailure("evaluation_journal_unavailable", "preflight") from None
+        cls._fsync_directory(directory.parent)
 
 
 def _unique_json_object(pairs):
@@ -625,8 +673,9 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         if not is_validated_profile(profile):
             raise GuardFailure("profile_untrusted_or_stale", "preflight")
         journal._require_active_lock()
-        if (not is_validated_policy(journal.policy) or cap_cny != journal.policy.hard_cap_cny
-                or journal.cap_cny != journal.policy.hard_cap_cny):
+        if (not is_validated_policy(journal.policy)
+                or not _strict_cap_matches(cap_cny, journal.policy.hard_cap_cny)
+                or not _strict_cap_matches(journal.cap_cny, journal.policy.hard_cap_cny)):
             raise GuardFailure("execution_policy_invalid", "preflight")
         self.profile = profile
         self.journal = journal
@@ -784,6 +833,10 @@ class GuardedTransport(httpx.AsyncBaseTransport):
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
         try:
             self.journal._require_active_lock()
+            if (not is_validated_policy(self.journal.policy)
+                    or not _strict_cap_matches(self.journal.cap_cny, self.journal.policy.hard_cap_cny)
+                    or not _strict_cap_matches(self.cap_cny, self.journal.policy.hard_cap_cny)):
+                raise GuardFailure("execution_policy_invalid", "request_guard")
         except GuardFailure as exc:
             self.ledger.error_code = exc.code
             raise
