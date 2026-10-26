@@ -397,7 +397,7 @@ The system SHALL prepare stage C lifecycle and single-attempt control without en
 
 ### Requirement: Respect the selected first-round runtime budget
 
-The system SHALL account for the selected 5 CNY first-round runtime budget across integration checks and the one task attempt, separately from coding costs. A budget plan SHALL NOT lift an active implementation or paid-run pause.
+The system SHALL account for the selected 5 CNY first-round local-development runtime budget across integration checks and the one task attempt, separately from coding costs. This cap SHALL NOT be treated as an organizer-required private-evaluation limit. A budget plan SHALL NOT lift an active implementation or paid-run pause.
 
 #### Scenario: The user selects a budget while paid execution is paused
 
@@ -412,6 +412,43 @@ The system SHALL account for the selected 5 CNY first-round runtime budget acros
 - **THEN** the run stops with a budget or accounting reason and preserves available evidence
 - **AND** it does not count unknown usage as zero or automatically rerun the whole task
 - **AND** an unfinished task is not reported as completed and local estimates are not presented as an exact provider billing cap
+
+### Requirement: Separate local development budgets from official private evaluation
+
+The system SHALL separate usage/cost recording from monetary stop policy and identify the execution scope explicitly. This pre-submission requirement is pending implementation and verification; current B/C preparation acceptance covers local development only. The rule basis and design are recorded in [the budget-policy design](../../design.md#本地开发预算与正式私有评测).
+
+#### Scenario: Local development uses the selected shared cap
+
+- **GIVEN** the first local B/C development run is selected
+- **WHEN** another model request is considered
+- **THEN** prior spend, settled cost and the next conservative reserve remain subject to the shared 5 CNY cap
+- **AND** restart or a different run-id cannot clear pending/unknown spend, increase the cap or authorize replay
+
+#### Scenario: A frozen official-evaluation profile is selected
+
+- **GIVEN** a separately identified official-evaluation profile consistent with the organizer's rules and resource limits
+- **WHEN** a legitimate private trial starts
+- **THEN** it does not inherit the local 5 CNY cap, development prior file, local balance or synthetic/shared B/C ledger
+- **AND** monetary stops apply only when explicitly specified by that frozen evaluation policy; otherwise accounting can record usage/cost without a development-currency hard stop
+- **AND** request/history/tool validation, effects evidence and retry controls remain active, and the same frozen policy applies across private tasks
+- **AND** documenting or selecting a policy does not lift the current live-execution pause
+
+#### Scenario: One trial has uncertain usage while another is independent
+
+- **GIVEN** two legitimate independent task/attempt identities and one frozen evaluation policy
+- **WHEN** the first trial has spent money, times out or retains pending/unknown usage
+- **THEN** its evidence and attempt identity remain intact without silently zeroing usage or replaying it
+- **AND** the unrelated trial is not blocked by the first trial's local-development ledger or pending state
+- **AND** unknown totals remain null with known prefixes separate, and the affected trial follows the frozen failure policy
+
+#### Scenario: The package is checked before final submission
+
+- **GIVEN** the final runnable package and explicit evaluation entry/configuration
+- **WHEN** pre-submission acceptance runs in Docker with synthetic transports and isolated trial identities
+- **THEN** sequential tasks and independent attempts demonstrate policy/state isolation, including an unknown-usage first trial
+- **AND** duplicate invocation of the same attempt cannot overwrite evidence or automatically replay a request
+- **AND** local-development cap regressions and shared request/history/retry validation still pass
+- **AND** the frozen policy and reproduction instructions are included without development ledgers, credentials or protected artifacts
 
 ### Requirement: Preserve official outcomes
 
