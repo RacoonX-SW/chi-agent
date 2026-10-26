@@ -15,7 +15,7 @@
 | 正式提交前置 | [F.2–F.4](../openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation) 离线通过；评测演练不继承开发余额/账本/5 元限额，F.5 的完整冻结/正式启动与真实运行仍未完成 |
 | 本轮验证 | 最终固定快照的全量、实际 CLI、组件/进程/故障、路径及 README 最小挂载均独立通过；详细结果与证据只见预算策略审核 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [预算边界文档 PR #9](https://github.com/xsw932187210-cell/chi-agent/pull/9) 已由用户合并；本轮离线代码通过，待推送并创建 base=main PR 交用户审核。代码/文档通过不恢复真实 API/C/判分 |
+| PR 与下一步 | [预算边界文档 PR #9](https://github.com/xsw932187210-cell/chi-agent/pull/9) 已由用户合并；[策略分离 PR #10](https://github.com/xsw932187210-cell/chi-agent/pull/10) 已推送创建并附加本聊天，base=main、head=codex/evaluation-budget-policy，待用户审核决定合并。代码/文档通过不恢复真实 API/C/判分 |
 | 未验证项 | 真实 provider transport/认证、真实 tokenizer/framing/用量/价格/账单、官方世界中的 B/C 及判分认证；其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 无真实 trial、official reward 或实测模型费用；新直接 runner 入口只完成离线验证，live 固定拒绝，原 cb/Harbor 的 ungraded gate 继续 unsupported |
 
