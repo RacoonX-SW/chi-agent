@@ -298,6 +298,43 @@ The integration SHALL use the pinned real SDK and official runner with synthetic
 - **AND** output identities are exclusive, failures retain safe evidence, and temporary runner/environment changes are restored
 - **AND** invalid/existing output identities are rejected atomically before runner/tool effects, and setup/constructor failures restore temporary SDK patches as well as execution failures
 
+### Requirement: Prepare a real stage B run without enabling API calls
+
+The preparation SHALL provide an identified provider profile, reusable guarded transport, explicit accounting evidence and read-only preflight. All checks and rehearsals SHALL run without provider credentials, network requests, an official task world or grading; preparation SHALL NOT resume real execution.
+
+#### Scenario: A profile is inspected before any request
+
+- **GIVEN** a candidate provider/model/API/mode and finite request limits
+- **WHEN** plan or preflight runs
+- **THEN** route and wire settings, source/version/date, SDK/source identity, budget evidence and active execution pause are reported separately
+- **AND** no files, production ledger, attempt claim, HTTP client/transport or credentials are created/read by these read-only entries
+- **AND** absent authentication remains unverified rather than being inferred from configuration; live mode is refused before any such boundary regardless of flags or file claims
+
+#### Scenario: Pricing and input reservation have documented provenance
+
+- **GIVEN** a profile with current official CNY peak/cache-miss upper prices and documented model context ceiling
+- **WHEN** the next request is evaluated
+- **THEN** finite arithmetic includes prior B/C spend and full request reserve, with CNY units and sources retained
+- **AND** absent/stale/untrusted provenance, unsafe numeric types, arbitrary reduced input ceilings or mismatched profile/accounting scope fail closed
+- **AND** documentation-based ceilings and upper cost estimates are distinguished from measured provider tokens and billed costs
+
+#### Scenario: The same guard runs through the pinned official loop
+
+- **GIVEN** an injected mock lower transport, fixed real SDK/official runner and synthetic tools
+- **WHEN** a rehearsal performs multiple tool exchanges
+- **THEN** the generic boundary checks each actual serialized request before lower transport, accounts returned usage before protocol/tool validation and preserves the original history/IDs
+- **AND** HTTP/Agents/tool/outer retries remain zero, all temporary SDK/environment changes are restored, and prior effects survive later failures
+- **AND** invalid or final missing usage, schema/model/history errors, over-limit results and insufficient next reserve prevent completion or another send
+- **AND** raw responses and evidence never disclose credentials or arbitrary exception payloads
+
+#### Scenario: A request reservation is interrupted or uncertain
+
+- **GIVEN** a persistent rehearsal ledger in an explicitly synthetic namespace and known prior costs
+- **WHEN** a request is reserved before send and then times out, returns unknown usage or the process exits
+- **THEN** restart or a different run-id cannot erase the pending state, reset prior spend or automatically replay the request
+- **AND** concurrent processes cannot both spend the same reservation, persistence failure blocks the lower boundary, and known-prefix/aggregate/upper-cost meanings remain distinct
+- **AND** rehearsals do not initialize or consume a real B/C budget namespace, and production missing/synthetic budget evidence is not treated as known real zero
+
 ### Requirement: Offline stage C single-attempt execution control
 
 The system SHALL prepare stage C lifecycle and single-attempt control without enabling model API calls, an official task attempt or grading. An offline rehearsal SHALL exercise control boundaries only; it SHALL NOT satisfy the real stage C execution scenario.

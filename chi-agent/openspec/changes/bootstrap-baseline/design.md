@@ -1,6 +1,6 @@
 ## Context
 
-本轮恢复真实模型/官方 runner 接入层代码与离线验收，复用 Python 3.12 开发镜像；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。使用现有官方环境，不重写模拟器或评测器。
+本轮完成真实 B 的运行准备，实际调用继续暂停。复用 Python 3.12 开发镜像和已锁模型依赖；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。使用现有官方环境，不重写模拟器或评测器。
 
 规划基线任务为 `pa_t018_t018_o001_p01_new_referral_provider`。其输入、静态工具和运行限制见 `docs/task-walkthrough-pa-t018.md`。该文档没有真实评分，不能充当完成基线的证据。
 
@@ -57,6 +57,20 @@
 带工具历史逐条保留原 assistant content、opaque reasoning_content、工具 ID/参数及对应 tool 结果；thinking 经 SDK extra_body 序列化后应落在 body 顶层。回放须绑定精确模型与 endpoint，避免跨模型泄漏或静默降级。通过真实 SDK 捕获的第二/三次 HTTP body 验证，不能仅比较预先构造的 dict。
 
 无评分入口选择直接执行固定官方 runner 的 `run_agent()`，不进入 `cb experiment run`/Harbor verifier；这仅建立开发接入路径，不增加虚构 skip-judge 参数，也不修改官方 judge。生产 CLI 提供纯计划及合成离线集成，真实模式在任何 credentials/网络/MCP/claim 边界前拒绝。本轮不把它接入 C 的真实 attempt，不消耗/重置真实 B/C 预算。
+
+### 真实 B 运行准备：本轮设计
+
+沿用上一接入层已验证的固定 SDK/官方循环及 scoped 恢复机制，不复制 runner 或再造一套业务 Agent。将 fixture 内部的传输与核算职责分离到可注入的通用请求边界；离线演练使用 mock 下层，真实 HTTP 构造/调用和凭据读取仍在 live 暂停门禁之后。旧 B/C/baseline 的门禁及既有合成探针行为保留；必要的接入层抽取须有原回归。
+
+provider profile 显式固定 model、endpoint、API、thinking/high、key-env 名称、有限轮数/输出、响应模型约束，以及价格/输入预留的版本、来源和核对日期。不读 .env，不调用 /models 或 /user/balance。预检只核对显式本地资料，分别报告代码/SDK、配置、预算证据、认证未验证和执行暂停；plan/preflight 不写文件或占用运行机会，不能把 technical configured 写成可执行授权。
+
+2026-10-26 从官方 [人民币价目](https://api-docs.deepseek.com/zh-cn/quick_start/pricing/) 核对 DeepSeek Flash 高峰未命中输入 2 元/百万、输出 8 元/百万；直接 CNY 核算，避免引入未经核对的汇率。使用高峰/未命中价格作为保守上界，不将该估计称为账单实测。来源过期/缺失、金额类型错误或非有限值均阻断。
+
+输入预留默认可采用官方 [模型元数据文档](https://api-docs.deepseek.com/zh-cn/api/list-models/) 示例的 context_window=1048576，明确标为 documented context ceiling，作为对被服务端接受请求的保守推断；不再把旧探针的 UTF-8 字节数称为 provider token 上界，也不下载 tokenizer 来掩盖服务端 framing 未验证。该策略假设服务端遵守文档容量，并非精确 tokenizer/费用硬封顶证明；实际 usage 超界时如实核算并停止。较小输入预留只有获得相应明确依据后才能采用，不能由任意配置字符串宣称已验证。
+
+累计预算包含此前 B/C 花费。未提供真实账目时真实预算就绪保持 unknown，不能默认为零或由 synthetic 文件放行。准备层只在合成 namespace 演练持久请求账目：先持久预留后到达下层传输，响应先核算后验证工具；超时、未知用量或中断中的请求保留未决状态，换 run-id/重启不能把未决费用清零或自动释放。持久化/清理错误和主错分别记录。实际账本初始化与真实请求机会留待明确恢复，C 控制器本轮不改。
+
+验收重点是同一通用传输边界在真实 SDK/官方循环中的禁网演练，而非只对字典做单元测试。使用显式 profile 和先前账目覆盖逐请求预留、陈旧来源、输出/轮数、缺失/不一致 usage、整批工具与历史、取消/超时/HTTP 错误、未决预留恢复和多进程排他。真实 provider usage/cost/reward 仍为 null，模拟 usage 与基于文档价格的演练估算分开标注。串行 B 验证无需扩到官方世界、C 资源调度、业务策略或后台进程。
 
 ### C 的离线执行控制
 

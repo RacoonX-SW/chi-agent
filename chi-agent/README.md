@@ -148,6 +148,43 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 证据为 `runs/model-runner/<run-id>.json`；身份在 runner 执行前独占，重复身份不会重跑或覆盖。正常合成完成退出 0，受控失败退出 1，非法/重复身份或 live 拒绝退出 2。可用 `--scenario post-tool-429`、`missing-usage`、`invalid-final-usage`、`batch-valid-then-invalid`、`empty-history` 观察错误、用量未知和空历史字段；其他场景见 `--help`。独立验收与限制集中在状态页链接的接入层报告。
 
+## 真实 B 运行准备：只读预检与合成账目
+
+`scripts/b_live_preflight.py` 提供 `plan`、`preflight`、`rehearse` 和固定拒绝的 `live`。profile 在 `profiles/deepseek-flash-prepared.json`，来源/核对日期、CNY 峰值上界、完整上下文预留及有限生成参数均明确保存；不把文档推断写成 tokenizer 或账单实测。使用前核对 [当前授权](reviews/REVIEW_STATE.md)。
+
+从本项目目录执行。基础镜像即可读取 plan/preflight；没有可选 SDK 或真实预算证据时会受控报告缺口。以下命令不挂凭据、模型依赖、官方资源或结果目录：
+
+```sh
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -v "$PWD/scripts:/workspace/scripts:ro" \
+  -v "$PWD/profiles:/workspace/profiles:ro" \
+  -w /workspace chi-agent-dev:latest /opt/venv/bin/python \
+  scripts/b_live_preflight.py preflight
+```
+
+改为 `plan` 可查看配置与最坏请求预留。真实预算缺失时 `preflight` 通常退出 1；即使显式提供已核对的 `--budget-evidence <路径>` 并取得技术核对结果，也仍为 authentication unverified / execution paused。该只读文件的格式由 `validate_budget_evidence()` 定义；不应拿 synthetic journal 充当真实花费依据。`live` 退出 2，不因配置或文件而解除暂停。
+
+下面在同一官方循环/真实 SDK 中演练新的通用 guard，复用上一节 `chi-model-deps` 卷。这个挂载目录只保存 synthetic 账目，默认演练 cap 对齐 5 元目标，真实 B/C 账目仍未初始化；首次使用一个新的合成目录：
+
+```sh
+mkdir -p runs/b-provider-preflight/rehearsal-example-001
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/model-deps:/workspace/vendor/chi-bench/src \
+  -v chi-model-deps:/model-deps:ro \
+  -v "$PWD/scripts:/workspace/scripts:ro" \
+  -v "$PWD/profiles:/workspace/profiles:ro" \
+  -v "$PWD/vendor/chi-bench:/workspace/vendor/chi-bench:ro" \
+  -v "$PWD/runs/b-provider-preflight/rehearsal-example-001:/workspace/runs/b-provider-preflight/synthetic:rw" \
+  -w /workspace chi-agent-dev:latest /opt/venv/bin/python \
+  scripts/b_live_preflight.py rehearse --run-id prepared-example-001 --scenario success
+```
+
+完整演练退出 0，其他结果以非零退出及 `safe_error_code` 标记。run-id 独占记录、`synthetic-accounting.json` 和持久 flock 文件在目录内保留。timeout、unknown usage 或中断产生的 pending 不自动清除，换 run-id 仍会阻断；settled 花费和已持久化 cap 也不随重启重置。需要独立错误场景时用另一个明确合成目录，例如 `--scenario post-tool-503`、`missing-usage`、`duplicate-call-id`。旧 schema/损坏账目拒绝，不删除历史证据或自动迁移。
+
+这只验证受控传输、预算账目和预检代码。认证、真实 prior spend、服务端计量/响应模型与账单仍未验证；实际结果与限制集中在状态页链接的 B 准备审核。
+
 ## 资料来源
 
 核对日期：2026-10-19。
