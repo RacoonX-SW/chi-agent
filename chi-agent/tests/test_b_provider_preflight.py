@@ -669,6 +669,25 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             self.assertEqual(error.exception.code, "evaluation_policy_conflict")
             run.assert_not_awaited()
 
+    def test_evaluation_registry_binds_optional_entry_bundle_identity(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        policy = policies.make_evaluation_policy("record_only")
+        with tempfile.TemporaryDirectory() as temp:
+            first = transport.EvaluationJournal(
+                Path(temp), "entry-one", evaluation_id="eval-entry-identity", task_id="task-a",
+                attempt_id="attempt-1", policy=policy, profile=profile,
+                execution_identity_sha256="a" * 64,
+            )
+            first.finish(success=False)
+            first.close()
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.EvaluationJournal(
+                    Path(temp), "entry-two", evaluation_id="eval-entry-identity", task_id="task-b",
+                    attempt_id="attempt-1", policy=policy, profile=profile,
+                    execution_identity_sha256="b" * 64,
+                )
+            self.assertEqual(error.exception.code, "evaluation_policy_conflict")
+
     def test_two_processes_cannot_claim_same_evaluation_attempt(self):
         with tempfile.TemporaryDirectory() as temp:
             ctx = multiprocessing.get_context("spawn")

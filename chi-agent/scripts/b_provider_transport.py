@@ -488,7 +488,8 @@ class EvaluationJournal(SyntheticJournal):
     """One durable, policy-bound attempt with isolated accounting and evidence."""
 
     def __init__(self, root: Path, run_id: str, *, evaluation_id: str, task_id: str,
-                 attempt_id: str, policy: ExecutionPolicy, profile: ProviderProfile):
+                 attempt_id: str, policy: ExecutionPolicy, profile: ProviderProfile,
+                 execution_identity_sha256: str | None = None):
         for value in (evaluation_id, task_id, attempt_id):
             if type(value) is not str or EVALUATION_ID_RE.fullmatch(value) is None:
                 raise GuardFailure("evaluation_identity_invalid", "preflight")
@@ -497,6 +498,10 @@ class EvaluationJournal(SyntheticJournal):
             raise GuardFailure("execution_policy_invalid", "preflight")
         if type(run_id) is not str or RUN_ID_RE.fullmatch(run_id) is None:
             raise GuardFailure("run_id_invalid", "preflight")
+        if (execution_identity_sha256 is not None
+                and (type(execution_identity_sha256) is not str
+                     or re.fullmatch(r"[0-9a-f]{64}", execution_identity_sha256) is None)):
+            raise GuardFailure("evaluation_execution_identity_invalid", "preflight")
 
         base = Path(root)
         eval_root = base / evaluation_id
@@ -512,6 +517,8 @@ class EvaluationJournal(SyntheticJournal):
             "policy_sha256": policy.sha256,
             "provider_profile_sha256": profile.sha256,
         }
+        if execution_identity_sha256 is not None:
+            registry["execution_identity_sha256"] = execution_identity_sha256
 
         try:
             _reject_symlink_ancestors(base, "evaluation_path_invalid")
@@ -552,6 +559,8 @@ class EvaluationJournal(SyntheticJournal):
                     "state": "claimed", "real_usage": None, "real_cost_cny": None,
                     "official_reward": None,
                 }
+                if execution_identity_sha256 is not None:
+                    claim["execution_identity_sha256"] = execution_identity_sha256
                 self._write_exclusive(claim_path, _json_bytes(claim), "evaluation_attempt_claim_exists")
             finally:
                 try:
@@ -580,6 +589,8 @@ class EvaluationJournal(SyntheticJournal):
             "evaluation_id": evaluation_id, "task_id": task_id, "attempt_id": attempt_id,
             "run_id_is_output_label_only": True, "claim_path": str(claim_path),
         }
+        if execution_identity_sha256 is not None:
+            self.run_doc["evaluation_identity"]["execution_identity_sha256"] = execution_identity_sha256
         try:
             self._persist_run()
         except Exception:
