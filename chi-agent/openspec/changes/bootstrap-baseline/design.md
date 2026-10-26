@@ -1,6 +1,6 @@
 ## Context
 
-本轮完成真实 B 的运行准备，实际调用继续暂停。复用 Python 3.12 开发镜像和已锁模型依赖；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。使用现有官方环境，不重写模拟器或评测器。
+本轮目标是完成 F.2–F.4 的本地/评测预算策略分离、任务/尝试隔离代码与离线验收，实际调用继续暂停。复用 Python 3.12 开发镜像和已锁模型依赖；一个 Luna High 实现，主代理独立审核。当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。真实参赛模型 API、真实 C 尝试与官方判分继续暂停，F.5 最终提交冻结留待后续。使用现有官方环境，不重写模拟器或评测器。
 
 规划基线任务为 `pa_t018_t018_o001_p01_new_referral_provider`。其输入、静态工具和运行限制见 `docs/task-walkthrough-pa-t018.md`。该文档没有真实评分，不能充当完成基线的证据。
 
@@ -80,7 +80,11 @@ provider profile 显式固定 model、endpoint、API、thinking/high、key-env �
 
 正式任务和独立尝试的身份、证据及未决状态应分别隔离。一道题的花费或 pending 不得自动阻断其他合法 trial，也不能通过换 run-id 擦除同一尝试的未决记录或自动重演。用量未知时保留 null 总量和已知前缀，该 trial 的停止/失败行为按统一冻结策略处理；保持请求/历史/工具校验、效果记录与重试控制，不能用“主办方付费”放开这些执行约束。所有私有任务使用同一策略，不按题手工改配置。
 
-当前 `b_provider_profile.py` 严格固定了 5 元 profile，`b_live_preflight.py` 与 `SyntheticJournal` 也按本地准备策略核对；正式策略分离和多 trial 隔离尚未实现或验收，不能只改 JSON/金额就声称已完成正式适配。正式提交前必须完成 [F 任务](tasks.md#f-separate-development-budgets-from-official-evaluation) 的代码分离、Docker 离线连续任务/独立尝试验收和冻结入口说明。此项文档记录不改变已有本地验收结论，不恢复真实 API、真实 C 或官方判分。
+F 开发前，`b_provider_profile.py` 严格固定了 5 元 profile，`b_live_preflight.py` 与 `SyntheticJournal` 也按本地准备策略核对；不能只改 JSON/金额就声称已完成正式适配。正式提交前必须完成 [F 任务](tasks.md#f-separate-development-budgets-from-official-evaluation) 的代码分离、Docker 离线连续任务/独立尝试验收和冻结入口说明。以下 F.2–F.4 的实现与验收不改变已有本地验收的历史范围，不恢复真实 API、真实 C 或官方判分。
+
+F.2–F.4 的实现边界：使用独立且可验证身份的策略表达 local_development、evaluation record_only 和显式每 trial capped。record_only 无金额硬停止，仍记录合成 usage/估算、保留协议/工具/轮数/输出/重试约束；未知用量停止受影响 trial，其他合法 trial 可继续。evaluation preflight 不读取开发 prior 文件，不能据此填造真实花费为零。
+
+评测演练以 evaluation_id/task_id/attempt_id 确定固定状态归属，run_id 仅管理输出。同一 evaluation 持久绑定策略与 provider profile 身份，不能靠更换 policy、cap 或 run_id 绕过已有 attempt。claim 在 runner/client/tool 前独占并持久化；所有记录只在与本地账本分离的合成演练 namespace 中创建，旧账本不静默迁移或清零。完整提交冻结和主办方正式启动路径仍由 F.5 与后续真实阶段单独验收。
 
 ### C 的离线执行控制
 

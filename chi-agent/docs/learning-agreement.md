@@ -68,7 +68,7 @@
 | B 离线请求、历史与工具结果关联 | 已准备合成 Chat Completions 探针；具体检查及限制见 [B 审核](../reviews/bootstrap-baseline-b-review.md)，真实模型/官方 runner 仍未验证 | 用户正确选择“让结果能对应原调用，并保留接口要求的历史字段”，能辨别这项作用；本轮进一步展开成功调用链、批校验、预算/未知用量和失败边界，其余理解待复述，修改与真实接入仍未实践 |
 | 固定 SDK 与官方 runner 的离线接入层 | 使用真实包与官方循环、合成 HTTP/工具边界；实际请求序列化与验收范围见 [接入层审核](../reviews/model-runner-integration-review.md)，真实 provider/任务仍未验证 | 已讲解每请求发送前预算和分层重试；用户委托主代理决定停止位置，没有新增逐字段复述或亲自运行/修改的证据 |
 | 真实 B 运行准备与持久请求预算 | source-pinned profile、只读 preflight、guard/journal 的禁网材料见 [B 准备审核](../reviews/b-live-preflight-review.md)；真实调用未恢复 | 已说明配置、认证、预算依据和执行许可分开，以及先持久预留再发送、中断不清零；用户选择了范围，没有逐字段复述或实践证据 |
-| 本地开发预算与正式评测策略 | 边界与来源见 [预算策略设计](../openspec/changes/bootstrap-baseline/design.md#本地开发预算与正式私有评测)，实现与隔离验收见 F 待办 | 用户主动指出本地预算不应默认带入官方评测，并要求落文档；能提出适用范围风险，尚未提供具体策略配置、隔离机制复述或实践证据 |
+| 本地开发预算与正式评测策略 | 边界与来源见 [预算策略设计](../openspec/changes/bootstrap-baseline/design.md#本地开发预算与正式私有评测)，离线策略/隔离材料见 [F 审核](../reviews/evaluation-budget-policy-review.md)，最终提交冻结仍为 F.5 | 用户主动指出本地预算不应默认带入官方评测，并要求落文档；已讲解成本记录与金额停止条件、evaluation/task/attempt 身份及逐请求重验。能提出适用范围风险，尚未提供具体策略配置、隔离机制复述或实践证据 |
 | C 单次尝试与资源生命周期控制 | 已实现纯计划、持久合成 claim 和离线生命周期控制；范围及限制见 [C 审核](../reviews/bootstrap-baseline-c-review.md) | 用户能判断 claim 后中断不自动重试，并已复述主错/清理错分别保留便于定位修复的原因；字段及终态细节已补讲，O_EXCL、资源归属、部分创建与实际排错仍待实践，不扩大为真实 C 已接通 |
 | 执行循环、运行状态与停止检查 | 已结合官方 runner 和所选任务提出首版讨论草案，并补讲 case/status；未实现状态控制器 | 用户能判断确认受理后不应重复提交，并解释超时可能是服务端已执行但响应未收到；完整恢复策略待实践 |
 | 上下文管理与压缩 | 已核对 CHI runner、DeepSeek 接口要求和 Codex 固定公开源码；候选方案未实现 | 用户能解释未知不能改成失败，并能说明旧摘要覆盖会丢新事实；版本校验与恢复尚未实践 |
@@ -97,7 +97,7 @@
 
 ## 下一次从哪里继续
 
-接续阶段、授权和未决项先查 [审核状态](../reviews/REVIEW_STATE.md)。先读 [预算策略边界](../openspec/changes/bootstrap-baseline/design.md#本地开发预算与正式私有评测)，辨别开发限额与正式冻结策略；再看 [B 准备预检](../scripts/b_live_preflight.py) 的 budget/identity/authorization：区分 profile 已配置、真实 prior unknown、认证未验证与 execution paused，沿 [通用边界](../scripts/b_provider_transport.py) 查看本地 pending 如何阻断下一发送。此前接入层第二次 SDK 请求中 content/reasoning/工具 ID 的逐字段复述、C 状态/清理与 B 批校验等仍保留待实践范围；模型回执来自 fixture，不能据官方循环运行推断真实模型选择工具。教学不作为开发门槛。
+接续阶段、授权和未决项先查 [审核状态](../reviews/REVIEW_STATE.md)。先从 [策略模块](../scripts/b_execution_policy.py) 的 local/capped/record_only 读到 [预检与演练入口](../scripts/b_live_preflight.py)，再沿 [通用边界](../scripts/b_provider_transport.py) 看 EvaluationJournal 的 registry/claim 和逐请求 reserve：解释为何一个 trial 的 unknown 不影响其他合法 trial，同时同一 attempt 换 run-id 仍不能重演。配置、SDK 身份、认证及执行许可继续分别判断，策略演练不等于 F.5 完整冻结。此前接入层 content/reasoning/工具 ID 逐字段复述、C 清理及 B 批校验仍待实践；模型回执来自 fixture，不能据官方循环运行推断真实模型选择工具。教学不作为开发门槛。
 
 ## 后续每轮追加记录
 
@@ -453,6 +453,12 @@
 - 用户在源码讲解后，把中断后停止与预算限制关联；主代理补讲了已发请求可能计费、usage 未收到时保留 pending 的原因。该回答尚未完整复述未知用量与恢复机制，也没有新增运行/修改证据。
 - 用户主动质疑本地 5 元预算是否会误带入官方评测，并要求写入相关文档。主代理核对现有固定 profile/账本和当前官方规则，说明成本记录、金额硬停止和正式执行配置须分开；用户提出了真实的适用范围风险，不据此升级为完整实现掌握。
 - [F 待办](../openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation) 保留正式提交前的策略分离与跨 trial 隔离验收。下一学习入口比较本地共享预算与正式独立 trial 的状态归属；本次只补文档，不把待办当成已实现或恢复真实调用。
+
+### 2026-10-26：F 预算策略与 trial 隔离代码
+
+- 用户明确授权 F.2–F.4 开发，一个 Luna High 实现、主代理独立审核。教学围绕成本记录与金额停止条件分离，以及 evaluation/task/attempt 的状态归属；run-id 只标输出，同一 evaluation 绑定相同策略/profile，独立合法尝试和重演同一尝试分别处理。源码材料与实际结果只链接 [F 审核](../reviews/evaluation-budget-policy-review.md)，不把合成链路当成真实官方任务。
+- 已结合独立返工讲解：初始化合法还需每请求核对；不同任务目录也会竞争共同父目录；构造失败须释放自己持有的锁并保留 claim；路径校验不能先规范化掉 symlink/父目录组件。这些为主代理定位/验证，不是用户亲自排错或修改的证据。
+- 用户此前提出的本地预算适用范围疑问保留为理解证据；本轮没有新增用户复述/实践，不升级掌握状态。下一入口比较 unknown trial 后另一个任务继续、相同 attempt 换 run-id 被拒的两条记录。F.5 完整系统冻结、真实 B/C 和判分仍未完成。
 
 ## 新对话的交接提示
 

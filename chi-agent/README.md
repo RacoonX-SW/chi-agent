@@ -152,7 +152,7 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 `scripts/b_live_preflight.py` 提供 `plan`、`preflight`、`rehearse` 和固定拒绝的 `live`。profile 在 `profiles/deepseek-flash-prepared.json`，来源/核对日期、CNY 峰值上界、完整上下文预留及有限生成参数均明确保存；不把文档推断写成 tokenizer 或账单实测。使用前核对 [当前授权](reviews/REVIEW_STATE.md)。
 
-本节入口用于本地开发；5 元是首轮 B/C 的共享开发限额。正式私有评测入口须先完成 [预算策略分离与隔离验收](openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation)，不能直接携带本地余额、账本或该限额作为最终评测配置；当前没有可用的正式策略切换开关。
+默认策略在 `profiles/local-development-policy.json`，用于本地开发；5 元是首轮 B/C 的共享开发限额。下方评测策略入口仅提供只读预检与合成演练，使用独立身份和状态，不继承本地余额/账本/限额。真实评测入口与最终冻结仍需完成 [F.5 及后续真实验收](openspec/changes/bootstrap-baseline/tasks.md#f-separate-development-budgets-from-official-evaluation)，`live` 在所有策略下继续拒绝。
 
 从本项目目录执行。基础镜像即可读取 plan/preflight；没有可选 SDK 或真实预算证据时会受控报告缺口。以下命令不挂凭据、模型依赖、官方资源或结果目录：
 
@@ -185,7 +185,32 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 完整演练退出 0，其他结果以非零退出及 `safe_error_code` 标记。run-id 独占记录、`synthetic-accounting.json` 和持久 flock 文件在目录内保留。timeout、unknown usage 或中断产生的 pending 不自动清除，换 run-id 仍会阻断；settled 花费和已持久化 cap 也不随重启重置。需要独立错误场景时用另一个明确合成目录，例如 `--scenario post-tool-503`、`missing-usage`、`duplicate-call-id`。旧 schema/损坏账目拒绝，不删除历史证据或自动迁移。
 
-这只验证受控传输、预算账目和预检代码。认证、真实 prior spend、服务端计量/响应模型与账单仍未验证；实际结果与限制集中在状态页链接的 B 准备审核。
+这只验证受控传输、预算账目和预检代码。认证、真实 prior spend、服务端计量/响应模型与账单仍未验证；实际结果与限制集中在状态页链接的阶段审核。
+
+### 评测预算策略的离线演练
+
+`--execution-scope evaluation` 显式选择评测策略：`--evaluation-policy record_only` 记录用量/估算而不施加金额硬停止，`--evaluation-policy capped --evaluation-cap-cny 7` 则使用明确的每 trial 上限。两者都保留请求/历史/工具/usage 校验和零重试。评测 preflight 不需要开发期 `--budget-evidence`；不要同时提供该参数，也不要将合成估算当成主办方账单或已授权真实执行。
+
+以下命令使用固定合成场景，在同一真实 SDK/官方循环中产生三次合法请求，累计估算超过 5 元，证明 record_only 没有继承本地限额。挂载目录仅保存本轮合成记录：
+
+```sh
+mkdir -p runs/evaluation-budget-policy/example-001
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/model-deps:/workspace/vendor/chi-bench/src \
+  -v chi-model-deps:/model-deps:ro \
+  -v "$PWD/scripts:/workspace/scripts:ro" \
+  -v "$PWD/profiles:/workspace/profiles:ro" \
+  -v "$PWD/vendor/chi-bench:/workspace/vendor/chi-bench:ro" \
+  -v "$PWD/runs/evaluation-budget-policy/example-001:/workspace/runs/evaluation-policy-rehearsal:rw" \
+  -w /workspace chi-agent-dev:latest /opt/venv/bin/python \
+  scripts/b_live_preflight.py rehearse --execution-scope evaluation \
+  --evaluation-policy record_only --evaluation-id eval-example-001 \
+  --task-id task-a --attempt-id attempt-1 --run-id eval-task-a-001 \
+  --scenario evaluation-over-five
+```
+
+同一 evaluation 固定 policy/profile 身份，不能在后续任务换模式或 cap；演练另一策略时用新的 evaluation-id。每个 task/attempt 的状态独立，换 run-id 不能重跑已占用尝试，失败/pending 的证据也保留；另一个合法 task/attempt 可继续。`plan`/`preflight` 支持相同策略参数且只读；evaluation preflight 的退出 0 只表示策略检查结束，SDK 身份可能仍 unavailable，完整运行就绪须分别核对。`live` 始终退出 2，正式提交配置与主办方真实运行结果仍未冻结/验证。
 
 ## 资料来源
 

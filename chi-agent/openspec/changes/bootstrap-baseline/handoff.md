@@ -1,10 +1,16 @@
 # 执行器交接：bootstrap-baseline
 
-当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮先完成真实 B 运行准备，继续暂停实际 API，按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理；主代理负责规格、独立审核、教学与 GitHub。真实 C 尝试与官方判分继续暂停。下方接入层/C/B/A/D0 交接保留其阶段范围。
+当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮开发 F.2–F.4 的预算策略分离与 trial 隔离，并做 Docker 离线验收；按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理，主代理负责规格、独立审核、教学与 GitHub。真实 API、真实 C 尝试与官方判分继续暂停，F.5 最终提交冻结留待后续。下方接入层/C/B/A/D0 交接保留其阶段范围。
 
 后续代码及文档交付统一使用 `codex/<任务名>` 工作分支：主代理先建分支、协调实现并独立检查，再推送和创建目标为 main 的 PR；用户审核并决定是否合并。主代理不直接开发/推送 main、不自行合并。下方历史 main 身份只记录已发生的交付，不能当作后续继续在 main 工作的授权，详见 [GitHub 工作流](../../../docs/github-workflow.md)。
 
-## 当前真实 B 运行准备交接（2026-10-26）
+## 当前 F 预算策略分离交接（2026-10-26）
+
+按 [预算策略契约](specs/benchmark-readiness/spec.md#requirement-separate-local-development-budgets-from-official-private-evaluation)、[设计](design.md#本地开发预算与正式私有评测) 和 F.2–F.4。实现代理独占 scripts、相应测试及必要 public JSON 配置，主代理独占 Markdown/Git。策略从 provider 配置独立出来，默认保留本地共享 5 元及 pending 保护；评测演练显式选择 record_only 或每 trial capped 策略，使用 evaluation/task/attempt 身份、独立持久 claim 与同一 evaluation 的策略/profile 登记，不继承开发 prior 或账目。plan/preflight 只读，live 在配置/凭据/client/claim 前拒绝；真实 SDK/官方循环仍用 MockTransport 与合成工具。
+
+复用既有 Python 3.12 镜像、只读模型依赖卷与固定 vendor，不改 C、baseline、锁文件或官方源码，不安装/下载/重建。先自测停写，再由主代理固定候选独立复验本地限额回归、合法估算超过 5 元的 record_only、显式 cap、跨 trial unknown 隔离、相同 attempt 零重演和策略一致性；最终提交与真实运行不由此自动通过。
+
+## 真实 B 运行准备交接（2026-10-26）
 
 行为按 [准备契约](specs/benchmark-readiness/spec.md#requirement-prepare-a-real-stage-b-run-without-enabling-api-calls)、[本轮设计](design.md#真实-b-运行准备本轮设计) 和 P 任务。实现代理负责 provider/profile、预检及受控传输/账目代码和相应测试，必要最小抽取既有接入层并回归；主代理负责所有文档和 Git。复用镜像/模型依赖卷，不装新 SDK/不下载 tokenizer，不读凭据/生产账本、不调用 API，不修改 vendor、C 或原真实 gate；真调用许可不由 profile/文件/CLI 参数自行生成。
 
