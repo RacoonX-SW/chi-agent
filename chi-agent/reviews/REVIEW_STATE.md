@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | G 评测专用默认入口与干净目录包已独立离线验收通过，固定 record_only、无开发预算回退；准备交用户 PR 审核。F.5 完整正式冻结仍待后续，真实 API/C/判分继续暂停 |
+| 当前任务 | G 评测专用默认入口与干净目录包已独立离线验收通过，固定 record_only、无开发预算回退；PR #11 待用户审核合并。F.5 完整正式冻结仍待后续，真实 API/C/判分继续暂停 |
 | 协作 | 默认一个 Luna High 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-25) |
 | 上次独立审核候选 | `d4003cac37cad5396ef9b977914ff07c5367a0e1`，G 复验通过，首审 R1–R3 已关闭；见 [专用入口/包审核](evaluation-entry-bundle-review.md) |
 | 上次通过的实现提交 | `d4003cac37cad5396ef9b977914ff07c5367a0e1`，仅评测专用入口/干净包的离线代码，不代表正式评测/真实调用通过。F/B 准备及接入层/C/B/环境/A 身份保留在各阶段报告 |
@@ -15,7 +15,7 @@
 | 正式提交前置 | F.2–F.4 与 [G 专用入口与干净包](../openspec/changes/bootstrap-baseline/tasks.md#g-dedicated-evaluation-entry-and-clean-bundle-offline) 离线通过。F.5 完整最终冻结和真实运行仍未完成 |
 | 本轮验证 | 修复候选全量、干净包实际默认多任务、unknown/replay/换包、只读/暂停及故障边界通过，详细结果只见专用入口/包审核 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [策略分离 PR #10](https://github.com/xsw932187210-cell/chi-agent/pull/10) 已由用户合并；G 独立验收通过后创建 base=main PR 交用户审核。后续核对完整官方启动/依赖复现缺口及 F.5，不因本轮代码/文档通过恢复真实 API/C/判分 |
+| PR 与下一步 | [专用入口/干净包 PR #11](https://github.com/xsw932187210-cell/chi-agent/pull/11) 已创建，base=main，待用户审核合并；[策略分离 PR #10](https://github.com/xsw932187210-cell/chi-agent/pull/10) 已由用户合并。后续核对完整官方启动/依赖复现缺口及 F.5，不因本轮代码/文档通过恢复真实 API/C/判分 |
 | 未验证项 | 真实 provider transport/认证、真实 tokenizer/framing/用量/价格/账单、官方世界中的 B/C 及判分认证；其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 无真实 trial、official reward 或实测模型费用；新直接 runner 入口只完成离线验证，live 固定拒绝，原 cb/Harbor 的 ungraded gate 继续 unsupported |
 

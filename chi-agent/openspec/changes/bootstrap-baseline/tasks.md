@@ -114,7 +114,7 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] G.2 Implement a dedicated plan/preflight/rehearse/live entry with default fixed evaluation record_only and null monetary cap, no development budget/scope/prior fallback, explicit trial identities/output root and earliest live refusal.
 - [x] G.3 Export a fixed-allowlist directory bundle with strictly validated config/content manifest and runbook; exclude development policy/ledgers, credentials, vendor/data/handbook, tests and raw evidence. Bind verified entry/package identity to the evaluation registry; reject existing/unsafe destinations and retain incomplete builds without false completion.
 - [x] G.4 In offline Docker, run the actual dedicated CLI from a read-only exported package at an unrelated cwd without the original repository mounted; verify multiple above-5-CNY synthetic trials, unknown/replay isolation, identity/config/file tampering, prohibited overrides, build failures, read-only modes and live refusal, with existing local regressions preserved.
-- [ ] G.5 Freeze the candidate, independently review/recheck it, record one phase report and learning entry, then create a base=main PR for user review/merge. This delivery is an identified offline package, not final submission or real execution acceptance.
+- [x] G.5 Freeze the candidate, independently review/recheck it, record one phase report and learning entry, then create a base=main PR for user review/merge. This delivery is an identified offline package, not final submission or real execution acceptance.
 
 ## 3. Verify and hand over
 
