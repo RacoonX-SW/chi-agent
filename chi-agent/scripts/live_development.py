@@ -50,6 +50,14 @@ def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False)
 
 
+def _fsync_parent(path: Path) -> None:
+    dfd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
+
+
 def _atomic_json(path: Path, value: dict[str, Any], *, exclusive: bool = False) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = (_json(value) + "\n").encode("utf-8")
@@ -59,6 +67,7 @@ def _atomic_json(path: Path, value: dict[str, Any], *, exclusive: bool = False) 
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
+        _fsync_parent(path)
         return
     fd, temp = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
@@ -67,11 +76,7 @@ def _atomic_json(path: Path, value: dict[str, Any], *, exclusive: bool = False) 
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp, path)
-        dfd = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(dfd)
-        finally:
-            os.close(dfd)
+        _fsync_parent(path)
     except Exception:
         try:
             os.unlink(temp)
@@ -88,6 +93,97 @@ def _read_json(path: Path) -> dict[str, Any]:
     if type(value) is not dict:
         raise LiveFailure("real_accounting_invalid")
     return value
+
+
+def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
+                               execution_identity: dict[str, Any] | None) -> str | None:
+    """Validate every persistent budget invariant without changing the journal."""
+    required = {"schema", "campaign_id", "namespace", "currency", "cap_cny", "prior_spend_cny",
+                "prior_source", "known_settled_cost_cny", "known_input_tokens", "known_output_tokens",
+                "usage_complete", "pending", "profile_sha256", "execution_identity", "created_at"}
+    if set(state) != required or state.get("schema") != ACCOUNTING_SCHEMA \
+            or state.get("campaign_id") != CAMPAIGN_ID:
+        return "real_accounting_invalid"
+    if (state.get("namespace") != "real_provider_usage_estimated_cost" or state.get("currency") != "CNY"
+            or state.get("cap_cny") != "5" or type(state.get("prior_source")) is not str
+            or not state["prior_source"].strip() or type(state.get("created_at")) is not str
+            or not state["created_at"].strip()):
+        return "real_accounting_invalid"
+    for key in ("prior_spend_cny", "known_settled_cost_cny"):
+        value = state.get(key)
+        if type(value) is not str:
+            return "real_accounting_invalid"
+        try:
+            amount = Decimal(value)
+        except Exception:
+            return "real_accounting_invalid"
+        if not amount.is_finite() or amount < 0:
+            return "real_accounting_invalid"
+    if Decimal(state["prior_spend_cny"]) + Decimal(state["known_settled_cost_cny"]) > Decimal("5"):
+        return "real_accounting_invalid"
+    try:
+        datetime.fromisoformat(state["created_at"].replace("Z", "+00:00"))
+    except ValueError:
+        return "real_accounting_invalid"
+    for key in ("known_input_tokens", "known_output_tokens"):
+        value = state.get(key)
+        if type(value) is not int or not 0 <= value <= 10**12:
+            return "real_accounting_invalid"
+    if type(state.get("usage_complete")) is not bool:
+        return "real_accounting_invalid"
+    digest = state.get("profile_sha256")
+    if digest is not None and (type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None):
+        return "real_accounting_invalid"
+    identity = state.get("execution_identity")
+    if type(identity) is not dict:
+        return "real_accounting_invalid"
+    if execution_identity is not None and identity != execution_identity:
+        return "real_execution_identity_mismatch"
+    if digest is not None and digest != profile.sha256:
+        return "real_profile_mismatch"
+    pending = state.get("pending")
+    if pending is not None:
+        pending_keys = {"run_id", "round", "status", "input_reserve_tokens", "output_reserve_tokens",
+                        "reserve_upper_cost_cny", "cumulative_upper_cost_cny", "request_sha256",
+                        "request_wire_bytes", "route", "model", "reserve_basis"}
+        if (type(pending) is not dict or set(pending) != pending_keys
+                or type(pending.get("run_id")) is not str or ID_RE.fullmatch(pending["run_id"]) is None
+                or type(pending.get("round")) is not int or pending["round"] < 1
+                or pending.get("status") not in {"pending", "unknown"}
+                or type(pending.get("input_reserve_tokens")) is not int
+                or pending.get("input_reserve_tokens") != profile.input_reserve_tokens
+                or type(pending.get("output_reserve_tokens")) is not int
+                or not 1 <= pending["output_reserve_tokens"] <= profile.max_output_tokens
+                or type(pending.get("request_wire_bytes")) is not int
+                or not 1 <= pending["request_wire_bytes"] <= 1_048_576
+                or type(pending.get("request_sha256")) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", pending["request_sha256"]) is None
+                or pending.get("route") != profile.endpoint + "/v1/chat/completions"
+                or pending.get("model") != profile.model
+                or pending.get("reserve_basis") != "documented_peak_price_and_context_ceiling_not_tokenizer_measured"):
+            return "real_accounting_invalid"
+        for key in ("reserve_upper_cost_cny", "cumulative_upper_cost_cny"):
+            value = pending.get(key)
+            if type(value) is not str:
+                return "real_accounting_invalid"
+            try:
+                amount = Decimal(value)
+            except Exception:
+                return "real_accounting_invalid"
+            if not amount.is_finite() or amount < 0:
+                return "real_accounting_invalid"
+        reserve = ((Decimal(pending["input_reserve_tokens"]) * profile.input_price
+                    + Decimal(pending["output_reserve_tokens"]) * profile.output_price)
+                   / Decimal(1_000_000))
+        expected_cumulative = Decimal(state["prior_spend_cny"]) + Decimal(state["known_settled_cost_cny"]) + reserve
+        if (Decimal(pending["reserve_upper_cost_cny"]) != reserve
+                or Decimal(pending["cumulative_upper_cost_cny"]) != expected_cumulative
+                or expected_cumulative > Decimal("5")
+                or state.get("profile_sha256") != profile.sha256):
+            return "real_accounting_invalid"
+    elif state.get("usage_complete") is not True:
+        return "real_accounting_invalid"
+    return None
 
 
 def _execution_identity() -> dict[str, Any]:
@@ -156,8 +252,7 @@ def initialize_real_accounting(root: Path, *, prior_source: str,
 class RealDevelopmentJournal:
     """Real-only persistent accounting; never reads or writes synthetic journals."""
 
-    def __init__(self, root: Path, run_id: str, *, profile: Any, policy: Any, initialize: bool = False,
-                 prior_source: str | None = None):
+    def __init__(self, root: Path, run_id: str, *, profile: Any, policy: Any):
         import fcntl
 
         if not isinstance(run_id, str) or ID_RE.fullmatch(run_id) is None:
@@ -185,15 +280,11 @@ class RealDevelopmentJournal:
             raise LiveFailure("real_accounting_busy_or_pending") from None
         self._lock_owned = True
         try:
-            if initialize:
-                if self.state_path.exists():
-                    raise LiveFailure("real_accounting_already_initialized")
-                initialize_real_accounting(root, prior_source=prior_source or "authorized_first_campaign_prior_zero")
             self.state = _read_json(self.state_path)
             actual_identity = _execution_identity()
             if self.state.get("execution_identity") != actual_identity:
                 raise LiveFailure("real_execution_identity_mismatch")
-            self._validate_state()
+            self._validate_state(actual_identity)
             if self.state.get("pending") is not None or self.state.get("usage_complete") is not True:
                 raise LiveFailure("real_accounting_pending_unknown")
             if self.state.get("profile_sha256") not in {None, profile.sha256}:
@@ -208,36 +299,22 @@ class RealDevelopmentJournal:
                 "policy_sha256": policy.sha256, "execution_identity": actual_identity,
                 "requests": [], "tool_effects": [],
                 "tool_history": [], "official_reward": None,
-                "real_usage": None, "estimated_cost_cny": None,
+                "real_usage": {"input_tokens": 0, "output_tokens": 0},
+                "estimated_cost_cny": "0",
+                "campaign_usage_snapshot": {"input_tokens": self.state["known_input_tokens"],
+                                             "output_tokens": self.state["known_output_tokens"]},
+                "campaign_estimated_cost_cny_snapshot": self.state["known_settled_cost_cny"],
             }
             _atomic_json(self.run_path, self.run_doc, exclusive=True)
         except Exception:
             self.close()
             raise
 
-    def _validate_state(self) -> None:
-        required = {"schema", "campaign_id", "namespace", "currency", "cap_cny", "prior_spend_cny",
-                    "prior_source", "known_settled_cost_cny", "known_input_tokens", "known_output_tokens",
-                    "usage_complete", "pending", "profile_sha256", "execution_identity", "created_at"}
-        s = self.state
-        if set(s) != required or s.get("schema") != ACCOUNTING_SCHEMA or s.get("campaign_id") != CAMPAIGN_ID:
-            raise LiveFailure("real_accounting_invalid")
-        if (s.get("namespace") != "real_provider_usage_estimated_cost" or s.get("currency") != "CNY"
-                or s.get("cap_cny") != "5" or type(s.get("prior_source")) is not str
-                or not s["prior_source"].strip()):
-            raise LiveFailure("real_accounting_invalid")
-        try:
-            amounts = (Decimal(s["prior_spend_cny"]), Decimal(s["known_settled_cost_cny"]))
-        except Exception:
-            raise LiveFailure("real_accounting_invalid") from None
-        if any(not x.is_finite() or x < 0 for x in amounts):
-            raise LiveFailure("real_accounting_invalid")
-        if any(type(s.get(k)) is not int or not 0 <= s[k] <= 10**12 for k in ("known_input_tokens", "known_output_tokens")):
-            raise LiveFailure("real_accounting_invalid")
-        if type(s.get("usage_complete")) is not bool:
-            raise LiveFailure("real_accounting_invalid")
-        if s.get("profile_sha256") is not None and s["profile_sha256"] != self.profile.sha256:
-            raise LiveFailure("real_profile_mismatch")
+    def _validate_state(self, expected_identity: dict[str, Any] | None = None) -> None:
+        code = _validate_accounting_state(
+            self.state, profile=self.profile, execution_identity=expected_identity)
+        if code is not None:
+            raise LiveFailure(code)
 
     def _require_active_lock(self) -> None:
         if self.closed or not self._lock_owned or self.lock_fd is None:
@@ -302,6 +379,16 @@ class RealDevelopmentJournal:
         self.state["known_settled_cost_cny"] = str(Decimal(self.state["known_settled_cost_cny"]) + actual_cost)
         self.state["known_input_tokens"] += incoming
         self.state["known_output_tokens"] += outgoing
+        run_usage = self.run_doc.setdefault("real_usage", {"input_tokens": 0, "output_tokens": 0})
+        run_usage["input_tokens"] += incoming
+        run_usage["output_tokens"] += outgoing
+        self.run_doc["estimated_cost_cny"] = str(
+            Decimal(self.run_doc.get("estimated_cost_cny", "0")) + actual_cost)
+        self.run_doc["campaign_usage_snapshot"] = {
+            "input_tokens": self.state["known_input_tokens"],
+            "output_tokens": self.state["known_output_tokens"],
+        }
+        self.run_doc["campaign_estimated_cost_cny_snapshot"] = self.state["known_settled_cost_cny"]
         self.state["pending"] = None
         self.state["usage_complete"] = True
         self.run_doc["state"] = "settled"
@@ -378,19 +465,23 @@ class RealDevelopmentJournal:
     def finalize(self, *, status: str, primary_error: str | None = None,
                  cleanup_error: str | None = None, reward: None = None) -> None:
         self._require_active_lock()
-        unresolved = [item for item in self.run_doc.get("tool_dispatches", []) if item.get("state") == "started"]
+        unresolved = [item for item in self.run_doc.get("tool_dispatches", [])
+                      if item.get("state") in {"started", "unknown"}]
         for item in unresolved:
             item["state"] = "unknown"
             item["reason_code"] = "dispatch_started_without_definitive_return"
-        if unresolved and primary_error is None:
-            primary_error = "tool_effect_unknown"
+        if unresolved:
+            if primary_error is None:
+                primary_error = "tool_effect_unknown"
             status = "incomplete"
         self.run_doc.update({"state": status, "primary_error_code": primary_error,
                              "cleanup_error_code": cleanup_error, "official_reward": reward,
-                             "real_usage": {"input_tokens": self.state["known_input_tokens"],
-                                            "output_tokens": self.state["known_output_tokens"]}
+                             "real_usage": dict(self.run_doc.get("real_usage", {}))
                              if self.state.get("usage_complete") else None,
-                             "estimated_cost_cny": str(self.state["known_settled_cost_cny"])
+                             "campaign_usage": {"input_tokens": self.state["known_input_tokens"],
+                                                "output_tokens": self.state["known_output_tokens"]}
+                             if self.state.get("usage_complete") else None,
+                             "campaign_estimated_cost_cny": str(self.state["known_settled_cost_cny"])
                              if self.state.get("usage_complete") else None,
                              "prior_spend_cny": self.state["prior_spend_cny"],
                              "prior_source": self.state["prior_source"]})
@@ -425,35 +516,47 @@ def build_read_only_plan() -> dict[str, Any]:
     return base
 
 
-def _budget_preflight(root: Path) -> dict[str, Any]:
+def _budget_preflight(root: Path, *, profile: Any | None = None,
+                      execution_identity: dict[str, Any] | None = None) -> dict[str, Any]:
     path = root / "accounting.json"
     if not path.is_file():
         return {"status": "unknown", "real_aggregate_cost_cny": None,
                 "source": None, "safe_error_code": "real_accounting_missing"}
-    state = _read_json(path)
-    expected = {"schema", "campaign_id", "namespace", "currency", "cap_cny", "prior_spend_cny",
-                "prior_source", "known_settled_cost_cny", "known_input_tokens", "known_output_tokens",
-                "usage_complete", "pending", "profile_sha256", "execution_identity", "created_at"}
-    if set(state) != expected or state.get("schema") != ACCOUNTING_SCHEMA or state.get("campaign_id") != CAMPAIGN_ID:
+    try:
+        state = _read_json(path)
+        profile = profile or load_profile()
+        execution_identity = execution_identity or _execution_identity()
+    except Exception as exc:
         return {"status": "invalid", "real_aggregate_cost_cny": None,
-                "source": None, "safe_error_code": "real_accounting_invalid"}
+                "source": None, "safe_error_code": getattr(exc, "code", "real_execution_identity_unavailable")}
+    code = _validate_accounting_state(state, profile=profile, execution_identity=execution_identity)
+    if code is not None:
+        return {"status": "invalid", "real_aggregate_cost_cny": None,
+                "source": None, "safe_error_code": code}
     if state.get("pending") is not None or state.get("usage_complete") is not True:
         return {"status": "unknown", "real_aggregate_cost_cny": None,
                 "source": state.get("prior_source"), "safe_error_code": "real_accounting_pending_unknown"}
+    prior = Decimal(state["prior_spend_cny"])
+    settled = Decimal(state["known_settled_cost_cny"])
+    if prior + settled > Decimal("5"):
+        return {"status": "invalid", "real_aggregate_cost_cny": None,
+                "source": None, "safe_error_code": "real_accounting_invalid"}
     return {"status": "known", "prior_spend_cny": state["prior_spend_cny"],
             "settled_estimated_cost_cny": state["known_settled_cost_cny"],
             "source": state["prior_source"], "real_aggregate_cost_cny": None,
-            "known_aggregate_estimated_cost_cny": str(Decimal(state["prior_spend_cny"]) + Decimal(state["known_settled_cost_cny"]))}
+            "known_aggregate_estimated_cost_cny": str(prior + settled)}
 
 
 def build_preflight(root: Path) -> dict[str, Any]:
     profile = load_profile()
+    actual_identity = None
     try:
-        identity = {"status": "verified", **_execution_identity()}
+        actual_identity = _execution_identity()
+        identity = {"status": "verified", **actual_identity}
     except Exception as exc:
         identity = {"status": "unavailable", "safe_error_code": getattr(exc, "code", "source_or_sdk_identity_unavailable"),
                     "source": None, "sdk": None}
-    budget = _budget_preflight(root)
+    budget = _budget_preflight(root, profile=profile, execution_identity=actual_identity)
     reserve = (Decimal(profile.input_reserve_tokens) * profile.input_price
                + Decimal(profile.max_output_tokens) * profile.output_price) / Decimal(1_000_000)
     remaining = (Decimal("5") - Decimal(budget["prior_spend_cny"]) - Decimal(budget["settled_estimated_cost_cny"])
@@ -487,7 +590,8 @@ def _claim_c_once(root: Path, run_id: str, b_success: dict[str, Any]) -> Path:
     return claim
 
 
-def _transition_c_claim(root: Path, run_id: str, state: str) -> None:
+def _transition_c_claim(root: Path, run_id: str, state: str, *,
+                        execution_identity: dict[str, Any], profile_sha256: str) -> None:
     import fcntl
 
     path = root / CLAIM_FILE
@@ -497,6 +601,8 @@ def _transition_c_claim(root: Path, run_id: str, state: str) -> None:
         record = _read_json(path)
         if record.get("schema") != CLAIM_SCHEMA or record.get("campaign_id") != CAMPAIGN_ID \
                 or record.get("task_id") != TASK_ID or record.get("run_id") != run_id \
+                or record.get("execution_identity") != execution_identity \
+                or record.get("profile_sha256") != profile_sha256 \
                 or record.get("state") != "claimed_before_world_creation":
             raise LiveFailure("real_c_claim_transition_invalid")
         record["state"] = state
@@ -589,7 +695,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
     from a_environment import (
         AEnvironmentError, _capture_logs,
         _check_resource_slots, _daemon_path, _docker, _resource_labels,
-        _task_environment, cleanup as cleanup_world, wait_world,
+        _task_environment, wait_world,
     )
 
     if budget_root.resolve() != (ROOT / REAL_ROOT_RELATIVE).resolve():
@@ -597,15 +703,15 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
         if (_test_context is not _MOCK_ORCHESTRATION_TEST
                 or approved_test_root not in budget_root.resolve().parents):
             raise LiveFailure("real_budget_root_mismatch")
-    state = _budget_preflight(budget_root)
+    profile = load_profile()
+    execution_identity = _execution_identity()
+    state = _budget_preflight(budget_root, profile=profile, execution_identity=execution_identity)
     if state.get("status") != "known" or not state.get("settled_estimated_cost_cny"):
-        raise LiveFailure("real_budget_unknown")
+        raise LiveFailure(state.get("safe_error_code", "real_budget_unknown"))
     # A known accounting record is required before any provider or Docker side effect.
     current = _read_json(budget_root / "accounting.json")
     if current.get("pending") is not None or current.get("usage_complete") is not True:
         raise LiveFailure("real_accounting_pending_unknown")
-    profile = load_profile()
-    execution_identity = _execution_identity()
     if current.get("execution_identity") != execution_identity:
         raise LiveFailure("real_execution_identity_mismatch")
     if current.get("profile_sha256") not in {None, profile.sha256}:
@@ -637,7 +743,9 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                 or not (b_logs / "run_output.txt").is_file()
                 or hashlib.sha256((b_logs / "run_output.txt").read_bytes()).hexdigest() != b_success.get("run_output_sha256")
                 or not (b_logs / "trace.jsonl").is_file()
-                or hashlib.sha256((b_logs / "trace.jsonl").read_bytes()).hexdigest() != b_success.get("trace_sha256")):
+                or hashlib.sha256((b_logs / "trace.jsonl").read_bytes()).hexdigest() != b_success.get("trace_sha256")
+                or not (b_logs / "run_log.txt").is_file()
+                or hashlib.sha256((b_logs / "run_log.txt").read_bytes()).hexdigest() != b_success.get("run_log_sha256")):
             raise LiveFailure("real_b_success_evidence_mismatch")
         reserve = (Decimal(profile.input_reserve_tokens) * profile.input_price
                    + Decimal(profile.max_output_tokens) * profile.output_price) / Decimal(1_000_000)
@@ -655,6 +763,10 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
     world = None
     runner = None
     tasknet = None
+    a_run_dir = None
+    network_create_started = False
+    world_create_started = False
+    runner_create_started = False
     result: dict[str, Any] = {"schema": "chi-real-b-c-orchestration-v1", "run_id": run_id,
                               "campaign_id": CAMPAIGN_ID, "kind": kind, "status": "failed",
                               "official_reward": None, "primary_error_code": None,
@@ -695,9 +807,6 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             a_run_dir = _official_world_run_dir(world_id)
             if a_run_dir.exists() or a_run_dir.is_symlink():
                 raise LiveFailure("official_world_run_id_exists")
-            a_run_dir.mkdir(parents=True, exist_ok=False)
-            workspace_mount = a_run_dir / "workspaces"
-            workspace_mount.mkdir()
             world_image = client.images.get("chi-agent-a-world:py312-review-20261025-01")
             if world_image.id != "sha256:000ca5096533e5dcb4451dd524e2e6492a1250c23e183241f13cba4e338dad50":
                 raise LiveFailure("world_image_identity_mismatch")
@@ -712,17 +821,24 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             claim_path = _claim_c_once(budget_root, run_id, b_success or {})
             result["c_claim_path"] = str(claim_path.relative_to(ROOT))
             persist_orchestration()
+            a_run_dir.mkdir(parents=True, exist_ok=False)
+            workspace_mount = a_run_dir / "workspaces"
+            workspace_mount.mkdir()
+            network_create_started = True
             tasknet = client.networks.create(task_net_name, driver="bridge", internal=True,
                                              labels=_resource_labels(world_id))
+            network_create_started = False
             result["world"] = {"network": tasknet.name, "network_id": tasknet.id,
                                "network_internal": True, "credentials_added": False}
             persist_orchestration()
+            world_create_started = True
             world = client.containers.create(
                 image=world_image.id, name=f"chi-agent-a-world-{world_id}", command=["sleep", "infinity"],
                 environment=_task_environment(), labels=_resource_labels(world_id),
                 volumes={_daemon_path(ROOT, workspace_mount): {"bind": "/logs/artifacts/workspaces", "mode": "rw"}},
                 network=task_net_name, detach=True, stdin_open=False, tty=False,
             )
+            world_create_started = False
             result["world"].update({"container": world.name, "container_id": world.id,
                                    "image_id": world_image.id, "task_id": TASK_ID,
                                    "agent_started": False, "runner_started": False, "judge_started": False})
@@ -760,6 +876,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                 "bind": "/workspace/skills/managed-care-operations-handbook", "mode": "ro"}
             if kind == "c-once":
                 volumes[_daemon_path(ROOT, workspace_mount)] = {"bind": "/logs/artifacts/workspaces", "mode": "rw"}
+        runner_create_started = True
         runner = client.containers.create(
             image=runner_image.id, name=runner_name,
             command=["/opt/venv/bin/python", "/participant/scripts/live_development.py", "worker",
@@ -778,6 +895,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             cap_drop=["ALL"], security_opt=["no-new-privileges:true"], pids_limit=256,
             labels={"org.chi-agent.real-development": "1", "org.chi-agent.real-development.run-id": run_id},
         )
+        runner_create_started = False
         result["controller"] = {"image": "chi-agent-a-control:latest", "image_id": controller_image.id}
         result["runner"] = {"container": runner_name, "container_id": runner.id,
                             "image": "chi-agent-dev:latest", "image_id": runner_image.id, "sdk_volume": sdk_volume,
@@ -806,6 +924,9 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             result["exception_file_basename"] = Path(exc.filename).name if exc.filename else None
         result["primary_error_code"] = getattr(exc, "code", "orchestration_failed") if SAFE_ERROR_RE.fullmatch(
             getattr(exc, "code", "orchestration_failed")) else "orchestration_failed"
+        if network_create_started or world_create_started or runner_create_started:
+            result["cleanup_error_code"] = "partial_resource_ownership_unknown"
+            result["partial_resource_ownership_unknown"] = True
         if kind == "c-once" and claim_path is not None:
             try:
                 record = _read_json(claim_path)
@@ -823,6 +944,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                 )
             except Exception as exc:
                 result["world"]["log_capture_error_type"] = type(exc).__name__
+                result["cleanup_error_code"] = result.get("cleanup_error_code") or "world_log_capture_failed"
         if runner is not None:
             try:
                 runner.remove(force=True)
@@ -830,16 +952,24 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             except Exception as exc:
                 result["cleanup_error_code"] = "runner_cleanup_failed"
                 result.setdefault("cleanup", {})["runner_cleanup_error_type"] = type(exc).__name__
-        if kind == "c-once" and client is not None:
+        # Remove only the exact handles returned by create() in this invocation.
+        # A preflight name/label collision is never a license to clean by run-id.
+        if world is not None:
             result.setdefault("cleanup", {})["attempted"] = True
             try:
-                cleanup_result = cleanup_world(client, run_id, deadline=time.monotonic() + 30)
-                result["cleanup"].update(cleanup_result)
-                if any(k.endswith("cleanup_error_type") for k in cleanup_result):
-                    result["cleanup_error_code"] = "world_cleanup_failed"
+                world.remove(force=True)
+                result["cleanup"]["world_removed"] = True
             except Exception as exc:
                 result["cleanup_error_code"] = "world_cleanup_failed"
                 result["cleanup"]["world_cleanup_error_type"] = type(exc).__name__
+        if tasknet is not None:
+            result.setdefault("cleanup", {})["attempted"] = True
+            try:
+                tasknet.remove()
+                result["cleanup"]["network_removed"] = True
+            except Exception as exc:
+                result["cleanup_error_code"] = result.get("cleanup_error_code") or "world_cleanup_failed"
+                result["cleanup"]["network_cleanup_error_type"] = type(exc).__name__
         if client is not None:
             try:
                 client.close()
@@ -848,8 +978,31 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
         result["finished_at"] = datetime.now(timezone.utc).isoformat()
         result["official_reward"] = None
         result["credentials_logged"] = False
-        result["status"] = ("cleanup_failed" if result.get("cleanup_error_code") and result["status"] in {"completed_ungraded", "smoke_completed"}
-                            else result["status"])
+        if result.get("cleanup_error_code") and result["status"] in {"completed_ungraded", "smoke_completed"}:
+            result["status"] = "cleanup_failed"
+        if result["status"] not in {"completed_ungraded", "smoke_completed"}:
+            run_path = budget_root / "runs" / f"{run_id}.json"
+            if run_path.is_file() and not run_path.is_symlink():
+                try:
+                    run_doc = _read_json(run_path)
+                    if run_doc.get("state") == "complete":
+                        run_doc["state"] = "incomplete"
+                        run_doc["cleanup_error_code"] = result.get("cleanup_error_code")
+                        run_doc["orchestration_status"] = result["status"]
+                        _atomic_json(run_path, run_doc)
+                except Exception:
+                    result["cleanup_error_code"] = result.get("cleanup_error_code") or "run_document_reconciliation_failed"
+                    result["status"] = "evidence_write_failed"
+        if kind == "b-smoke" and result["status"] != "smoke_completed":
+            receipt = budget_root / "b-success.json"
+            if receipt.exists():
+                try:
+                    receipt.unlink()
+                    _fsync_parent(receipt)
+                    result["b_success_receipt_revoked"] = True
+                except Exception:
+                    result["cleanup_error_code"] = result.get("cleanup_error_code") or "b_success_receipt_revocation_failed"
+                    result["status"] = "cleanup_failed"
         if claim_path is not None:
             try:
                 claim = _read_json(claim_path)
@@ -861,6 +1014,8 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                 _atomic_json(claim_path, claim)
             except Exception:
                 result["cleanup_error_code"] = result.get("cleanup_error_code") or "c_claim_finalization_failed"
+                if result["status"] == "completed_ungraded":
+                    result["status"] = "cleanup_failed"
         try:
             persist_orchestration()
         except Exception:
@@ -889,16 +1044,25 @@ def _tool_schema(tool: Any) -> tuple[str, dict[str, Any]] | None:
 
 
 def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealDevelopmentJournal,
-                schemas: dict[str, dict[str, Any]]) -> list[Any]:
+                schemas: dict[str, dict[str, Any]], ledger: Any) -> list[Any]:
+    import contextvars
     from agents.tool import FunctionTool
 
     prior_lookup_result: list[str] = []
+    active_call_id = contextvars.ContextVar("real_local_tool_call_id", default=None)
+
+    def record_effect(name: str, result: str) -> None:
+        call_id = active_call_id.get()
+        if not isinstance(call_id, str):
+            raise LiveFailure("local_tool_call_id_unavailable")
+        recorded_result = result if kind == "b-smoke" else (
+            f"sha256:{hashlib.sha256(result.encode()).hexdigest()};chars:{len(result)}")
+        journal.record_effect({"tool": name, "call_id": call_id, "result": recorded_result})
 
     async def lookup(_ctx: Any, payload: str) -> str:
         args = json.loads(payload)
         answer = f"lookup-result:{args['query'].strip()}"
         prior_lookup_result[:] = [answer]
-        journal.record_effect({"tool": "smoke_lookup", "call_id": "pending", "result": answer})
         return answer
 
     async def transform(_ctx: Any, payload: str) -> str:
@@ -906,7 +1070,6 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         if not prior_lookup_result or args["value"] != prior_lookup_result[-1]:
             raise LiveFailure("smoke_tool_dependency_invalid")
         answer = f"transform-result:{args['value'].strip()}"
-        journal.record_effect({"tool": "smoke_transform", "call_id": "pending", "result": answer})
         return answer
 
     workspace_root = Path("/logs/artifacts/workspaces")
@@ -961,7 +1124,6 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
             lines = text.splitlines(keepends=True)
             start = max(int(offset or 1) - 1, 0)
             text = "".join(lines[start:start + int(limit)] if limit is not None else lines[start:])
-        journal.record_effect({"tool": "local-fs-read", "call_id": "pending", "result": f"read:{path.name}:{len(text)}"})
         return text
 
     async def list_files(_ctx: Any, payload: str) -> str:
@@ -984,7 +1146,8 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         path = workspace_dir or handbook_dir or Path(path_value)
         if path.is_symlink() or not path.is_dir():
             return "ERROR: projected directory is unavailable"
-        return "\n".join(sorted(p.name for p in path.iterdir() if p.is_file() and not p.is_symlink()))
+        return "\n".join(sorted(p.name for p in path.iterdir()
+                                if not p.is_symlink() and (p.is_file() or p.is_dir())))
 
     async def write_file(_ctx: Any, payload: str) -> str:
         args = json.loads(payload)
@@ -996,7 +1159,6 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         if any(parent.is_symlink() for parent in (workspace_root, *path.parents) if parent.exists()):
             return "ERROR: symlink paths are not allowed"
         path.write_text(content, encoding="utf-8")
-        journal.record_effect({"tool": "local-fs-write", "call_id": "pending", "result": f"wrote:{path.name}:{len(content)}"})
         return f"wrote {len(content.encode('utf-8'))} bytes to {path}"
 
     async def edit_file(_ctx: Any, payload: str) -> str:
@@ -1012,7 +1174,6 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
             return "ERROR: old_string not found"
         replace_all = args.get("replace_all", False)
         path.write_text(text.replace(old, new) if replace_all else text.replace(old, new, 1), encoding="utf-8")
-        journal.record_effect({"tool": "local-fs-edit", "call_id": "pending", "result": f"edited:{path.name}"})
         return f"edited {path}"
 
     async def claim_done(_ctx: Any, _payload: str) -> str:
@@ -1025,8 +1186,37 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         return f"slept {seconds:g}s"
 
     def fn(name: str, description: str, schema: dict[str, Any], callback: Any) -> Any:
+        async def tracked(ctx: Any, payload: str) -> Any:
+            try:
+                arguments = json.loads(payload, object_pairs_hook=_no_duplicate_keys,
+                                       parse_constant=lambda _x: (_ for _ in ()).throw(ValueError()))
+            except Exception:
+                raise LiveFailure("tool_arguments_invalid") from None
+            pending = next((item for item in ledger.pending_calls or []
+                            if item.get("tool") == name and item.get("arguments") == arguments), None)
+            if pending is None:
+                raise LiveFailure("tool_dispatch_unvalidated")
+            ledger.pending_calls.remove(pending)
+            call_id = pending["call_id"]
+            journal.start_dispatch(call_id=call_id, model_name=name, raw_name=name, arguments=arguments)
+            token = active_call_id.set(call_id)
+            try:
+                result = await callback(ctx, payload)
+                journal.finish_dispatch(call_id=call_id, result=result)
+                record_effect(name, result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str))
+            except BaseException:
+                try:
+                    journal.finish_dispatch(call_id=call_id, result=None, error=True)
+                except Exception:
+                    pass
+                finally:
+                    active_call_id.reset(token)
+                raise
+            active_call_id.reset(token)
+            return result
+
         return FunctionTool(name=name, description=description, params_json_schema=schema,
-                            on_invoke_tool=callback, strict_json_schema=False)
+                            on_invoke_tool=tracked, strict_json_schema=False)
 
     empty = {"type": "object", "properties": {}, "required": [], "additionalProperties": False}
     if kind == "b-smoke":
@@ -1071,7 +1261,8 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
 def _validate_live_response(response: dict[str, Any], ledger: Any, profile: Any,
                             schemas: dict[str, dict[str, Any]], allowed_names: set[str],
                             journal: RealDevelopmentJournal,
-                            raw_names: dict[str, str]) -> None:
+                            raw_names: dict[str, str], *, kind: str = "c-once",
+                            observed_history: list[dict[str, Any]] | None = None) -> None:
     if response.get("model") != profile.raw["response_model"]:
         raise LiveFailure("response_model_mismatch")
     choices = response.get("choices")
@@ -1113,6 +1304,13 @@ def _validate_live_response(response: dict[str, Any], ledger: Any, profile: Any,
             raise LiveFailure("tool_arguments_invalid") from None
         if not _strict_tool_arguments(schemas[name], args):
             raise LiveFailure("tool_arguments_invalid")
+        if kind == "b-smoke" and name == "smoke_transform":
+            if not any(entry.get("tool") == "smoke_lookup"
+                       and entry.get("result") == args.get("value")
+                       and type(entry.get("observed_at_request_round")) is int
+                       and entry["observed_at_request_round"] <= ledger.rounds
+                       for entry in (observed_history or [])):
+                raise LiveFailure("smoke_transform_without_observed_lookup")
         batch_ids.add(call_id)
         parsed.append((call_id, name, args))
     seen = ledger.validated_call_ids
@@ -1125,6 +1323,7 @@ def _validate_live_response(response: dict[str, Any], ledger: Any, profile: Any,
         {"call_id": call_id, "model_name": name, "raw_name": raw_names.get(name, name),
          "argument_keys": sorted(args),
          "arguments_sha256": hashlib.sha256(json.dumps(args, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()).hexdigest(),
+         "response_round": ledger.rounds,
          "state": "validated", "validated_at": datetime.now(timezone.utc).isoformat()}
         for call_id, name, args in parsed
     ])
@@ -1139,7 +1338,7 @@ def _no_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
-def _observe_live_history(body: dict[str, Any], exchanges: list[dict[str, Any]]) -> None:
+def _observe_live_history(body: dict[str, Any], exchanges: list[dict[str, Any]], request_round: int) -> None:
     calls: dict[str, tuple[str, str]] = {}
     for message in body.get("messages", []):
         if not isinstance(message, dict) or message.get("role") != "assistant":
@@ -1170,7 +1369,46 @@ def _observe_live_history(body: dict[str, Any], exchanges: list[dict[str, Any]])
             raise LiveFailure("tool_history_invalid")
         exchanges.append({"call_id": call_id, "tool": name, "arguments": arguments,
                           "result": derived_text, "raw_wire_content": result,
+                          "observed_at_request_round": request_round,
                           "provenance": provenance})
+
+
+def _b_smoke_evidence_valid(journal: RealDevelopmentJournal, exchanges: list[dict[str, Any]],
+                            final_output: str) -> bool:
+    dispatches = journal.run_doc.get("tool_dispatches", [])
+    effects = journal.run_doc.get("tool_effects", [])
+    lookups = [item for item in dispatches if item.get("model_name") == "smoke_lookup"
+               and item.get("state") == "returned"]
+    transforms = [item for item in dispatches if item.get("model_name") == "smoke_transform"
+                  and item.get("state") == "returned"]
+    if len(lookups) != 1 or len(transforms) != 1 or len(journal.run_doc.get("requests", [])) < 3:
+        return False
+    lookup, transform = lookups[0], transforms[0]
+    if lookup.get("response_round", 99) >= transform.get("response_round", 0):
+        return False
+    lookup_history = next((item for item in exchanges if item.get("call_id") == lookup.get("call_id")
+                           and item.get("tool") == "smoke_lookup"), None)
+    transform_history = next((item for item in exchanges if item.get("call_id") == transform.get("call_id")
+                              and item.get("tool") == "smoke_transform"), None)
+    lookup_effect = next((item for item in effects if item.get("call_id") == lookup.get("call_id")
+                          and item.get("tool") == "smoke_lookup"), None)
+    transform_effect = next((item for item in effects if item.get("call_id") == transform.get("call_id")
+                             and item.get("tool") == "smoke_transform"), None)
+    if not all((lookup_history, transform_history, lookup_effect, transform_effect)):
+        return False
+    observed_round = lookup_history.get("observed_at_request_round")
+    response_round = transform.get("response_round")
+    if (type(observed_round) is not int or type(response_round) is not int
+            or observed_round > response_round):
+        return False
+    try:
+        transform_args = json.loads(transform_history["arguments"], object_pairs_hook=_no_duplicate_keys)
+    except Exception:
+        return False
+    return (lookup_history.get("result") == lookup_effect.get("result")
+            and transform_args.get("value") == lookup_history.get("result")
+            and transform_history.get("result") == transform_effect.get("result")
+            and isinstance(final_output, str) and bool(final_output.strip()))
 
 
 def _install_dispatch_recorder(official_runner: Any, mcp_util: Any, journal: RealDevelopmentJournal) -> tuple[Any, Any]:
@@ -1230,6 +1468,9 @@ async def _worker_run(args: argparse.Namespace) -> int:
     )
 
     kind, run_id = args.kind, args.run_id
+    if not isinstance(run_id, str) or ID_RE.fullmatch(run_id) is None:
+        raise LiveFailure("run_id_invalid")
+    _validate_worker_mounts(args)
     profile = load_profile()
     policy = load_local_policy()
     instruction_file = args.instruction_file
@@ -1239,7 +1480,8 @@ async def _worker_run(args: argparse.Namespace) -> int:
     if not secret:
         raise LiveFailure("provider_credential_missing")
     if kind == "c-once":
-        _transition_c_claim(args.budget_root, run_id, "runner_started_once")
+        _transition_c_claim(args.budget_root, run_id, "runner_started_once",
+                            execution_identity=_execution_identity(), profile_sha256=profile.sha256)
     journal = RealDevelopmentJournal(args.budget_root, run_id, profile=profile, policy=policy)
     ledger = Ledger("real-provider", initial_cost_cny=float(journal.cumulative_spend),
                     prior_cost_source=journal.state["prior_source"])
@@ -1252,6 +1494,7 @@ async def _worker_run(args: argparse.Namespace) -> int:
     cleanup_error: str | None = None
     openai_client = None
     client_http = None
+    b_success_candidate: dict[str, Any] | None = None
     restore: list[tuple[Any, str, Any]] = []
     runner_stdout, runner_stderr = io.StringIO(), io.StringIO()
     try:
@@ -1290,9 +1533,10 @@ async def _worker_run(args: argparse.Namespace) -> int:
                 profile=profile, journal=journal, lower=http_transport, ledger=ledger,
                 cap_cny=Decimal("5"),
                 validate_response=lambda payload: _validate_live_response(payload, ledger, profile, schemas, allowed_names,
-                                                                           journal, raw_names),
+                                                                           journal, raw_names, kind=kind,
+                                                                           observed_history=exchanges),
                 allowed_tool_names=allowed_names,
-                observe_request=lambda body: _observe_live_history(body, exchanges),
+                observe_request=lambda body: _observe_live_history(body, exchanges, ledger.rounds),
                 max_rounds=6 if kind == "b-smoke" else profile.max_rounds,
                 allow_text_blocks_in_tool_history=kind == "c-once",
             ), trust_env=False, follow_redirects=False, timeout=httpx.Timeout(60.0, connect=10.0))
@@ -1313,7 +1557,7 @@ async def _worker_run(args: argparse.Namespace) -> int:
                                      retry=ModelRetrySettings(max_retries=0))
 
             projection_root = instruction_file.parent if kind == "c-once" else logs_dir
-            local_tools = _live_tools(kind, logs_dir, projection_root, journal, schemas)
+            local_tools = _live_tools(kind, logs_dir, projection_root, journal, schemas, ledger)
             for local_tool in local_tools:
                 local_name = getattr(local_tool, "name", None)
                 local_schema = getattr(local_tool, "params_json_schema", None)
@@ -1433,23 +1677,19 @@ async def _worker_run(args: argparse.Namespace) -> int:
             if exchanges:
                 journal.record_history(exchanges)
             if kind == "b-smoke":
-                lookups = [entry for entry in exchanges if entry.get("tool") == "smoke_lookup"]
-                transforms = [entry for entry in exchanges if entry.get("tool") == "smoke_transform"]
-                dependent = False
-                if lookups and transforms:
-                    try:
-                        transform_args = json.loads(transforms[0]["arguments"], object_pairs_hook=_no_duplicate_keys)
-                        dependent = transform_args.get("value") == lookups[0].get("result")
-                    except Exception:
-                        dependent = False
                 output_path = logs_dir / "run_output.txt"
                 final_output = output_path.read_text(encoding="utf-8") if output_path.is_file() else ""
-                if len(lookups) < 1 or len(transforms) < 1 or not dependent or not final_output.strip():
+                if not _b_smoke_evidence_valid(journal, exchanges, final_output):
                     result_code = 1
                     primary_error = primary_error or "smoke_tool_exchange_incomplete_or_independent"
-            if not (logs_dir / "run_result.json").is_file():
+            required_artifacts = ("run_result.json", "run_output.txt", "trace.jsonl", "run_log.txt")
+            missing_artifacts = [name for name in required_artifacts
+                                 if not (logs_dir / name).is_file() or (logs_dir / name).stat().st_size == 0]
+            if missing_artifacts:
                 result_code = 1
                 primary_error = primary_error or "official_runner_artifacts_missing"
+            if cleanup_error is not None:
+                result_code = 1
             journal.finalize(status="complete" if result_code == 0 else "incomplete",
                              primary_error=primary_error, cleanup_error=cleanup_error)
             if kind == "b-smoke" and result_code == 0:
@@ -1457,24 +1697,49 @@ async def _worker_run(args: argparse.Namespace) -> int:
                 b_success = {"schema": B_SUCCESS_SCHEMA, "campaign_id": CAMPAIGN_ID, "task_id": TASK_ID,
                              "run_id": run_id, "status": "success", "profile_sha256": profile.sha256,
                              "execution_identity": journal.state["execution_identity"],
-                             "usage": {"input_tokens": journal.state["known_input_tokens"],
-                                       "output_tokens": journal.state["known_output_tokens"]},
-                             "estimated_cost_cny": journal.state["known_settled_cost_cny"],
+                             "usage": dict(journal.run_doc["real_usage"]),
+                             "estimated_cost_cny": journal.run_doc["estimated_cost_cny"],
                              "run_journal_sha256": hashlib.sha256(run_path.read_bytes()).hexdigest(),
                              "runner_result_sha256": hashlib.sha256((logs_dir / "run_result.json").read_bytes()).hexdigest(),
                              "run_output_sha256": hashlib.sha256((logs_dir / "run_output.txt").read_bytes()).hexdigest(),
                              "trace_sha256": hashlib.sha256((logs_dir / "trace.jsonl").read_bytes()).hexdigest(),
+                             "run_log_sha256": hashlib.sha256((logs_dir / "run_log.txt").read_bytes()).hexdigest(),
                              "official_reward": None, "success_at": datetime.now(timezone.utc).isoformat()}
-                try:
-                    _atomic_json(args.budget_root / "b-success.json", b_success, exclusive=True)
-                except Exception:
-                    result_code = 1
-                    primary_error = "b_success_evidence_persist_failed"
-                    journal.finalize(status="incomplete", primary_error=primary_error,
-                                     cleanup_error=cleanup_error)
+                b_success_candidate = b_success
+        except Exception as exc:
+            result_code = 1
+            primary_error = primary_error or "real_journal_finalize_failed"
+            runner_stderr.write(f"journal_finalization_exception_type={type(exc).__name__}\n")
+            try:
+                journal.run_doc["primary_error_code"] = primary_error
+                journal.run_doc["persistence_error_code"] = primary_error
+                journal.run_doc["state"] = "incomplete"
+            except Exception:
+                pass
+        try:
+            journal.close()
+        except Exception as exc:
+            result_code = 1
+            cleanup_error = cleanup_error or "journal_close_failed"
+            runner_stderr.write(f"journal_close_exception_type={type(exc).__name__}\n")
+            try:
+                journal.run_doc["state"] = "incomplete"
+                journal.run_doc["cleanup_error_code"] = cleanup_error
+                _atomic_json(journal.run_path, journal.run_doc)
+            except Exception:
+                primary_error = primary_error or "run_document_reconciliation_failed"
+    if b_success_candidate is not None and result_code == 0:
+        receipt = args.budget_root / "b-success.json"
+        try:
+            _atomic_json(receipt, b_success_candidate, exclusive=True)
         except Exception:
-            cleanup_error = cleanup_error or "real_journal_finalize_failed"
-        journal.close()
+            result_code = 1
+            primary_error = "b_success_evidence_persist_failed"
+            try:
+                receipt.unlink(missing_ok=True)
+                _fsync_parent(receipt)
+            except Exception:
+                pass
     return result_code
 
 
@@ -1491,6 +1756,22 @@ def _scrub_secret(logs_dir: Path, secret: str) -> None:
             continue
         if secret in text:
             path.write_text(text.replace(secret, "[REDACTED_SECRET]"), encoding="utf-8")
+
+
+def _validate_worker_mounts(args: argparse.Namespace) -> None:
+    # The fake orchestration supplies host paths directly to the in-process worker;
+    # this sentinel is never populated by the public CLI parser.
+    if getattr(args, "_test_context", None) is _MOCK_ORCHESTRATION_TEST:
+        return
+    expected_budget = Path("/participant/real-budget")
+    expected_logs = Path("/participant/run/runner-logs")
+    expected_instruction = (Path("/participant/projection/instruction.md") if args.kind == "c-once"
+                            else Path("/participant/run/b-smoke-instruction.md"))
+    expected_mcp = (f"http://chi-agent-a-world-{args.run_id}:8020/mcp" if args.kind == "c-once"
+                    else "http://127.0.0.1:9/unused-mcp-for-b-smoke")
+    if (args.budget_root != expected_budget or args.logs_dir != expected_logs
+            or args.instruction_file != expected_instruction or args.mcp_url != expected_mcp):
+        raise LiveFailure("worker_scope_arguments_invalid")
 
 
 def _run_worker(args: argparse.Namespace) -> int:

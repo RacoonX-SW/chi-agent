@@ -103,9 +103,13 @@ class FakeNetwork:
     def __init__(self, name):
         self.name = name
         self.id = f"net-{name}"
+        self.removed = False
 
     def connect(self, _container):
         return None
+
+    def remove(self):
+        self.removed = True
 
 
 class FakeContainer:
@@ -138,7 +142,8 @@ class FakeContainer:
                 instruction = run_dir / "b-smoke-instruction.md"
             worker_args = Namespace(kind=kind, run_id=run_id, budget_root=output_root,
                                     logs_dir=run_dir / "runner-logs", instruction_file=instruction,
-                                    mcp_url=args[args.index("--mcp-url") + 1])
+                                    mcp_url=args[args.index("--mcp-url") + 1],
+                                    _test_context=live._MOCK_ORCHESTRATION_TEST)
             try:
                 with patch.dict(os.environ, self.environment):
                     self.exit_code = asyncio.run(live._worker_run(worker_args))
@@ -189,8 +194,13 @@ class FakeDocker:
         self.volumes = FakeCollection(test_root)
         self.containers = FakeCollection(test_root)
         self.networks = self
+        self.fail_network_create = False
+        self.network_remove_attempts = []
 
     def create(self, name, **_kwargs):
+        if self.fail_network_create:
+            self.unknown_network_name = name
+            raise OSError("synthetic create outcome unknown")
         return FakeNetwork(name)
 
     def close(self):
@@ -344,6 +354,8 @@ class LiveDevelopmentTests(unittest.TestCase):
                          side_effect=lambda run_id: test_root / "runs" / "a-environment" / run_id),
             patch.object(live, "_projection_run_dir",
                          side_effect=lambda run_id: test_root / "projection-output" / run_id),
+            patch.object(live, "_copy_projection",
+                         side_effect=lambda _root, run_id: self._mock_projection(test_root, run_id)),
             patch.object(GuardedTransport, "_validate_request", capture_guard_shape),
         ]
         for item in monkeypatches:
@@ -383,6 +395,16 @@ class LiveDevelopmentTests(unittest.TestCase):
                 self.assertEqual(claim["terminal_status"], "completed_ungraded")
                 run_doc = json.loads((test_root / "runs" / f"{run_c}.json").read_text())
                 self.assertEqual([item["state"] for item in run_doc["tool_dispatches"]], ["returned", "returned"])
+                self.assertEqual(run_doc["real_usage"], {
+                    "input_tokens": sum(row["input_tokens"] for row in run_doc["requests"]),
+                    "output_tokens": sum(row["output_tokens"] for row in run_doc["requests"])})
+                self.assertEqual(run_doc["campaign_usage"], {
+                    "input_tokens": sum(row["input_tokens"] for row in
+                                         json.loads((test_root / "runs" / f"{run_b}.json").read_text())["requests"])
+                                    + run_doc["real_usage"]["input_tokens"],
+                    "output_tokens": sum(row["output_tokens"] for row in
+                                          json.loads((test_root / "runs" / f"{run_b}.json").read_text())["requests"])
+                                     + run_doc["real_usage"]["output_tokens"]})
                 self.assertIsNone(run_doc["official_reward"])
                 self.assertFalse(any("mock-secret-never-real" in p.read_text(errors="ignore")
                                      for p in (test_root / run_b).rglob("*") if p.is_file()))
@@ -393,6 +415,104 @@ class LiveDevelopmentTests(unittest.TestCase):
             finally:
                 for p in reversed(monkeypatches):
                     p.stop()
+
+    def test_partial_network_create_keeps_claim_and_does_not_guess_cleanup(self):
+        evidence_root = live.ROOT / "runs" / "real-b-c" / "impl"
+        evidence_root.mkdir(parents=True, exist_ok=True)
+        test_root = Path(tempfile.mkdtemp(prefix="mock-partial-create-", dir=evidence_root))
+        (test_root / "runs" / "a-environment").mkdir(parents=True)
+        (test_root / "projection-output").mkdir()
+        identity = live._execution_identity()
+        live.initialize_real_accounting(test_root, prior_source="offline-partial-create-fixture",
+                                        execution_identity=identity)
+        docker = FakeDocker(test_root)
+        tools = [
+            patch.object(live, "_model_key", return_value="mock-secret-never-real"),
+            patch.dict(os.environ, {"DEEPSEEK_API_KEY": "mock-secret-never-real"}),
+            patch("a_environment._docker", return_value=docker),
+            patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)),
+            patch("a_environment._check_resource_slots", return_value=None),
+            patch("a_environment.wait_world", return_value=0.0),
+            patch("a_environment._capture_logs", return_value=True),
+            patch.object(live, "_official_world_run_dir",
+                         side_effect=lambda run_id: test_root / "runs" / "a-environment" / run_id),
+            patch.object(live, "_projection_run_dir",
+                         side_effect=lambda run_id: test_root / "projection-output" / run_id),
+            patch.object(live, "_copy_projection", side_effect=lambda _root, run_id: self._mock_projection(test_root, run_id)),
+        ]
+        with patch("httpx.AsyncHTTPTransport", side_effect=lambda **_kwargs: httpx.MockTransport(FakeWire("b-smoke"))), \
+             patch.object(live, "_model_key", return_value="mock-secret-never-real"), \
+             patch.dict(os.environ, {"DEEPSEEK_API_KEY": "mock-secret-never-real"}):
+            # Create an authentic B receipt using the offline provider fixture first.
+            with patch("a_environment._docker", return_value=docker), \
+                 patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)), \
+                 patch("a_environment.cleanup", return_value={"container_removed": True, "network_removed": True}):
+                self.assertEqual(live._orchestrate("b-smoke", "partial-b", test_root,
+                                                   _test_context=live._MOCK_ORCHESTRATION_TEST)["status"], "smoke_completed")
+        docker.fail_network_create = True
+        started = [item.start() for item in tools]
+        try:
+            result = live._orchestrate("c-once", "partial-c", test_root,
+                                       _test_context=live._MOCK_ORCHESTRATION_TEST)
+            claim = json.loads((test_root / live.CLAIM_FILE).read_text())
+            self.assertEqual(result["status"], "failed")
+            self.assertEqual(result["cleanup_error_code"], "partial_resource_ownership_unknown")
+            self.assertEqual(claim["terminal_status"], "failed")
+            self.assertEqual(claim["state"], "failed_or_uncertain_claim_retained")
+        finally:
+            for item in reversed(tools):
+                item.stop()
+
+    @staticmethod
+    def _mock_projection(test_root: Path, run_id: str) -> Path:
+        projection = test_root / "projection-output" / run_id
+        projection.mkdir(parents=True)
+        (projection / "instruction.md").write_text("Offline task instruction.")
+        (projection / "tool_reference.md").write_text("Offline tool reference.")
+        for alias in ("healthverse-task-assets", "chi-bench-task-assets"):
+            (projection / alias).mkdir()
+            (projection / alias / "tool_reference.md").write_text("Offline tool reference.")
+        handbook = projection / "workspace/skills/managed-care-operations-handbook"
+        handbook.mkdir(parents=True)
+        (handbook / "SKILL.md").write_text("Offline handbook.")
+        return projection
+
+    def test_worker_cli_scope_is_fixed(self):
+        args = Namespace(kind="c-once", run_id="c-run", budget_root=Path("/tmp/budget"),
+                         logs_dir=Path("/tmp/logs"), instruction_file=Path("/tmp/instruction"),
+                         mcp_url="http://wrong/mcp")
+        with self.assertRaises(live.LiveFailure) as blocked:
+            live._validate_worker_mounts(args)
+        self.assertEqual(blocked.exception.code, "worker_scope_arguments_invalid")
+
+    def test_b_receipt_is_revoked_when_controller_cleanup_fails(self):
+        evidence_root = live.ROOT / "runs" / "real-b-c" / "impl"
+        evidence_root.mkdir(parents=True, exist_ok=True)
+        test_root = Path(tempfile.mkdtemp(prefix="mock-b-cleanup-failure-", dir=evidence_root))
+        identity = live._execution_identity()
+        live.initialize_real_accounting(test_root, prior_source="offline-cleanup-fixture",
+                                        execution_identity=identity)
+        docker = FakeDocker(test_root)
+        original_remove = FakeContainer.remove
+
+        def fail_runner_remove(container, force=False):
+            if container.name.startswith("chi-agent-real-runner-"):
+                raise OSError("synthetic cleanup failure")
+            return original_remove(container, force=force)
+
+        with patch.object(live, "_model_key", return_value="mock-secret-never-real"), \
+             patch.dict(os.environ, {"DEEPSEEK_API_KEY": "mock-secret-never-real"}), \
+             patch("httpx.AsyncHTTPTransport", side_effect=lambda **_kwargs: httpx.MockTransport(FakeWire("b-smoke"))), \
+             patch("a_environment._docker", return_value=docker), \
+             patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)), \
+             patch.object(FakeContainer, "remove", fail_runner_remove):
+            result = live._orchestrate("b-smoke", "cleanup-b", test_root,
+                                       _test_context=live._MOCK_ORCHESTRATION_TEST)
+        self.assertEqual(result["status"], "cleanup_failed")
+        self.assertFalse((test_root / "b-success.json").exists())
+        run_doc = json.loads((test_root / "runs" / "cleanup-b.json").read_text())
+        self.assertEqual(run_doc["state"], "incomplete")
+        self.assertEqual(run_doc["orchestration_status"], "cleanup_failed")
 
 
 if __name__ == "__main__":
