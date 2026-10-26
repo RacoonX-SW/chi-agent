@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import hashlib
+import json
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -214,7 +214,8 @@ async def _rehearse(scenario: str, run_id: str, *, initial_prior: Decimal = Deci
                     task_id: str | None = None, attempt_id: str | None = None,
                     output_root: Path | None = None,
                     application_files: tuple[str, ...] = APPLICATION_SOURCE_FILES,
-                    execution_identity_sha256: str | None = None) -> tuple[Any, Any, str | None]:
+                    execution_identity_sha256: str | None = None,
+                    official_launch: dict[str, Any] | None = None) -> tuple[Any, Any, str | None]:
     try:
         from b_provider_transport import EvaluationJournal, GuardFailure, SyntheticJournal
     except Exception:
@@ -266,10 +267,18 @@ async def _rehearse(scenario: str, run_id: str, *, initial_prior: Decimal = Deci
             "price_basis": "official_peak_cache_miss_upper_estimate_not_billed_cost",
             "retry_policy": {"http_client": 0, "agents_model": 0, "outer": 0, "synthetic_tool": 0},
             "real_usage": None, "real_cost_cny": None, "official_reward": None,
+            "official_launch": ({
+                "instruction_sha256": hashlib.sha256(
+                    official_launch["instruction"].encode("utf-8")).hexdigest(),
+                "mcp_url": official_launch["mcp_url"],
+                "logs_dir": str(official_launch["logs_dir"]),
+                "transport": "synthetic_only",
+            } if official_launch is not None else None),
         })
         ledger, result = await _run_offline(scenario, prepared={
             "profile": profile, "journal": journal, "policy": policy,
             "cap_cny": policy.hard_cap_cny,
+            **({"official_launch": official_launch} if official_launch is not None else {}),
             **({"output_tokens": output_tokens} if output_tokens is not None else {}),
         })
         journal.set_result(send_count=ledger.transport_calls, effects=ledger.effects or [],

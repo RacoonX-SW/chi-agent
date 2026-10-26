@@ -873,23 +873,53 @@ async def _run_offline(scenario: str, *, prepared: dict[str, Any] | None = None)
         local_tools_module.build_local_tools = lambda _logs: _tool_specs(
             ledger, effect_callback=persist_synthetic_effect if prepared is not None else None
         )
-        with tempfile.TemporaryDirectory(prefix="chi-model-runner-") as temp, contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-            runner_started = True
+        launch = (prepared or {}).get("official_launch") or {}
+        instruction = launch.get("instruction", "Use the supplied synthetic tools to look up sample and format the result.")
+        mcp_url = launch.get("mcp_url", "http://synthetic.invalid/mcp")
+        requested_logs_dir = launch.get("logs_dir")
+        temporary_logs = tempfile.TemporaryDirectory(prefix="chi-model-runner-") if requested_logs_dir is None else None
+        runner_logs = Path(temporary_logs.name) if temporary_logs is not None else Path(requested_logs_dir)
+        if requested_logs_dir is not None:
             try:
-                await official_runner.run_agent(
-                    "Use the supplied synthetic tools to look up sample and format the result.",
-                    "http://synthetic.invalid/mcp", logs_dir=Path(temp),
-                )
-            except SystemExit:
-                ledger.error_code = ledger.error_code or "official_runner_failed"
-            except IntegrationFailure as exc:
-                ledger.error_code = ledger.error_code or exc.code
+                # The caller validates the location; exclusive creation prevents
+                # runner output from reusing any prior evidence or accounting.
+                runner_logs.mkdir()
             except Exception:
-                ledger.error_code = ledger.error_code or "official_runner_failed"
-            if ledger.error_code is None:
-                output_path = Path(temp) / "run_output.txt"
-                if output_path.is_file():
+                ledger.error_code = "official_logs_directory_unavailable"
+                return ledger, None
+        stdout_capture, stderr_capture = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(stdout_capture), contextlib.redirect_stderr(stderr_capture):
+                runner_started = True
+                try:
+                    await official_runner.run_agent(instruction, mcp_url, logs_dir=runner_logs)
+                except SystemExit:
+                    ledger.error_code = ledger.error_code or "official_runner_failed"
+                except IntegrationFailure as exc:
+                    ledger.error_code = ledger.error_code or exc.code
+                except Exception:
+                    ledger.error_code = ledger.error_code or "official_runner_failed"
+            if temporary_logs is not None:
+                output_path = runner_logs / "run_output.txt"
+                if ledger.error_code is None and output_path.is_file():
                     result_text = output_path.read_text(encoding="utf-8")
+            else:
+                # Keep the runner's actual files and its stdout/stderr together;
+                # even a failed runner leaves the evidence it managed to write.
+                try:
+                    (runner_logs / "run_log.txt").write_text(
+                        stdout_capture.getvalue() + stderr_capture.getvalue(), encoding="utf-8")
+                except Exception:
+                    ledger.error_code = ledger.error_code or "official_logs_persist_failed"
+                output_path = runner_logs / "run_output.txt"
+                if ledger.error_code is None and output_path.is_file():
+                    result_text = output_path.read_text(encoding="utf-8")
+                if ledger.error_code is None and not all((runner_logs / name).is_file()
+                        for name in ("run_result.json", "run_output.txt", "trace.jsonl", "run_log.txt")):
+                    ledger.error_code = "official_runner_artifacts_missing"
+        finally:
+            if temporary_logs is not None:
+                temporary_logs.cleanup()
         if ledger.error_code is None and ledger.rounds == 3 and result_text is None:
             ledger.error_code = "final_output_missing"
         if ledger.error_code is None and ledger.rounds != 3:

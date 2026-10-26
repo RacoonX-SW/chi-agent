@@ -10,13 +10,15 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 
 ROOT = Path(__file__).absolute().parent.parent
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from evaluation_bundle import BundleFailure, BundleIdentity, _read_regular_bounded, validate_bundle
+from evaluation_bundle import (BundleFailure, BundleIdentity, _check_components,
+                               _read_regular_bounded, validate_bundle)
 from b_execution_policy import PolicyFailure, ExecutionPolicy, is_validated_policy, make_evaluation_policy
 from b_provider_profile import ProfileFailure, ProviderProfile, load_profile
 from b_live_preflight import PreparationFailure, _policy_summary, _profile_summary, _rehearse, _source_and_sdk
@@ -45,6 +47,9 @@ SAFE_REHEARSE_SCENARIOS = (
     "evaluation-over-five", "success", "missing-usage", "invalid-final-usage", "http-429",
     "http-503", "connect-error", "timeout", "post-tool-503",
 )
+MAX_INSTRUCTION_BYTES = 65_536
+FIXTURE_PATH_PARTS = frozenset({"fixtures", "fixture", "hidden", "private"})
+FIXTURE_FILENAMES = frozenset({"tasks.jsonl", "task.jsonl", "expected.jsonl"})
 
 
 class EntryFailure(Exception):
@@ -133,8 +138,7 @@ def _safe_output_root(value: Path, bundle_root: Path) -> Path:
     if ".." in value.parts:
         raise EntryFailure("evaluation_output_path_invalid")
     try:
-        absolute = __import__("evaluation_bundle")._check_components(
-            value, "evaluation_output_path_invalid")
+        absolute = _check_components(value, "evaluation_output_path_invalid")
     except BundleFailure:
         raise EntryFailure("evaluation_output_path_invalid") from None
     bundle_root = Path(bundle_root)
@@ -148,6 +152,58 @@ def _safe_output_root(value: Path, bundle_root: Path) -> Path:
     except ValueError:
         return absolute
     raise EntryFailure("evaluation_output_path_invalid")
+
+
+def _disjoint_paths(first: Path, second: Path) -> bool:
+    return not (first == second or first in second.parents or second in first.parents)
+
+
+def _read_launch_inputs(instruction_path: Path, mcp_url: str, logs_path: Path,
+                        bundle_root: Path, output_root: Path) -> tuple[str, str, Path]:
+    try:
+        instruction_path = _check_components(
+            Path(instruction_path), "evaluation_instruction_path_invalid", final_may_be_missing=False)
+        logs_path = _check_components(Path(logs_path), "evaluation_logs_path_invalid")
+    except BundleFailure:
+        raise EntryFailure("evaluation_launch_path_invalid") from None
+    if (any(part.lower() in FIXTURE_PATH_PARTS for part in instruction_path.parts)
+            or instruction_path.name.lower() in FIXTURE_FILENAMES):
+        raise EntryFailure("evaluation_fixture_input_forbidden")
+    if not _disjoint_paths(instruction_path, bundle_root):
+        raise EntryFailure("evaluation_instruction_path_invalid")
+    if not _disjoint_paths(logs_path, bundle_root) or not _disjoint_paths(logs_path, output_root):
+        raise EntryFailure("evaluation_logs_path_invalid")
+    if not _disjoint_paths(logs_path, instruction_path):
+        raise EntryFailure("evaluation_launch_paths_overlap")
+    try:
+        payload = _read_regular_bounded(instruction_path, MAX_INSTRUCTION_BYTES,
+                                        "evaluation_instruction_invalid")
+        if not payload or b"\x00" in payload:
+            raise ValueError
+        instruction = payload.decode("utf-8", errors="strict")
+        if not instruction.strip():
+            raise ValueError
+    except Exception:
+        raise EntryFailure("evaluation_instruction_invalid") from None
+    try:
+        parsed = urlsplit(mcp_url)
+        port = parsed.port
+        host = parsed.hostname
+        if (type(mcp_url) is not str or len(mcp_url) > 2048
+                or parsed.scheme not in {"http", "https"} or not host
+                or parsed.username is not None or parsed.password is not None
+                or parsed.query or parsed.fragment or parsed.path != "/mcp"
+                or port is None or not 1 <= port <= 65535
+                or "?" in mcp_url or "#" in mcp_url
+                or any(c.isspace() for c in mcp_url)):
+            raise ValueError
+    except Exception:
+        raise EntryFailure("evaluation_mcp_url_invalid") from None
+    if logs_path.exists() or logs_path.is_symlink():
+        raise EntryFailure("evaluation_logs_destination_exists")
+    if not logs_path.parent.is_dir():
+        raise EntryFailure("evaluation_logs_parent_invalid")
+    return instruction, mcp_url, logs_path
 
 
 def _print(value: dict[str, Any]) -> None:
@@ -181,12 +237,15 @@ def _read_only_report(mode: str, context: EntryContext) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", nargs="?", choices=("plan", "preflight", "rehearse", "live"), default="plan")
+    parser.add_argument("mode", nargs="?", choices=("plan", "preflight", "rehearse", "launch-rehearse", "live"), default="plan")
     parser.add_argument("--evaluation-id")
     parser.add_argument("--task-id")
     parser.add_argument("--attempt-id")
     parser.add_argument("--run-id")
     parser.add_argument("--output-root", type=Path)
+    parser.add_argument("--instruction-file", type=Path)
+    parser.add_argument("--mcp-url")
+    parser.add_argument("--logs-dir", type=Path)
     parser.add_argument("--scenario", choices=SAFE_REHEARSE_SCENARIOS, default="evaluation-over-five")
     args = parser.parse_args(argv)
 
@@ -209,6 +268,15 @@ def main(argv: list[str] | None = None) -> int:
         if not all((args.evaluation_id, args.task_id, args.attempt_id, args.run_id, args.output_root)):
             raise EntryFailure("evaluation_identity_and_output_root_required")
         output_root = _safe_output_root(args.output_root, context.bundle.root)
+        official_launch = None
+        if args.mode == "launch-rehearse":
+            if not all((args.instruction_file, args.mcp_url, args.logs_dir)):
+                raise EntryFailure("evaluation_launch_inputs_required")
+            instruction, mcp_url, logs_dir = _read_launch_inputs(args.instruction_file, args.mcp_url, args.logs_dir,
+                                                                 context.bundle.root, output_root)
+            official_launch = {"instruction": instruction, "mcp_url": mcp_url, "logs_dir": logs_dir}
+        elif any((args.instruction_file, args.mcp_url, args.logs_dir)):
+            raise EntryFailure("evaluation_launch_inputs_require_launch_mode")
         identity = _runtime_identity()
         if identity["status"] != "verified_for_offline_integration":
             raise EntryFailure(identity["safe_error_code"])
@@ -219,6 +287,7 @@ def main(argv: list[str] | None = None) -> int:
             evaluation_id=args.evaluation_id, task_id=args.task_id, attempt_id=args.attempt_id,
             output_root=output_root, application_files=ENTRY_RUNTIME_SOURCE_FILES,
             execution_identity_sha256=context.bundle.manifest_sha256,
+            official_launch=official_launch,
         ))
         success = ledger.error_code is None and result is not None
         _print({"mode": "identified_evaluation_entry_rehearsal",
@@ -230,6 +299,12 @@ def main(argv: list[str] | None = None) -> int:
                 "entry_identity": {"bundle_manifest_sha256": context.bundle.manifest_sha256,
                                    "config_sha256": context.config_sha256},
                 "safe_error_code": ledger.error_code, "cleanup_error_code": ledger.cleanup_error_code,
+                "launch_contract": ({"mcp_url": official_launch["mcp_url"],
+                                     "instruction_sha256": hashlib.sha256(
+                                         official_launch["instruction"].encode("utf-8")).hexdigest(),
+                                     "logs_dir": str(official_launch["logs_dir"]),
+                                     "transport": "synthetic_only"}
+                                    if official_launch is not None else None),
                 "real_usage": None, "real_cost_cny": None, "official_reward": None})
         return 0 if success else 1
     except (BundleFailure, EntryFailure, PolicyFailure, ProfileFailure, PreparationFailure) as exc:
