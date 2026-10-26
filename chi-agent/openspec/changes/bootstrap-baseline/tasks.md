@@ -94,7 +94,7 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] P.2 Add a strictly validated, source-dated provider profile and read-only plan/preflight with real budget/auth readiness kept separate from execution authorization.
 - [x] P.3 Prepare a reusable injected transport/accounting boundary with documented CNY reserve, prior spend and persistent synthetic pending/settled/unknown states; do not create a real ledger or send requests.
 - [x] P.4 Rehearse the same boundary through the pinned real SDK/official loop in network-disabled Docker; preserve existing integration behavior and verify failure/restart/race/history/budget paths.
-- [ ] P.5 Freeze candidate, independently verify it, update the learning ledger and one stage report, then create a base=main PR for user review/merge. Actual B/C/grading remain paused.
+- [x] P.5 Freeze candidate, independently verify it, update the learning ledger and one stage report, then create a base=main PR for user review/merge. Actual B/C/grading remain paused; PR identity is recorded only in REVIEW_STATE, and user merge remains separate.
 
 ## 3. Verify and hand over
 
