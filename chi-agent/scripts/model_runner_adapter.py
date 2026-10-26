@@ -207,6 +207,10 @@ def _scenario_response(scenario: str, number: int) -> dict[str, Any]:
     elif scenario == "over-input" and number == 1:
         usage = {"prompt_tokens": MAX_INPUT_TOKENS + 1, "completion_tokens": 5,
                  "total_tokens": MAX_INPUT_TOKENS + 6}
+    elif scenario == "over-document-context" and number == 1:
+        usage = {"prompt_tokens": 1_048_577, "completion_tokens": 5, "total_tokens": 1_048_582}
+    elif scenario == "over-profile-output" and number == 1:
+        usage = {"prompt_tokens": 12, "completion_tokens": 8193, "total_tokens": 8205}
     else:
         usage = {"prompt_tokens": 12 + number * 8, "completion_tokens": 5 + number,
                  "total_tokens": 17 + number * 9}
@@ -538,6 +542,34 @@ class MockWire:
                     break
 
 
+class PreparedFixtureWire:
+    """Canned synthetic fixture only; all enforcement/accounting stays in guard."""
+
+    def __init__(self, ledger: Ledger):
+        self.ledger = ledger
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        ledger = self.ledger
+        n = ledger.rounds
+        failure_scenarios = {
+            "http-429": (1, 429), "http-503": (1, 503),
+            "post-tool-429": (2, 429), "post-tool-503": (2, 503),
+        }
+        failure = failure_scenarios.get(ledger.scenario)
+        if failure and n == failure[0]:
+            _, status = failure
+            return httpx.Response(status, headers={"Retry-After": "0"},
+                                  json={"error": {"message": "synthetic"}}, request=request)
+        if ledger.scenario in {"connect-error", "post-tool-connect-error"} and n == (2 if ledger.scenario.startswith("post-tool-") else 1):
+            raise httpx.ConnectError("synthetic", request=request)
+        if ledger.scenario in {"timeout", "post-tool-timeout"} and n == (2 if ledger.scenario.startswith("post-tool-") else 1):
+            raise httpx.ReadTimeout("synthetic", request=request)
+        return httpx.Response(200, json=_scenario_response(ledger.scenario, n), request=request)
+
+    def observe_request(self, body: dict[str, Any]) -> None:
+        MockWire._observe_tool_history(self, body)
+
+
 class BudgetedMockTransport(httpx.AsyncBaseTransport):
     """Enforce request limits before invoking the underlying mock transport."""
 
@@ -660,7 +692,7 @@ def _same_route_reasoning(context: Any) -> bool:
     )
 
 
-def _tool_specs(ledger: Ledger):
+def _tool_specs(ledger: Ledger, *, effect_callback=None):
     from agents import function_tool
 
     @function_tool
@@ -672,7 +704,10 @@ def _tool_specs(ledger: Ledger):
             raise IntegrationFailure("tool_dispatch_unvalidated", "tool_execution")
         ledger.pending_calls.remove(pending)
         result = "synthetic-value" if key == "sample" else "synthetic-key-not-found"
-        ledger.effects.append({"tool": "synthetic_lookup", "call_id": pending["call_id"], "result": result})
+        effect = {"tool": "synthetic_lookup", "call_id": pending["call_id"], "result": result}
+        ledger.effects.append(effect)
+        if effect_callback is not None:
+            effect_callback(effect)
         return result
 
     @function_tool
@@ -684,13 +719,16 @@ def _tool_specs(ledger: Ledger):
         if pending is None:
             raise IntegrationFailure("tool_dispatch_unvalidated", "tool_execution")
         ledger.pending_calls.remove(pending)
-        ledger.effects.append({"tool": "synthetic_format", "call_id": pending["call_id"], "result": result})
+        effect = {"tool": "synthetic_format", "call_id": pending["call_id"], "result": result}
+        ledger.effects.append(effect)
+        if effect_callback is not None:
+            effect_callback(effect)
         return result
 
     return [synthetic_lookup, synthetic_format]
 
 
-async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
+async def _run_offline(scenario: str, *, prepared: dict[str, Any] | None = None) -> tuple[Ledger, str | None]:
     ledger = Ledger(scenario)
     identity: dict[str, Any] | None = None
     sdk: dict[str, str] | None = None
@@ -757,8 +795,23 @@ async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
             async def list_tools(self, *_args, **_kwargs):
                 return []
 
-        wire = MockWire(ledger)
-        client_transport = BudgetedMockTransport(ledger, wire)
+        if prepared is None:
+            wire = MockWire(ledger)
+            client_transport = BudgetedMockTransport(ledger, wire)
+            max_turns = MAX_ROUNDS
+            output_tokens = MAX_OUTPUT_TOKENS
+        else:
+            from b_provider_transport import GuardedTransport
+            wire = PreparedFixtureWire(ledger)
+            client_transport = GuardedTransport(
+                profile=prepared["profile"], journal=prepared["journal"],
+                lower=httpx.MockTransport(wire), ledger=ledger, cap_cny=prepared["cap_cny"],
+                validate_response=lambda payload: _validate_response(payload, ledger),
+                allowed_tool_names=set(SYNTHETIC_TOOLS),
+                observe_request=wire.observe_request,
+            )
+            max_turns = prepared["profile"].max_rounds
+            output_tokens = prepared.get("output_tokens", prepared["profile"].max_output_tokens)
         client_http = httpx.AsyncClient(transport=client_transport)
 
         # Save descriptors before patching. The finally block can restore even
@@ -767,7 +820,7 @@ async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
         os.environ.update({
             "OPENAI_AGENTS_MODEL": CANDIDATE_PROFILE["model"],
             "OPENAI_AGENTS_API_MODE": "chat_completions",
-            "OPENAI_AGENTS_MAX_TURNS": str(MAX_ROUNDS),
+            "OPENAI_AGENTS_MAX_TURNS": str(max_turns),
             "OPENAI_AGENTS_REASONING_EFFORT": "high",
             "OPENAI_AGENTS_MAX_RETRIES": "0",
         })
@@ -791,7 +844,7 @@ async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
         def model_settings(_effort: str | None = None, *, separate_reasoning: bool = False):
             del separate_reasoning
             return ModelSettings(
-                max_tokens=MAX_OUTPUT_TOKENS,
+                max_tokens=output_tokens,
                 reasoning={"effort": "high"},
                 extra_body={"thinking": {"type": "enabled"}},
                 retry=ModelRetrySettings(max_retries=0),
@@ -800,10 +853,21 @@ async def _run_offline(scenario: str) -> tuple[Ledger, str | None]:
         def safe_mcp_factory(*_args, **_kwargs):
             return SyntheticMCP()
 
+        def persist_synthetic_effect(effect):
+            if prepared is None:
+                return
+            try:
+                prepared["journal"].record_effect(effect)
+            except Exception:
+                ledger.error_code = "journal_write_failed"
+                raise IntegrationFailure("journal_write_failed", "tool_execution") from None
+
         official_runner._agent_model_context = model_context
         official_runner._build_model_settings = model_settings
         agents_mcp.MCPServerStreamableHttp = safe_mcp_factory
-        local_tools_module.build_local_tools = lambda _logs: _tool_specs(ledger)
+        local_tools_module.build_local_tools = lambda _logs: _tool_specs(
+            ledger, effect_callback=persist_synthetic_effect if prepared is not None else None
+        )
         with tempfile.TemporaryDirectory(prefix="chi-model-runner-") as temp, contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             runner_started = True
             try:
