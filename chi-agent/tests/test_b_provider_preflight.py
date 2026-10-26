@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import dataclasses
+import fcntl
 import gzip
 import json
 import multiprocessing
@@ -18,6 +19,7 @@ from unittest.mock import AsyncMock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 import b_provider_profile as profiles
+import b_execution_policy as policies
 import b_live_preflight as preflight
 
 try:
@@ -55,12 +57,52 @@ def _lock_handoff(root: str, acquired, close_old, old_closed, done, results):
     done.wait(10)
 
 
+def _evaluation_attempt_worker(root: str, run_id: str, acquired, release, results):
+    try:
+        journal = transport.EvaluationJournal(
+            Path(root), run_id, evaluation_id="eval-contended", task_id="task-a", attempt_id="attempt-1",
+            policy=policies.make_evaluation_policy("record_only"),
+            profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+        )
+    except transport.GuardFailure as exc:
+        results.put(exc.code)
+        return
+    results.put("acquired")
+    acquired.set()
+    release.wait(10)
+    journal.finish(success=False)
+    journal.close()
+
+
+def _concurrent_evaluation_task_worker(root: str, run_id: str, task_id: str, barrier, results):
+    original_mkdir = Path.mkdir
+
+    def synchronized_mkdir(path, *args, **kwargs):
+        if path.name == "claims":
+            barrier.wait(10)
+        return original_mkdir(path, *args, **kwargs)
+
+    with patch.object(Path, "mkdir", synchronized_mkdir):
+        try:
+            journal = transport.EvaluationJournal(
+                Path(root), run_id, evaluation_id="eval-shared-init", task_id=task_id,
+                attempt_id="attempt-1", policy=policies.make_evaluation_policy("record_only"),
+                profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+            )
+        except transport.GuardFailure as exc:
+            results.put((task_id, exc.code))
+            return
+        journal.finish(success=False)
+        journal.close()
+        results.put((task_id, "acquired"))
+
+
 class ProfileReadOnlyTests(unittest.TestCase):
     def test_profile_source_and_documented_bounds_are_available_without_model_sdk(self):
         profile = profiles.load_profile(today=dt.date(2026, 10, 26))
         self.assertEqual(profile.model, "deepseek-flash")
         self.assertEqual(profile.input_reserve_tokens, 1_048_576)
-        self.assertEqual(profile.budget_cap_cny, Decimal("5"))
+        self.assertNotIn("budget", profile.raw)
 
     def test_plan_and_preflight_report_optional_sdk_missing_without_import_traceback(self):
         with patch.object(preflight, "_source_and_sdk", side_effect=preflight.PreparationFailure("sdk_package_missing")):
@@ -109,9 +151,22 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             dataclasses.replace(profile, input_reserve_tokens=1),
             dataclasses.replace(profile, max_output_tokens=1),
             dataclasses.replace(profile, max_rounds=1),
-            dataclasses.replace(profile, budget_cap_cny=Decimal("Infinity")),
         ):
             self.assertFalse(profiles.is_validated_profile(changed))
+
+    def test_policy_identity_is_separate_and_runtime_fields_cannot_be_forged(self):
+        local = policies.load_local_policy()
+        self.assertEqual(local.scope, "local_development")
+        self.assertEqual(local.hard_cap_cny, Decimal("5"))
+        record = policies.make_evaluation_policy("record_only")
+        capped = policies.make_evaluation_policy("capped", "7.5")
+        self.assertIsNone(record.hard_cap_cny)
+        self.assertEqual(capped.hard_cap_cny, Decimal("7.5"))
+        self.assertNotEqual(record.sha256, capped.sha256)
+        self.assertFalse(policies.is_validated_policy(dataclasses.replace(capped, hard_cap_cny=Decimal("5"))))
+        for bad in (True, "NaN", "Infinity", "0", "-1", "1e9", 2):
+            with self.subTest(cap=bad), self.assertRaises(policies.PolicyFailure):
+                policies.make_evaluation_policy("capped", bad)
 
     def test_budget_evidence_missing_stale_and_bool_are_unknown(self):
         missing = profiles.validate_budget_evidence(None, today=dt.date(2026, 10, 26))
@@ -223,6 +278,86 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             self.assertEqual(lower.calls, 0)
             journal.finish(success=False)
             journal.close()
+
+    def test_guard_rejects_dynamic_policy_forgery_and_boolean_evaluation_cap(self):
+        profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+        lower = _CountingTransport(httpx.Response(200, json={}))
+        with tempfile.TemporaryDirectory() as temp:
+            local_policy = policies.load_local_policy()
+            journal = transport.SyntheticJournal(Path(temp) / "local", "dynamic-policy",
+                                                 initial_prior_cny=Decimal("4"), policy=local_policy)
+            guard = transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
+                                               ledger=runner_adapter.Ledger("success"), cap_cny=Decimal("5"),
+                                               validate_response=lambda _payload: None,
+                                               allowed_tool_names={"synthetic_lookup", "synthetic_format"})
+            journal.policy = dataclasses.replace(local_policy, mode="record_only")
+            with self.assertRaises(transport.GuardFailure) as error:
+                asyncio.run(guard.handle_async_request(_request()))
+            self.assertEqual(error.exception.code, "execution_policy_invalid")
+            self.assertEqual(lower.calls, 0)
+            journal.close()
+
+        with tempfile.TemporaryDirectory() as temp:
+            policy = policies.make_evaluation_policy("capped", "1")
+            journal = transport.EvaluationJournal(
+                Path(temp), "bool-cap", evaluation_id="eval-bool-cap", task_id="task-a",
+                attempt_id="attempt-1", policy=policy, profile=profile,
+            )
+            with self.assertRaises(transport.GuardFailure):
+                transport.GuardedTransport(profile=profile, journal=journal, lower=lower,
+                                           ledger=runner_adapter.Ledger("success"), cap_cny=True,
+                                           validate_response=lambda _payload: None,
+                                           allowed_tool_names={"synthetic_lookup", "synthetic_format"})
+            self.assertEqual(lower.calls, 0)
+            journal.finish(success=False)
+            journal.close()
+
+    def test_journal_construction_rejects_symlink_in_deep_ancestor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "real-target"
+            target.mkdir()
+            (root / "alias").symlink_to(target, target_is_directory=True)
+            deep = root / "alias" / "a" / "b" / "c" / "d" / "e" / "f" / "g" / "h"
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.EvaluationJournal(
+                    deep, "deep-symlink", evaluation_id="eval-path", task_id="task-a", attempt_id="a1",
+                    policy=policies.make_evaluation_policy("record_only"),
+                    profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+                )
+            self.assertEqual(error.exception.code, "evaluation_path_invalid")
+            self.assertEqual(list(target.iterdir()), [])
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            target = root / "real-target"
+            target.mkdir()
+            (root / "alias").symlink_to(target, target_is_directory=True)
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.SyntheticJournal(root / "alias" / "a" / "b" / "c" / "d" / "e", "local-link")
+            self.assertEqual(error.exception.code, "synthetic_journal_path_invalid")
+            self.assertEqual(list(target.iterdir()), [])
+
+    def test_journal_path_rejects_parent_segment_before_symlink_normalization(self):
+        with tempfile.TemporaryDirectory() as temp:
+            top = Path(temp)
+            (top / "start").mkdir()
+            (top / "external" / "child").mkdir(parents=True)
+            (top / "start" / "alias").symlink_to(top / "external" / "child", target_is_directory=True)
+            unsafe_root = top / "start" / "alias" / ".." / "chosen"
+            self.assertIn("..", unsafe_root.parts)
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.EvaluationJournal(
+                    unsafe_root, "path-normalization", evaluation_id="eval-normalization", task_id="task-a",
+                    attempt_id="attempt-1", policy=policies.make_evaluation_policy("record_only"),
+                    profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+                )
+            self.assertEqual(error.exception.code, "evaluation_path_invalid")
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.SyntheticJournal(unsafe_root, "path-normalization-local")
+            self.assertEqual(error.exception.code, "synthetic_journal_path_invalid")
+            self.assertFalse((top / "external" / "chosen").exists())
+            self.assertFalse((top / "start" / "chosen").exists())
 
     def test_guard_rejects_streaming_multiple_completions_and_ambiguous_limits_pre_send(self):
         profile = profiles.load_profile(today=dt.date(2026, 10, 26))
@@ -450,6 +585,210 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             evidence = json.loads(journal.run_path.read_text(encoding="utf-8"))
             self.assertEqual(evidence["requests"][0]["status"], "settled")
             self.assertEqual(evidence["state"], "incomplete")
+
+    def test_evaluation_record_only_completes_above_local_five_cny(self):
+        policy = policies.make_evaluation_policy("record_only")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "evaluation"
+            with patch.object(preflight, "EVALUATION_RUNS", root):
+                journal, ledger, result = asyncio.run(preflight._rehearse(
+                    "evaluation-over-five", "record-only-run", policy=policy,
+                    evaluation_id="eval-record", task_id="task-a", attempt_id="attempt-1",
+                ))
+            evidence = json.loads(journal.run_path.read_text(encoding="utf-8"))
+            self.assertIsNotNone(result)
+            self.assertEqual(ledger.transport_calls, 3)
+            self.assertEqual(evidence["state"], "complete")
+            self.assertGreater(Decimal(evidence["accounting"]["aggregate_cost_upper_cny"]), Decimal("5"))
+            self.assertEqual(evidence["execution_policy"]["mode"], "record_only")
+            self.assertEqual(evidence["accounting"]["aggregate_cost_upper_cny"], "6.196608")
+            self.assertIsNone(evidence["real_usage"])
+            self.assertIsNone(evidence["real_cost_cny"])
+            self.assertIsNone(evidence["official_reward"])
+
+    def test_evaluation_capped_stops_before_third_request_and_keeps_effects(self):
+        policy = policies.make_evaluation_policy("capped", "5")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "evaluation"
+            with patch.object(preflight, "EVALUATION_RUNS", root):
+                journal, ledger, result = asyncio.run(preflight._rehearse(
+                    "evaluation-over-five", "capped-run", policy=policy,
+                    evaluation_id="eval-capped", task_id="task-a", attempt_id="attempt-1",
+                ))
+            evidence = json.loads(journal.run_path.read_text(encoding="utf-8"))
+            self.assertIsNone(result)
+            self.assertEqual(ledger.transport_calls, 2)
+            self.assertEqual(ledger.error_code, "budget_exhausted")
+            self.assertEqual(len(evidence["effects"]), 2)
+            self.assertEqual(evidence["state"], "incomplete")
+
+    def test_evaluation_attempts_are_independent_but_unknown_attempt_is_not_replayed(self):
+        policy = policies.make_evaluation_policy("record_only")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "evaluation"
+            with patch.object(preflight, "EVALUATION_RUNS", root):
+                first, first_ledger, first_result = asyncio.run(preflight._rehearse(
+                    "missing-usage", "unknown-run", policy=policy, evaluation_id="eval-isolation",
+                    task_id="task-a", attempt_id="attempt-1",
+                ))
+                second, second_ledger, second_result = asyncio.run(preflight._rehearse(
+                    "success", "other-run", policy=policy, evaluation_id="eval-isolation",
+                    task_id="task-b", attempt_id="attempt-1",
+                ))
+            first_evidence_before = first.run_path.read_bytes()
+            self.assertIsNone(first_result)
+            self.assertFalse(first_ledger.usage_complete)
+            self.assertEqual(first_ledger.transport_calls, 1)
+            self.assertIsNotNone(second_result)
+            self.assertEqual(second_ledger.transport_calls, 3)
+            self.assertEqual(json.loads(first_evidence_before)["state"], "unknown")
+
+            with patch.object(preflight, "EVALUATION_RUNS", root), patch.object(
+                    runner_adapter, "_run_offline", new=AsyncMock(side_effect=AssertionError("runner entered"))) as run:
+                with self.assertRaises(preflight.PreparationFailure) as error:
+                    asyncio.run(preflight._rehearse(
+                        "success", "replacement-run", policy=policy, evaluation_id="eval-isolation",
+                        task_id="task-a", attempt_id="attempt-1",
+                    ))
+            self.assertIn(error.exception.code, {"evaluation_attempt_path_conflict", "evaluation_attempt_claim_exists"})
+            run.assert_not_awaited()
+            self.assertEqual(first.run_path.read_bytes(), first_evidence_before)
+
+    def test_evaluation_registry_rejects_policy_change_for_same_evaluation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "evaluation"
+            record = policies.make_evaluation_policy("record_only")
+            capped = policies.make_evaluation_policy("capped", "4")
+            with patch.object(preflight, "EVALUATION_RUNS", root):
+                asyncio.run(preflight._rehearse("success", "first", policy=record,
+                                                evaluation_id="eval-bound", task_id="task-a", attempt_id="a1"))
+                with patch.object(runner_adapter, "_run_offline", new=AsyncMock(side_effect=AssertionError("runner entered"))) as run:
+                    with self.assertRaises(preflight.PreparationFailure) as error:
+                        asyncio.run(preflight._rehearse("success", "second", policy=capped,
+                                                        evaluation_id="eval-bound", task_id="task-b", attempt_id="a1"))
+            self.assertEqual(error.exception.code, "evaluation_policy_conflict")
+            run.assert_not_awaited()
+
+    def test_two_processes_cannot_claim_same_evaluation_attempt(self):
+        with tempfile.TemporaryDirectory() as temp:
+            ctx = multiprocessing.get_context("spawn")
+            acquired, release = ctx.Event(), ctx.Event()
+            results = ctx.Queue()
+            first = ctx.Process(target=_evaluation_attempt_worker,
+                                args=(temp, "process-one", acquired, release, results))
+            first.start()
+            self.assertTrue(acquired.wait(10))
+            self.assertEqual(results.get(timeout=10), "acquired")
+            second_acquired, second_release = ctx.Event(), ctx.Event()
+            second = ctx.Process(target=_evaluation_attempt_worker,
+                                 args=(temp, "process-two", second_acquired, second_release, results))
+            second.start()
+            second.join(10)
+            self.assertFalse(second.is_alive())
+            self.assertEqual(results.get(timeout=10), "evaluation_attempt_path_conflict")
+            release.set()
+            first.join(10)
+            self.assertFalse(first.is_alive())
+
+    def test_concurrent_distinct_tasks_share_initial_evaluation_directories_safely(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / "eval-shared-init").mkdir()
+            ctx = multiprocessing.get_context("spawn")
+            barrier, results = ctx.Barrier(2), ctx.Queue()
+            workers = [ctx.Process(target=_concurrent_evaluation_task_worker,
+                                   args=(temp, f"concurrent-{task}", task, barrier, results))
+                       for task in ("task-a", "task-b")]
+            for worker in workers:
+                worker.start()
+            outcomes = sorted(results.get(timeout=15) for _ in workers)
+            for worker in workers:
+                worker.join(15)
+                self.assertFalse(worker.is_alive())
+                self.assertEqual(worker.exitcode, 0)
+            self.assertEqual(outcomes, [("task-a", "acquired"), ("task-b", "acquired")])
+
+    def test_evaluation_constructor_persist_failure_keeps_claim_and_releases_namespace_lock(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            policy = policies.make_evaluation_policy("record_only")
+            profile = profiles.load_profile(today=dt.date(2026, 10, 26))
+            original_persist = transport.SyntheticJournal._persist_run
+            count = 0
+
+            def fail_identity_write(journal):
+                nonlocal count
+                count += 1
+                if count == 2:
+                    raise OSError("synthetic identity persistence failure")
+                return original_persist(journal)
+
+            with patch.object(transport.SyntheticJournal, "_persist_run", fail_identity_write):
+                with self.assertRaises(transport.GuardFailure) as error:
+                    transport.EvaluationJournal(root, "persist-fail", evaluation_id="eval-persist",
+                                                task_id="task-a", attempt_id="attempt-1",
+                                                policy=policy, profile=profile)
+            self.assertEqual(error.exception.code, "evaluation_identity_persist_failed")
+            attempt_root = root / "eval-persist" / "attempts" / "task-a" / "attempt-1"
+            evidence = json.loads((attempt_root / "persist-fail.json").read_text(encoding="utf-8"))
+            self.assertEqual(evidence["state"], "incomplete")
+            self.assertEqual(evidence["primary_error_code"], "evaluation_identity_persist_failed")
+            self.assertEqual(evidence["persistence_error_code"], "journal_write_failed")
+            self.assertTrue((root / "eval-persist" / "claims" / "task-a" / "attempt-1.json").exists())
+            lock_fd = os.open(attempt_root / ".synthetic-namespace.lock", os.O_RDWR)
+            try:
+                fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            finally:
+                os.close(lock_fd)
+
+    def test_registry_lock_acquisition_error_closes_descriptor(self):
+        with tempfile.TemporaryDirectory() as temp:
+            original_open = os.open
+            original_close = os.close
+            original_flock = fcntl.flock
+            registry_fds = set()
+            closed = set()
+
+            def tracked_open(path, *args, **kwargs):
+                fd = original_open(path, *args, **kwargs)
+                if Path(path).name == ".registry.lock":
+                    registry_fds.add(fd)
+                return fd
+
+            def failing_registry_flock(fd, operation):
+                if fd in registry_fds and operation == fcntl.LOCK_EX:
+                    raise OSError("synthetic flock failure")
+                return original_flock(fd, operation)
+
+            def tracked_close(fd):
+                if fd in registry_fds:
+                    closed.add(fd)
+                return original_close(fd)
+
+            with patch.object(transport.os, "open", tracked_open), patch.object(
+                    transport.os, "close", tracked_close), patch.object(
+                    transport.fcntl, "flock", failing_registry_flock):
+                with self.assertRaises(transport.GuardFailure) as error:
+                    transport.EvaluationJournal(
+                        Path(temp), "registry-lock-fail", evaluation_id="eval-lock-fail", task_id="task-a",
+                        attempt_id="attempt-1", policy=policies.make_evaluation_policy("record_only"),
+                        profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+                    )
+            self.assertEqual(error.exception.code, "evaluation_journal_unavailable")
+            self.assertTrue(registry_fds)
+            self.assertEqual(closed, registry_fds)
+
+    def test_evaluation_preflight_does_not_require_or_read_development_budget(self):
+        policy = policies.make_evaluation_policy("record_only")
+        with patch.object(preflight, "_source_and_sdk", side_effect=preflight.PreparationFailure("sdk_package_missing")):
+            plan = preflight.build_plan(policy)
+            status = preflight.build_preflight(policy=policy)
+            with self.assertRaises(preflight.PreparationFailure) as error:
+                preflight.build_preflight(Path("/must/not/read.json"), policy=policy)
+        self.assertEqual(error.exception.code, "development_budget_not_applicable")
+        self.assertEqual(plan["budget"]["status"], "not_read")
+        self.assertEqual(status["budget"]["status"], "not_read")
+        self.assertEqual(status["readiness"], "identified_evaluation_policy_rehearsal_not_frozen")
 
     def test_known_over_limit_usage_is_settled_before_stopping(self):
         for scenario in ("over-profile-output", "over-document-context"):

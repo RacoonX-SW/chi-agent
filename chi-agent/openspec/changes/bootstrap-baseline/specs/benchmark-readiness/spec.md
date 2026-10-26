@@ -415,7 +415,7 @@ The system SHALL account for the selected 5 CNY first-round local-development ru
 
 ### Requirement: Separate local development budgets from official private evaluation
 
-The system SHALL separate usage/cost recording from monetary stop policy and identify the execution scope explicitly. This pre-submission requirement is pending implementation and verification; current B/C preparation acceptance covers local development only. The rule basis and design are recorded in [the budget-policy design](../../design.md#本地开发预算与正式私有评测).
+The system SHALL separate usage/cost recording from monetary stop policy and identify the execution scope explicitly. Offline policy-rehearsal acceptance SHALL NOT establish final submission freezing or real private-evaluation readiness. The rule basis and design are recorded in [the budget-policy design](../../design.md#本地开发预算与正式私有评测).
 
 #### Scenario: Local development uses the selected shared cap
 
