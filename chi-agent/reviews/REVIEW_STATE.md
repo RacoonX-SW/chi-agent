@@ -4,18 +4,18 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | H 官方启动接点与空依赖安装复现已独立离线验收通过；G 通过范围保留。正式入口 record_only/null cap，本地 B/C 共享 5 元；F.5 完整正式冻结和真实 API/C/判分继续未完成/暂停 |
+| 当前任务 | 本轮仅调整学习约定，以 B/C 那样的完整开发讲解为默认，不默认安排小题；详见 [学习约定](../docs/learning-agreement.md#教学方式)。H 官方启动接点与空依赖安装复现已独立离线验收通过，G 通过范围保留；F.5 完整正式冻结和真实 API/C/判分继续未完成/暂停 |
 | 协作 | 默认一个 Luna High 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-25) |
 | 上次独立审核候选 | `f562f60a1ecb1f35d716c7e06cede89083b6ad10`，H 复验通过，首审 FIFO 阻塞 R1 已关闭；见 [启动/安装复现审核](official-launch-reproduction-review.md) |
 | 上次通过的实现提交 | `f562f60a1ecb1f35d716c7e06cede89083b6ad10`，仅启动接点/独立安装的离线代码；G/F/B 准备及接入层/C/B/环境/A 身份保留在各阶段报告，不代表正式评测/真实调用通过 |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 已核对 PR #11 merged=true，从最新 `origin/main` `0ca299b8856a5d385b330569c49c0be6e213e32a` 建立 `codex/official-launch-reproduction`；写入前干净，一个 `gpt-6-luna` / `high` 实现，主代理负责规格、独立审核、教学和 GitHub |
-| 环境目标与实际 | 复用 Python 3.12 dev，原哈希锁在本轮新空 SDK 卷安装；独立包以屏蔽 site-packages 的解释器离线启动，实际身份见 H 报告。基础镜像/锁及模型锁未改，历史见 [环境审核](python312-alignment-review.md) |
+| 当前分支与接手改动 | 已核对 PR #12 merged=true，从最新 `origin/main` `3d686d0a2e347196d369c5944ace889f7368cb01` 建立 `codex/project-development-learning`；写入前干净，纯文档由主代理处理 |
+| 环境目标与实际 | H 复用 Python 3.12 dev，原哈希锁在 H 的新空 SDK 卷安装；独立包以屏蔽 site-packages 的解释器离线启动，实际身份见 H 报告。基础镜像/锁及模型锁未改，历史见 [环境审核](python312-alignment-review.md) |
 | 本地开发预算 | 首轮 B/C 共享 5 元人民币，写代码另计；该开发限额不自动适用于正式私有评测，依据见 [预算策略设计](../openspec/changes/bootstrap-baseline/design.md#本地开发预算与正式私有评测)。真实调用未恢复 |
 | 正式提交前置 | F.2–F.4、G 与 H 的有界离线范围通过。F.5 完整最终冻结、真实接入和正式配送仍未完成 |
-| 本轮验证 | 空卷锁定安装、独立包实际 instruction/URL/logs 流转、SDK wire 观测、失败产物/claim、FIFO/非普通文件、只读/暂停及相关回归通过，详细结果只见 H 审核 |
+| 本轮验证 | 纯文档变更仅检查差异、引用和现行规则一致性，结果记在本轮 PR；H 安装/启动及失败路径的既有证据只见 H 审核，不代表本轮重跑 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR #11 已由用户合并；[启动/安装复现 PR #12](https://github.com/xsw932187210-cell/chi-agent/pull/12) 已创建，base=main，待用户审核合并。后续按明确授权核对真实服务/认证/资源、正式启动与 F.5，当前不恢复真实 API/C/判分 |
+| PR 与下一步 | [启动/安装复现 PR #12](https://github.com/xsw932187210-cell/chi-agent/pull/12) 已由用户合并；[学习方式 PR #13](https://github.com/xsw932187210-cell/chi-agent/pull/13) 已创建，base=main，待用户审核合并。后续按明确授权核对真实服务/认证/资源、正式启动与 F.5，当前不恢复真实 API/C/判分 |
 | 未验证项 | 真实 provider transport/认证、真实 tokenizer/framing/用量/价格/账单、官方世界中的 B/C 及判分认证；其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 无真实 trial、official reward 或实测模型费用；直接 runner 的外部启动接点只完成合成离线验证，live 固定拒绝，原 cb/Harbor 的 ungraded gate 继续 unsupported |
 
