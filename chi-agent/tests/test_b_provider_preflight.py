@@ -6,6 +6,7 @@ import dataclasses
 import gzip
 import json
 import multiprocessing
+import os
 import sys
 import tempfile
 import unittest
@@ -343,6 +344,30 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             self.assertEqual(lower.calls, 0)
             second.finish(success=False)
             second.close()
+
+    def test_lock_fd_close_failure_persists_incomplete_terminal_evidence(self):
+        with tempfile.TemporaryDirectory() as temp:
+            journal = transport.SyntheticJournal(Path(temp), "close-failure")
+            journal.mark_error("prior_primary_error")
+            lock_fd = journal.lock_fd
+            original_close = os.close
+
+            def close_except_lock(fd):
+                if fd == lock_fd:
+                    raise OSError("synthetic close failure")
+                return original_close(fd)
+
+            with patch.object(transport.os, "close", side_effect=close_except_lock):
+                with self.assertRaises(transport.GuardFailure) as error:
+                    journal.finish(success=False)
+            self.assertEqual(error.exception.code, "namespace_lock_release_failed")
+            evidence = json.loads(journal.run_path.read_text(encoding="utf-8"))
+            self.assertEqual(evidence["state"], "incomplete")
+            self.assertEqual(evidence["primary_error_code"], "prior_primary_error")
+            self.assertEqual(evidence["cleanup_error_code"], "namespace_lock_release_failed")
+            self.assertEqual(evidence["persistence_error_code"], "namespace_lock_release_failed")
+            self.assertNotEqual(evidence["state"], "complete")
+            original_close(lock_fd)
 
     def test_missing_shared_journal_cannot_reset_prior_spend_from_other_run_files(self):
         with tempfile.TemporaryDirectory() as temp:

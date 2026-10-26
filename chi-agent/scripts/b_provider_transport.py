@@ -209,6 +209,15 @@ class SyntheticJournal:
         self._require_active_lock()
         _atomic_replace(self.run_path, _json_bytes(self.run_doc))
 
+    def _persist_finalization(self) -> None:
+        """Update only this run's terminal evidence after releasing shared ownership."""
+        if self.run_doc.get("state") not in {"complete", "incomplete", "unknown"}:
+            raise GuardFailure("journal_finalization_invalid", "persistence")
+        try:
+            _atomic_replace(self.run_path, _json_bytes(self.run_doc))
+        except Exception:
+            raise GuardFailure("journal_write_failed", "persistence") from None
+
     def _require_active_lock(self) -> None:
         if self.closed or not self._lock_owned or self.lock_fd is None:
             raise GuardFailure("journal_lock_not_owned", "persistence")
@@ -381,7 +390,7 @@ class SyntheticJournal:
             self.run_doc["state"] = "incomplete"
         complete = success and self.state.get("pending") is None and self.run_doc.get("primary_error_code") is None and cleanup_error_code is None
         if complete:
-            self.run_doc["state"] = "complete"
+            self.run_doc["state"] = "finalizing"
         self._persist_run()
         if self.state.get("pending") is None:
             try:
@@ -390,12 +399,14 @@ class SyntheticJournal:
                 self.run_doc["cleanup_error_code"] = "namespace_lock_release_failed"
                 self.run_doc["persistence_error_code"] = "namespace_lock_release_failed"
                 self.run_doc["state"] = "incomplete"
-                if self._lock_owned:
-                    try:
-                        self._persist_run()
-                    except Exception:
-                        pass
+                try:
+                    self._persist_finalization()
+                except GuardFailure:
+                    pass
                 raise
+            if complete:
+                self.run_doc["state"] = "complete"
+            self._persist_finalization()
 
     def _release_lock(self, *, strict: bool = False) -> None:
         failure = False
