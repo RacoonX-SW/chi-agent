@@ -125,7 +125,7 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] H.3 Extend only the necessary clean-package allowlist and evidence metadata; preserve package/policy identity, attempt exclusion, unknown usage and local budget behavior, without importing protected resources (the existing allowlist already contains all changed modules).
 - [x] H.4 Install the unchanged locked model dependencies in a newly created empty Docker volume without reusing an installed dependency layer; record environment, actual install result and dependency consistency.
 - [x] H.5 Independently run a frozen candidate's clean read-only package from an unrelated cwd, with only separate authorized vendor/dependency/input/output mounts; verify actual instruction/URL/log flow, success/failure and replay/pause boundaries using synthetic external services.
-- [ ] H.6 Record the bounded independent review and learning progress, push the work branch and create a base=main PR for user review/merge; retain F.5 and real-run limitations.
+- [x] H.6 Record the bounded independent review and learning progress, push the work branch and create a base=main PR for user review/merge; retain F.5 and real-run limitations.
 
 ## 3. Verify and hand over
 

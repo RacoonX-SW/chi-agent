@@ -15,7 +15,7 @@
 | 正式提交前置 | F.2–F.4、G 与 H 的有界离线范围通过。F.5 完整最终冻结、真实接入和正式配送仍未完成 |
 | 本轮验证 | 空卷锁定安装、独立包实际 instruction/URL/logs 流转、SDK wire 观测、失败产物/claim、FIFO/非普通文件、只读/暂停及相关回归通过，详细结果只见 H 审核 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR #11 已由用户合并；本轮 H 的 base=main PR 待创建并交用户审核合并。后续按明确授权核对真实服务/认证/资源、正式启动与 F.5，当前不恢复真实 API/C/判分 |
+| PR 与下一步 | PR #11 已由用户合并；[启动/安装复现 PR #12](https://github.com/xsw932187210-cell/chi-agent/pull/12) 已创建，base=main，待用户审核合并。后续按明确授权核对真实服务/认证/资源、正式启动与 F.5，当前不恢复真实 API/C/判分 |
 | 未验证项 | 真实 provider transport/认证、真实 tokenizer/framing/用量/价格/账单、官方世界中的 B/C 及判分认证；其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 无真实 trial、official reward 或实测模型费用；直接 runner 的外部启动接点只完成合成离线验证，live 固定拒绝，原 cb/Harbor 的 ungraded gate 继续 unsupported |
 
