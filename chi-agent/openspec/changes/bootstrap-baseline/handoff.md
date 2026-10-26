@@ -1,10 +1,14 @@
 # 执行器交接：bootstrap-baseline
 
-当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮恢复模型/官方 runner 接入层代码与离线验收，按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理；主代理负责规格、独立审核、教学与 GitHub。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。下方 C/B/A/D0 交接保留其阶段范围。
+当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮先完成真实 B 运行准备，继续暂停实际 API，按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理；主代理负责规格、独立审核、教学与 GitHub。真实 C 尝试与官方判分继续暂停。下方接入层/C/B/A/D0 交接保留其阶段范围。
 
 后续代码及文档交付统一使用 `codex/<任务名>` 工作分支：主代理先建分支、协调实现并独立检查，再推送和创建目标为 main 的 PR；用户审核并决定是否合并。主代理不直接开发/推送 main、不自行合并。下方历史 main 身份只记录已发生的交付，不能当作后续继续在 main 工作的授权，详见 [GitHub 工作流](../../../docs/github-workflow.md)。
 
-## 当前模型/runner 接入层交接（2026-10-26）
+## 当前真实 B 运行准备交接（2026-10-26）
+
+行为按 [准备契约](specs/benchmark-readiness/spec.md#requirement-prepare-a-real-stage-b-run-without-enabling-api-calls)、[本轮设计](design.md#真实-b-运行准备本轮设计) 和 P 任务。实现代理负责 provider/profile、预检及受控传输/账目代码和相应测试，必要最小抽取既有接入层并回归；主代理负责所有文档和 Git。复用镜像/模型依赖卷，不装新 SDK/不下载 tokenizer，不读凭据/生产账本、不调用 API，不修改 vendor、C 或原真实 gate；真调用许可不由 profile/文件/CLI 参数自行生成。
+
+## 模型/runner 接入层交接（2026-10-26）
 
 行为与交付以 [集成契约](specs/benchmark-readiness/spec.md#requirement-offline-validation-of-the-model-and-official-runner-integration-layer)、[设计](design.md#模型与官方-runner-接入层本轮设计) 和 [I 任务](tasks.md#modelofficial-runner-integration-code-offline-only) 为准。唯一实现子代理负责接入层代码、相应测试和独立可选 SDK 锁/安装入口；主代理负责其余文档、固定候选后的独立检查及 GitHub。复用 Python 3.12 Docker，使用固定真实 SDK/官方循环和合成 HTTP/工具边界，不改 vendor、基础依赖锁、原门禁或评分器。运行方法只维护在 README。
 

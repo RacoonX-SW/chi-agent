@@ -1,0 +1,48 @@
+{
+  "schema": "chi-prepared-provider-profile-v1",
+  "profile_id": "deepseek-flash-prepared-2026-10-26-v1",
+  "candidate": "deepseek-flash",
+  "model": "deepseek-flash",
+  "documented_model_mapping": "DeepSeek-V4.1-Flash-1017",
+  "model_mapping_status": "documentation_only_not_provider_verified",
+  "response_model": "deepseek-flash",
+  "response_model_policy": "exact_candidate_match",
+  "endpoint": "https://api.deepseek.com",
+  "api": "chat_completions",
+  "key_env": "DEEPSEEK_API_KEY",
+  "thinking": { "type": "enabled" },
+  "reasoning_effort": "high",
+  "max_rounds": 30,
+  "max_output_tokens": 8192,
+  "documented_output_ceiling": {
+    "tokens": 393216,
+    "source": "https://api-docs.deepseek.com/zh-cn/api/list-models/",
+    "checked_on": "2026-10-26"
+  },
+  "input_reservation": {
+    "tokens": 1048576,
+    "kind": "documented_context_ceiling",
+    "measurement": "documented_not_measured",
+    "source": "https://api-docs.deepseek.com/zh-cn/api/list-models/",
+    "checked_on": "2026-10-26"
+  },
+  "pricing": {
+    "currency": "CNY",
+    "input_peak_cache_miss_per_million": 2,
+    "output_peak_per_million": 8,
+    "version": "DeepSeek-V4.1-Flash-1017",
+    "source": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+    "checked_on": "2026-10-26",
+    "estimate_kind": "conservative_peak_upper_estimate_not_billed_cost"
+  },
+  "budget": {
+    "scope": "shared_B_C",
+    "cap_cny": 5,
+    "prior_spend_default": "unknown"
+  },
+  "execution": {
+    "real_api_enabled": false,
+    "actual_calls_authorized": false,
+    "authentication": "unverified"
+  }
+}

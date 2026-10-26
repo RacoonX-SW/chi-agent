@@ -88,6 +88,14 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] I.4 Prepare direct-runner ungraded plan/offline entries with synthetic tools/HTTP only, preserved evidence and live rejection; leave real B/C and grading paused.
 - [x] I.5 Freeze implementation, independently review in Docker, record limitations in one stage report and create a base=main PR for user review/merge. PR identity and next action are recorded only in REVIEW_STATE; user merge remains separate.
 
+## Real B run preparation (actual API calls paused)
+
+- [x] P.1 Verify the merged integration PR and create a new branch from latest origin/main; freeze provider/profile/provenance and authorization boundaries.
+- [x] P.2 Add a strictly validated, source-dated provider profile and read-only plan/preflight with real budget/auth readiness kept separate from execution authorization.
+- [x] P.3 Prepare a reusable injected transport/accounting boundary with documented CNY reserve, prior spend and persistent synthetic pending/settled/unknown states; do not create a real ledger or send requests.
+- [x] P.4 Rehearse the same boundary through the pinned real SDK/official loop in network-disabled Docker; preserve existing integration behavior and verify failure/restart/race/history/budget paths.
+- [x] P.5 Freeze candidate, independently verify it, update the learning ledger and one stage report, then create a base=main PR for user review/merge. Actual B/C/grading remain paused; PR identity is recorded only in REVIEW_STATE, and user merge remains separate.
+
 ## 3. Verify and hand over
 
 - [x] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.
