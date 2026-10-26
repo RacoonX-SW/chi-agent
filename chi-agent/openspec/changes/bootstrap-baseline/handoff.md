@@ -1,10 +1,14 @@
 # 执行器交接：bootstrap-baseline
 
-当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮恢复 C 代码开发的离线控制部分，按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理；主代理负责规格、独立审核、教学与 GitHub。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。下方 B/A/D0 交接保留其阶段范围。
+当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮恢复模型/官方 runner 接入层代码与离线验收，按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理；主代理负责规格、独立审核、教学与 GitHub。真实参赛模型 API、真实 C 尝试与官方判分继续暂停。下方 C/B/A/D0 交接保留其阶段范围。
 
 后续代码及文档交付统一使用 `codex/<任务名>` 工作分支：主代理先建分支、协调实现并独立检查，再推送和创建目标为 main 的 PR；用户审核并决定是否合并。主代理不直接开发/推送 main、不自行合并。下方历史 main 身份只记录已发生的交付，不能当作后续继续在 main 工作的授权，详见 [GitHub 工作流](../../../docs/github-workflow.md)。
 
-## 当前 C 离线交接（2026-10-26）
+## 当前模型/runner 接入层交接（2026-10-26）
+
+行为与交付以 [集成契约](specs/benchmark-readiness/spec.md#requirement-offline-validation-of-the-model-and-official-runner-integration-layer)、[设计](design.md#模型与官方-runner-接入层本轮设计) 和 [I 任务](tasks.md#modelofficial-runner-integration-code-offline-only) 为准。唯一实现子代理负责接入层代码、相应测试和独立可选 SDK 锁/安装入口；主代理负责其余文档、固定候选后的独立检查及 GitHub。复用 Python 3.12 Docker，使用固定真实 SDK/官方循环和合成 HTTP/工具边界，不改 vendor、基础依赖锁、原门禁或评分器。运行方法只维护在 README。
+
+## C 离线交接（2026-10-26）
 
 验收按 [C 控制契约](specs/benchmark-readiness/spec.md#requirement-offline-stage-c-single-attempt-execution-control)、[C 任务](tasks.md#c-offline-single-attempt-lifecycle-control) 和 [C 设计](design.md#c-的离线执行控制)。唯一实现子代理负责 `scripts/c_run_control.py` 与 `tests/test_c_run_control.py`，主代理负责其余文档与独立审核。不改 B 代码、既有真实 gate 或官方源码，不安装 SDK，不把合成控制演练写成实际任务执行。
 
@@ -14,7 +18,7 @@
 
 ## B 离线交接（2026-10-26）
 
-目标和行为以 [spec 的 Offline-only preparation for stage B](specs/benchmark-readiness/spec.md#requirement-offline-only-preparation-for-stage-b)、[B 任务](tasks.md#b-offline-preparation-of-modeltool-exchanges) 和 [设计取舍/参考 runner 缺口](design.md#b-的参考-runner-接入缺口) 为准。候选是独立合成协议探针，不是已接通的官方 Agent runner。
+目标和行为以 [spec 的 Offline-only preparation for stage B](specs/benchmark-readiness/spec.md#requirement-offline-only-preparation-for-stage-b)、[B 任务](tasks.md#b-offline-preparation-of-modeltool-exchanges) 和 [设计取舍/参考 runner 缺口](design.md#b-离线探针的参考-runner-接入缺口) 为准。候选是独立合成协议探针，不是已接通的官方 Agent runner。
 
 唯一实现子代理负责 `scripts/b_model_adapter.py`（若必要）、`scripts/b_model_probe.py` 与相应测试；主代理独占规格、README、学习、审核和 Git。复用现有 Python 3.12 dev 镜像，不装 SDK、不新增真实模型传输、不启动官方世界。Docker 离线运行不挂 socket、不转发凭据，输入仅为代码和合成 fixture，结果保存在忽略的 `runs/b-model/`。
 

@@ -8,7 +8,7 @@
 - [x] C.2 Implement a pure plan and an explicitly synthetic rehearsal controller, reusing the existing single-task builder and budget gate without modifying the real baseline guard.
 - [x] C.3 Persist an exclusive attempt claim scoped by campaign/task/upstream, isolated from real attempts; prevent duplicate/concurrent replay and evidence overwrite.
 - [x] C.4 Verify shared-budget provenance, one fresh-world/runner invocation, partial-failure/timeout/cleanup handling and retained null real outcomes in Docker (implementation self-test; independent acceptance follows C.5).
-- [x] C.5 Freeze and independently verify the candidate, update the existing learning ledger and one phase report, then push a base=main PR for user review/merge. PR identity and next action are recorded only in REVIEW_STATE; user merge remains pending.
+- [x] C.5 Freeze and independently verify the candidate, update the existing learning ledger and one phase report, then push a base=main PR for user review/merge. PR identity and next action are recorded only in REVIEW_STATE.
 
 ## B. Offline preparation of model/tool exchanges
 
@@ -79,6 +79,14 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] 2.8 Implement the D0 offline cumulative-budget/next-request-reservation and round-limit decision; the production preflight stops on missing accounting evidence, and limits are forwarded via agent_kwargs. Actual per-request harness enforcement, measured usage and a clean real task attempt remain deferred to B/C, not completed by these offline checks.
 - [x] 2.9 Provide the minimal development image, Compose entry points, dependency lock and controlled build context; run offline checks inside containers, persist source/results and keep secrets/restricted data out of the distributable image (D0: requirements.lock committed, Dockerfile uses pinned image & locked dependencies, socket mount removed).
 - [x] 2.10 At stage A, verify task-container creation from the containerized scheduler using the existing engine, actual mount source paths, network endpoints, artifact persistence and cleanup; retain the official runtime contract (A: fresh-world independent verification; see stage A review).
+
+## Model/official runner integration code (offline only)
+
+- [x] I.1 Add an optional, pinned SDK dependency layer in the existing Python 3.12 Docker; preserve the base environment and vendor source.
+- [x] I.2 Separate route/client and wire body; verify actual SDK serialization and same-model/endpoint reasoning plus tool-result history through the fixed official loop.
+- [x] I.3 Enforce per-request budget/input/output/round guards, account returned usage before validation, and verify zero HTTP/Agents/tool/outer retries including failure paths.
+- [x] I.4 Prepare direct-runner ungraded plan/offline entries with synthetic tools/HTTP only, preserved evidence and live rejection; leave real B/C and grading paused.
+- [x] I.5 Freeze implementation, independently review in Docker, record limitations in one stage report and create a base=main PR for user review/merge. PR identity and next action are recorded only in REVIEW_STATE; user merge remains separate.
 
 ## 3. Verify and hand over
 

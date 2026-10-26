@@ -115,6 +115,39 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 配置中的 harness、模型轮数和时限均为 `configured_unverified`；此处没有运行官方世界或 Agent，也未实现官方 runner 的逐请求预算 hook、硬取消或跨目录/跨主机全局幂等。真实 usage/cost/reward 为 null，任务结果 unknown；实际验收及真实接入缺口只查 [审核状态](reviews/REVIEW_STATE.md)。
 
+## 模型与官方 runner 接入层：离线集成
+
+`scripts/model_runner_adapter.py` 使用固定官方 `run_agent()` 与真实 SDK 循环，HTTP 响应和工具均为合成替身。`plan` 只预览，`offline` 捕获实际 SDK 序列化，`live` 固定拒绝；原 baseline/B/C 门禁仍保留。使用前核对 [当前授权与验收](reviews/REVIEW_STATE.md)。
+
+从本项目 `chi-agent/` 目录执行。可选 SDK 单独安装到 Docker 卷，复用现有 Python 3.12 镜像，不改基础镜像或 `requirements.lock`。安装需要包下载网络，不需要模型凭据：
+
+```sh
+docker run --rm \
+  -v "$PWD/scripts:/workspace/scripts:ro" \
+  -v "$PWD/requirements-model.lock:/workspace/requirements-model.lock:ro" \
+  -v chi-model-deps:/model-deps -w /workspace chi-agent-dev:latest \
+  sh scripts/install_model_dependencies.sh /model-deps
+```
+
+离线命令不挂 `.env`、data、手册或 Docker socket；vendor 只提供固定源码。先按 A 的源码获取说明准备 checkout，已存在时复用。每次换一个新的 run-id：
+
+```sh
+mkdir -p runs/model-runner
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/model-deps:/workspace/vendor/chi-bench/src \
+  -v chi-model-deps:/model-deps:ro \
+  -v "$PWD/scripts:/workspace/scripts:ro" \
+  -v "$PWD/vendor/chi-bench:/workspace/vendor/chi-bench:ro" \
+  -v "$PWD/runs/model-runner:/workspace/runs/model-runner:rw" \
+  -w /workspace chi-agent-dev:latest /opt/venv/bin/python \
+  scripts/model_runner_adapter.py offline --run-id sdk-offline-001 --scenario success
+```
+
+将最后一行的参数换为 `plan` 可查看无评分直接 runner 路径；这条路径不调用 `cb experiment run` 或 verifier，也不添加上游 skip-judge 参数。候选模型、工具选择、用量与价目都是合成验证输入，真实 provider usage/cost/reward 仍为 null，任务结果 unknown。真实 tokenizer、服务端计量和价格尚不能由离线字节界限证明；后续真实运行须另行恢复并验收。
+
+证据为 `runs/model-runner/<run-id>.json`；身份在 runner 执行前独占，重复身份不会重跑或覆盖。正常合成完成退出 0，受控失败退出 1，非法/重复身份或 live 拒绝退出 2。可用 `--scenario post-tool-429`、`missing-usage`、`invalid-final-usage`、`batch-valid-then-invalid`、`empty-history` 观察错误、用量未知和空历史字段；其他场景见 `--help`。独立验收与限制集中在状态页链接的接入层报告。
+
 ## 资料来源
 
 核对日期：2026-10-19。

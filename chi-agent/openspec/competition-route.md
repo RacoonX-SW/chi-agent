@@ -1,6 +1,6 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline/C` 的离线执行控制开发，真实模型 API、真实 C 尝试与官方判分继续暂停。实现分工按 [当前工作流](../docs/luna-subagent-workflow.md)，不操作 Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline` 的真实模型/官方 runner 接入层代码与离线验收，真实模型 API、真实 C 尝试与官方判分继续暂停。实现分工按 [当前工作流](../docs/luna-subagent-workflow.md)，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 
@@ -24,7 +24,7 @@
 - 官方判分保留为暂缓项；reward 为 null，不能宣称任务已通过或产生竞赛通过率。部分 Claude 模拟对话同样需要单独检查依赖。
 - 以后若执行官方判分，保留原版 reward 和 scorecard；有效 0 分也是真实测量，不能宣称解决任务。详见 [开发准备](../docs/development-preparation-2026-10-21.md)。
 - 每次恢复按当前审核身份增量核对差异，历史未通过报告只作为对应缺陷的证据，不覆盖后续独立验收。
-- B 离线探针用合成响应和合成工具检验请求/历史、关联、预算与失败处理；其通过不代替选定 provider/官方 runner 中的真实连续往返。真实 B 恢复前须补齐 [设计记录](changes/bootstrap-baseline/design.md#b-的参考-runner-接入缺口) 中的接入缺口。
+- B 离线探针用合成响应和合成工具检验请求/历史、关联、预算与失败处理；其通过不代替选定 provider/官方 runner 中的真实连续往返。接入层离线开发见 [设计记录](changes/bootstrap-baseline/design.md#模型与官方-runner-接入层本轮设计)，真实 B/C 仍需另行恢复和验证。
 
 ## 阶段 2：根据实际执行证据提出 Agent 改进变更
 
