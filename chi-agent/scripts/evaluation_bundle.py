@@ -14,6 +14,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_NAME = "bundle-manifest.json"
+INCOMPLETE_NAME = ".bundle-incomplete"
 MANIFEST_SCHEMA = "chi-evaluation-entry-bundle-v1"
 CONFIG_PATH = "profiles/evaluation-entry.json"
 MAX_FILE_BYTES = 16 * 1024 * 1024
@@ -101,12 +102,39 @@ def _read_allowlisted_source(source_root: Path, source_relative: str) -> bytes:
     path = _check_components(source_root / source_relative, "bundle_source_invalid",
                              final_may_be_missing=False)
     try:
-        details = path.stat()
-        if not stat.S_ISREG(details.st_mode) or details.st_size > MAX_FILE_BYTES:
-            raise ValueError
-        return path.read_bytes()
+        return _read_regular_bounded(path, MAX_FILE_BYTES, "bundle_source_invalid")
     except Exception:
         raise BundleFailure("bundle_source_invalid") from None
+
+
+def _read_regular_bounded(path: Path, limit: int, code: str, *, expected_size: int | None = None,
+                          size_mismatch_code: str | None = None) -> bytes:
+    """Read a regular no-follow file with a hard byte bound and stable size checks."""
+    fd = None
+    try:
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_size > limit:
+            raise ValueError
+        if expected_size is not None and before.st_size != expected_size:
+            raise BundleFailure(size_mismatch_code or code)
+        bound = limit if expected_size is None else expected_size
+        with os.fdopen(fd, "rb") as handle:
+            fd = None
+            payload = handle.read(bound + 1)
+            after = os.fstat(handle.fileno())
+        if (len(payload) > bound or (expected_size is not None and len(payload) != expected_size)
+                or before.st_dev != after.st_dev or before.st_ino != after.st_ino
+                or after.st_size != before.st_size):
+            raise BundleFailure(size_mismatch_code or code)
+        return payload
+    except BundleFailure:
+        raise
+    except Exception:
+        raise BundleFailure(code) from None
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 def _write_exclusive(path: Path, payload: bytes) -> None:
@@ -143,6 +171,15 @@ def _tree_allowlist() -> tuple[set[str], set[str]]:
 
 
 def _check_tree(root: Path) -> None:
+    incomplete = root / INCOMPLETE_NAME
+    try:
+        incomplete.lstat()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        raise BundleFailure("bundle_tree_invalid") from None
+    else:
+        raise BundleFailure("bundle_incomplete")
     expected_files, expected_dirs = _tree_allowlist()
     found_files: set[str] = set()
     found_dirs: set[str] = set()
@@ -203,6 +240,8 @@ def build_bundle(target: Path, *, source_root: Path = ROOT) -> BundleIdentity:
 
     entries: dict[str, dict[str, Any]] = {}
     try:
+        _write_exclusive(target / INCOMPLETE_NAME, b"bundle build in progress\n")
+        _fsync_dir(target)
         for relative, source_relative in PACKAGE_FILES.items():
             payload = _read_allowlisted_source(source_root, source_relative)
             destination = target / relative
@@ -226,7 +265,13 @@ def build_bundle(target: Path, *, source_root: Path = ROOT) -> BundleIdentity:
         manifest = {**unsigned, "manifest_sha256": _manifest_digest(unsigned)}
         _write_exclusive(target / MANIFEST_NAME, _canonical(manifest) + b"\n")
         _fsync_dir(target)
-        return validate_bundle(target)
+        # Removing this marker is the publication commit. All package files
+        # and the manifest have already been fsynced. Any earlier failure
+        # leaves the reserved target visibly incomplete and unverifiable.
+        (target / INCOMPLETE_NAME).unlink()
+        return BundleIdentity(root=target, bundle_id=manifest["bundle_id"],
+                              manifest_sha256=manifest["manifest_sha256"],
+                              entry_config_sha256=manifest["entry_config_sha256"], files=entries)
     except BundleFailure:
         try:
             manifest_path = target / MANIFEST_NAME
@@ -255,9 +300,8 @@ def validate_bundle(root: Path) -> BundleIdentity:
     manifest_path = root / MANIFEST_NAME
     _check_components(manifest_path, "bundle_manifest_invalid", final_may_be_missing=False)
     try:
-        if manifest_path.stat().st_size > 1_048_576:
-            raise ValueError
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"), object_pairs_hook=_unique_object,
+        manifest_bytes = _read_regular_bounded(manifest_path, 1_048_576, "bundle_manifest_invalid")
+        manifest = json.loads(manifest_bytes.decode("utf-8"), object_pairs_hook=_unique_object,
                               parse_constant=lambda _s: (_ for _ in ()).throw(ValueError()))
     except Exception:
         raise BundleFailure("bundle_manifest_invalid") from None
@@ -282,10 +326,9 @@ def validate_bundle(root: Path) -> BundleIdentity:
                 or type(item.get("size")) is not int or not 0 <= item["size"] <= MAX_FILE_BYTES):
             raise BundleFailure("bundle_manifest_invalid")
         path = _check_components(root / relative, "bundle_file_invalid", final_may_be_missing=False)
-        try:
-            payload = path.read_bytes()
-        except Exception:
-            raise BundleFailure("bundle_file_invalid") from None
+        payload = _read_regular_bounded(path, MAX_FILE_BYTES, "bundle_file_invalid",
+                                        expected_size=item["size"],
+                                        size_mismatch_code="bundle_file_digest_mismatch")
         if len(payload) != item["size"] or hashlib.sha256(payload).hexdigest() != item["sha256"]:
             raise BundleFailure("bundle_file_digest_mismatch")
     if manifest["entry_config_sha256"] != manifest["files"][CONFIG_PATH]["sha256"]:

@@ -143,6 +143,24 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
                 with self.subTest(field=field_path), self.assertRaises(profiles.ProfileFailure):
                     profiles.load_profile(path, today=dt.date(2026, 10, 26))
 
+    def test_oversized_profile_is_rejected_without_unbounded_path_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "large-profile.json"
+            path.write_bytes(b"x" * (profiles.MAX_PROFILE_BYTES + 1))
+            original_read_bytes = Path.read_bytes
+            reads = []
+
+            def record_read(candidate):
+                if candidate == path:
+                    reads.append(candidate)
+                return original_read_bytes(candidate)
+
+            with patch.object(Path, "read_bytes", new=record_read):
+                with self.assertRaises(profiles.ProfileFailure) as error:
+                    profiles.load_profile(path, today=dt.date(2026, 10, 26))
+            self.assertEqual(error.exception.code, "profile_unreadable")
+            self.assertEqual(reads, [])
+
     def test_verified_profile_runtime_fields_are_bound_to_pinned_raw_profile(self):
         profile = profiles.load_profile(today=dt.date(2026, 10, 26))
         for changed in (

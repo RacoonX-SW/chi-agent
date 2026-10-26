@@ -56,6 +56,61 @@ class EvaluationEntryBundleTests(unittest.TestCase):
             self.assertEqual(error.exception.code, "bundle_target_exists")
             self.assertEqual(sentinel.read_text(encoding="utf-8"), "preserve")
 
+    def test_output_root_may_not_overlap_bundle_in_either_direction(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = self.build(temp)
+            for output in (root, root.parent, root.parent.parent, root / "output"):
+                with self.subTest(output=output), self.assertRaises(entry.EntryFailure) as error:
+                    entry._safe_output_root(output, root)
+                self.assertEqual(error.exception.code, "evaluation_output_path_invalid")
+            outside = Path(temp) / "separate-output"
+            self.assertEqual(entry._safe_output_root(outside, root), outside)
+
+    def test_failed_manifest_publication_stays_incomplete_if_cleanup_fails(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / "package"
+            original_fsync = bundle._fsync_dir
+            original_unlink = Path.unlink
+
+            def fail_final_fsync(path):
+                if path == target and (target / bundle.MANIFEST_NAME).exists():
+                    raise bundle.BundleFailure("bundle_write_failed")
+                return original_fsync(path)
+
+            def fail_manifest_cleanup(path, *args, **kwargs):
+                if path == target / bundle.MANIFEST_NAME:
+                    raise OSError("injected cleanup failure")
+                return original_unlink(path, *args, **kwargs)
+
+            with patch.object(bundle, "_fsync_dir", side_effect=fail_final_fsync), patch.object(
+                    Path, "unlink", new=fail_manifest_cleanup):
+                with self.assertRaises(bundle.BundleFailure):
+                    bundle.build_bundle(target, source_root=PROJECT_ROOT)
+            self.assertTrue((target / bundle.INCOMPLETE_NAME).is_file())
+            self.assertTrue((target / bundle.MANIFEST_NAME).is_file())
+            with self.assertRaises(bundle.BundleFailure) as error:
+                bundle.validate_bundle(target)
+            self.assertEqual(error.exception.code, "bundle_incomplete")
+
+    def test_oversized_bundle_file_is_rejected_before_unbounded_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = self.build(temp)
+            oversized = root / "scripts" / "evaluation_entry.py"
+            with oversized.open("ab") as handle:
+                handle.truncate(bundle.MAX_FILE_BYTES + 1)
+            original_read_bytes = Path.read_bytes
+            read_attempts = []
+
+            def record_read(path):
+                if path == oversized:
+                    read_attempts.append(path)
+                return original_read_bytes(path)
+
+            with patch.object(Path, "read_bytes", new=record_read):
+                with self.assertRaises(bundle.BundleFailure):
+                    bundle.validate_bundle(root)
+            self.assertEqual(read_attempts, [])
+
     def test_failed_build_keeps_reserved_incomplete_target_without_manifest(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp) / "source"

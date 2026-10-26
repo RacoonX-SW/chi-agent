@@ -16,7 +16,7 @@ ROOT = Path(__file__).absolute().parent.parent
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from evaluation_bundle import BundleFailure, BundleIdentity, validate_bundle
+from evaluation_bundle import BundleFailure, BundleIdentity, _read_regular_bounded, validate_bundle
 from b_execution_policy import PolicyFailure, ExecutionPolicy, is_validated_policy, make_evaluation_policy
 from b_provider_profile import ProfileFailure, ProviderProfile, load_profile
 from b_live_preflight import PreparationFailure, _policy_summary, _profile_summary, _rehearse, _source_and_sdk
@@ -92,9 +92,8 @@ def _load_context() -> EntryContext:
     except BundleFailure as exc:
         raise EntryFailure(exc.code) from None
     try:
-        raw_bytes = ENTRY_CONFIG_PATH.read_bytes()
-        if len(raw_bytes) > MAX_CONFIG_BYTES:
-            raise ValueError
+        raw_bytes = _read_regular_bounded(
+            ENTRY_CONFIG_PATH, MAX_CONFIG_BYTES, "evaluation_entry_config_invalid")
         data = json.loads(raw_bytes, object_pairs_hook=_unique_object,
                           parse_constant=lambda _s: (_ for _ in ()).throw(ValueError()))
     except Exception:
@@ -133,9 +132,19 @@ def _safe_output_root(value: Path, bundle_root: Path) -> Path:
     value = Path(value)
     if ".." in value.parts:
         raise EntryFailure("evaluation_output_path_invalid")
-    absolute = Path(__import__("os").path.abspath(value))
+    try:
+        absolute = __import__("evaluation_bundle")._check_components(
+            value, "evaluation_output_path_invalid")
+    except BundleFailure:
+        raise EntryFailure("evaluation_output_path_invalid") from None
+    bundle_root = Path(bundle_root)
     try:
         absolute.relative_to(bundle_root)
+        raise EntryFailure("evaluation_output_path_invalid")
+    except ValueError:
+        pass
+    try:
+        bundle_root.relative_to(absolute)
     except ValueError:
         return absolute
     raise EntryFailure("evaluation_output_path_invalid")
