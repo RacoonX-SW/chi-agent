@@ -338,6 +338,27 @@ class ProviderProfileAndTransportTests(unittest.TestCase):
             self.assertEqual(error.exception.code, "synthetic_journal_path_invalid")
             self.assertEqual(list(target.iterdir()), [])
 
+    def test_journal_path_rejects_parent_segment_before_symlink_normalization(self):
+        with tempfile.TemporaryDirectory() as temp:
+            top = Path(temp)
+            (top / "start").mkdir()
+            (top / "external" / "child").mkdir(parents=True)
+            (top / "start" / "alias").symlink_to(top / "external" / "child", target_is_directory=True)
+            unsafe_root = top / "start" / "alias" / ".." / "chosen"
+            self.assertIn("..", unsafe_root.parts)
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.EvaluationJournal(
+                    unsafe_root, "path-normalization", evaluation_id="eval-normalization", task_id="task-a",
+                    attempt_id="attempt-1", policy=policies.make_evaluation_policy("record_only"),
+                    profile=profiles.load_profile(today=dt.date(2026, 10, 26)),
+                )
+            self.assertEqual(error.exception.code, "evaluation_path_invalid")
+            with self.assertRaises(transport.GuardFailure) as error:
+                transport.SyntheticJournal(unsafe_root, "path-normalization-local")
+            self.assertEqual(error.exception.code, "synthetic_journal_path_invalid")
+            self.assertFalse((top / "external" / "chosen").exists())
+            self.assertFalse((top / "start" / "chosen").exists())
+
     def test_guard_rejects_streaming_multiple_completions_and_ambiguous_limits_pre_send(self):
         profile = profiles.load_profile(today=dt.date(2026, 10, 26))
         for name, extra, code in (

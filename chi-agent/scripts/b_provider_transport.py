@@ -70,8 +70,11 @@ def _strict_cap_matches(value: Any, expected: Decimal | None) -> bool:
 
 
 def _reject_symlink_ancestors(path: Path, code: str) -> None:
-    """Reject links in every existing path component without resolving them."""
-    absolute = Path(os.path.abspath(path))
+    """Reject parent traversal and links without normalizing away components."""
+    lexical = Path(path)
+    if ".." in lexical.parts:
+        raise GuardFailure(code, "preflight")
+    absolute = Path(os.path.abspath(lexical))
     current = Path(absolute.anchor)
     for part in absolute.parts[1:]:
         current = current / part
