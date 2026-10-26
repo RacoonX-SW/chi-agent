@@ -35,11 +35,6 @@
     "checked_on": "2026-10-26",
     "estimate_kind": "conservative_peak_upper_estimate_not_billed_cost"
   },
-  "budget": {
-    "scope": "shared_B_C",
-    "cap_cny": 5,
-    "prior_spend_default": "unknown"
-  },
   "execution": {
     "real_api_enabled": false,
     "actual_calls_authorized": false,

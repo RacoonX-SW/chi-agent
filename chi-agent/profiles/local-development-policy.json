@@ -1,0 +1,9 @@
+{
+  "schema": "chi-execution-accounting-policy-v1",
+  "policy_id": "local-development-shared-b-c-5-cny-v1",
+  "scope": "local_development",
+  "mode": "capped",
+  "hard_cap_cny": "5",
+  "budget_group": "shared_B_C",
+  "cost_basis": "provider_profile_peak_upper_estimate_not_billed"
+}

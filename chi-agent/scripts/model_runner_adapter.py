@@ -564,7 +564,11 @@ class PreparedFixtureWire:
             raise httpx.ConnectError("synthetic", request=request)
         if ledger.scenario in {"timeout", "post-tool-timeout"} and n == (2 if ledger.scenario.startswith("post-tool-") else 1):
             raise httpx.ReadTimeout("synthetic", request=request)
-        return httpx.Response(200, json=_scenario_response(ledger.scenario, n), request=request)
+        payload = _scenario_response(ledger.scenario, n)
+        if ledger.scenario == "evaluation-over-five":
+            payload["usage"] = {"prompt_tokens": 1_000_000, "completion_tokens": 8192,
+                                "total_tokens": 1_008_192}
+        return httpx.Response(200, json=payload, request=request)
 
     def observe_request(self, body: dict[str, Any]) -> None:
         MockWire._observe_tool_history(self, body)
@@ -805,7 +809,8 @@ async def _run_offline(scenario: str, *, prepared: dict[str, Any] | None = None)
             wire = PreparedFixtureWire(ledger)
             client_transport = GuardedTransport(
                 profile=prepared["profile"], journal=prepared["journal"],
-                lower=httpx.MockTransport(wire), ledger=ledger, cap_cny=prepared["cap_cny"],
+                lower=httpx.MockTransport(wire), ledger=ledger,
+                cap_cny=prepared.get("cap_cny", prepared.get("policy").hard_cap_cny if prepared.get("policy") else None),
                 validate_response=lambda payload: _validate_response(payload, ledger),
                 allowed_tool_names=set(SYNTHETIC_TOOLS),
                 observe_request=wire.observe_request,

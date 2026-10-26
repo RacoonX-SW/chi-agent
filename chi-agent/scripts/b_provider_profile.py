@@ -55,7 +55,6 @@ EXPECTED: dict[str, Any] = {
         "checked_on": "2026-10-26",
         "estimate_kind": "conservative_peak_upper_estimate_not_billed_cost",
     },
-    "budget": {"scope": "shared_B_C", "cap_cny": 5, "prior_spend_default": "unknown"},
     "execution": {"real_api_enabled": False, "actual_calls_authorized": False, "authentication": "unverified"},
 }
 
@@ -94,7 +93,6 @@ class ProviderProfile:
     input_reserve_tokens: int
     max_output_tokens: int
     max_rounds: int
-    budget_cap_cny: Decimal
 
     @property
     def model(self) -> str:
@@ -129,7 +127,6 @@ def load_profile(path: Path = PROFILE_PATH, *, today: dt.date | None = None) -> 
         input_reserve_tokens=data["input_reservation"]["tokens"],
         max_output_tokens=data["max_output_tokens"],
         max_rounds=data["max_rounds"],
-        budget_cap_cny=Decimal(data["budget"]["cap_cny"]),
     )
 
 
@@ -151,11 +148,11 @@ def is_validated_profile(profile: Any) -> bool:
         and profile.input_reserve_tokens == current.input_reserve_tokens
         and type(profile.max_output_tokens) is int and profile.max_output_tokens == current.max_output_tokens
         and type(profile.max_rounds) is int and profile.max_rounds == current.max_rounds
-        and type(profile.budget_cap_cny) is Decimal and profile.budget_cap_cny == current.budget_cap_cny
     )
 
 
-def validate_budget_evidence(path: Path | None, *, today: dt.date | None = None) -> dict[str, Any]:
+def validate_budget_evidence(path: Path | None, *, cap_cny: Decimal = Decimal("5"),
+                             today: dt.date | None = None) -> dict[str, Any]:
     if path is None:
         return {"status": "unknown", "prior_spend_cny": None, "source": None, "code": "prior_spend_missing"}
     if (path.name == ".env" or path.name.startswith(".env.") or path.is_symlink()
@@ -184,7 +181,8 @@ def validate_budget_evidence(path: Path | None, *, today: dt.date | None = None)
         and data["scope"] == "shared_B_C"
         and data["currency"] == "CNY"
         and valid_amount
-        and Decimal(str(amount)) <= Decimal("5")
+        and type(cap_cny) is Decimal and cap_cny.is_finite() and cap_cny > 0
+        and Decimal(str(amount)) <= cap_cny
         and isinstance(source, str) and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}", source) is not None
         and not any(word in source.lower() for word in ("synthetic", "fixture", "mock"))
         and checked is not None and 0 <= (today - checked).days <= PROFILE_FRESHNESS_DAYS
