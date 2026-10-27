@@ -255,30 +255,60 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 开发实现默认一个 GPT-6.1 Terra（`gpt-6.1-terra`）/ `high` 子代理，主代理独立审核，见 [实现工作流](docs/subagent-workflow.md)。参赛运行时仍按 DeepSeek profile 配置；开发模型切换不更换参赛模型。
 
-用户已授权多次本地 C 开发尝试并取消旧 5 元金额停止条件。新的接续/逐尝试命令正在 K 中实现，实际可执行方法随固定候选更新；下方是 J 的历史命令，保留用于理解已有证据，不通过删除旧账目或失败 claim 再试。当前执行状态只查 [REVIEW_STATE](reviews/REVIEW_STATE.md)。
+用户已授权多次本地 C 开发尝试并取消旧 5 元金额停止条件；K 策略独立为 real_development / record_only / null cap。运行前先核对 [REVIEW_STATE](reviews/REVIEW_STATE.md) 的验收与实际授权。参赛模型的基础 SDK 继续复用 H 的卷；PDF 读取使用独立的固定依赖，不改原 SDK 卷。
 
-## 首次真实 B/C 开发联调（J 历史入口）
-
-`scripts/live_development.py` 是单独的本地真实入口：`plan`/`preflight` 只读，`init-prior` 显式初始化已有审核来源的首次真实账目，`b-smoke` 做真实模型工具往返，`c-once` 仅在 B 成功且预算足够后尝试一次固定官方题。先核对 [当前授权与实际结果](reviews/REVIEW_STATE.md)；本轮允许 B/C 合计最多 5 CNY，官方判分暂停。既有评测包入口仍固定 record_only/null cap，旧 live 拒绝不变。
-
-从 `chi-agent/` 目录运行。复用已有 dev/controller/world 镜像、固定 vendor 和 H 的 SDK 卷；`.env` 只配置 `DEEPSEEK_API_KEY`，不提交 GitHub。下面的 controller 能访问 Docker socket 与本地凭据；实际模型在独立 runner 容器，不向模型暴露 controller 文件、socket、凭据、vendor 源码或评分 fixtures。不要把这些命令当成干运行：`b-smoke`/`c-once` 会发送真实请求。
+从 `chi-agent/` 目录运行。首次在空 PDF 卷安装；已有通过核对的卷直接复用，安装也在 Docker 中：
 
 ```sh
-# 在当前 shell 定义一次；HOST_PROJECT_ROOT 必须是 Docker 引擎看到的真实项目路径
+docker volume create chi-k-pdf-deps-20261027-v1
+docker run --rm --read-only --tmpfs /tmp \
+  -e UV_CACHE_DIR=/tmp/uv-cache -e UV_LINK_MODE=copy \
+  -v "$PWD/requirements-pdf.lock:/workspace/requirements-pdf.lock:ro" \
+  -v chi-k-pdf-deps-20261027-v1:/pdf-deps \
+  chi-agent-dev:latest uv pip install --target /pdf-deps --require-hashes \
+    -r /workspace/requirements-pdf.lock
+
 chi_live_control() {
   docker run --rm --read-only --tmpfs /tmp \
     -e PYTHONDONTWRITEBYTECODE=1 \
     -e A_PROJECT_ROOT=/workspace -e HOST_PROJECT_ROOT="$PWD" \
     -e DOCKER_HOST=unix:///var/run/docker.sock \
-    -e PYTHONPATH=/model-deps:/workspace/vendor/chi-bench/src \
+    -e PYTHONPATH=/pdf-deps:/model-deps:/workspace/vendor/chi-bench/src \
     -e CHI_MODEL_DEPS_VOLUME=chi-h-root-model-deps-20261027-v1 \
     -v "$PWD:/workspace:ro" -v "$PWD/runs:/workspace/runs:rw" \
     -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+    -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro \
     -v "${DOCKER_HOST_SOCKET:-/Users/asaki/.docker/run/docker.sock}:/var/run/docker.sock" \
     -w /workspace chi-agent-a-control:latest /opt/a-venv/bin/python \
     scripts/live_development.py "$@"
 }
+```
 
+controller 需要访问本地 `.env` 和 Docker socket；模型在独立 runner 中，文件工具不可读取凭据/socket/源码/账目。以下命令不是干运行，B/C 会调用真实模型：
+
+```sh
+# 仅首次接续：验证旧 known 账目、B 回执与失败 claim，保留原文件
+chi_live_control adopt-prior
+# 显式记录新源码身份，保留费用；代码变更后也使用此命令
+chi_live_control rebind-source --reason 'reviewed implementation for continued C development'
+# 每个新源码身份先取得自己的 B 工具闭环证据
+chi_live_control k-b-smoke --run-id k-b-example-001
+chi_live_control c-run --run-id k-c-example-001
+# 上次终态和资源清理符合要求后，可在新世界再次自主尝试
+chi_live_control c-run --run-id k-c-example-002
+```
+
+K 状态固定在 `runs/real-c-development/`：`adoption.json` 保存旧来源，source-transitions 保存源码变更，accounting 累计旧费用与新增费用；claims 与各 run 产物分别保留。源码改变后先 rebind，再做当前源码 B；同一 attempt 不重演，不删除状态重新初始化。pending/未知用量、资源清理或持久化不明时先处理证据，金额上限取消不等于抹掉未知。旧 `plan`/`preflight` 及下方命令继续表示 J 的 5 元历史入口，不能拿它们当作 K 的预检。
+
+已允许路径内的 UTF-8 文本和 PDF 可通过 `local-fs-read` 读取；PDF 是文本提取，不提供 OCR。PDF 上限为 8 MiB、100 页、累计提取 100 万字符、单次返回 10 万字符；可用原有 offset/limit 按行分段。损坏、加密或不支持的二进制返回明确工具错误。解析器版本、锁和包源码纳入 K 身份，缺依赖或不一致会停止；这不扩大 handbook/task/case provider/shared 的路径权限。
+
+## 首次真实 B/C 开发联调（J 历史入口）
+
+`scripts/live_development.py` 是单独的本地真实入口：`plan`/`preflight` 只读，`init-prior` 显式初始化已有审核来源的首次真实账目，`b-smoke` 做真实模型工具往返，`c-once` 仅在 B 成功且预算足够后尝试一次固定官方题。先核对 [当前授权与实际结果](reviews/REVIEW_STATE.md)；本轮允许 B/C 合计最多 5 CNY，官方判分暂停。既有评测包入口仍固定 record_only/null cap，旧 live 拒绝不变。
+
+以下仅保留 J 命令以复查历史；当前使用上面的 K 入口。复用已有 dev/controller/world 镜像、固定 vendor 和 H 的 SDK 卷；`.env` 只配置 `DEEPSEEK_API_KEY`，不提交 GitHub。不要删除旧 J 账目、回执或失败 claim 来重新执行。
+
+```sh
 # 只读，不读取密钥、不调用模型、不创建世界/账目
 chi_live_control plan
 chi_live_control preflight
