@@ -22,6 +22,11 @@ import live_development as live
 def test_capture_review_input_bounded_and_fail_closed(tmp_path):
     class World:
         id = "synthetic-world"
+        class Client:
+            class API:
+                timeout = 30
+            api = API()
+        client = Client()
 
         def exec_run(self, command, demux=False):
             assert "127.0.0.1:8023/export" in command[-1]
@@ -970,3 +975,35 @@ class ContinuedDevelopmentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_capture_timeout_closes_archive_and_rejects_parent_symlink(tmp_path, monkeypatch):
+    clock = {"seconds": 0.0}
+    monkeypatch.setattr(live.time, "monotonic", lambda: clock["seconds"])
+    class API:
+        timeout = 30
+    class Client:
+        api = API()
+    class World:
+        id = "synthetic-world"
+        client = Client()
+        closed = False
+        def exec_run(self, *args, **kwargs):
+            return 0, b'{"world_id":"synthetic-world"}'
+        def get_archive(self, path):
+            def chunks():
+                try:
+                    clock["seconds"] = 61.0
+                    yield b"synthetic"
+                finally:
+                    self.closed = True
+            return chunks(), {}
+    world = World()
+    result = live._capture_review_input(world, tmp_path / "captures", "attempt", {})
+    assert result["status"] == "unavailable" and world.closed
+    assert world.client.api.timeout == 30
+    link = tmp_path / "linked"
+    link.symlink_to(tmp_path, target_is_directory=True)
+    result = live._capture_review_input(world, link / "captures", "attempt", {})
+    assert result["status"] == "unavailable"
+    assert not (tmp_path / "captures").exists()

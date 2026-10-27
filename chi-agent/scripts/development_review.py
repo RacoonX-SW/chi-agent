@@ -11,6 +11,7 @@ import re
 import sys
 import tempfile
 import time
+import stat
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -18,6 +19,7 @@ from typing import Any
 import httpx
 import live_development as live
 from b_provider_profile import load_profile
+from b_provider_transport import _reject_symlink_ancestors
 
 ROOT = Path(__file__).resolve().parents[1]
 INPUT_ROOT = ROOT / "runs/development-review-inputs"
@@ -56,12 +58,11 @@ def _parse(data: bytes) -> Any:
 
 
 def _read(path: Path, limit: int) -> bytes:
-    if path.is_symlink():
-        raise ReviewError("input_invalid")
     try:
-        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        _reject_symlink_ancestors(path.parent, "input_invalid")
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
         with os.fdopen(fd, "rb") as f:
-            if not __import__("stat").S_ISREG(os.fstat(f.fileno()).st_mode):
+            if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
                 raise ValueError
             data = f.read(limit + 1)
         if len(data) > limit:
@@ -85,7 +86,15 @@ def _object(path: Path, limit: int) -> tuple[dict[str, Any], bytes]:
 def _input(input_dir: Path, *, input_root: Path = INPUT_ROOT, c_root: Path = C_ROOT,
            identity: dict[str, Any] | None = None) -> tuple[dict, dict, dict, dict]:
     # Only the controller-owned captured namespace is admissible.
-    if input_dir.is_symlink() or input_root.is_symlink() or input_dir.parent.resolve() != input_root.resolve():
+    try:
+        for directory in (input_root, input_dir, c_root, c_root / input_dir.name,
+                          c_root / "runs", c_root / "claims"):
+            _reject_symlink_ancestors(directory, "input_location_invalid")
+            if not directory.is_dir():
+                raise ValueError
+    except Exception:
+        raise ReviewError("input_location_invalid") from None
+    if input_dir.parent.resolve() != input_root.resolve():
         raise ReviewError("input_location_invalid")
     run_id = input_dir.name
     if live.ID_RE.fullmatch(run_id) is None:
@@ -296,11 +305,55 @@ def _accounting(path: Path, profile: Any) -> dict:
             raise ValueError
         if state["pending"] is not None:
             raise ReviewError("accounting_pending_unknown")
+        _validate_receipts(path.parent, state, profile)
         return state
-    except ReviewError:
-        raise
+    except ReviewError as exc:
+        if exc.code == "accounting_pending_unknown":
+            raise
+        raise ReviewError("accounting_invalid") from None
     except Exception:
         raise ReviewError("accounting_invalid") from None
+
+
+def _validate_receipts(root: Path, state: dict, profile: Any) -> None:
+    """Verify the aggregate against every durable per-request settlement."""
+    totals = {key: 0 for key in ("input_tokens", "output_tokens", "cache_hit_tokens",
+                                  "cache_miss_tokens", "cache_usage_missing_requests", "settled_requests")}
+    for directory in root.iterdir():
+        if directory.name in {".lock", "accounting.json"}:
+            continue
+        _reject_symlink_ancestors(directory, "accounting_invalid")
+        if not directory.is_dir() or live.ID_RE.fullmatch(directory.name) is None:
+            raise ValueError
+        receipt, _ = _object(directory / "settlement.json", 1_000_000)
+        claim, _ = _object(directory / "claim.json", 1_000_000)
+        usage = receipt.get("usage")
+        identity = claim.get("identity")
+        if (receipt.get("schema") != "chi-development-review-settlement-v1"
+            or receipt.get("review_id") != directory.name or claim.get("review_id") != directory.name
+            or not isinstance(identity, dict) or receipt.get("identity") != identity
+            or identity.get("profile_sha256") != profile.sha256 or type(usage) is not dict
+            or type(usage.get("cache_usage_reported")) is not bool):
+            raise ValueError
+        for key in ("prompt_tokens", "completion_tokens", "cache_hit_tokens", "cache_miss_tokens"):
+            if type(usage.get(key)) is not int or not 0 <= usage[key] <= 10**9:
+                raise ValueError
+        if usage["cache_usage_reported"]:
+            if usage["cache_hit_tokens"] + usage["cache_miss_tokens"] != usage["prompt_tokens"]:
+                raise ValueError
+        elif usage["cache_hit_tokens"] != 0 or usage["cache_miss_tokens"] != 0:
+            raise ValueError
+        cost = (Decimal(usage["prompt_tokens"]) * profile.input_price + Decimal(usage["completion_tokens"]) * profile.output_price) / Decimal(1_000_000)
+        if usage.get("estimated_cost_cny") != str(cost) or usage.get("estimate_kind") != "conservative_peak_not_bill":
+            raise ValueError
+        totals["input_tokens"] += usage["prompt_tokens"]
+        totals["output_tokens"] += usage["completion_tokens"]
+        totals["cache_hit_tokens"] += usage["cache_hit_tokens"]
+        totals["cache_miss_tokens"] += usage["cache_miss_tokens"]
+        totals["cache_usage_missing_requests"] += int(not usage["cache_usage_reported"])
+        totals["settled_requests"] += 1
+    if any(state[key] != value for key, value in totals.items()):
+        raise ValueError
 
 
 def _write_bytes(path: Path, data: bytes) -> None:
@@ -341,9 +394,12 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
     secret = _secret if _secret is not None else os.environ.get("DEEPSEEK_API_KEY")
     if type(secret) is not str or not secret.strip() or "\n" in secret or "\r" in secret:
         raise ReviewError("provider_credential_missing")
-    review_root.mkdir(parents=True, mode=0o700, exist_ok=True)
-    if review_root.is_symlink():
-        raise ReviewError("review_root_invalid")
+    try:
+        _reject_symlink_ancestors(review_root, "review_root_invalid")
+        review_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+        _reject_symlink_ancestors(review_root, "review_root_invalid")
+    except Exception:
+        raise ReviewError("review_root_invalid") from None
     lock_fd = os.open(review_root / ".lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         try:
@@ -410,6 +466,12 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
                 if not has_secret:
                     _write_bytes(run_dir / "provider-response.json", raw)
                 raise
+            usage = {"prompt_tokens": i, "completion_tokens": o, "cache_hit_tokens": hit,
+                     "cache_miss_tokens": miss, "cache_usage_reported": "prompt_cache_hit_tokens" in payload["usage"],
+                     "estimated_cost_cny": str((Decimal(i) * profile.input_price + Decimal(o) * profile.output_price) / Decimal(1_000_000)),
+                     "estimate_kind": "conservative_peak_not_bill"}
+            live._atomic_json(run_dir / "settlement.json", {"schema": "chi-development-review-settlement-v1",
+                              "review_id": review_id, "identity": identity, "usage": usage}, exclusive=True)
             state["input_tokens"] += i
             state["output_tokens"] += o
             state["cache_hit_tokens"] += hit
@@ -420,10 +482,7 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
             state["known_estimated_cost_cny"] = str((Decimal(state["input_tokens"]) * profile.input_price + Decimal(state["output_tokens"]) * profile.output_price) / Decimal(1_000_000))
             state["pending"] = None
             live._atomic_json(review_root / "accounting.json", state)
-            result["usage"] = {"prompt_tokens": i, "completion_tokens": o, "cache_hit_tokens": hit,
-                               "cache_miss_tokens": miss, "cache_usage_reported": "prompt_cache_hit_tokens" in payload["usage"],
-                               "estimated_cost_cny": str((Decimal(i) * profile.input_price + Decimal(o) * profile.output_price) / Decimal(1_000_000)),
-                               "estimate_kind": "conservative_peak_not_bill"}
+            result["usage"] = usage
             if has_secret:
                 raise ReviewError("provider_response_secret")
             _write_bytes(run_dir / "provider-response.json", raw)

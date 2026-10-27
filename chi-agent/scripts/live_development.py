@@ -1074,15 +1074,24 @@ def _projection_run_dir(run_id: str) -> Path:
 def _capture_review_input(world: Any, capture_root: Path, run_id: str,
                           execution_identity: dict[str, Any]) -> dict[str, Any]:
     """Capture only the stopped runner's owned world, never participant outputs."""
+    from a_environment import _api_timeout
+    from b_provider_transport import _reject_symlink_ancestors
     limit = 16 * 1024 * 1024
+    deadline = time.monotonic() + 60
     try:
+        if ID_RE.fullmatch(run_id) is None:
+            raise ValueError
+        _reject_symlink_ancestors(capture_root, "review_input_capture_failed")
         program = (
             "import sys,urllib.request; "
             "r=urllib.request.urlopen('http://127.0.0.1:8023/export',timeout=20); "
             "b=r.read(16777217); "
             "sys.exit(2) if len(b)>16777216 else sys.stdout.buffer.write(b)"
         )
-        code, exported = world.exec_run(["python", "-c", program], demux=False)
+        with _api_timeout(world.client, deadline):
+            code, exported = world.exec_run(["python", "-c", program], demux=False)
+        if time.monotonic() > deadline:
+            raise TimeoutError
         if code != 0 or not isinstance(exported, bytes) or len(exported) > limit:
             raise ValueError
         def parse(raw: bytes) -> dict[str, Any]:
@@ -1093,12 +1102,22 @@ def _capture_review_input(world: Any, capture_root: Path, run_id: str,
             return value
 
         def archive_file(path: str, name: str, maximum: int) -> bytes:
-            archive, _ = world.get_archive(path)
             chunks = bytearray()
-            for chunk in archive:
-                chunks.extend(chunk)
-                if len(chunks) > maximum + 1024 * 1024:
-                    raise ValueError
+            archive = None
+            try:
+                with _api_timeout(world.client, deadline):
+                    archive, _ = world.get_archive(path)
+                    for chunk in archive:
+                        if time.monotonic() > deadline:
+                            raise TimeoutError
+                        chunks.extend(chunk)
+                        if len(chunks) > maximum + 1024 * 1024:
+                            raise ValueError
+                    if time.monotonic() > deadline:
+                        raise TimeoutError
+            finally:
+                if archive is not None and callable(getattr(archive, "close", None)):
+                    archive.close()
             with tarfile.open(fileobj=io.BytesIO(chunks), mode="r:*") as tar:
                 members = tar.getmembers()
                 if len(members) != 1 or members[0].name != name or not members[0].isfile() or members[0].size > maximum:
@@ -1120,8 +1139,7 @@ def _capture_review_input(world: Any, capture_root: Path, run_id: str,
         world_filename = f"{shared_world_id}.json"
         shared_world = archive_file(f"/opt/chi-bench/worlds/{world_filename}", world_filename, 64 * 1024 * 1024)
         capture_root.mkdir(mode=0o700, parents=True, exist_ok=True)
-        if capture_root.is_symlink():
-            raise ValueError
+        _reject_symlink_ancestors(capture_root, "review_input_capture_failed")
         target = capture_root / run_id
         target.mkdir(mode=0o700, exist_ok=False)
         for name, payload in (("exported_state.json", exported), ("expectations.json", expectations),

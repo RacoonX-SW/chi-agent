@@ -258,3 +258,77 @@ def test_response_echoing_secret_is_not_saved_but_usage_settles(capture, tmp_pat
     assert not (tmp_path / "reviews/review-1/provider-response.json").exists()
     for item in (tmp_path / "reviews").rglob("*.json"):
         assert "synthetic-secret" not in item.read_text()
+
+
+def test_read_fifo_rejected_without_blocking(tmp_path):
+    import subprocess
+    import sys
+    fifo = tmp_path / "fifo"
+    os.mkfifo(fifo)
+    proc = subprocess.run([sys.executable, "-c", "import development_review as d,sys; "
+                           "\ntry: d._read(d.Path(sys.argv[1]),100)\nexcept d.ReviewError: sys.exit(0)\nsys.exit(1)",
+                           str(fifo)], timeout=3, capture_output=True)
+    assert proc.returncode == 0
+
+
+def test_ancestor_symlinks_rejected(capture, tmp_path, synthetic_adapter):
+    folder, kwargs, _ = capture
+    linked = tmp_path / "linked"
+    linked.symlink_to(tmp_path, target_is_directory=True)
+    linked_folder = linked / "inputs" / folder.name
+    linked_kwargs = dict(kwargs, input_root=linked / "inputs")
+    with pytest.raises(dr.ReviewError, match="input_location_invalid"):
+        dr._input(linked_folder, **linked_kwargs)
+    with pytest.raises(dr.ReviewError, match="review_root_invalid"):
+        dr.review(folder, "symlink-test", review_root=linked / "reviews", _secret="synthetic-secret",
+                  _transport=httpx.MockTransport(lambda req: pytest.fail("no request")), **kwargs)
+    assert not (tmp_path / "reviews").exists()
+
+
+def test_receipt_durable_before_aggregate_and_missing_receipt_blocks(capture, tmp_path, synthetic_adapter):
+    class Crash(BaseException):
+        pass
+    root = tmp_path / "reviews"
+    atomic = live._atomic_json
+    def crash_after_settlement(path, value, **kwargs):
+        atomic(path, value, **kwargs)
+        if path == root / "accounting.json" and value.get("settled_requests") == 1:
+            raise Crash()
+    with patch.object(live, "_atomic_json", side_effect=crash_after_settlement):
+        with pytest.raises(Crash):
+            call(capture, tmp_path, lambda req: httpx.Response(200, json=response()))
+    receipt = json.loads((root / "review-1/settlement.json").read_text())
+    assert receipt["usage"]["prompt_tokens"] == 100
+    assert json.loads((root / "accounting.json").read_text())["pending"] is None
+    assert call(capture, tmp_path, lambda req: httpx.Response(200, json=response()), "review-2")["status"] == "complete"
+    (root / "review-1/settlement.json").unlink()
+    with pytest.raises(dr.ReviewError, match="accounting_invalid"):
+        call(capture, tmp_path, lambda req: pytest.fail("no request"), "review-3")
+
+
+def test_crash_after_receipt_preserves_pending(capture, tmp_path, synthetic_adapter):
+    class Crash(BaseException):
+        pass
+    root = tmp_path / "reviews"
+    atomic = live._atomic_json
+    def crash_after_receipt(path, value, **kwargs):
+        atomic(path, value, **kwargs)
+        if path.name == "settlement.json":
+            raise Crash()
+    with patch.object(live, "_atomic_json", side_effect=crash_after_receipt):
+        with pytest.raises(Crash):
+            call(capture, tmp_path, lambda req: httpx.Response(200, json=response()))
+    assert (root / "review-1/settlement.json").is_file()
+    assert json.loads((root / "accounting.json").read_text())["pending"] is not None
+    with pytest.raises(dr.ReviewError, match="accounting_pending_unknown"):
+        call(capture, tmp_path, lambda req: pytest.fail("no request"), "review-2")
+
+
+def test_modified_settlement_is_rejected(capture, tmp_path, synthetic_adapter):
+    call(capture, tmp_path, lambda req: httpx.Response(200, json=response()))
+    path = tmp_path / "reviews/review-1/settlement.json"
+    receipt = json.loads(path.read_text())
+    receipt["usage"]["completion_tokens"] = 21
+    path.write_text(json.dumps(receipt))
+    with pytest.raises(dr.ReviewError, match="accounting_invalid"):
+        call(capture, tmp_path, lambda req: pytest.fail("no request"), "review-2")
