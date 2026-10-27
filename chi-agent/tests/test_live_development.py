@@ -209,6 +209,52 @@ class FakeDocker:
 
 
 class LiveDevelopmentTests(unittest.TestCase):
+    def test_live_guard_replays_empty_reasoning_on_both_tool_rounds(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            live.initialize_real_accounting(root, prior_source="synthetic")
+            instruction = root / "instruction.md"
+            instruction.write_text("Use both smoke tools in order.")
+            wire = FakeWire("b-smoke")
+            for response in wire.responses[:2]:
+                response["choices"][0]["message"].update(content="", reasoning_content="")
+            args = Namespace(kind="b-smoke", run_id="synthetic-b", budget_root=root,
+                             logs_dir=root / "logs", instruction_file=instruction,
+                             mcp_url="http://127.0.0.1:9/unused", _test_context=live._MOCK_ORCHESTRATION_TEST)
+            with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "synthetic"}), patch(
+                    "httpx.AsyncHTTPTransport", side_effect=lambda **kw: httpx.MockTransport(wire)):
+                self.assertEqual(asyncio.run(live._worker_run(args)), 0)
+            assistants = [m for m in wire.requests[2]["messages"] if m.get("role") == "assistant" and m.get("tool_calls")]
+            self.assertEqual([m["tool_calls"][0]["id"] for m in assistants], ["call_lookup", "call_transform"])
+            self.assertEqual([m["reasoning_content"] for m in assistants], ["", ""])
+            run = json.loads((root / "runs" / "synthetic-b.json").read_text())
+            self.assertEqual(len(run["requests"]), 3)
+            self.assertTrue(all(request["status"] == "settled" for request in run["requests"]))
+
+    def test_live_guard_rejects_missing_or_invalid_reasoning_without_retry(self):
+        for value in (None, 7, "absent"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                live.initialize_real_accounting(root, prior_source="synthetic")
+                instruction = root / "instruction.md"
+                instruction.write_text("Use smoke tools.")
+                wire = FakeWire("b-smoke")
+                message = wire.responses[0]["choices"][0]["message"]
+                if value == "absent":
+                    del message["reasoning_content"]
+                else:
+                    message["reasoning_content"] = value
+                args = Namespace(kind="b-smoke", run_id="synthetic-b", budget_root=root,
+                                 logs_dir=root / "logs", instruction_file=instruction,
+                                 mcp_url="http://127.0.0.1:9/unused", _test_context=live._MOCK_ORCHESTRATION_TEST)
+                with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "synthetic"}), patch(
+                        "httpx.AsyncHTTPTransport", side_effect=lambda **kw: httpx.MockTransport(wire)):
+                    self.assertNotEqual(asyncio.run(live._worker_run(args)), 0)
+                self.assertEqual(len(wire.requests), 1)
+                run = json.loads((root / "runs" / "synthetic-b.json").read_text())
+                self.assertEqual(run["primary_error_code"], "response_invalid")
+                self.assertEqual(run["requests"][0]["status"], "settled")
+
     def test_j_identity_binds_utf8_reader_without_pdf_dependency(self):
         import hashlib
         from types import SimpleNamespace
