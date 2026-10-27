@@ -1,5 +1,9 @@
 # 判分访问方式：纠正 API Key 唯一性的说法
 
+2026-10-27 补充：用户要求使用已有 DeepSeek 替代本地 Claude 评审。实现契约见 [L 设计](../openspec/changes/bootstrap-baseline/design.md#deepseek-开发评审l)，运行方式见 [README](../README.md)，实际能力与验收结果查 [审核状态](../reviews/REVIEW_STATE.md)。此处下文保留 10 月 21 日的访问核对与当时授权，不作为后续开发暂停指令。
+
+DeepSeek 官方提供 [Anthropic 兼容 API](https://api-docs.deepseek.com/guides/anthropic_api/)，但固定 CHI ClaudeRunner 会清理代理地址；只改环境变量或模型名不能完成本项目接入。L 采用独立的 DeepSeek Chat Completions runner，复用固定 PA adapter、评分条目和提示，确定性部分检查另列；与原版 Claude 的判断可能不同，因此只标本地开发评审，官方 reward 仍为 null。没有 Claude 账号也可改进与测试参赛 Agent，官方最终评分仍由主办方按其协议执行。
+
 核对日期：2026-10-21（Asia/Shanghai）。仍处规划阶段，没有安装 Claude Code、读取登录凭据、生成 token、运行判分或调用付费模型。
 
 ## 纠正结论

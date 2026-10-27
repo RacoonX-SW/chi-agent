@@ -1,10 +1,10 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前增量是 `bootstrap-baseline` 的 K：先同步 GPT-6.1 Terra / high 实现协作，再接续旧真实账目、多次尝试官方任务 C；本地按新授权记录费用，旧 5 元上限与唯一 C 规则保留为 J 的历史边界。先独立审核代码，再由模型自主运行；G/H 和正式入口 record_only/null cap 保留，官方判分暂停，F.5 最终冻结仍待后续。实现分工按 [当前工作流](../docs/subagent-workflow.md)，不操作 Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。本地执行后进入 `bootstrap-baseline` 的 L：保留权威终态，复用固定官方检查与 rubric，用 DeepSeek 做开发评审；模型替换的结果与官方 Claude 分数分开。旧尝试/账目保留，正式入口 record_only/null cap 与 F.5 最终冻结边界延续。实现分工按 [当前工作流](../docs/subagent-workflow.md)，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 
-所有阶段同时遵循 [学习约定与进度](../docs/learning-agreement.md)：解释当前设计，结合真实材料/源码/轨迹教学，用简短理解问题反馈，并记录下一步。教学是协作要求，不改变比赛的自主评测规则，也不把完成课程设为开发前置条件。
+所有阶段同时遵循 [学习约定与进度](../docs/learning-agreement.md)：结合真实材料/源码/轨迹，串起阶段目标、设计、调用链与验证，默认不安排小测。教学是协作要求，不改变比赛的自主评测规则，也不把完成课程设为开发前置条件。
 
 2026-10-21 的 [开发讨论](../docs/development-discussion-2026-10-21.md) 补充了官方能力与自有实现的分工、已核对的工具调用示例及各阶段证据。它是规划说明，不代表模型、harness 或改进策略已经冻结，也未恢复实现。
 

@@ -302,6 +302,52 @@ K 状态固定在 `runs/real-c-development/`：`adoption.json` 保存旧来源�
 
 已允许路径内的 UTF-8 文本和 PDF 可通过 `local-fs-read` 读取；PDF 是文本提取，不提供 OCR。PDF 上限为 8 MiB、100 页、累计提取 100 万字符、单次返回 10 万字符；可用原有 offset/limit 按行分段。损坏、加密或不支持的二进制返回明确工具错误。解析器版本、锁和包源码纳入 K 身份，缺依赖或不一致会停止；这不扩大 handbook/task/case provider/shared 的路径权限。
 
+## DeepSeek 本地开发评审
+
+`scripts/development_review.py` 用固定 PA 规则和完整证据做本地诊断，报告名为 `development-review.json`，official reward 为 null。原版 Claude 评分与正式交付仍按 [审核状态](reviews/REVIEW_STATE.md) 的范围处理。
+
+新的成功 K C 在 runner 退出后保存 `runs/development-review-inputs/<run-id>/`，包含有来源/hash 的业务 export、expectations 和原始 world；目录不挂给 participant。捕获失败仍清理本次资源，并拒绝评审。旧 C 只有 trace/workspace 时不能补造成完整导出。participant 源码变更仍须 rebind 和当前源码 B，见上节；仅调整独立评审器不改变已捕获 C 的 participant 身份。
+
+下面函数在 Bash/Zsh 中从 `chi-agent/` 运行。`plan` 不读输入/密钥、不写状态；`deterministic` 禁网，只返回部分程序检查；只有显式 `review` 注入已有 `.env` 并调用一次 DeepSeek，不自动重试。评审容器没有 Docker socket，不挂整个项目或受限手册。
+
+```sh
+mkdir -p runs/development-review-inputs runs/development-review
+chi_development_review() {
+  typeset -a review_connection
+  review_connection=(--network none)
+  if [ "$1" = review ]; then
+    review_connection=(--env-file "$PWD/.env")
+  fi
+  docker run --rm --read-only --tmpfs /tmp "${review_connection[@]}" \
+    -e PYTHONDONTWRITEBYTECODE=1 \
+    -e PYTHONPATH=/pdf-deps:/model-deps:/workspace/vendor/chi-bench/src \
+    -v "$PWD/scripts:/workspace/scripts:ro" \
+    -v "$PWD/profiles:/workspace/profiles:ro" \
+    -v "$PWD/project.yaml:/workspace/project.yaml:ro" \
+    -v "$PWD/requirements-model.lock:/workspace/requirements-model.lock:ro" \
+    -v "$PWD/requirements-pdf.lock:/workspace/requirements-pdf.lock:ro" \
+    -v "$PWD/vendor/chi-bench:/workspace/vendor/chi-bench:ro" \
+    -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+    -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro \
+    -v "$PWD/runs/development-review-inputs:/workspace/runs/development-review-inputs:ro" \
+    -v "$PWD/runs/real-c-development:/workspace/runs/real-c-development:ro" \
+    -v "$PWD/runs/development-review:/workspace/runs/development-review:rw" \
+    -w /workspace chi-agent-dev:latest /opt/venv/bin/python \
+    scripts/development_review.py "$@"
+}
+chi_development_review plan
+chi_development_review deterministic \
+  --input-dir runs/development-review-inputs/k-c-example-003
+# 下一条是真实评审：使用实际已完成的 C ID 和一个新 review-id
+chi_development_review review \
+  --input-dir runs/development-review-inputs/k-c-example-003 \
+  --review-id review-example-001
+```
+
+评审只把官方 adapter 生成的目标患者证据、Agent 产物和 rubric 按文件路径内联，不向模型提供 tools，也不发送整个原始 world。单次请求大小上限 2 MiB；本地审计 journal 可读到 32 MiB，其内容不直接内联给模型。独立评审生成上限为 32,768 tokens、360 秒总截止，单次在途网络读取最多额外约 60 秒；参赛 Agent 的生成参数由其原 profile 管理。超限、缺材料、字段/引用不合法或 verdict 缺项返回 incomplete，不能当作通过；stdout 只输出安全摘要，逐项判断保存在本地报告。
+
+新增费用在 `runs/development-review/accounting.json` 独立累计，保留原 B/C 账目。发送前先持久占用，可信 usage 先结算；未知响应保留 pending 并阻止下一 review-id，不能删除目录清零后重试。估算使用峰值价格，不等于账单；模型替换后的逐项 verdict 不与主办方 Claude 分数混报。
+
 ## 首次真实 B/C 开发联调（J 历史入口）
 
 `scripts/live_development.py` 是单独的本地真实入口：`plan`/`preflight` 只读，`init-prior` 显式初始化已有审核来源的首次真实账目，`b-smoke` 做真实模型工具往返，`c-once` 仅在 B 成功且预算足够后尝试一次固定官方题。先核对 [当前授权与实际结果](reviews/REVIEW_STATE.md)；本轮允许 B/C 合计最多 5 CNY，官方判分暂停。既有评测包入口仍固定 record_only/null cap，旧 live 拒绝不变。

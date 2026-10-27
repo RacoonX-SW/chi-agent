@@ -153,6 +153,17 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 
 J.7 原授权的唯一尝试在官方 bootstrap 失败、模型未启动，历史 checkbox 不改成通过；原失败 claim 保留。用户后续另行授权的 K 已完成新世界自主无评分执行，见 K 任务与 [K 审核](../../../reviews/c-development-retry-review.md)；J 原记录见 [J 审核](../../../reviews/real-b-c-ungraded-review.md)。
 
+## L. DeepSeek local development judging
+
+用户没有可用 Claude，明确要求改用 DeepSeek；本阶段授权实现并试用独立的 DeepSeek 开发评审。复用固定官方 stage checks、PA provider adapter/rubrics/prompt，替换评审模型；结果只作本地诊断，official reward 保持 null，原版 Claude 判分和 F.5 仍未完成。一个 GPT-6.1 Terra / high 实现，主代理独立审核后运行；所有运行在 Python 3.12 Docker。既有多次本地 B/C 和无金额硬停止授权继续适用，历史账目不清零。
+
+- [x] L.1 Verify merged PR #15/latest main, branch, inspect the pinned judge extension and retained C evidence; specify local-versus-official result provenance.
+- [x] L.2 Preserve an authoritative post-run world export before C cleanup, outside participant-visible mounts; record export provenance/hashes and failure without modifying the participant's output or old attempts.
+- [x] L.3 Add a separate DeepSeek development-review entry using pinned deterministic checks and PA provider rubrics/prompt. Inline a bounded, complete adapter workspace in one tool-free structured request, validate verdicts strictly, enforce finite time/input/output, preserve request/usage evidence with zero retries, and report unknown/incomplete results honestly.
+- [x] L.4 Independently validate frozen code offline against synthetic provider/world boundaries: input provenance, credential/path isolation, capture/cleanup failure, malformed or missing verdicts, strict booleans, complete inline evidence/no tools, timeout, missing usage, replay/concurrency and previous regressions.
+- [x] L.5 After acceptance, evaluate existing authoritative evidence if available; otherwise perform a fresh authorized B/C with terminal export and then a separate DeepSeek review. Preserve every attempt/cost, report partial deterministic and local semantic findings with official reward null.
+- [x] L.6 Update one review report and learning ledger, push and create a base=main PR for user review/merge; keep judge adaptation outside the formal bundle and preserve official scoring/F.5 limits.
+
 ## 3. Verify and hand over
 
 - [x] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.
