@@ -1,5 +1,16 @@
 当前阶段、授权与已通过身份以 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md) 为准。以下已勾选项保留其历史验收范围；旧双代理人数与开发版本不覆盖现行协作约定。
 
+## K. Terra implementation and repeated ungraded C development
+
+用户于 2026-10-27 明确改用 GPT-6.1 Terra 实现、同步现行文档，并允许多次 C 开发尝试；API 费用不再以旧 5 元上限阻挡。参赛运行时模型不随开发代理切换，官方判分仍暂停。
+
+- [x] K.1 Verify PR #14 merged/latest main, create a codex branch, update active model defaults/prompts/links and archive obsolete templates without rewriting actual historical model evidence.
+- [ ] K.2 Implement explicit prior/source continuation with immutable predecessor evidence and cumulative real costs, a separate local record_only/null-cap policy and truthful unknown handling.
+- [ ] K.3 Support serial fresh-world C attempts, persistent per-attempt claims, same-attempt rejection, a controller-wide exclusive lock, source-bound B evidence and exact owned cleanup; preserve request-level zero retries.
+- [ ] K.4 Freeze and independently review/retest meaningful migration, accounting, concurrency, repeated-attempt, failure and G/H/J regressions in Python 3.12 Docker.
+- [ ] K.5 Execute fresh real B if the implementation identity changed, then autonomous official C attempts; diagnose outside runs, retain each failure, preserve null official reward and separate process completion from business observations.
+- [ ] K.6 Update the existing learning ledger, one new phase report and current state, then push a base=main PR for user review/merge. Do not claim official scoring or F.5 freeze.
+
 ## C. Offline single-attempt lifecycle control
 
 用户于 2026-10-26 恢复 C 代码开发；本轮先实现单题执行控制的离线部分，不恢复真实模型、官方任务试跑或判分，不代勾真实 C 的 3.2。一个 Luna High 实现，主代理独立审核。

@@ -251,7 +251,13 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 输出根须与包路径双向无重叠；日志目标必须新建并与包、输入和账目隔离。同 evaluation 可继续另一合法 task/attempt，换 run-id 不能重演占用的 attempt。默认合成场景每 trial 估算超过 5 元，不会触发开发限额。包验证/完整演练退出 0，受控演练失败退出 1，输入或身份拒绝/live 退出 2；缺 SDK/vendor 时 `plan` 报告缺口仍退出 0，`preflight` 退出 1，完整依赖核对后 preflight 才退出 0。认证和执行许可始终分别报告；实际官方服务/模型/C/判分与 F.5 完整正式冻结仍须后续验收。
 
-## 首次真实 B/C 开发联调
+## 真实开发入口与协作模型
+
+开发实现默认一个 GPT-6.1 Terra（`gpt-6.1-terra`）/ `high` 子代理，主代理独立审核，见 [实现工作流](docs/subagent-workflow.md)。参赛运行时仍按 DeepSeek profile 配置；开发模型切换不更换参赛模型。
+
+用户已授权多次本地 C 开发尝试并取消旧 5 元金额停止条件。新的接续/逐尝试命令正在 K 中实现，实际可执行方法随固定候选更新；下方是 J 的历史命令，保留用于理解已有证据，不通过删除旧账目或失败 claim 再试。当前执行状态只查 [REVIEW_STATE](reviews/REVIEW_STATE.md)。
+
+## 首次真实 B/C 开发联调（J 历史入口）
 
 `scripts/live_development.py` 是单独的本地真实入口：`plan`/`preflight` 只读，`init-prior` 显式初始化已有审核来源的首次真实账目，`b-smoke` 做真实模型工具往返，`c-once` 仅在 B 成功且预算足够后尝试一次固定官方题。先核对 [当前授权与实际结果](reviews/REVIEW_STATE.md)；本轮允许 B/C 合计最多 5 CNY，官方判分暂停。既有评测包入口仍固定 record_only/null cap，旧 live 拒绝不变。
 

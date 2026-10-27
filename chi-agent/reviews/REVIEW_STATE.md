@@ -4,18 +4,18 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | J 开发与独立离线验收完成；真实 B 通过，唯一 C 在官方启动阶段失败、模型未启动，挂载修复仅离线复验，未重跑。官方判分暂停，F.5 未完成；G/H 范围保留 |
-| 协作 | 默认一个 Luna High 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-25) |
+| 当前任务 | K：先同步 Terra 协作，再接续旧真实账目并开发多次 C 尝试；用户已授权多次运行，API 费用不再以旧 5 元上限阻挡。官方判分暂停，F.5 未完成；G/H/J 实际范围保留 |
+| 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 上次独立审核候选 | `ba6786717a624d328d3f9bc1296392f9637888da`，J 含 C 挂载修复的最终离线复验通过，见 [真实 B/C 审核](real-b-c-ungraded-review.md) |
 | 上次通过的实现提交 | `ba6786717a624d328d3f9bc1296392f9637888da`，只代表该候选离线实现通过；实际 B/C 使用前一候选，其成功/失败分别见 J 报告。历史各阶段范围保留，不代表正式评测通过 |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | PR #12/#13 已合并，从最新 `origin/main` `9b917f08a465091456329a1dd2d14c2f47a8b266` 建立 `codex/real-b-c-ungraded`；写入前干净，一个 Luna High 实现、主代理独立审核/真实运行/教学/GitHub |
+| 当前分支与接手改动 | PR #14 已核对合并，从最新 `origin/main` `3cca5f89de205cb8b608d4bded345e426577461f` 建立 `codex/terra-c-development`，写入前干净；现行模型与文档先更新，随后实现/独立审核与真实 C |
 | 环境目标与实际 | H 复用 Python 3.12 dev，原哈希锁在 H 的新空 SDK 卷安装；独立包以屏蔽 site-packages 的解释器离线启动，实际身份见 H 报告。基础镜像/锁及模型锁未改，历史见 [环境审核](python312-alignment-review.md) |
-| 本地开发预算 | 首轮真实 B/C 共享 5 元人民币，写代码另计；本轮唯一 C 尝试已结束，失败 claim 与累计真实账目保留，不自动重试。正式评测仍独立 record_only/null cap，依据见 [预算策略设计](../openspec/changes/bootstrap-baseline/design.md#本地开发预算与正式私有评测) |
+| 本地开发预算 | 用户已授权多次 C、取消旧 5 元金额停止条件；新本地 record_only/null cap 接续旧实际费用，不清零历史。请求不自动重试，官方判分暂停。旧 capped 策略保留历史范围；正式评测仍独立 record_only/null cap |
 | 正式提交前置 | F.2–F.4、G 与 H 的有界离线范围通过。F.5 完整最终冻结、真实接入和正式配送仍未完成 |
 | 本轮验证 | R1–R7 离线关闭；真实 B 通过，C 暴露 R8 workspace bind 冲突，修复后的代码回归与实际合成 Docker bind 检查通过。详细证据与实际费用估算只见 J 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #14](https://github.com/xsw932187210-cell/chi-agent/pull/14) 已推送、base=main，交用户审核合并。若再试 C，须明确授权并审查新旧源码身份与累计费用接续，不能清除旧 claim。官方判分与 F.5 保留暂停/未完成 |
+| PR 与下一步 | [PR #14](https://github.com/xsw932187210-cell/chi-agent/pull/14) 已由用户合并；K 先完成账目/源码接续和多次尝试入口，经独立审核后真实运行，完成后建 base=main PR。无需再次询问 C 授权，保留旧 claim 与累计费用 |
 | 未验证项 | 修复候选的真实 B/C、官方业务效果与判分认证、真实 tokenizer/账单、其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 真实 B 成功；C 启动失败，模型未启动，无业务结果，资源已清理、claim 保留，official reward=null。新源码不继承旧 B 回执；旧 runner/evaluation 与原 cb/Harbor 门禁未放开 |
 
@@ -30,7 +30,7 @@
 - [评测专用入口与干净目录包独立审核](evaluation-entry-bundle-review.md)
 - [官方启动接点与独立安装复现审核](official-launch-reproduction-review.md)
 - [真实 B/C 接入与首次试跑审核](real-b-c-ungraded-review.md)
-- [实现子代理与独立审核](../docs/luna-subagent-workflow.md)
+- [实现子代理与独立审核](../docs/subagent-workflow.md)
 - [D0 接续 Prompt](../docs/d0-handoff-prompts.md)
 - [当前交接规格](../openspec/changes/bootstrap-baseline/handoff.md)
 - [本地与 GitHub 工作流](../docs/github-workflow.md)

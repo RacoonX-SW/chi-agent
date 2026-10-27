@@ -1,5 +1,29 @@
 ## ADDED Requirements
 
+### Requirement: Repeated local C development preserves real history
+
+The local development entry MUST support the user's newly authorized repeated ungraded official C attempts with GPT-6.1 Terra / high as the implementation subagent and the existing DeepSeek participant runtime. The new authorization MUST use a distinct record_only policy with null monetary cap, preserving historical 5 CNY behavior and the formal evaluation entry. It MUST keep source-bound real accounting, request-level zero retries, bounded turns/output, exact owned cleanup and null official reward.
+
+#### Scenario: Explicit continuation from the first real campaign
+- **WHEN** the operator explicitly adopts the completed known first-campaign history
+- **THEN** the entry verifies predecessor state and receipt/artifact identities without sending requests, carries historical estimated spend and usage with provenance, and leaves original accounting, B receipt and failed C claim unchanged
+- **AND** missing, unknown, pending, inconsistent or concurrently active history is rejected instead of initialized at zero
+
+#### Scenario: Multiple fresh attempts with one active controller
+- **WHEN** a prior attempt has ended with owned resources cleaned and a new attempt is requested
+- **THEN** the entry retains the old claim and artifacts, claims a new identity before world creation and autonomously runs a fresh official world
+- **AND** the same attempt cannot replay, another controller cannot run concurrently, and no request is automatically retried
+
+#### Scenario: Source changes after a recorded attempt
+- **WHEN** reviewed implementation code changes between attempts
+- **THEN** an explicit recorded transition preserves the old run/source and cumulative accounting, records the new identity and reason, and requires B success for the new source before C
+- **AND** it does not rewrite old receipts, discard uncertain charges or silently clear a claim
+
+#### Scenario: Recording costs does not stop at the historical amount
+- **WHEN** known cumulative estimated cost exceeds 5 CNY under the new local authorization
+- **THEN** valid requests continue under record_only while usage and costs remain recorded with their provenance
+- **AND** unknown usage is represented truthfully, protocol/output/turn limits remain enforced, and legacy capped/evaluation behavior is unchanged
+
 ### Requirement: Containerized development and reproducible delivery
 
 The workflow SHALL install project dependencies, download resources and execute project checks inside containers, without requiring project Python/uv/Node packages on the host. Containerized development SHALL preserve the official task runtime contract and separate distributable code images from restricted data.
