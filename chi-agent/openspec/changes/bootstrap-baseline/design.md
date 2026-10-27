@@ -169,7 +169,7 @@ backend 仅表示创建新世界、运行一次和清理边界。返回的资源
 
 ## DeepSeek 开发评审（L）
 
-原版 WorkspaceJudge 接受带 run_session 的 runner，PA adapter 与提示可复用，但仅改 CHI_BENCH_JUDGE_MODEL 不会切换 provider。L 通过独立 DeepSeek runner 实现同一 rubric 的开发评审，不修改 vendor、不调用 Claude、不输出冒充官方的 reward/scorecard；结果包含 origin、模型/提示/输入/源码身份、确定性部分检查、每项本地 verdict 与不可判定项，official_reward=null。模型替换的结果不与论文或主办方分数混报。
+原版 WorkspaceJudge 接受带 run_session 的 runner，PA adapter 与提示可复用，但仅改 CHI_BENCH_JUDGE_MODEL 不会切换 provider。L 复用 PA adapter、workspace 生成和原始提示，独立向 DeepSeek 请求同一 rubric 的开发评审，不修改 vendor、不调用 Claude、不输出冒充官方的 reward/scorecard；结果包含 origin、模型/提示/输入/源码身份、确定性部分检查、每项本地 verdict 与不可判定项，official_reward=null。模型替换的结果不与论文或主办方分数混报。
 
 上次 C 保留了 workspace 与 trace，未在移除 world 前导出完整业务状态。不能从最终聊天或零散工具结果拼成权威 export。L 在模型完成、runner 停止后通过所属 world 的 localhost:8023/export 只读捕获，写到 controller 独有的 evidence 目录；runner 和其工具不挂载此目录。导出成功/失败均记录，不影响本轮资源精确清理，失败不给可评审身份。只支持当前 PA provider contract，其他契约显式拒绝，不宣称全任务覆盖。
 
