@@ -247,7 +247,7 @@ def _execution_identity(*, k: bool = False) -> dict[str, Any]:
              "profiles/deepseek-flash-prepared.json", "profiles/local-development-policy.json",
              "requirements-model.lock")
     if k:
-        files += ("requirements-pdf.lock",)
+        files += ("requirements-pdf.lock", "scripts/provider_task_resources.py")
     hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files}
     identity = {"vendor": upstream, "sdk": sdk, "application_files_sha256": hashes,
                 "profile_sha256": profile.sha256, "policy_sha256": policy.sha256}
@@ -551,7 +551,13 @@ def _k_locked(root: Path, operation: Any) -> Any:
         os.close(fd)
 
 
-def _k_run(kind: str, run_id: str, root: Path) -> dict[str, Any]:
+def _k_run(kind: str, run_id: str, root: Path, task_id: str = TASK_ID) -> dict[str, Any]:
+    if kind == "c-once" and task_id != TASK_ID:
+        from provider_task_resources import verify
+        try:
+            verify(ROOT, task_id)
+        except Exception:
+            raise LiveFailure("official_task_resources_invalid") from None
     if ((root / run_id).exists() or (root / run_id).is_symlink()
             or (root / "runs" / f"{run_id}.json").exists()
             or (root / "claims" / f"{run_id}.json").exists()):
@@ -585,7 +591,7 @@ def _k_run(kind: str, run_id: str, root: Path) -> dict[str, Any]:
         _atomic_json(gate, {"schema": "chi-real-controller-state-v1", "state": "active", "run_id": run_id})
         armed = True
     try:
-        result = _orchestrate(kind, run_id, root, k=True, _credential=credential, _before_resources=arm_gate)
+        result = _orchestrate(kind, run_id, root, k=True, _credential=credential, _before_resources=arm_gate, task_id=task_id)
     except Exception as exc:
         if not armed:
             code = getattr(exc, "code", "pre_resource_failure")
@@ -954,14 +960,17 @@ def build_preflight(root: Path) -> dict[str, Any]:
             "readiness": "technical_only_not_authorized"}
 
 
-def _claim_c_once(root: Path, run_id: str, b_success: dict[str, Any], *, k: bool = False) -> Path:
+def _claim_c_once(root: Path, run_id: str, b_success: dict[str, Any], *, k: bool = False,
+                  task_id: str = TASK_ID, resource_identity: dict | None = None) -> Path:
     claim = root / "claims" / f"{run_id}.json" if k else root / CLAIM_FILE
-    record = {"schema": CLAIM_SCHEMA, "campaign_id": CAMPAIGN_ID, "task_id": TASK_ID,
+    record = {"schema": CLAIM_SCHEMA, "campaign_id": CAMPAIGN_ID, "task_id": task_id,
               "run_id": run_id, "state": "claimed_before_world_creation", "replay_allowed": False,
               "official_reward": None, "b_success_sha256": hashlib.sha256(_json(b_success).encode()).hexdigest(),
               "execution_identity": b_success.get("execution_identity"),
               "profile_sha256": b_success.get("profile_sha256"),
               "claimed_at": datetime.now(timezone.utc).isoformat()}
+    if resource_identity is not None:
+        record["task_resource_identity"] = resource_identity
     try:
         _atomic_json(claim, record, exclusive=True)
     except FileExistsError:
@@ -972,7 +981,8 @@ def _claim_c_once(root: Path, run_id: str, b_success: dict[str, Any], *, k: bool
 
 
 def _transition_c_claim(root: Path, run_id: str, state: str, *,
-                        execution_identity: dict[str, Any], profile_sha256: str, k: bool = False) -> None:
+                        execution_identity: dict[str, Any], profile_sha256: str, k: bool = False,
+                        task_id: str = TASK_ID) -> None:
     import fcntl
 
     path = root / "claims" / f"{run_id}.json" if k else root / CLAIM_FILE
@@ -981,11 +991,15 @@ def _transition_c_claim(root: Path, run_id: str, state: str, *,
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         record = _read_json(path)
         if record.get("schema") != CLAIM_SCHEMA or record.get("campaign_id") != CAMPAIGN_ID \
-                or record.get("task_id") != TASK_ID or record.get("run_id") != run_id \
+                or record.get("task_id") != task_id or record.get("run_id") != run_id \
                 or record.get("execution_identity") != execution_identity \
                 or record.get("profile_sha256") != profile_sha256 \
                 or record.get("state") != "claimed_before_world_creation":
             raise LiveFailure("real_c_claim_transition_invalid")
+        if k and task_id != TASK_ID:
+            from provider_task_resources import identity
+            if record.get("task_resource_identity") != identity(task_id):
+                raise LiveFailure("real_c_claim_transition_invalid")
         record["state"] = state
         record["updated_at"] = datetime.now(timezone.utc).isoformat()
         _atomic_json(path, record)
@@ -997,30 +1011,40 @@ def _transition_c_claim(root: Path, run_id: str, state: str, *,
             os.close(lock)
 
 
-def _copy_projection(root: Path, run_id: str, *, output_parent: Path | None = None) -> Path:
+def _copy_projection(root: Path, run_id: str, *, output_parent: Path | None = None,
+                     task_id: str = TASK_ID) -> Path:
     import shutil
     from a_environment import _verify_handbook
 
+    if task_id != TASK_ID:
+        from provider_task_resources import verify
+        try:
+            source, _ = verify(root, task_id)
+        except Exception:
+            raise LiveFailure("official_task_projection_unavailable") from None
+    else:
+        source = None
     dataset = root / "data" / "a-environment" / "download-5ce88104df2a91e057619eb70fb51f56fc5949eb"
-    try:
-        manifest = json.loads((dataset / ".a-environment-data-manifest.json").read_text(encoding="utf-8"))
-        if manifest.get("revision") != "5ce88104df2a91e057619eb70fb51f56fc5949eb":
-            raise ValueError
-        records = manifest.get("files")
-        public_relatives = (f"prior_auth_provider/tasks/{TASK_ID}/instruction.md",
-                            f"prior_auth_provider/tasks/{TASK_ID}/tool_reference.md")
-        if not isinstance(records, dict) or not set(public_relatives).issubset(records):
-            raise ValueError
-        from a_environment import _sha256
-        for relative in public_relatives:
-            path = dataset / relative
-            expected = records[relative]
-            if (path.is_symlink() or not path.is_file() or path.stat().st_size != expected.get("size")
-                    or _sha256(path) != expected.get("sha256")):
+    if source is None:
+        try:
+            manifest = json.loads((dataset / ".a-environment-data-manifest.json").read_text(encoding="utf-8"))
+            if manifest.get("revision") != "5ce88104df2a91e057619eb70fb51f56fc5949eb":
                 raise ValueError
-    except Exception:
-        raise LiveFailure("official_task_projection_unavailable") from None
-    source = dataset / "prior_auth_provider" / "tasks" / TASK_ID
+            records = manifest.get("files")
+            public_relatives = (f"prior_auth_provider/tasks/{TASK_ID}/instruction.md",
+                                f"prior_auth_provider/tasks/{TASK_ID}/tool_reference.md")
+            if not isinstance(records, dict) or not set(public_relatives).issubset(records):
+                raise ValueError
+            from a_environment import _sha256
+            for relative in public_relatives:
+                path = dataset / relative
+                expected = records[relative]
+                if (path.is_symlink() or not path.is_file() or path.stat().st_size != expected.get("size")
+                        or _sha256(path) != expected.get("sha256")):
+                    raise ValueError
+        except Exception:
+            raise LiveFailure("official_task_projection_unavailable") from None
+        source = dataset / "prior_auth_provider" / "tasks" / TASK_ID
     output = (output_parent if output_parent is not None else _projection_run_dir(run_id)) / "projection"
     output.mkdir(parents=True, exist_ok=False)
     for filename in ("instruction.md", "tool_reference.md"):
@@ -1072,7 +1096,8 @@ def _projection_run_dir(run_id: str) -> Path:
 
 
 def _capture_review_input(world: Any, capture_root: Path, run_id: str,
-                          execution_identity: dict[str, Any]) -> dict[str, Any]:
+                          execution_identity: dict[str, Any], task_id: str = TASK_ID,
+                          resource_identity: dict | None = None) -> dict[str, Any]:
     """Capture only the stopped runner's owned world, never participant outputs."""
     from a_environment import _api_timeout
     from b_provider_transport import _reject_symlink_ancestors
@@ -1135,9 +1160,13 @@ def _capture_review_input(world: Any, capture_root: Path, run_id: str,
         shared_world_id = export_data.get("world_id")
         if type(shared_world_id) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,95}", shared_world_id) is None:
             raise ValueError
-        expectations = archive_file(f"/opt/chi-bench/tasks/{TASK_ID}/fixtures/expectations.json", "expectations.json", limit)
+        expectations = archive_file(f"/opt/chi-bench/tasks/{task_id}/fixtures/expectations.json", "expectations.json", limit)
         world_filename = f"{shared_world_id}.json"
         shared_world = archive_file(f"/opt/chi-bench/worlds/{world_filename}", world_filename, 64 * 1024 * 1024)
+        if resource_identity is not None and (shared_world_id != resource_identity["world_id"]
+                or hashlib.sha256(shared_world).hexdigest() != resource_identity["world_sha256"]
+                or hashlib.sha256(expectations).hexdigest() != resource_identity["files"]["fixtures/expectations.json"]["sha256"]):
+            raise ValueError
         capture_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         _reject_symlink_ancestors(capture_root, "review_input_capture_failed")
         target = capture_root / run_id
@@ -1150,22 +1179,41 @@ def _capture_review_input(world: Any, capture_root: Path, run_id: str,
                 stream.flush()
                 os.fsync(stream.fileno())
         manifest = {"schema": "chi-development-review-capture-v1", "status": "ready",
-                    "run_id": run_id, "task_id": TASK_ID, "world_id": world.id,
+                    "run_id": run_id, "task_id": task_id, "world_id": world.id,
                     "shared_world_id": shared_world_id,
                     "execution_identity": execution_identity,
                     "export_sha256": hashlib.sha256(exported).hexdigest(),
                     "expectations_sha256": hashlib.sha256(expectations).hexdigest(),
                     "shared_world_sha256": hashlib.sha256(shared_world).hexdigest(),
                     "official_reward": None}
+        if resource_identity is not None:
+            manifest["task_resource_identity"] = resource_identity
         _atomic_json(target / "manifest.json", manifest, exclusive=True)
         return {"status": "ready", "manifest_sha256": hashlib.sha256((target / "manifest.json").read_bytes()).hexdigest()}
     except Exception:
         return {"status": "unavailable", "safe_error_code": "review_input_capture_failed"}
 
 
+def _runner_quiescent(runner: Any, client: Any, record: dict[str, Any]) -> bool:
+    if type(record.get("exit_code")) is int:
+        return True
+    try:
+        from a_environment import _api_timeout
+        with _api_timeout(client, time.monotonic() + 30):
+            runner.stop(timeout=10)
+            runner.reload()
+        state = runner.attrs.get("State", {})
+        if state.get("Status") not in {"exited", "dead"} or type(state.get("ExitCode")) is not int:
+            return False
+        record["exit_code"] = state["ExitCode"]
+        return True
+    except Exception:
+        return False
+
+
 def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: Any = None,
                  k: bool = False, _credential: str | None = None,
-                 _before_resources: Any = None) -> dict[str, Any]:
+                 _before_resources: Any = None, task_id: str = TASK_ID) -> dict[str, Any]:
     """Create an isolated runner; only C owns an official task world."""
     from a_environment import (
         AEnvironmentError, _capture_logs,
@@ -1175,6 +1223,15 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
 
     if k and _test_context is not _MOCK_ORCHESTRATION_TEST and not callable(_before_resources):
         raise LiveFailure("controller_lock_required")
+
+    task_directory = None
+    resource_identity = None
+    if k and kind == "c-once" and task_id != TASK_ID:
+        from provider_task_resources import verify
+        try:
+            task_directory, resource_identity = verify(ROOT, task_id)
+        except Exception:
+            raise LiveFailure("official_task_resources_invalid") from None
 
     if budget_root.resolve() != (ROOT / (K_ROOT_RELATIVE if k else REAL_ROOT_RELATIVE)).resolve():
         approved_test_root = (ROOT / REAL_ROOT_RELATIVE / "impl").resolve()
@@ -1253,6 +1310,8 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                               "campaign_id": CAMPAIGN_ID, "kind": kind, "status": "failed",
                               "official_reward": None, "primary_error_code": None,
                               "cleanup_error_code": None, "cleanup": {"attempted": False}}
+    if resource_identity is not None:
+        result["task_resource_identity"] = resource_identity
     orchestration_path = run_dir / "orchestration.json"
 
     def persist_orchestration() -> None:
@@ -1271,7 +1330,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
         _before_resources()
     try:
         if kind == "c-once":
-            projection = (_copy_projection(ROOT, run_id, output_parent=run_dir) if k
+            projection = (_copy_projection(ROOT, run_id, output_parent=run_dir, task_id=task_id) if k
                           else _copy_projection(ROOT, run_id))
             result["projection_files"] = ["instruction.md", "tool_reference.md",
                                           "healthverse-task-assets/tool_reference.md",
@@ -1306,7 +1365,8 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                     raise LiveFailure("runner_resource_preflight_failed") from None
             else:
                 raise LiveFailure("runner_resource_already_exists")
-            claim_path = _claim_c_once(budget_root, run_id, b_success or {}, k=k)
+            claim_path = _claim_c_once(budget_root, run_id, b_success or {}, k=k, task_id=task_id,
+                                       resource_identity=resource_identity)
             result["c_claim_path"] = str(claim_path.relative_to(ROOT))
             persist_orchestration()
             a_run_dir.mkdir(parents=True, exist_ok=False)
@@ -1320,15 +1380,20 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                                "network_internal": True, "credentials_added": False}
             persist_orchestration()
             world_create_started = True
+            world_volumes = {_daemon_path(ROOT, a_run_dir): {"bind": "/logs/artifacts", "mode": "rw"}}
+            if task_directory is not None:
+                world_volumes[_daemon_path(ROOT, task_directory)] = {"bind": f"/opt/chi-bench/tasks/{task_id}", "mode": "ro"}
+            task_environment = _task_environment()
+            task_environment["CHI_BENCH_TASK_ID"] = task_id
             world = client.containers.create(
                 image=world_image.id, name=f"chi-agent-a-world-{world_id}", command=["sleep", "infinity"],
-                environment=_task_environment(), labels=_resource_labels(world_id),
-                volumes={_daemon_path(ROOT, a_run_dir): {"bind": "/logs/artifacts", "mode": "rw"}},
+                environment=task_environment, labels=_resource_labels(world_id),
+                volumes=world_volumes,
                 network=task_net_name, detach=True, stdin_open=False, tty=False,
             )
             world_create_started = False
             result["world"].update({"container": world.name, "container_id": world.id,
-                                   "image_id": world_image.id, "task_id": TASK_ID,
+                                   "image_id": world_image.id, "task_id": task_id,
                                    "agent_started": False, "runner_started": False, "judge_started": False})
             persist_orchestration()
             world.start()
@@ -1373,7 +1438,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                      "--kind", kind, "--run-id", run_id, "--budget-root", "/participant/real-budget",
                      "--logs-dir", "/participant/run/runner-logs", "--instruction-file",
                      ("/participant/projection/instruction.md" if projection is not None else "/participant/run/b-smoke-instruction.md"),
-                     "--mcp-url", mcp_url] + (["--k-development"] if k else []),
+                     "--mcp-url", mcp_url] + (["--k-development", "--task-id", task_id] if k and kind == "c-once" else (["--k-development"] if k else [])),
             environment={"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": ("/pdf-deps:" if k else "") + "/model-deps:/participant/vendor/chi-bench/src",
                          "OPENAI_AGENTS_MODEL": profile.model, "OPENAI_AGENTS_API_MODE": "chat_completions",
                          "OPENAI_AGENTS_MAX_TURNS": "6" if kind == "b-smoke" else str(profile.max_rounds),
@@ -1411,9 +1476,6 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                             "smoke_completed" if kind == "b-smoke" and exit_code == 0 else "runner_failed"
         if exit_code != 0:
             result["primary_error_code"] = "runner_nonzero_exit"
-        elif k and kind == "c-once":
-            result["review_input"] = _capture_review_input(
-                world, ROOT / "runs" / "development-review-inputs", run_id, execution_identity)
     except Exception as exc:
         result["exception_type"] = type(exc).__name__
         if isinstance(exc, OSError):
@@ -1433,6 +1495,15 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             except Exception:
                 result["persistence_error_code"] = "claim_evidence_persist_failed"
     finally:
+        if k and kind == "c-once" and world is not None and runner is not None and result.get("runner", {}).get("started"):
+            quiescent = _runner_quiescent(runner, client, result["runner"])
+            result["runner"]["quiescent"] = quiescent
+            if quiescent:
+                result["review_input"] = _capture_review_input(
+                    world, ROOT / "runs" / "development-review-inputs", run_id, execution_identity,
+                    task_id, resource_identity)
+            else:
+                result["review_input"] = {"status": "unavailable", "safe_error_code": "runner_quiescence_unverified"}
         if world is not None and client is not None and kind == "c-once":
             try:
                 result["world"]["logs_captured"] = _capture_logs(
@@ -1970,7 +2041,7 @@ async def _worker_run(args: argparse.Namespace) -> int:
     if kind == "c-once":
         _transition_c_claim(args.budget_root, run_id, "runner_started_once",
                             execution_identity=_execution_identity(k=True) if k else _execution_identity(),
-                            profile_sha256=profile.sha256, k=k)
+                            profile_sha256=profile.sha256, k=k, task_id=getattr(args, "task_id", TASK_ID))
     journal = RealDevelopmentJournal(args.budget_root, run_id, profile=profile, policy=policy)
     ledger = Ledger("real-provider", initial_cost_cny=float(journal.cumulative_spend),
                     prior_cost_source=journal.state["prior_source"])
@@ -1987,6 +2058,11 @@ async def _worker_run(args: argparse.Namespace) -> int:
     restore: list[tuple[Any, str, Any]] = []
     runner_stdout, runner_stderr = io.StringIO(), io.StringIO()
     try:
+        if k and kind == "c-once" and getattr(args, "task_id", TASK_ID) != TASK_ID:
+            from provider_task_resources import identity
+            journal.run_doc["task_id"] = args.task_id
+            journal.run_doc["task_resource_identity"] = identity(args.task_id)
+            journal._persist()
         import agents.mcp as agents_mcp
         from agents.models.openai_chatcompletions import Converter, OpenAIChatCompletionsModel
         from agents import ModelSettings, ModelRetrySettings
@@ -2265,6 +2341,10 @@ def _validate_worker_mounts(args: argparse.Namespace) -> None:
 
 def _run_worker(args: argparse.Namespace) -> int:
     import asyncio
+    if args.kind == "c-once" and getattr(args, "k_development", False) and args.task_id != TASK_ID:
+        from provider_task_resources import TASK_FILES
+        if args.task_id not in TASK_FILES:
+            raise LiveFailure("official_task_resources_invalid")
     return asyncio.run(_worker_run(args))
 
 
@@ -2286,6 +2366,9 @@ def _parser() -> argparse.ArgumentParser:
     for name in ("k-b-smoke", "c-run"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--run-id", required=True)
+        if name == "c-run":
+            from provider_task_resources import TASK_FILES
+            cmd.add_argument("--task-id", required=True, choices=tuple(TASK_FILES))
     worker = sub.add_parser("worker")
     worker.add_argument("--kind", choices=("b-smoke", "c-once"), required=True)
     worker.add_argument("--run-id", required=True)
@@ -2294,6 +2377,7 @@ def _parser() -> argparse.ArgumentParser:
     worker.add_argument("--instruction-file", type=Path, required=True)
     worker.add_argument("--mcp-url", required=True)
     worker.add_argument("--k-development", action="store_true")
+    worker.add_argument("--task-id", default=TASK_ID)
     return parser
 
 
@@ -2313,7 +2397,7 @@ def main(argv: list[str] | None = None) -> int:
             if ID_RE.fullmatch(args.run_id) is None:
                 raise LiveFailure("run_id_invalid")
             kind = "b-smoke" if args.command == "k-b-smoke" else "c-once"
-            result = _k_locked(k_root, lambda: _k_run(kind, args.run_id, k_root))
+            result = _k_locked(k_root, lambda: _k_run(kind, args.run_id, k_root, getattr(args, "task_id", TASK_ID)))
             print(_json(result))
             return 0 if result.get("status") in {"completed_ungraded", "smoke_completed"} else 1
         if args.command == "plan":
