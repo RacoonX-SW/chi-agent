@@ -143,6 +143,7 @@ class FakeContainer:
             worker_args = Namespace(kind=kind, run_id=run_id, budget_root=output_root,
                                     logs_dir=run_dir / "runner-logs", instruction_file=instruction,
                                     mcp_url=args[args.index("--mcp-url") + 1],
+                                    k_development="--k-development" in args,
                                     _test_context=live._MOCK_ORCHESTRATION_TEST)
             try:
                 with patch.dict(os.environ, self.environment):
@@ -208,6 +209,79 @@ class FakeDocker:
 
 
 class LiveDevelopmentTests(unittest.TestCase):
+    def test_live_guard_replays_empty_reasoning_on_both_tool_rounds(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            live.initialize_real_accounting(root, prior_source="synthetic")
+            instruction = root / "instruction.md"
+            instruction.write_text("Use both smoke tools in order.")
+            wire = FakeWire("b-smoke")
+            for response in wire.responses[:2]:
+                response["choices"][0]["message"].update(content="", reasoning_content="")
+            args = Namespace(kind="b-smoke", run_id="synthetic-b", budget_root=root,
+                             logs_dir=root / "logs", instruction_file=instruction,
+                             mcp_url="http://127.0.0.1:9/unused", _test_context=live._MOCK_ORCHESTRATION_TEST)
+            with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "synthetic"}), patch(
+                    "httpx.AsyncHTTPTransport", side_effect=lambda **kw: httpx.MockTransport(wire)):
+                self.assertEqual(asyncio.run(live._worker_run(args)), 0)
+            assistants = [m for m in wire.requests[2]["messages"] if m.get("role") == "assistant" and m.get("tool_calls")]
+            self.assertEqual([m["tool_calls"][0]["id"] for m in assistants], ["call_lookup", "call_transform"])
+            self.assertEqual([m["reasoning_content"] for m in assistants], ["", ""])
+            run = json.loads((root / "runs" / "synthetic-b.json").read_text())
+            self.assertEqual(len(run["requests"]), 3)
+            self.assertTrue(all(request["status"] == "settled" for request in run["requests"]))
+
+    def test_live_guard_rejects_missing_or_invalid_reasoning_without_retry(self):
+        for value in (None, 7, "absent"):
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                live.initialize_real_accounting(root, prior_source="synthetic")
+                instruction = root / "instruction.md"
+                instruction.write_text("Use smoke tools.")
+                wire = FakeWire("b-smoke")
+                message = wire.responses[0]["choices"][0]["message"]
+                if value == "absent":
+                    del message["reasoning_content"]
+                else:
+                    message["reasoning_content"] = value
+                args = Namespace(kind="b-smoke", run_id="synthetic-b", budget_root=root,
+                                 logs_dir=root / "logs", instruction_file=instruction,
+                                 mcp_url="http://127.0.0.1:9/unused", _test_context=live._MOCK_ORCHESTRATION_TEST)
+                with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "synthetic"}), patch(
+                        "httpx.AsyncHTTPTransport", side_effect=lambda **kw: httpx.MockTransport(wire)):
+                    self.assertNotEqual(asyncio.run(live._worker_run(args)), 0)
+                self.assertEqual(len(wire.requests), 1)
+                run = json.loads((root / "runs" / "synthetic-b.json").read_text())
+                self.assertEqual(run["primary_error_code"], "response_invalid")
+                self.assertEqual(run["requests"][0]["status"], "settled")
+
+    def test_j_identity_binds_utf8_reader_without_pdf_dependency(self):
+        import hashlib
+        from types import SimpleNamespace
+        identity = live._execution_identity()
+        source = live.ROOT / "scripts" / "pdf_resource_reader.py"
+        self.assertEqual(identity["application_files_sha256"]["scripts/pdf_resource_reader.py"],
+                         hashlib.sha256(source.read_bytes()).hexdigest())
+        self.assertNotIn("pdf_dependency", identity)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "workspace"
+            target = workspace / "case-1" / "provider" / "text.txt"
+            target.parent.mkdir(parents=True)
+            target.write_text("一\n二\n", encoding="utf-8")
+            ledger = SimpleNamespace(pending_calls=[])
+            class Journal:
+                policy = SimpleNamespace(scope="local_development")
+                def start_dispatch(self, **kwargs): pass
+                def finish_dispatch(self, **kwargs): pass
+                def record_effect(self, effect): pass
+            with patch.object(live, "WORKSPACE_CONTAINER_ROOT", workspace):
+                tool = next(t for t in live._live_tools("c-once", root, root, Journal(), {}, ledger)
+                            if t.name == "local-fs-read")
+                args = {"path": str(target), "offset": 2, "limit": 1}
+                ledger.pending_calls.append({"tool": tool.name, "arguments": args, "call_id": "test"})
+                self.assertEqual(asyncio.run(tool.on_invoke_tool(None, json.dumps(args))), "二\n")
+
     def test_missing_mock_credentials_and_unsupported_response_stop_without_reading_host_env(self):
         with tempfile.TemporaryDirectory() as temp:
             with patch.object(live, "ROOT", Path(temp)), patch.dict(os.environ, {}, clear=True):
@@ -588,6 +662,259 @@ class LiveDevelopmentTests(unittest.TestCase):
         run_doc = json.loads((test_root / "runs" / "cleanup-b.json").read_text())
         self.assertEqual(run_doc["state"], "incomplete")
         self.assertEqual(run_doc["orchestration_status"], "cleanup_failed")
+
+
+def _adopt_synthetic_history(base: Path, root: Path) -> None:
+    import hashlib
+    old = base / "prior-fixture"
+    old.mkdir(parents=True)
+    state = live.initialize_real_accounting(old, prior_source="synthetic")
+    state.update(profile_sha256=live.load_profile().sha256, known_input_tokens=7,
+                 known_output_tokens=3, known_settled_cost_cny="0.000038")
+    live._atomic_json(old / "accounting.json", state)
+    (old / ".real-accounting.lock").touch()
+    run = {"schema": "chi-real-provider-run-v1", "campaign_id": live.CAMPAIGN_ID,
+           "state": "complete", "execution_identity": state["execution_identity"],
+           "profile_sha256": state["profile_sha256"], "real_usage": {"input_tokens": 7, "output_tokens": 3},
+           "estimated_cost_cny": "0.000038"}
+    run_path = old / "runs" / "b.json"
+    live._atomic_json(run_path, run)
+    logs = old / "b" / "runner-logs"
+    logs.mkdir(parents=True)
+    for name in ("run_result.json", "run_output.txt", "trace.jsonl", "run_log.txt"):
+        (logs / name).write_text("synthetic")
+    digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    receipt = {"schema": live.B_SUCCESS_SCHEMA, "campaign_id": live.CAMPAIGN_ID, "task_id": live.TASK_ID,
+               "run_id": "b", "status": "success", "profile_sha256": state["profile_sha256"],
+               "execution_identity": state["execution_identity"], "usage": run["real_usage"],
+               "estimated_cost_cny": run["estimated_cost_cny"], "official_reward": None,
+               "run_journal_sha256": digest(run_path), "runner_result_sha256": digest(logs / "run_result.json"),
+               "run_output_sha256": digest(logs / "run_output.txt"), "trace_sha256": digest(logs / "trace.jsonl"),
+               "run_log_sha256": digest(logs / "run_log.txt")}
+    live._atomic_json(old / "b-success.json", receipt)
+    claim = {"schema": live.CLAIM_SCHEMA, "campaign_id": live.CAMPAIGN_ID, "task_id": live.TASK_ID,
+             "run_id": "c", "execution_identity": state["execution_identity"],
+             "profile_sha256": state["profile_sha256"], "official_reward": None, "replay_allowed": False,
+             "finished_at": "synthetic", "cleanup_error_code": None, "terminal_status": "failed",
+             "state": "failed_or_uncertain_claim_retained",
+             "b_success_sha256": hashlib.sha256(live._json(receipt).encode()).hexdigest()}
+    live._atomic_json(old / live.CLAIM_FILE, claim)
+    live._atomic_json(old / "c" / "orchestration.json", {"run_id": "c", "status": "failed",
+        "finished_at": "synthetic", "cleanup_error_code": None, "world": {"logs_captured": True},
+        "cleanup": {"world_removed": True, "network_removed": True}})
+    live.adopt_prior(old, root, _test_context=live._MOCK_ORCHESTRATION_TEST)
+    live.rebind_source(root, "synthetic source transition")
+
+
+class ContinuedDevelopmentTests(unittest.TestCase):
+    def test_real_projection_copy_uses_explicit_new_run_directory(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            revision = "5ce88104df2a91e057619eb70fb51f56fc5949eb"
+            dataset = root / "data" / "a-environment" / f"download-{revision}"
+            records = {}
+            for name in ("instruction.md", "tool_reference.md"):
+                relative = f"prior_auth_provider/tasks/{live.TASK_ID}/{name}"
+                path = dataset / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("synthetic public input")
+                records[relative] = {"size": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            live._atomic_json(dataset / ".a-environment-data-manifest.json", {"revision": revision, "files": records})
+            handbook = root / "data" / "skills" / "managed-care-operations-handbook"
+            handbook.mkdir(parents=True)
+            (handbook / "sample.md").write_text("synthetic")
+            destination = root / "runs" / "real-c-development" / "attempt"
+            with patch("a_environment._verify_handbook"):
+                projection = live._copy_projection(root, "attempt", output_parent=destination)
+            self.assertEqual(projection, destination / "projection")
+            self.assertTrue((projection / "instruction.md").is_file())
+            self.assertFalse((root / "runs" / "real-b-c").exists())
+
+    def test_missing_or_modified_provenance_blocks_before_key_and_resources(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _adopt_synthetic_history(root, root)
+            adoption = root / "adoption.json"
+            original = adoption.read_bytes()
+            transition = next((root / "source-transitions").iterdir())
+            original_transition = transition.read_bytes()
+            for path, payload in ((adoption, None), (adoption, b"{}"), (transition, b"{}")):
+                if payload is None:
+                    path.unlink()
+                else:
+                    path.write_bytes(payload)
+                with patch.object(live, "_model_key") as key, patch.object(live, "_orchestrate") as orchestration:
+                    with self.assertRaises(live.LiveFailure) as error:
+                        live._k_locked(root, lambda: live._k_run("b-smoke", "attempt", root))
+                    self.assertEqual(error.exception.code, "real_provenance_invalid")
+                    key.assert_not_called()
+                    orchestration.assert_not_called()
+                adoption.write_bytes(original)
+                transition.write_bytes(original_transition)
+            state = live._read_json(root / "accounting.json")
+            state["prior_spend_cny"] = "1"
+            live._atomic_json(root / "accounting.json", state)
+            with self.assertRaises(live.LiveFailure):
+                live._k_locked(root, lambda: live._k_run("b-smoke", "attempt", root))
+
+    def test_credential_failure_does_not_poison_controller_gate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _adopt_synthetic_history(root, root)
+            with patch.object(live, "_model_key", side_effect=live.LiveFailure("provider_credential_missing")):
+                with self.assertRaises(live.LiveFailure):
+                    live._k_locked(root, lambda: live._k_run("b-smoke", "first", root))
+            self.assertFalse((root / "controller-state.json").exists())
+            self.assertEqual(live._read_json(root / "pre-resource-failures" / "first.json")["error_code"], "provider_credential_missing")
+            with patch.object(live, "_model_key", return_value="synthetic"), patch.object(
+                    live, "_orchestrate", side_effect=lambda *args, **kw: (
+                        kw["_before_resources"]() or {"status": "smoke_completed"})) as run:
+                live._k_locked(root, lambda: live._k_run("b-smoke", "second", root))
+                run.assert_called_once()
+            self.assertEqual(live._read_json(root / "controller-state.json")["state"], "clean")
+
+    def test_two_fresh_mock_worlds_after_current_b(self):
+        evidence_root = live.ROOT / "runs" / "real-b-c" / "impl"
+        evidence_root.mkdir(parents=True, exist_ok=True)
+        root = Path(tempfile.mkdtemp(prefix="mock-k-e2e-", dir=evidence_root))
+        _adopt_synthetic_history(root, root)
+        docker = FakeDocker(root)
+        kind = {"value": "b-smoke"}
+        wires = {"b-smoke": FakeWire("b-smoke"), "c-once": FakeWire("c-once")}
+        patches = [patch.object(live, "_model_key", return_value="synthetic-secret"),
+                   patch.dict(os.environ, {"DEEPSEEK_API_KEY": "synthetic-secret"}),
+                   patch("httpx.AsyncHTTPTransport", side_effect=lambda **kw: httpx.MockTransport(wires[kind["value"]])),
+                   patch("a_environment._docker", return_value=docker),
+                   patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)),
+                   patch("a_environment._check_resource_slots", return_value=None),
+                   patch("a_environment.wait_world", return_value=0.0),
+                   patch("a_environment._capture_logs", return_value=True),
+                   patch.object(live, "_official_world_run_dir", side_effect=lambda run_id: root / "worlds" / run_id),
+                   patch.object(live, "_copy_projection", side_effect=lambda _r, run_id, **kw: LiveDevelopmentTests._mock_projection(root, run_id)),
+                   patch("agents.mcp.MCPServerStreamableHttp", side_effect=lambda *a, **kw: FakeMCP([]))]
+        for item in patches:
+            item.start()
+        try:
+            result = live._orchestrate("b-smoke", "k-b", root, _test_context=live._MOCK_ORCHESTRATION_TEST, k=True)
+            self.assertEqual(result["status"], "smoke_completed", result)
+            kind["value"] = "c-once"
+            for run_id in ("k-c-one", "k-c-two"):
+                wires["c-once"] = FakeWire("c-once")
+                result = live._orchestrate("c-once", run_id, root, _test_context=live._MOCK_ORCHESTRATION_TEST, k=True)
+                self.assertEqual(result["status"], "completed_ungraded", result)
+                self.assertTrue(result["cleanup"]["world_removed"])
+                self.assertTrue(result["cleanup"]["network_removed"])
+            self.assertEqual(len(list((root / "claims").iterdir())), 2)
+            live._check_k_attempts_clean(root)
+            old_receipt = (root / "b-success.json").read_bytes()
+            new_identity = {**live._execution_identity(k=True), "synthetic_revision": "next"}
+            with patch.object(live, "_execution_identity", return_value=new_identity):
+                live.rebind_source(root, "synthetic revision")
+            self.assertFalse((root / "b-success.json").exists())
+            self.assertEqual((root / "b-receipts" / "k-b.json").read_bytes(), old_receipt)
+            self.assertEqual(live._read_json(root / "accounting.json")["execution_identity"], new_identity)
+        finally:
+            for item in reversed(patches):
+                item.stop()
+
+    def test_adoption_preserves_prior_and_requires_explicit_source_transition(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temp:
+            old, new = Path(temp) / "old", Path(temp) / "new"
+            old.mkdir()
+            state = live.initialize_real_accounting(old, prior_source="synthetic")
+            state.update(profile_sha256=live.load_profile().sha256, known_input_tokens=7,
+                         known_output_tokens=3, known_settled_cost_cny="0.000038")
+            live._atomic_json(old / "accounting.json", state)
+            (old / ".real-accounting.lock").touch()
+            run = {"schema": "chi-real-provider-run-v1", "campaign_id": live.CAMPAIGN_ID,
+                   "state": "complete", "execution_identity": state["execution_identity"],
+                   "profile_sha256": state["profile_sha256"], "real_usage": {"input_tokens": 7, "output_tokens": 3},
+                   "estimated_cost_cny": "0.000038"}
+            run_path = old / "runs" / "b.json"
+            live._atomic_json(run_path, run)
+            logs = old / "b" / "runner-logs"
+            logs.mkdir(parents=True)
+            for name in ("run_result.json", "run_output.txt", "trace.jsonl", "run_log.txt"):
+                (logs / name).write_text("synthetic evidence")
+            digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+            receipt = {"schema": live.B_SUCCESS_SCHEMA, "campaign_id": live.CAMPAIGN_ID, "task_id": live.TASK_ID,
+                       "run_id": "b", "status": "success", "profile_sha256": state["profile_sha256"],
+                       "execution_identity": state["execution_identity"], "usage": run["real_usage"],
+                       "estimated_cost_cny": run["estimated_cost_cny"], "official_reward": None,
+                       "run_journal_sha256": digest(run_path), "runner_result_sha256": digest(logs / "run_result.json"),
+                       "run_output_sha256": digest(logs / "run_output.txt"), "trace_sha256": digest(logs / "trace.jsonl"),
+                       "run_log_sha256": digest(logs / "run_log.txt")}
+            live._atomic_json(old / "b-success.json", receipt)
+            claim = {"schema": live.CLAIM_SCHEMA, "campaign_id": live.CAMPAIGN_ID, "task_id": live.TASK_ID,
+                     "run_id": "c", "execution_identity": state["execution_identity"],
+                     "profile_sha256": state["profile_sha256"], "official_reward": None, "replay_allowed": False,
+                     "finished_at": "synthetic", "cleanup_error_code": None, "terminal_status": "failed",
+                     "state": "failed_or_uncertain_claim_retained",
+                     "b_success_sha256": hashlib.sha256(live._json(receipt).encode()).hexdigest()}
+            live._atomic_json(old / live.CLAIM_FILE, claim)
+            live._atomic_json(old / "c" / "orchestration.json", {"run_id": "c", "status": "failed",
+                "finished_at": "synthetic", "cleanup_error_code": None,
+                "world": {"logs_captured": True}, "cleanup": {"world_removed": True, "network_removed": True}})
+            before = {path: path.read_bytes() for path in old.rglob("*") if path.is_file()}
+            live.adopt_prior(old, new, _test_context=live._MOCK_ORCHESTRATION_TEST)
+            adopted = live._read_json(new / "accounting.json")
+            self.assertEqual(adopted["prior_spend_cny"], "0.000038")
+            self.assertEqual(adopted["known_input_tokens"], 7)
+            self.assertEqual(adopted["execution_identity"], state["execution_identity"])
+            live.rebind_source(new, "synthetic change")
+            self.assertEqual(live._read_json(new / "accounting.json")["execution_identity"], live._execution_identity(k=True))
+            self.assertEqual(len(list((new / "source-transitions").iterdir())), 1)
+            self.assertEqual(before, {path: path.read_bytes() for path in old.rglob("*") if path.is_file()})
+            with self.assertRaises(live.LiveFailure):
+                live.adopt_prior(old, new, _test_context=live._MOCK_ORCHESTRATION_TEST)
+            (logs / "trace.jsonl").write_text("tampered")
+            with self.assertRaises(live.LiveFailure):
+                live.adopt_prior(old, Path(temp) / "bad", _test_context=live._MOCK_ORCHESTRATION_TEST)
+
+    def test_record_only_known_above_five_and_unknown_blocks(self):
+        from decimal import Decimal
+        from b_execution_policy import load_real_development_policy
+        profile = live.load_profile()
+        policy = load_real_development_policy()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _adopt_synthetic_history(root, root)
+            journal = live.RealDevelopmentJournal(root, "k-one", profile=profile, policy=policy)
+            request = httpx.Request("POST", profile.endpoint + "/v1/chat/completions", content=b"synthetic")
+            for number in range(1, 4):
+                journal.reserve(profile, request, {"model": profile.model}, b"synthetic", 8192, number)
+                journal.settle(Decimal("2"), 1_000_000, 0)
+            self.assertGreater(journal.cumulative_spend, Decimal("5"))
+            journal.reserve(profile, request, {"model": profile.model}, b"synthetic", 1024, 1)
+            journal.settle(Decimal("0.000038"), 7, 3)
+            journal.reserve(profile, request, {"model": profile.model}, b"synthetic-two", 1024, 2)
+            journal.mark_unknown("transport_timeout")
+            journal.finalize(status="incomplete")
+            self.assertIsNone(journal.run_doc["campaign_estimated_cost_cny"])
+            self.assertEqual(journal.run_doc["prior_spend_cny"], "0.000038")
+            journal.close()
+            with self.assertRaises(live.LiveFailure):
+                live.RealDevelopmentJournal(root, "k-two", profile=profile, policy=policy)
+
+    def test_per_run_claim_and_controller_lock(self):
+        import fcntl
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            b = {"execution_identity": {"synthetic": True}, "profile_sha256": live.load_profile().sha256}
+            live._claim_c_once(root, "one", b, k=True)
+            live._claim_c_once(root, "two", b, k=True)
+            with self.assertRaises(live.LiveFailure):
+                live._claim_c_once(root, "one", b, k=True)
+            lock = os.open(root / ".controller.lock", os.O_CREAT | os.O_RDWR, 0o600)
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaises(live.LiveFailure) as error:
+                    live._k_locked(root, lambda: None)
+                self.assertEqual(error.exception.code, "controller_busy")
+            finally:
+                os.close(lock)
 
 
 if __name__ == "__main__":

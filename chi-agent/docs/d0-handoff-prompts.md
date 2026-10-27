@@ -1,10 +1,10 @@
 # D0 开工与审核 Prompt
 
-更新：2026-10-25。当前由 Codex 主代理协调两个 Luna High 子代理；替代原先用户把 Prompt 交给 Gemini、再转交审核意见的流程。旧模板保存在 [35370ab 的历史版本](https://github.com/xsw932187210-cell/chi-agent/blob/35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9/chi-agent/docs/d0-handoff-prompts.md)，不再作为当前派发指令。
+更新：2026-10-27。本文件保留 2026-10-25 D0 双 Luna 的历史模板，只供回查，不作为当前派发指令。现行默认是一个 `gpt-6.1-terra` / `high` 实现子代理与主代理独立审核，见 [实现工作流](subagent-workflow.md)；当前阶段与真实运行授权见 REVIEW_STATE。更早模板保存在 [35370ab 的历史版本](https://github.com/xsw932187210-cell/chi-agent/blob/35370ab5d9d20f03b1cb8e4fab60e2e220a24dd9/chi-agent/docs/d0-handoff-prompts.md)。
 
 当前 b7f8941 已通过 D0 离线代码验收，暂无本阶段代码返工。复制模板时先读最新 REVIEW_STATE；查无当前阶段待办就报告状态，不重复修复，也不自动进入 A/B/C。
 
-## 给当前或新 Codex 对话
+## 已归档的 D0 对话模板（不直接执行）
 
 ```text
 请在 /Users/asaki/Documents/ChatGPT/Kaggle 接续 CHI-Bench。
@@ -13,7 +13,7 @@ gpt-6-luna，推理强度 high。不要交给 Gemini，也不操作或监控 Ant
 你作为主代理负责规格、协调、独立审核、教学和 GitHub 存储。
 
 先读 AGENTS.md 指定的当前协作、学习、README 和 REVIEW_STATE 摘要，
-以及 docs/luna-subagent-workflow.md、D0 handoff 和本轮未决审核问题。
+以及 docs/subagent-workflow.md、D0 handoff 和本轮未决审核问题。
 历史源码/长日志按需读取，不全量重载聊天或仓库。
 
 核对 Git 根目录、分支、实际 HEAD、暂存区和未提交文件。Git 根目录是
@@ -55,12 +55,12 @@ A/B/C、参赛模型 API、真实 trial 和官方判分继续暂停。
 
 ## 主代理怎样给子代理任务
 
-任务包的内容和分工见 [双 Luna 工作流](luna-subagent-workflow.md)。技术状态以最新 REVIEW_STATE、[D0 验收](../reviews/bootstrap-baseline-d0-review.md) 及实际 OpenSpec 为准；当前 D0 无代码未决项，已关闭项只作新变更影响的回归，不重新实现。
+任务包的内容和分工见 [双 Luna 工作流](subagent-workflow.md)。技术状态以最新 REVIEW_STATE、[D0 验收](../reviews/bootstrap-baseline-d0-review.md) 及实际 OpenSpec 为准；当前 D0 无代码未决项，已关闭项只作新变更影响的回归，不重新实现。
 
-派发设置分为两件事：`gpt-6-luna` 是模型，`high` 是推理强度。主代理在实际派发时显式设置；写进 Prompt 或 AGENTS.md 是持续约定，不能冒充已启动的运行证据。当前会话支持直接派发，无须修改用户全局配置或新增 API Key。
+派发设置分为模型和推理强度两项；现行是 `gpt-6.1-terra` 与 `high`，上面的 `gpt-6-luna` 仅记录当时模板。主代理在实际派发时显式设置；写进 Prompt 或 AGENTS.md 是持续约定，不能冒充已启动的运行证据。无需修改用户全局配置或新增 API Key。
 
 每次子代理仅回复：改了哪些文件/入口、实际 Docker 命令和退出结果、证据位置、失败或未验证项、需主代理决定的事项。Git 提交/上传由主代理处理。子代理自测后停止写入，主代理固定候选后才独立验收。
 
 ## 若只想了解或修改方案
 
-直接说“本轮只改文档/讲解，先不写代码”。主代理按这个限制执行，不因项目长期使用两个子代理就自动启动实现。普通问答也不需要创建两个子代理。
+直接说“本轮只改文档/讲解，先不写代码”。主代理按这个限制执行；普通问答不创建实现子代理，历史双代理模板不覆盖现行分工。

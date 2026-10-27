@@ -1,5 +1,16 @@
 当前阶段、授权与已通过身份以 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md) 为准。以下已勾选项保留其历史验收范围；旧双代理人数与开发版本不覆盖现行协作约定。
 
+## K. Terra implementation and repeated ungraded C development
+
+用户于 2026-10-27 明确改用 GPT-6.1 Terra 实现、同步现行文档，并允许多次 C 开发尝试；API 费用不再以旧 5 元上限阻挡。参赛运行时模型不随开发代理切换，官方判分仍暂停。
+
+- [x] K.1 Verify PR #14 merged/latest main, create a codex branch, update active model defaults/prompts/links and archive obsolete templates without rewriting actual historical model evidence.
+- [x] K.2 Implement explicit prior/source continuation with immutable predecessor evidence and cumulative real costs, a separate local record_only/null-cap policy and truthful unknown handling.
+- [x] K.3 Support serial fresh-world C attempts, persistent per-attempt claims, same-attempt rejection, a controller-wide exclusive lock, source-bound B evidence and exact owned cleanup; preserve request-level zero retries.
+- [x] K.4 Freeze and independently review/retest meaningful migration, accounting, concurrency, repeated-attempt, failure and G/H/J regressions in Python 3.12 Docker.
+- [x] K.5 Execute fresh real B if the implementation identity changed, then autonomous official C attempts; diagnose outside runs, retain each failure, preserve null official reward and separate process completion from business observations.
+- [x] K.6 Update the existing learning ledger, one new phase report and current state, then push a base=main PR for user review/merge. Do not claim official scoring or F.5 freeze.
+
 ## C. Offline single-attempt lifecycle control
 
 用户于 2026-10-26 恢复 C 代码开发；本轮先实现单题执行控制的离线部分，不恢复真实模型、官方任务试跑或判分，不代勾真实 C 的 3.2。一个 Luna High 实现，主代理独立审核。
@@ -140,13 +151,13 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [ ] J.7 Only after real B success and sufficient known budget, claim and execute one fresh-world C autonomously, retain artifacts and cleanup evidence with official reward null; otherwise record the concrete prerequisite failure without consuming a C attempt.
 - [x] J.8 Update the learning ledger and one phase report, push and create a base=main PR for user review/merge; disclose actual-run versus offline-only scope, keeping official grading and F.5 deferred.
 
-J.7 的唯一真实尝试已执行到官方 bootstrap 失败，模型未启动，因此自主任务执行目标仍未完成；失败 claim 保留，挂载修复仅通过离线复验，不自动补试。实际结果与修复证据见 [J 审核](../../../reviews/real-b-c-ungraded-review.md)。
+J.7 原授权的唯一尝试在官方 bootstrap 失败、模型未启动，历史 checkbox 不改成通过；原失败 claim 保留。用户后续另行授权的 K 已完成新世界自主无评分执行，见 K 任务与 [K 审核](../../../reviews/c-development-retry-review.md)；J 原记录见 [J 审核](../../../reviews/real-b-c-ungraded-review.md)。
 
 ## 3. Verify and hand over
 
 - [x] 3.1 Run and record actual offline checks; provide diff, exact commands, exit codes and limitations.
-- [ ] 3.2 Once implementation is resumed and prerequisites/budget are set, verify live tools and one real ungraded Agent execution; retain local evidence and do not claim official success.
-- [ ] 3.3 Report measured duration and available usage/cost, failed stages and implications for the next change; identify unmeasured fields.
+- [x] 3.2 Once implementation is resumed and prerequisites/budget are set, verify live tools and one real ungraded Agent execution; retain local evidence and do not claim official success. Actual K scope and evidence are recorded in the K review.
+- [x] 3.3 Report measured duration and available usage/cost, failed stages and implications for the next change; identify unmeasured fields. K records claim-to-finished timing and provider usage; billing and full pre-claim end-to-end timing remain unmeasured.
 - [ ] 3.4 Codex independently reviews the code and applicable offline checks; user inspects the demonstrated result. D0 code review passed at b7f8941; the combined checkbox remains open because separate full user acceptance has not been recorded.
 - [ ] 3.5 Deferred by user: run the original official verifier only if local grading is later requested with its prerequisites available; retain the verdict, scorecard and resource sources.
 - [x] 3.6 Demonstrate the D0 development target's clean container startup without host project dependencies; record Python 3.13.17/aarch64, uv/lock and image identity. Official Python 3.12, other architectures and real task runtime remain unverified; no paid task was repeated.

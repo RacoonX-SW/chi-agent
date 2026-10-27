@@ -50,6 +50,16 @@ _EVALUATION_COMMON = {
     "cost_basis": "provider_profile_peak_upper_estimate_not_organizer_billing",
 }
 
+_REAL_DEVELOPMENT_EXPECTED = {
+    "schema": POLICY_SCHEMA,
+    "policy_id": "real-development-repeated-b-c-record-only-v1",
+    "scope": "real_development",
+    "mode": "record_only",
+    "hard_cap_cny": None,
+    "budget_group": "shared_B_C",
+    "cost_basis": "provider_profile_peak_upper_estimate_not_billed",
+}
+
 
 def _strict_money(value: Any) -> Decimal:
     if type(value) is not str or _MONEY_RE.fullmatch(value) is None:
@@ -81,6 +91,9 @@ def _build(raw: Any) -> ExecutionPolicy:
         cap = _strict_money(raw["hard_cap_cny"])
         return ExecutionPolicy(raw=dict(raw), sha256=_hash(raw), policy_id=raw["policy_id"],
                                scope=raw["scope"], mode=raw["mode"], hard_cap_cny=cap)
+    if raw == _REAL_DEVELOPMENT_EXPECTED and all(type(raw[k]) is type(v) for k, v in _REAL_DEVELOPMENT_EXPECTED.items()):
+        return ExecutionPolicy(raw=dict(raw), sha256=_hash(raw), policy_id=raw["policy_id"],
+                               scope=raw["scope"], mode=raw["mode"], hard_cap_cny=None)
     expected_keys = set(_EVALUATION_COMMON) | {"mode", "hard_cap_cny"}
     if set(raw) != expected_keys or any(type(raw.get(k)) is not type(v) for k, v in _EVALUATION_COMMON.items()):
         raise PolicyFailure("execution_policy_invalid")
@@ -113,6 +126,11 @@ def load_local_policy(path: Path = LOCAL_POLICY_PATH) -> ExecutionPolicy:
     if policy.scope != "local_development" or policy.raw != _LOCAL_EXPECTED:
         raise PolicyFailure("execution_policy_untrusted")
     return policy
+
+
+def load_real_development_policy() -> ExecutionPolicy:
+    """Return the fixed, distinct policy for explicitly continued real development."""
+    return _build(_REAL_DEVELOPMENT_EXPECTED)
 
 
 def make_evaluation_policy(mode: str, cap_cny: str | Decimal | None = None) -> ExecutionPolicy:

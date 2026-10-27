@@ -621,6 +621,8 @@ def _patch_empty_history_compatibility(converter: Any, endpoint: str, model: str
     """
     from openai.types.responses import ResponseOutputMessage, ResponseOutputText, ResponseReasoningItem
     from openai.types.responses.response_reasoning_item import Summary
+    from agents.models.reasoning_content_replay import ReasoningContentReplayContext, ReasoningContentSource
+    from uuid import uuid4
 
     old_message = converter.__dict__["message_to_output_items"]
     old_items = converter.__dict__["items_to_messages"]
@@ -630,16 +632,18 @@ def _patch_empty_history_compatibility(converter: Any, endpoint: str, model: str
         metadata["origin_endpoint"] = endpoint
         items = old_message.__func__(cls, message, provider_data=metadata)
         if getattr(message, "reasoning_content", None) == "":
+            call_ids = [call.id for call in (getattr(message, "tool_calls", None) or [])
+                        if getattr(call, "type", None) == "function" and isinstance(getattr(call, "id", None), str)]
             reasoning = ResponseReasoningItem(
-                id="offline-empty-reasoning",
+                id=f"chi-empty-reasoning-{uuid4().hex}",
                 summary=[Summary(text="", type="summary_text")],
                 type="reasoning",
-                provider_data={"model": model, "origin_endpoint": endpoint},
+                provider_data={"model": model, "origin_endpoint": endpoint, "empty_reasoning_call_ids": call_ids},
             )
             items.insert(0, reasoning)
         if getattr(message, "content", None) == "":
             empty_message = ResponseOutputMessage(
-                id="offline-empty-content",
+                id=f"chi-empty-content-{uuid4().hex}",
                 content=[ResponseOutputText(text="", type="output_text", annotations=[], logprobs=[])],
                 role="assistant", type="message", status="completed",
                 provider_data={"model": model, "origin_endpoint": endpoint},
@@ -649,34 +653,52 @@ def _patch_empty_history_compatibility(converter: Any, endpoint: str, model: str
         return items
 
     def patched_items_to_messages(cls, items, *args, **kwargs):
-        result = old_items.__func__(cls, items, *args, **kwargs)
+        input_items = items if isinstance(items, str) else list(items)
+        result = old_items.__func__(cls, input_items, *args, **kwargs)
         target_model = kwargs.get("model", args[0] if args else None)
         target_endpoint = kwargs.get("base_url", None)
         replay = kwargs.get("should_replay_reasoning_content")
         if target_model != model or (target_endpoint or "").rstrip("/") != endpoint + "/v1" or replay is None:
             return result
-        empty_pending = False
-        for item in items if not isinstance(items, str) else []:
+        pending_ids = None
+        observed_ids = []
+        def restore_pending():
+            if not pending_ids or observed_ids != pending_ids:
+                return
+            for output_message in result:
+                calls = output_message.get("tool_calls", [])
+                if (output_message.get("role") == "assistant"
+                        and [call.get("id") for call in calls] == pending_ids):
+                    output_message["reasoning_content"] = ""
+                    break
+        for item in input_items if not isinstance(input_items, str) else []:
             is_reasoning = cls.maybe_reasoning_message(item)
             if is_reasoning:
                 data = is_reasoning.get("provider_data", {})
                 summaries = is_reasoning.get("summary", [])
-                empty_pending = (
-                    data.get("model") == model
-                    and data.get("origin_endpoint") == endpoint
-                    and any(isinstance(s, dict) and s.get("text") == "" for s in summaries)
-                )
+                if type(data) is not dict:
+                    pending_ids = None
+                    observed_ids = []
+                    continue
+                call_ids = data.get("empty_reasoning_call_ids")
+                context = ReasoningContentReplayContext(model=model, base_url=(target_endpoint or "").rstrip("/"),
+                    reasoning=ReasoningContentSource(item=is_reasoning, origin_model=data.get("model"), provider_data=data))
+                valid = (data.get("model") == model and data.get("origin_endpoint") == endpoint
+                         and type(call_ids) is list and all(type(value) is str and value for value in call_ids)
+                         and len(call_ids) == len(set(call_ids))
+                         and type(summaries) is list and len(summaries) == 1 and isinstance(summaries[0], dict)
+                         and summaries[0].get("text") == "" and replay(context))
+                pending_ids = call_ids if valid else None
+                observed_ids = []
                 continue
-            if empty_pending:
+            if pending_ids is not None:
                 function_call = cls.maybe_function_tool_call(item)
                 if function_call:
-                    call_id = function_call.get("call_id")
-                    for message in result:
-                        if message.get("role") == "assistant" and any(c.get("id") == call_id for c in message.get("tool_calls", [])):
-                            message["reasoning_content"] = ""
-                            break
+                    observed_ids.append(function_call.get("call_id"))
                 if cls.maybe_function_tool_call_output(item):
-                    empty_pending = False
+                    restore_pending()
+                    pending_ids = None
+                    observed_ids = []
         return result
 
     converter.message_to_output_items = classmethod(patched_message_to_output_items)

@@ -71,6 +71,68 @@ class ModelRunnerAdapterTests(unittest.TestCase):
         self.assertIsNone(assistant["content"])
         self.assertEqual(assistant["reasoning_content"], "opaque-reason-1")
 
+    def test_two_empty_tool_rounds_keep_each_assistant_reasoning(self):
+        original = adapter._scenario_response
+        def response(scenario, number):
+            result = original(scenario, number)
+            if number in (1, 2):
+                result["choices"][0]["message"].update(content="", reasoning_content="")
+            return result
+        with patch.object(adapter, "_scenario_response", side_effect=response):
+            ledger, result = self.run_scenario("success")
+        self.assertIsNotNone(result)
+        assistants = [m for m in ledger.requests[2]["body"]["messages"]
+                      if m.get("role") == "assistant" and m.get("tool_calls")]
+        self.assertEqual(len(assistants), 2)
+        self.assertEqual([m.get("reasoning_content") for m in assistants], ["", ""])
+
+    def test_tool_rounds_preserve_each_empty_and_nonempty_response(self):
+        from itertools import product
+        original = adapter._scenario_response
+        choices = list(product((None, ""), ("", "synthetic-reason")))
+        for first, second in product(choices, repeat=2):
+            def response(scenario, number):
+                result = original(scenario, number)
+                if number in (1, 2):
+                    content, reasoning = (first, second)[number - 1]
+                    result["choices"][0]["message"].update(content=content, reasoning_content=reasoning)
+                return result
+            with self.subTest(first=first, second=second), patch.object(adapter, "_scenario_response", side_effect=response):
+                ledger, result = self.run_scenario("success")
+                self.assertIsNotNone(result)
+                assistants = [m for m in ledger.requests[2]["body"]["messages"]
+                              if m.get("role") == "assistant" and m.get("tool_calls")]
+                self.assertEqual([m["tool_calls"][0]["id"] for m in assistants], ["call-1", "call-2"])
+                self.assertEqual([m.get("content") for m in assistants], [first[0], second[0]])
+                self.assertEqual([m.get("reasoning_content") for m in assistants], [first[1], second[1]])
+
+    def test_empty_reasoning_replay_requires_matching_batch_and_replay_permission(self):
+        from agents.models.openai_chatcompletions import Converter
+        from openai.types.chat import ChatCompletionMessage
+        message = ChatCompletionMessage.model_validate({"role": "assistant", "content": "", "reasoning_content": "",
+            "tool_calls": [{"id": "batch-a", "type": "function", "function": {"name": "one", "arguments": "{}"}},
+                           {"id": "batch-b", "type": "function", "function": {"name": "two", "arguments": "{}"}}]})
+        old_message, old_items = adapter._patch_empty_history_compatibility(
+            Converter, "https://api.deepseek.com", "deepseek-flash")
+        try:
+            items = [item.model_dump(exclude_none=True) for item in Converter.message_to_output_items(
+                message, provider_data={"model": "deepseek-flash"})]
+            items.append({"type": "function_call_output", "call_id": "batch-a", "output": "synthetic"})
+            def convert(values, callback=adapter._same_route_reasoning, base="https://api.deepseek.com/v1"):
+                return Converter.items_to_messages(values, model="deepseek-flash", base_url=base,
+                                                   should_replay_reasoning_content=callback)
+            self.assertEqual(convert(items)[0]["reasoning_content"], "")
+            self.assertNotIn("reasoning_content", convert(items, lambda _context: False)[0])
+            self.assertNotIn("reasoning_content", convert(items, base="https://proxy.invalid/v1")[0])
+            altered = json.loads(json.dumps(items))
+            next(i for i in altered if i.get("type") == "function_call" and i.get("call_id") == "batch-b")["call_id"] = "other"
+            self.assertNotIn("reasoning_content", convert(altered)[0])
+            missing = message.model_copy(update={"reasoning_content": None})
+            self.assertFalse(any(getattr(i, "type", None) == "reasoning" for i in Converter.message_to_output_items(missing)))
+        finally:
+            Converter.message_to_output_items = old_message
+            Converter.items_to_messages = old_items
+
     def test_whole_tool_batch_and_finish_reason_are_checked_before_effects(self):
         for scenario, code in (("batch-valid-then-invalid", "tool_unknown"),
                                ("invalid-finish", "finish_reason_invalid")):
