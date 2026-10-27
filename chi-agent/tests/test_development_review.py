@@ -3,6 +3,7 @@ import fcntl
 import json
 import os
 import sys
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
@@ -101,6 +102,18 @@ def test_single_request_inline_and_settled(capture, tmp_path, synthetic_adapter)
         assert "tools" not in body and "tool_choice" not in body
         assert body["thinking"] == {"type": "enabled"} and body["reasoning_effort"] == "high"
         assert body["response_format"] == {"type": "json_object"}
+        plan = dr.plan()
+        assert body["max_tokens"] == plan["max_output_tokens"] == 32768
+        claim = json.loads((tmp_path / "reviews/review-1/claim.json").read_text())
+        settings = claim["identity"]["review_settings"]
+        assert settings == {"max_output_tokens": 32768, "timeout_seconds": 360, "read_timeout_seconds": 60}
+        assert plan["timeout_seconds"] == settings["timeout_seconds"]
+        assert plan["read_timeout_seconds"] == settings["read_timeout_seconds"]
+        pending = json.loads((tmp_path / "reviews/accounting.json").read_text())["pending"]
+        profile = dr.load_profile()
+        expected = (Decimal(profile.input_reserve_tokens) * profile.input_price
+                    + Decimal(body["max_tokens"]) * profile.output_price) / Decimal(1_000_000)
+        assert Decimal(pending["reserve_upper_cost_cny"]) == expected == Decimal("2.359296")
         files = json.loads(body["messages"][1]["content"])
         assert "source_context/chart_slice.json" in files
         assert "synthetic chart" in json.dumps(files)
@@ -257,7 +270,7 @@ def test_actual_world_model_and_adapter_source(monkeypatch):
 
 
 def test_overall_deadline_and_bounded_socket_read(capture, tmp_path, synthetic_adapter, monkeypatch):
-    moments = iter([0.0, 181.0])
+    moments = iter([0.0, 361.0])
     monkeypatch.setattr(dr, "_now", lambda: next(moments))
     calls = []
     def handler(request):
@@ -354,3 +367,29 @@ def test_modified_settlement_is_rejected(capture, tmp_path, synthetic_adapter):
     path.write_text(json.dumps(receipt))
     with pytest.raises(dr.ReviewError, match="accounting_invalid"):
         call(capture, tmp_path, lambda req: pytest.fail("no request"), "review-2")
+
+
+def test_length_response_settles_and_new_id_continues_with_prior_receipt(capture, tmp_path, synthetic_adapter):
+    payload = response()
+    payload["choices"][0]["finish_reason"] = "length"
+    payload["choices"][0]["message"]["content"] = ""
+    result = call(capture, tmp_path, lambda req: httpx.Response(200, json=payload))
+    assert result["status"] == "incomplete" and result["safe_error_code"] == "provider_response_invalid"
+    root = tmp_path / "reviews"
+    state = json.loads((root / "accounting.json").read_text())
+    assert state["pending"] is None and state["settled_requests"] == 1
+    assert (root / "review-1/settlement.json").is_file()
+    # Prior receipts predate review_settings. Preserve their semantics while
+    # checking that their matching identities and usage remain reconcilable.
+    receipt_path = root / "review-1/settlement.json"
+    claim_path = root / "review-1/claim.json"
+    receipt = json.loads(receipt_path.read_text())
+    claim = json.loads(claim_path.read_text())
+    del receipt["identity"]["review_settings"]
+    del claim["identity"]["review_settings"]
+    receipt_path.write_text(json.dumps(receipt))
+    claim_path.write_text(json.dumps(claim))
+    result = call(capture, tmp_path, lambda req: httpx.Response(200, json=response()), "review-2")
+    assert result["status"] == "complete"
+    state = json.loads((root / "accounting.json").read_text())
+    assert state["settled_requests"] == 2 and state["pending"] is None

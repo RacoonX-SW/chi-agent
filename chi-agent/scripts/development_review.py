@@ -30,6 +30,9 @@ MAX_RESPONSE = 2 * 1024 * 1024
 # The C audit journal includes tool evidence; it is checked locally and is
 # never included in the model's inline workspace.
 MAX_AUDIT_JOURNAL = 32 * 1024 * 1024
+REVIEW_MAX_OUTPUT_TOKENS = 32768
+REVIEW_TIMEOUT_SECONDS = 360
+REVIEW_READ_TIMEOUT_SECONDS = 60
 SUPPLEMENT_VERSION = "inline-evidence-no-tools-v1"
 SUPPLEMENT = ("The workspace files below are supplied inline as a JSON object mapping relative paths "
               "to their complete contents. You have no file tools. Use only these files and return "
@@ -271,7 +274,8 @@ def _usage(response: dict) -> tuple[int, int, int, int]:
 def plan() -> dict:
     return {"schema": "chi-development-review-plan-v1", "mode": "single_request_no_tools",
             "provider": "deepseek-flash", "thinking": "enabled", "reasoning_effort": "high",
-            "max_input_bytes": MAX_INPUT, "max_output_tokens": 8192, "timeout_seconds": 180,
+            "max_input_bytes": MAX_INPUT, "max_output_tokens": REVIEW_MAX_OUTPUT_TOKENS,
+            "timeout_seconds": REVIEW_TIMEOUT_SECONDS, "read_timeout_seconds": REVIEW_READ_TIMEOUT_SECONDS,
             "automatic_retries": 0, "official_reward": None, "credentials_read": False}
 
 
@@ -379,7 +383,7 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
     body = {"model": profile.model, "messages": [
         {"role": "system", "content": prompt + "\n\n" + SUPPLEMENT},
         {"role": "user", "content": _json_bytes(files).decode("utf-8")}],
-        "thinking": {"type": "enabled"}, "reasoning_effort": "high", "max_tokens": profile.max_output_tokens,
+        "thinking": {"type": "enabled"}, "reasoning_effort": "high", "max_tokens": REVIEW_MAX_OUTPUT_TOKENS,
         "response_format": {"type": "json_object"}}
     wire = _json_bytes(body)
     if len(wire) > MAX_INPUT:
@@ -389,6 +393,9 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
     identity = {"capture_manifest_sha256": _hash(_read(input_dir / "manifest.json", 1_000_000)),
                 "execution_identity": manifest["execution_identity"],
                 "review_module_sha256": _hash(_read(Path(__file__), 2_000_000)),
+                "review_settings": {"max_output_tokens": REVIEW_MAX_OUTPUT_TOKENS,
+                                    "timeout_seconds": REVIEW_TIMEOUT_SECONDS,
+                                    "read_timeout_seconds": REVIEW_READ_TIMEOUT_SECONDS},
                 "source_sha256": {name: _hash(_read(source_dir / name, 2_000_000)) for name in source_names},
                 "model": profile.model, "profile_sha256": profile.sha256,
                 "prompt_version": prompt_version, "prompt_sha256": _hash(prompt.encode()),
@@ -419,7 +426,7 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
         claim = {"schema": "chi-development-review-claim-v1", "review_id": review_id,
                  "status": "reserved", "identity": identity, "official_reward": None}
         live._atomic_json(run_dir / "claim.json", claim, exclusive=True)
-        reserve = (Decimal(profile.input_reserve_tokens) * profile.input_price + Decimal(profile.max_output_tokens) * profile.output_price) / Decimal(1_000_000)
+        reserve = (Decimal(profile.input_reserve_tokens) * profile.input_price + Decimal(REVIEW_MAX_OUTPUT_TOKENS) * profile.output_price) / Decimal(1_000_000)
         state["pending"] = {"review_id": review_id, "status": "pending", "request_sha256": identity["request_sha256"],
                             "reserve_upper_cost_cny": str(reserve), "reserve_basis": "profile_peak_prices_not_bill"}
         live._atomic_json(review_root / "accounting.json", state)
@@ -431,8 +438,8 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
             transport = _transport if _transport is not None else httpx.HTTPTransport(retries=0, trust_env=False)
             # The socket inactivity timeout bounds a read beyond the overall
             # deadline. A single in-flight operation may overrun it by 60 s.
-            deadline = _now() + 180
-            timeout = httpx.Timeout(connect=10, read=60, write=10, pool=10)
+            deadline = _now() + REVIEW_TIMEOUT_SECONDS
+            timeout = httpx.Timeout(connect=10, read=REVIEW_READ_TIMEOUT_SECONDS, write=10, pool=10)
             with httpx.Client(transport=transport, timeout=timeout, trust_env=False) as client:
                 with client.stream("POST", profile.endpoint + "/v1/chat/completions",
                                    content=wire, headers={"Authorization": "Bearer " + secret.strip(),
