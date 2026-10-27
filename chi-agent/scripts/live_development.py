@@ -247,7 +247,7 @@ def _execution_identity(*, k: bool = False) -> dict[str, Any]:
              "profiles/deepseek-flash-prepared.json", "profiles/local-development-policy.json",
              "requirements-model.lock")
     if k:
-        files += ("requirements-pdf.lock", "scripts/provider_task_resources.py")
+        files += ("requirements-pdf.lock", "scripts/provider_task_resources.py", "scripts/patient_identity_binding.py")
     hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files}
     identity = {"vendor": upstream, "sdk": sdk, "application_files_sha256": hashes,
                 "profile_sha256": profile.sha256, "policy_sha256": policy.sha256}
@@ -1615,7 +1615,9 @@ def _tool_schema(tool: Any) -> tuple[str, dict[str, Any]] | None:
 
 
 def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealDevelopmentJournal,
-                schemas: dict[str, dict[str, Any]], ledger: Any) -> list[Any]:
+                schemas: dict[str, dict[str, Any]], ledger: Any, *, binding: Any = None,
+                binding_lock: Any = None, openai_client: Any = None, profile: Any = None,
+                exchanges: list[dict[str, Any]] | None = None, request_context: Any = None) -> list[Any]:
     import contextvars
     from agents.tool import FunctionTool
 
@@ -1743,6 +1745,51 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         await asyncio.sleep(seconds)
         return f"slept {seconds:g}s"
 
+    async def read_patient_observation(_ctx: Any, payload: str) -> str:
+        args = json.loads(payload)
+        from patient_identity_binding import Refusal
+        try:
+            return binding.read_observation(args["patient_id"], args["offset"])
+        except Refusal as exc:
+            return f"REFUSED: {exc}"
+
+    async def confirm_patient(_ctx: Any, payload: str) -> str:
+        from patient_identity_binding import PROMPT, PROMPT_VERSION, MAX_CONFIRM_INPUT, Refusal
+        args = json.loads(payload)
+        try:
+            evidence = binding.confirmation_input(args["patient_id"], exchanges or [])
+            if (not args["instruction_quote"].strip() or args["instruction_quote"] not in binding.instruction
+                    or not args["chart_quote"].strip() or args["chart_quote"] not in binding.charts[args["patient_id"]]["text"]):
+                raise Refusal("selection_evidence_unverified")
+        except Refusal as exc:
+            binding.event("confirmation_refused", reason=str(exc))
+            return f"REFUSED: {exc}"
+        evidence = json.dumps({"selection": args, "public_observations": json.loads(evidence)}, ensure_ascii=False)
+        if len(evidence.encode()) > MAX_CONFIRM_INPUT:
+            binding.event("confirmation_refused", reason="confirmation_input_too_large")
+            return "REFUSED: confirmation_input_too_large"
+        binding.confirmations += 1
+        binding.event("confirmation_attempt", attempt=binding.confirmations, purpose="patient_confirmation",
+                      prompt_version=PROMPT_VERSION, prompt_sha256=hashlib.sha256(PROMPT.encode()).hexdigest(),
+                      evidence_sha256=hashlib.sha256(evidence.encode()).hexdigest(), provider_round=ledger.rounds + 1)
+        token = request_context.set("patient_confirmation") if request_context is not None else None
+        try:
+            response = await openai_client.chat.completions.create(
+                model=profile.model, messages=[{"role": "system", "content": PROMPT}, {"role": "user", "content": evidence}],
+                max_tokens=profile.max_output_tokens, response_format={"type": "json_object"},
+                extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "high"})
+        finally:
+            if token is not None:
+                request_context.reset(token)
+        choices = response.choices
+        if len(choices) != 1 or choices[0].finish_reason != "stop" or not isinstance(choices[0].message.content, str):
+            result = "invalid_confirmation"
+        else:
+            result = binding.assess(args["patient_id"], choices[0].message.content)
+        binding.event("confirmation_result", attempt=binding.confirmations, result=result,
+                      response_content=choices[0].message.content if len(choices) == 1 else None)
+        return f"patient confirmation: {result}"
+
     def fn(name: str, description: str, schema: dict[str, Any], callback: Any) -> Any:
         async def tracked(ctx: Any, payload: str) -> Any:
             try:
@@ -1759,10 +1806,25 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
             journal.start_dispatch(call_id=call_id, model_name=name, raw_name=name, arguments=arguments)
             token = active_call_id.set(call_id)
             try:
-                result = await callback(ctx, payload)
+                if binding is not None and name in {"local-fs-write", "local-fs-edit", "local-confirm-patient"}:
+                    async with binding_lock:
+                        refusal = binding.batch_refusals.get(call_id)
+                        if not refusal and name in {"local-fs-write", "local-fs-edit"}:
+                            path = workspace_path(arguments.get("path"))
+                            if path is None or binding.cases.get(path.relative_to(workspace_root).parts[0]) != binding.bound or binding.bound is None or binding.poisoned:
+                                refusal = "workspace_case_unverified"
+                        if refusal:
+                            binding.event("refusal", call_id=call_id, tool=name, reason=refusal)
+                            result = f"REFUSED: {refusal}"
+                        else:
+                            result = await callback(ctx, payload)
+                else:
+                    result = await callback(ctx, payload)
                 journal.finish_dispatch(call_id=call_id, result=result)
                 record_effect(name, result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str))
             except BaseException:
+                if binding is not None and name in {"local-fs-write", "local-fs-edit", "local-confirm-patient"}:
+                    binding.poisoned = True
                 try:
                     journal.finish_dispatch(call_id=call_id, result=None, error=True)
                 except Exception:
@@ -1809,6 +1871,18 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
                  fn("local-fs-list", "List files only in the task projection or provider/shared workspace directories.", list_schema, list_files),
                  fn("local-fs-write", "Create or overwrite files only inside provider/shared workspace directories.", write_schema, write_file),
                  fn("local-fs-edit", "Edit existing files only inside provider/shared workspace directories.", edit_schema, edit_file)]
+        if binding is not None:
+            from patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION
+            read_observation_schema = {"type": "object", "properties": {"patient_id": {"type": "string"},
+                                        "offset": {"type": "integer", "minimum": 0}},
+                                       "required": ["patient_id", "offset"], "additionalProperties": False}
+            confirm_schema = {"type": "object", "properties": {"patient_id": {"type": "string"},
+                              "instruction_quote": {"type": "string", "minLength": 1},
+                              "chart_quote": {"type": "string", "minLength": 1}},
+                              "required": ["patient_id", "instruction_quote", "chart_quote"], "additionalProperties": False}
+            schemas.update({"local-read-patient-observation": read_observation_schema, "local-confirm-patient": confirm_schema})
+            tools.extend([fn("local-read-patient-observation", READ_DESCRIPTION, read_observation_schema, read_patient_observation),
+                          fn("local-confirm-patient", CONFIRM_DESCRIPTION, confirm_schema, confirm_patient)])
     tools.extend([fn("local-claim_done", "Mark the task as complete after finishing the work.", empty, claim_done),
                   fn("local-sleep", "Pause briefly while waiting for a known operation.",
                      schemas.get("local-sleep", {"type": "object", "properties": {"seconds": {"type": "number", "minimum": 0, "maximum": 30}},
@@ -1820,7 +1894,8 @@ def _validate_live_response(response: dict[str, Any], ledger: Any, profile: Any,
                             schemas: dict[str, dict[str, Any]], allowed_names: set[str],
                             journal: RealDevelopmentJournal,
                             raw_names: dict[str, str], *, kind: str = "c-once",
-                            observed_history: list[dict[str, Any]] | None = None) -> None:
+                            observed_history: list[dict[str, Any]] | None = None,
+                            binding: Any = None) -> None:
     if response.get("model") != profile.raw["response_model"]:
         raise LiveFailure("response_model_mismatch")
     choices = response.get("choices")
@@ -1872,6 +1947,22 @@ def _validate_live_response(response: dict[str, Any], ledger: Any, profile: Any,
         batch_ids.add(call_id)
         parsed.append((call_id, name, args))
     seen = ledger.validated_call_ids
+    if binding is not None:
+        from patient_identity_binding import Refusal
+        if any(name == "local-confirm-patient" for _, name, _ in parsed) and len(parsed) != 1:
+            raise LiveFailure("patient_confirmation_batch_invalid")
+        for call_id, name, args in parsed:
+            raw_name = raw_names.get(name, name)
+            if raw_name.startswith("local-"):
+                if raw_name in {"local-fs-write", "local-fs-edit"}:
+                    path = _workspace_path(WORKSPACE_CONTAINER_ROOT, args.get("path"))
+                    if path is None or binding.bound is None or binding.poisoned or binding.cases.get(path.relative_to(WORKSPACE_CONTAINER_ROOT).parts[0]) != binding.bound:
+                        binding.batch_refusals[call_id] = "workspace_case_unverified"
+                continue
+            try:
+                binding.check(raw_name, args)
+            except Refusal as exc:
+                binding.batch_refusals[call_id] = str(exc)
     for call_id, _name, _args in parsed:
         if call_id in seen:
             raise LiveFailure("tool_call_id_duplicate")
@@ -1969,7 +2060,9 @@ def _b_smoke_evidence_valid(journal: RealDevelopmentJournal, exchanges: list[dic
             and isinstance(final_output, str) and bool(final_output.strip()))
 
 
-def _install_dispatch_recorder(official_runner: Any, mcp_util: Any, journal: RealDevelopmentJournal) -> tuple[Any, Any]:
+def _install_dispatch_recorder(official_runner: Any, mcp_util: Any, journal: RealDevelopmentJournal,
+                               binding: Any = None, binding_lock: Any = None,
+                               active_mcp: Any = None) -> tuple[Any, Any]:
     original_install = official_runner._install_oversize_output_patch
     original_invoke = mcp_util.__dict__["invoke_mcp_tool"]
 
@@ -1999,11 +2092,38 @@ def _install_dispatch_recorder(official_runner: Any, mcp_util: Any, journal: Rea
             call_id = selected["call_id"]
             journal.start_dispatch(call_id=call_id, model_name=model_name, raw_name=raw_name, arguments=arguments)
             try:
-                value = await patched_invoke(server, tool, context, input_json, meta=meta)
+                if binding is None:
+                    value = await patched_invoke(server, tool, context, input_json, meta=meta)
+                else:
+                    from patient_identity_binding import Refusal
+                    async with binding_lock:
+                        refusal = binding.batch_refusals.get(call_id)
+                        if not refusal:
+                            try:
+                                binding.check(raw_name, arguments)
+                            except Refusal as exc:
+                                refusal = str(exc)
+                        if refusal:
+                            binding.event("refusal", call_id=call_id, tool=raw_name, reason=refusal)
+                            value = f"REFUSED: {refusal}"
+                        else:
+                            token = active_mcp.set((call_id, raw_name, arguments))
+                            try:
+                                value = await patched_invoke(server, tool, context, input_json, meta=meta)
+                            except BaseException:
+                                binding.poisoned = True
+                                raise
+                            finally:
+                                active_mcp.reset(token)
             except BaseException:
                 journal.finish_dispatch(call_id=call_id, result=None, error=True)
                 raise
-            journal.finish_dispatch(call_id=call_id, result=value)
+            try:
+                journal.finish_dispatch(call_id=call_id, result=value)
+            except BaseException:
+                if binding is not None:
+                    binding.poisoned = True
+                raise
             return value
 
         mcp_util.invoke_mcp_tool = classmethod(monitored)
@@ -2013,6 +2133,7 @@ def _install_dispatch_recorder(official_runner: Any, mcp_util: Any, journal: Rea
 
 
 async def _worker_run(args: argparse.Namespace) -> int:
+    import asyncio
     import contextlib
     import io
     import httpx
@@ -2049,6 +2170,17 @@ async def _worker_run(args: argparse.Namespace) -> int:
     raw_names: dict[str, str] = {}
     allowed_names: set[str] = set()
     exchanges: list[dict[str, Any]] = []
+    binding = None
+    binding_lock = None
+    active_mcp = None
+    request_context = None
+    if k and kind == "c-once":
+        import contextvars
+        from patient_identity_binding import PatientBinding
+        binding = PatientBinding(instruction_file.read_text(encoding="utf-8"), journal)
+        binding_lock = asyncio.Lock()
+        active_mcp = contextvars.ContextVar("patient_binding_mcp", default=None)
+        request_context = contextvars.ContextVar("patient_binding_request", default=None)
     result_code = 1
     primary_error: str | None = None
     cleanup_error: str | None = None
@@ -2058,6 +2190,11 @@ async def _worker_run(args: argparse.Namespace) -> int:
     restore: list[tuple[Any, str, Any]] = []
     runner_stdout, runner_stderr = io.StringIO(), io.StringIO()
     try:
+        if binding is not None:
+            from patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION, PROMPT, PROMPT_VERSION
+            binding.event("protocol", prompt_version=PROMPT_VERSION, prompt_sha256=hashlib.sha256(PROMPT.encode()).hexdigest(),
+                          confirm_tool_description_sha256=hashlib.sha256(CONFIRM_DESCRIPTION.encode()).hexdigest(),
+                          read_tool_description_sha256=hashlib.sha256(READ_DESCRIPTION.encode()).hexdigest())
         if k and kind == "c-once" and getattr(args, "task_id", TASK_ID) != TASK_ID:
             from provider_task_resources import identity
             journal.run_doc["task_id"] = args.task_id
@@ -2094,12 +2231,20 @@ async def _worker_run(args: argparse.Namespace) -> int:
                 raise LiveFailure("profile_identity_mismatch")
             http_transport = httpx.AsyncHTTPTransport(retries=0, verify=True)
             output_ceiling = min(profile.max_output_tokens, 1024) if kind == "b-smoke" else profile.max_output_tokens
+            def validate_provider_response(payload: dict[str, Any]) -> None:
+                if request_context is not None and request_context.get() == "patient_confirmation":
+                    choices = payload.get("choices")
+                    if (type(choices) is not list or len(choices) != 1 or type(choices[0]) is not dict
+                            or choices[0].get("finish_reason") != "stop"
+                            or type(choices[0].get("message")) is not dict
+                            or choices[0]["message"].get("tool_calls") not in (None, [])):
+                        raise LiveFailure("patient_confirmation_response_invalid")
+                _validate_live_response(payload, ledger, profile, schemas, allowed_names, journal, raw_names,
+                                        kind=kind, observed_history=exchanges, binding=binding)
             client_http = httpx.AsyncClient(transport=GuardedTransport(
                 profile=profile, journal=journal, lower=http_transport, ledger=ledger,
                 cap_cny=policy.hard_cap_cny,
-                validate_response=lambda payload: _validate_live_response(payload, ledger, profile, schemas, allowed_names,
-                                                                           journal, raw_names, kind=kind,
-                                                                           observed_history=exchanges),
+                validate_response=validate_provider_response,
                 allowed_tool_names=allowed_names,
                 observe_request=lambda body: _observe_live_history(body, exchanges, ledger.rounds),
                 max_rounds=6 if kind == "b-smoke" else profile.max_rounds,
@@ -2122,7 +2267,9 @@ async def _worker_run(args: argparse.Namespace) -> int:
                                      retry=ModelRetrySettings(max_retries=0))
 
             projection_root = instruction_file.parent if kind == "c-once" else logs_dir
-            local_tools = _live_tools(kind, logs_dir, projection_root, journal, schemas, ledger)
+            local_tools = _live_tools(kind, logs_dir, projection_root, journal, schemas, ledger,
+                                      binding=binding, binding_lock=binding_lock, openai_client=openai_client,
+                                      profile=profile, exchanges=exchanges, request_context=request_context)
             for local_tool in local_tools:
                 local_name = getattr(local_tool, "name", None)
                 local_schema = getattr(local_tool, "params_json_schema", None)
@@ -2137,7 +2284,8 @@ async def _worker_run(args: argparse.Namespace) -> int:
             local_tools_module.build_local_tools = lambda _logs: local_tools
 
             original_mcp_factory = agents_mcp.MCPServerStreamableHttp
-            dispatch_install, dispatch_invoke = _install_dispatch_recorder(official_runner, MCPUtil, journal)
+            dispatch_install, dispatch_invoke = _install_dispatch_recorder(official_runner, MCPUtil, journal,
+                                                                            binding, binding_lock, active_mcp)
             original_to_function = MCPUtil.__dict__["to_function_tool"]
 
             def strict_to_function_tool(_cls: Any, tool: Any, server: Any, convert_schemas_to_strict: bool,
@@ -2180,7 +2328,17 @@ async def _worker_run(args: argparse.Namespace) -> int:
                             allowed_names.add(model_name)
                         if not tools: raise LiveFailure("mcp_schema_empty")
                         return tools
-                    async def call_tool(self, *a: Any, **kw: Any): return await self.inner.call_tool(*a, **kw)
+                    async def call_tool(self, *a: Any, **kw: Any):
+                        result = await self.inner.call_tool(*a, **kw)
+                        if binding is not None:
+                            call = active_mcp.get()
+                            if call is None:
+                                raise LiveFailure("patient_binding_call_missing")
+                            if getattr(result, "isError", False):
+                                binding.poisoned = True
+                                raise LiveFailure("patient_binding_backend_error")
+                            binding.observe(call[0], call[1], call[2], result)
+                        return result
                     def __getattr__(self, name: str): return getattr(self.inner, name)
                 agents_mcp.MCPServerStreamableHttp = CapturedMCP
             official_runner._agent_model_context = model_context

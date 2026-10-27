@@ -8,6 +8,7 @@ Persistent journals created here are explicitly synthetic-only.
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
 import os
 import re
@@ -894,10 +895,18 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                                      "body": body, "body_sha256": hashlib.sha256(raw).hexdigest(),
                                      "wire_bytes": len(raw), "token_bound": "documented_context_ceiling_not_measured",
                                      "provenance": "real_sdk_serialized_http_request"})
-        if self.observe_request is not None:
-            self.observe_request(body)
         try:
+            if self.observe_request is not None:
+                self.observe_request(body)
             response = await self.lower.handle_async_request(request)
+        except asyncio.CancelledError:
+            self.ledger.error_code = "transport_cancelled"
+            self.ledger.usage_complete = False
+            self.ledger.aggregate_input_tokens = None
+            self.ledger.aggregate_output_tokens = None
+            self.ledger.aggregate_cost_cny = None
+            self.journal.mark_unknown("transport_cancelled")
+            raise
         except httpx.ConnectError:
             self.ledger.error_code = "transport_connect_error"
             self.ledger.usage_complete = False
@@ -956,6 +965,15 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             # consumed response preserves cached decoded bytes; rebuilding it
             # with content-encoding would decode gzip a second time.
             return response
+        except asyncio.CancelledError:
+            self.ledger.error_code = "transport_cancelled"
+            if self.journal.state.get("pending") is not None:
+                self.ledger.usage_complete = False
+                self.ledger.aggregate_input_tokens = None
+                self.ledger.aggregate_output_tokens = None
+                self.ledger.aggregate_cost_cny = None
+                self.journal.mark_unknown("transport_cancelled")
+            raise
         except GuardFailure as exc:
             self.ledger.error_code = exc.code
             if self.journal.state.get("pending") is not None:
