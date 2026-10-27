@@ -1,10 +1,18 @@
 # 执行器交接：bootstrap-baseline
 
-当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮开发 H 官方启动接点与空依赖安装复现；按 [现行实现工作流](../../../docs/luna-subagent-workflow.md) 使用一个 Luna High 子代理，主代理负责规格、独立审核、教学与 GitHub。G 已通过范围保留，真实 API、真实 C 和官方判分继续暂停，F.5 完整正式冻结留待后续。
+当前摘要、授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮 J 已明确恢复真实 B 与条件满足后的一次无评分 C，合计 5 元；官方判分继续暂停。使用一个 Luna High 子代理实现/离线自测，主代理负责规格、独立审核、教学、真实运行与 GitHub；先固定候选独立审核，子代理不读密钥或调用真实模型，不消耗 C 机会。G/H 范围保留，F.5 最终冻结留待后续。
 
 后续代码及文档交付统一使用 `codex/<任务名>` 工作分支：主代理先建分支、协调实现并独立检查，再推送和创建目标为 main 的 PR；用户审核并决定是否合并。主代理不直接开发/推送 main、不自行合并。下方历史 main 身份只记录已发生的交付，不能当作后续继续在 main 工作的授权，详见 [GitHub 工作流](../../../docs/github-workflow.md)。
 
-## 当前 H 官方启动与独立安装交接（2026-10-27）
+## 当前 J 真实 B/C 交接（2026-10-27）
+
+按 [J 契约](specs/benchmark-readiness/spec.md#requirement-bounded-real-development-model-and-official-task-runs) 与 J 任务。实现代理独占 scripts/tests、必要 JSON/Compose；主代理独占 Markdown/Git。新增独立本地真实入口，不修改 G 的包 allowlist/record_only 默认或旧 live 暂停。真实账目和 B/C 固定 campaign 与 synthetic/evaluation 完全隔离，B/C 使用同一真实累计 5 元账；主代理核对此前没有真实 B/C 后显式初始化带来源的 prior=0，不能以合成账目代替。发送前持久预留，响应先核算再校验整批工具；超时/未知/中断保留 pending，换 run-id/输出不能清零或重试 C。
+
+B 用真实模型、受控 HTTP 和本地依赖工具往返检验模型发起调用/历史/usage，至少两次有依赖的工具往返后才算技术成功。C 只使用固定 provider task、已有官方 world 镜像和原 entrypoint，claim 先于创建世界；真实 B 成功且 profile/source/SDK/budget 一致才允许一次。controller 只调度；runner 在独立容器，代码/vendor/SDK 分开只读，instruction/tool reference/授权 handbook 最小投影。模型工具只允许投影范围的受限文件读/list（必要 run scratch 写）和完成/等待；不暴露任意 shell/Python、Docker socket、环境变量、凭据、评分 fixtures 或原项目。world 保持内部网络且无模型/judge 凭据，runner 可连接 world MCP 和已固定 provider；所有临时资源按本次 owner 清理。
+
+实际 API/元数据检查及真实 C 均由主代理在代码独立审核后执行，原始内容只留忽略目录；任何缺口如实保留，不能用模拟输出补齐真实成功。使用已有 Python 3.12 Docker/依赖/固定 vendor，必要改动服务于这次真实试跑；不扩展 Agent 业务策略、其他题或官方 judge。
+
+## H 官方启动与独立安装交接（2026-10-27）
 
 按 [H 契约](specs/benchmark-readiness/spec.md#requirement-official-launch-contract-through-the-guarded-offline-runner) 与 H 任务。实现代理独占 scripts、tests、必要 JSON，主代理独占 Markdown/Git；固定 vendor 与既有锁不改。外部 instruction 文件、MCP URL 和外部日志目录实际传入已有官方 run_agent，模型 transport、MCP 与本地工具仍是合成边界。不得由参数创建真实客户端、调用官方世界或 verifier；live 最先拒绝。输入有界读取，拒绝无效编码/类型/路径；URL 不含凭据、query 或 fragment，明确记录它未被联网访问。日志独占且不覆盖包、输入或账目，失败仍保留已有产物；无日志不得误报成功。
 

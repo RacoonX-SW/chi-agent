@@ -251,6 +251,45 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 输出根须与包路径双向无重叠；日志目标必须新建并与包、输入和账目隔离。同 evaluation 可继续另一合法 task/attempt，换 run-id 不能重演占用的 attempt。默认合成场景每 trial 估算超过 5 元，不会触发开发限额。包验证/完整演练退出 0，受控演练失败退出 1，输入或身份拒绝/live 退出 2；缺 SDK/vendor 时 `plan` 报告缺口仍退出 0，`preflight` 退出 1，完整依赖核对后 preflight 才退出 0。认证和执行许可始终分别报告；实际官方服务/模型/C/判分与 F.5 完整正式冻结仍须后续验收。
 
+## 首次真实 B/C 开发联调
+
+`scripts/live_development.py` 是单独的本地真实入口：`plan`/`preflight` 只读，`init-prior` 显式初始化已有审核来源的首次真实账目，`b-smoke` 做真实模型工具往返，`c-once` 仅在 B 成功且预算足够后尝试一次固定官方题。先核对 [当前授权与实际结果](reviews/REVIEW_STATE.md)；本轮允许 B/C 合计最多 5 CNY，官方判分暂停。既有评测包入口仍固定 record_only/null cap，旧 live 拒绝不变。
+
+从 `chi-agent/` 目录运行。复用已有 dev/controller/world 镜像、固定 vendor 和 H 的 SDK 卷；`.env` 只配置 `DEEPSEEK_API_KEY`，不提交 GitHub。下面的 controller 能访问 Docker socket 与本地凭据；实际模型在独立 runner 容器，不向模型暴露 controller 文件、socket、凭据、vendor 源码或评分 fixtures。不要把这些命令当成干运行：`b-smoke`/`c-once` 会发送真实请求。
+
+```sh
+# 在当前 shell 定义一次；HOST_PROJECT_ROOT 必须是 Docker 引擎看到的真实项目路径
+chi_live_control() {
+  docker run --rm --read-only --tmpfs /tmp \
+    -e PYTHONDONTWRITEBYTECODE=1 \
+    -e A_PROJECT_ROOT=/workspace -e HOST_PROJECT_ROOT="$PWD" \
+    -e DOCKER_HOST=unix:///var/run/docker.sock \
+    -e PYTHONPATH=/model-deps:/workspace/vendor/chi-bench/src \
+    -e CHI_MODEL_DEPS_VOLUME=chi-h-root-model-deps-20261027-v1 \
+    -v "$PWD:/workspace:ro" -v "$PWD/runs:/workspace/runs:rw" \
+    -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+    -v "${DOCKER_HOST_SOCKET:-/Users/asaki/.docker/run/docker.sock}:/var/run/docker.sock" \
+    -w /workspace chi-agent-a-control:latest /opt/a-venv/bin/python \
+    scripts/live_development.py "$@"
+}
+
+# 只读，不读取密钥、不调用模型、不创建世界/账目
+chi_live_control plan
+chi_live_control preflight
+
+# 仅在实际核对此前没有本项目真实 B/C 花费时初始化一次；已有记录拒绝覆盖
+chi_live_control init-prior
+
+# 真实执行：每次用独立 run-id；不自动重试失败或未知用量
+chi_live_control b-smoke --run-id real-b-example-001
+# 只有真实 B 成功且账目/身份/剩余预算符合要求后才允许下一条
+chi_live_control c-once --run-id real-c-example-001
+```
+
+本地真实账目固定在 `runs/real-b-c/`，不因 run-id 或日志目录改变而重新获得 5 元；不要删除/复制状态来重跑。C 在创建世界前占用一次 claim，启动失败也保留。源码/profile/SDK 变化会使旧账目和 B 回执不匹配，此时停止，另行审查累计费用与身份接续，不能删除旧证据重新初始化。已知用量按 provider 回报记录，金额按 profile 高峰价估算，不能当成账单；未知用量/pending 不清零。详细证据位置、错误代码和实际通过范围见 [本轮审核](reviews/real-b-c-ungraded-review.md)。
+
+runner 保留任务结果、轨迹、stdout/stderr、逐请求账目与工具 dispatch 记录；官方 reward 始终为 null。只有官方 MCP 业务工具和受限资源文件工具提供给模型，任务由模型自主执行，人工不在试跑中代选动作或修改结果。程序退出、模型声称完成与官方判分分别判断；正式冻结、评分和其他架构另行验收。
+
 ## 资料来源
 
 核对日期：2026-10-19。

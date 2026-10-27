@@ -512,6 +512,43 @@ The evaluation entry SHALL accept the pinned runner's instruction-file, MCP URL 
 - **AND** record_only/null cap and local shared 5 CNY behavior are preserved
 - **AND** this evidence is reported as offline installation/startup reproduction, leaving F.5, real API/C and official grading unverified
 
+### Requirement: Bounded real development model and official task runs
+
+The system SHALL provide a separate local real-development entry for explicitly authorized real B and one conditional ungraded C, sharing one persistent 5 CNY campaign. Existing evaluation-package defaults and paused legacy live entries SHALL remain unchanged. Real model execution SHALL follow fixed-candidate independent offline acceptance; official grading SHALL remain disabled.
+
+#### Scenario: Real provider smoke with dependent tool exchanges
+
+- **GIVEN** explicit user authorization, a trusted fixed source/SDK/profile, valid credentials and a known real prior with provenance
+- **WHEN** the local B smoke runs against the documented provider endpoint
+- **THEN** the real model chooses tools and receives at least two dependent tool results before a nonempty final response can establish B success
+- **AND** the actual serialized history, call IDs, reasoning fields, provider usage and estimated CNY costs are retained with provenance; estimates are not presented as billed costs
+- **AND** a missing credential, unsupported metadata/model, malformed batch, timeout or unknown usage stops the run without silently retrying or creating a C world
+
+#### Scenario: Persistent shared budget and one C attempt
+
+- **GIVEN** the fixed first B/C campaign and explicitly initialized prior evidence
+- **WHEN** any B/C model request is about to be sent
+- **THEN** a conservative next-request reservation is durably recorded before transport, and returned usage is accounted before tools execute
+- **AND** B and C share cumulative spend; pending/unknown state survives restart, and run-id/log-output changes cannot create a fresh budget or erase a C claim
+- **AND** a changed source/SDK/profile, inconsistent state or insufficient known budget blocks rather than reinitializes execution
+
+#### Scenario: Autonomous fresh-world ungraded C
+
+- **GIVEN** a successful real B under matching source/profile/SDK and sufficient known remaining budget
+- **WHEN** C is requested for the fixed selected provider task
+- **THEN** a single durable claim is acquired before creating a new official world, and its runner starts at most once
+- **AND** the model autonomously uses official MCP tools through the pinned official loop with finite turns/output and zero automatic model, HTTP, tool or outer retries
+- **AND** actual task instruction and authorized resources are supplied without verifier-only content; official reward remains null and no judge is called
+- **AND** runner artifacts, primary errors, pending accounting and separate cleanup errors survive success, partial creation, timeout or failure
+
+#### Scenario: Agent-visible resources remain isolated
+
+- **GIVEN** controller access to Docker and runner access to provider credentials
+- **WHEN** model tools obtain file or business data
+- **THEN** the runner is isolated from the controller socket and original project, and its local tools are confined to explicitly projected instruction/tool-reference/handbook and run scratch resources
+- **AND** arbitrary shell/Python, environment files, credentials, code/vendor internals and hidden scoring fixtures are not model-visible
+- **AND** only owned world/runner/network resources are cleaned up, without adding credentials or external access to the official world
+
 ### Requirement: Preserve official outcomes
 
 The system SHALL preserve official verifier outcomes and distinguish process failures from scored task failures.

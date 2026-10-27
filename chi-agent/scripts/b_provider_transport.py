@@ -683,7 +683,9 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                  lower: httpx.AsyncBaseTransport, ledger: Any, cap_cny: Decimal | None,
                  validate_response: Callable[[dict[str, Any]], None],
                  allowed_tool_names: set[str] | frozenset[str],
-                 observe_request: Callable[[dict[str, Any]], None] | None = None):
+                 observe_request: Callable[[dict[str, Any]], None] | None = None,
+                 max_rounds: int | None = None,
+                 allow_text_blocks_in_tool_history: bool = False):
         if not is_validated_profile(profile):
             raise GuardFailure("profile_untrusted_or_stale", "preflight")
         journal._require_active_lock()
@@ -697,8 +699,16 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         self.ledger = ledger
         self.cap_cny = cap_cny
         self.validate_response = validate_response
-        self.allowed_tool_names = frozenset(allowed_tool_names)
+        # Preserve an explicitly supplied mutable set so live MCP discovery can
+        # add validated names before the first model response is checked.
+        self.allowed_tool_names = allowed_tool_names if isinstance(allowed_tool_names, set) else frozenset(allowed_tool_names)
         self.observe_request = observe_request
+        if max_rounds is not None and (type(max_rounds) is not int or not 1 <= max_rounds <= profile.max_rounds):
+            raise GuardFailure("round_limit_invalid", "preflight")
+        self.max_rounds = max_rounds if max_rounds is not None else profile.max_rounds
+        if type(allow_text_blocks_in_tool_history) is not bool:
+            raise GuardFailure("history_policy_invalid", "preflight")
+        self.allow_text_blocks_in_tool_history = allow_text_blocks_in_tool_history
 
     def _validate_request(self, request: httpx.Request, raw: bytes) -> dict[str, Any]:
         if self.ledger.error_code is not None:
@@ -737,7 +747,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             raise GuardFailure("generation_limit_ambiguous", "request_guard")
         if ("modalities" in body and body["modalities"] != ["text"]) or "audio" in body:
             raise GuardFailure("generation_shape_unsupported", "request_guard")
-        if not isinstance(body.get("messages"), list) or self.ledger.rounds >= self.profile.max_rounds:
+        if not isinstance(body.get("messages"), list) or self.ledger.rounds >= self.max_rounds:
             raise GuardFailure("round_or_history_invalid", "request_guard")
         tools = body.get("tools", [])
         if not isinstance(tools, list):
@@ -769,8 +779,17 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                 raise GuardFailure("history_invalid", "request_guard")
             role = message["role"]
             content = message.get("content")
-            if role in {"system", "user", "tool"} and not isinstance(content, str):
+            if role in {"system", "user"} and not isinstance(content, str):
                 raise GuardFailure("history_invalid", "request_guard")
+            if role == "tool" and not isinstance(content, str):
+                text_blocks = (
+                    isinstance(content, list) and bool(content)
+                    and all(type(part) is dict and set(part) == {"type", "text"}
+                            and part.get("type") == "text" and isinstance(part.get("text"), str)
+                            for part in content)
+                )
+                if not self.allow_text_blocks_in_tool_history or not text_blocks:
+                    raise GuardFailure("history_invalid", "request_guard")
             if role == "assistant" and content is not None and not isinstance(content, str):
                 raise GuardFailure("history_invalid", "request_guard")
             if role == "assistant":
