@@ -1,7 +1,6 @@
 import contextlib
+import hashlib
 import json
-import shutil
-from pathlib import Path
 
 import pytest
 
@@ -10,18 +9,45 @@ import live_development as live
 import provider_task_resources as resources
 
 
-def test_frozen_resource_verification_and_tampering(tmp_path):
-    source = live.ROOT / "data/provider-baseline" / resources.REVISION
-    target = tmp_path / "data/provider-baseline" / resources.REVISION
+def test_frozen_resource_verification_and_tampering(tmp_path, monkeypatch):
+    revision, world_id = "synthetic-revision", "synthetic-world"
+    world_sha = "a" * 64
+    task_ids = ("synthetic-provider-one", "synthetic-provider-two")
+    monkeypatch.setattr(resources, "REVISION", revision)
+    monkeypatch.setattr(resources, "WORLD_ID", world_id)
+    monkeypatch.setattr(resources, "WORLD_SHA256", world_sha)
+    task_files = {}
+    manifest_files = {}
+    target = tmp_path / "data/provider-baseline" / revision
     target.mkdir(parents=True)
-    shutil.copyfile(source / "resource-manifest.json", target / "resource-manifest.json")
-    for task_id in resources.TASK_FILES:
-        relative = Path("prior_auth_provider/tasks") / task_id
-        (target / relative).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(source / relative, target / relative)
+    for task_id in task_ids:
+        contents = {
+            "instruction.md": b"Synthetic instruction\n",
+            "tool_reference.md": b"Synthetic reference\n",
+            "task.toml": b'task = "synthetic"\n',
+            "fixtures/manifest.json": json.dumps({"task_id": task_id, "world_id": world_id,
+                                                   "task_actor": "provider", "payer_mode": "agent"}).encode(),
+            "fixtures/expectations.json": json.dumps({"verifier_contract": "contract_v5",
+                                                       "task_actor": "provider"}).encode(),
+        }
+        task_files[task_id] = {}
+        for name, payload in contents.items():
+            relative = f"prior_auth_provider/tasks/{task_id}/{name}"
+            path = target / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+            digest = hashlib.sha256(payload).hexdigest()
+            task_files[task_id][name] = (len(payload), digest)
+            manifest_files[relative] = {"size": len(payload), "sha256": digest}
+    monkeypatch.setattr(resources, "TASK_FILES", task_files)
+    (target / "resource-manifest.json").write_text(json.dumps({
+        "schema": "chi-provider-baseline-resources-v1", "dataset": "actava/chi-bench",
+        "revision": revision, "tasks": list(task_ids), "files": manifest_files,
+    }))
+    for task_id in task_ids:
         path, identity = resources.verify(tmp_path, task_id)
         assert identity["task_id"] == task_id
-        assert identity["world_sha256"] == resources.WORLD_SHA256
+        assert identity["world_sha256"] == world_sha
         (path / "instruction.md").write_text("tampered")
         with pytest.raises(ValueError):
             resources.verify(tmp_path, task_id)
