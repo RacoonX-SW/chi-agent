@@ -2,12 +2,14 @@
 import fcntl
 import json
 import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import httpx
 import pytest
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import development_review as dr
 import live_development as live
 
@@ -265,9 +267,10 @@ def test_read_fifo_rejected_without_blocking(tmp_path):
     import sys
     fifo = tmp_path / "fifo"
     os.mkfifo(fifo)
-    proc = subprocess.run([sys.executable, "-c", "import development_review as d,sys; "
-                           "\ntry: d._read(d.Path(sys.argv[1]),100)\nexcept d.ReviewError: sys.exit(0)\nsys.exit(1)",
-                           str(fifo)], timeout=3, capture_output=True)
+    proc = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+                           "import development_review as d; "
+                           "\ntry: d._read(d.Path(sys.argv[2]),100)\nexcept d.ReviewError: sys.exit(0)\nsys.exit(1)",
+                           str(Path(dr.__file__).parent), str(fifo)], timeout=3, capture_output=True)
     assert proc.returncode == 0
 
 
