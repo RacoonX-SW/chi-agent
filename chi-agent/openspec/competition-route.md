@@ -1,6 +1,6 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。本地执行后进入 `bootstrap-baseline` 的 L：保留权威终态，复用固定官方检查与 rubric，用 DeepSeek 做开发评审；模型替换的结果与官方 Claude 分数分开。旧尝试/账目保留，正式入口 record_only/null cap 与 F.5 最终冻结边界延续。实现分工按 [当前工作流](../docs/subagent-workflow.md)，不操作 Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。单题本地执行与 L 评审闭环后，按 [两个新任务的固定条件基线](changes/provider-two-task-baseline/proposal.md) 检查同一 Agent 的新任务表现；复用现有循环和评审，模型替换的结果与官方 Claude 分数分开。旧尝试/账目保留，正式入口 record_only/null cap 与 F.5 最终冻结边界延续。实现分工按 [当前工作流](../docs/subagent-workflow.md)，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 
@@ -33,6 +33,8 @@
 可参考 [执行循环设计讨论](../docs/agent-loop-discussion-2026-10-21.md) 中的模型/程序分工、运行状态和结束检查候选。这些是待验证的设计方向，不提前当作已实现能力，也不扩大首个 bootstrap 接入变更的实现范围。
 
 改进应可用于同类新任务，不硬编码任务 ID 对应的答案、终态、表单值或文档产物。对照运行固定任务、模型和可比预算；更换模型时单独记录变量。
+
+M 的两个新任务固定条件基线揭示了目标案件局部检查以外的错患者副作用。下一候选变更为公开证据驱动的患者身份绑定与跨患者写入门禁，具体证据和验证方案见 [M 报告](../reviews/provider-two-task-baseline-review.md)；当前仅提出，不在本轮改策略或追加回归，不能把局部 verdict 当完整任务成功。
 
 ## 阶段 3：跨领域、小批量与必要并发
 
