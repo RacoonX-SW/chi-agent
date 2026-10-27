@@ -36,6 +36,7 @@ B_SUCCESS_SCHEMA = "chi-real-b-smoke-success-v1"
 _MOCK_ORCHESTRATION_TEST = object()
 CLAIM_FILE = "c-once-claim.json"
 REAL_ROOT_RELATIVE = Path("runs/real-b-c")
+WORKSPACE_CONTAINER_ROOT = Path("/logs/artifacts/workspaces")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$")
 SAFE_ERROR_RE = re.compile(r"^[a-z0-9_]{1,64}$")
 
@@ -44,6 +45,28 @@ class LiveFailure(RuntimeError):
     def __init__(self, code: str):
         super().__init__(code)
         self.code = code
+
+
+def _workspace_path(workspace_root: Path, value: Any, *, allow_directory: bool = False) -> Path | None:
+    """Return only case/provider/shared paths beneath the task workspace root."""
+    if type(value) is not str or ".." in Path(value).parts:
+        return None
+    candidate = Path(value)
+    try:
+        relative = candidate.relative_to(workspace_root)
+    except ValueError:
+        return None
+    parts = relative.parts
+    if len(parts) < (2 if allow_directory else 3) or not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", parts[0]):
+        return None
+    if parts[1] not in {"provider", "shared"}:
+        return None
+    cursor = workspace_root
+    for part in parts:
+        cursor = cursor / part
+        if cursor.is_symlink():
+            return None
+    return candidate
 
 
 def _json(value: Any) -> str:
@@ -852,7 +875,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             world = client.containers.create(
                 image=world_image.id, name=f"chi-agent-a-world-{world_id}", command=["sleep", "infinity"],
                 environment=_task_environment(), labels=_resource_labels(world_id),
-                volumes={_daemon_path(ROOT, workspace_mount): {"bind": "/logs/artifacts/workspaces", "mode": "rw"}},
+                volumes={_daemon_path(ROOT, a_run_dir): {"bind": "/logs/artifacts", "mode": "rw"}},
                 network=task_net_name, detach=True, stdin_open=False, tty=False,
             )
             world_create_started = False
@@ -892,7 +915,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             volumes[_daemon_path(ROOT, projection / "workspace" / "skills" / "managed-care-operations-handbook")] = {
                 "bind": "/workspace/skills/managed-care-operations-handbook", "mode": "ro"}
             if kind == "c-once":
-                volumes[_daemon_path(ROOT, workspace_mount)] = {"bind": "/logs/artifacts/workspaces", "mode": "rw"}
+                volumes[_daemon_path(ROOT, a_run_dir)] = {"bind": "/logs/artifacts", "mode": "rw"}
         runner_create_started = True
         runner = client.containers.create(
             image=runner_image.id, name=runner_name,
@@ -1090,7 +1113,7 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         answer = f"transform-result:{args['value'].strip()}"
         return answer
 
-    workspace_root = Path("/logs/artifacts/workspaces")
+    workspace_root = WORKSPACE_CONTAINER_ROOT
     allowed_projection = {
         str(projection_root / "instruction.md"), str(projection_root / "tool_reference.md"),
         str(projection_root / "healthverse-task-assets" / "tool_reference.md"),
@@ -1100,24 +1123,7 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
     }
 
     def workspace_path(value: Any, *, allow_directory: bool = False) -> Path | None:
-        if type(value) is not str or ".." in Path(value).parts:
-            return None
-        candidate = Path(value)
-        try:
-            relative = candidate.relative_to(workspace_root)
-        except ValueError:
-            return None
-        parts = relative.parts
-        if len(parts) < (2 if allow_directory else 3) or not re.fullmatch(r"[A-Za-z0-9_-]{1,96}", parts[0]):
-            return None
-        if parts[1] not in {"provider", "shared"}:
-            return None
-        cursor = workspace_root
-        for part in parts:
-            cursor = cursor / part
-            if cursor.is_symlink():
-                return None
-        return candidate
+        return _workspace_path(workspace_root, value, allow_directory=allow_directory)
 
     async def read_file(_ctx: Any, payload: str) -> str:
         args = json.loads(payload)

@@ -421,7 +421,12 @@ class LiveDevelopmentTests(unittest.TestCase):
                 world_c = fake_docker.containers.created[-2]
                 self.assertTrue(runner_c.options["read_only"])
                 self.assertNotIn("DEEPSEEK_API_KEY", world_c.environment)
-                self.assertIn("/logs/artifacts/workspaces", runner_c.volumes.values().__str__())
+                world_artifacts = next(Path(source) for source, options in world_c.volumes.items()
+                                       if options.get("bind") == "/logs/artifacts")
+                runner_artifacts = next(Path(source) for source, options in runner_c.volumes.items()
+                                        if options.get("bind") == "/logs/artifacts")
+                self.assertEqual(world_artifacts, runner_artifacts)
+                self.assertTrue((world_artifacts / "workspaces").is_dir())
                 claim = json.loads((test_root / live.CLAIM_FILE).read_text())
                 self.assertFalse(claim["replay_allowed"])
                 self.assertEqual(claim["terminal_status"], "completed_ungraded")
@@ -524,6 +529,36 @@ class LiveDevelopmentTests(unittest.TestCase):
         with self.assertRaises(live.LiveFailure) as blocked:
             live._validate_worker_mounts(args)
         self.assertEqual(blocked.exception.code, "worker_scope_arguments_invalid")
+
+    def test_official_workspace_reset_removes_child_not_bind_mount_and_scope_stays_narrow(self):
+        from chi_bench.core.context import ServiceContext
+
+        with tempfile.TemporaryDirectory() as temp:
+            artifacts = Path(temp) / "artifacts"
+            workspace = artifacts / "workspaces"
+            old_case = workspace / "case-17" / "provider"
+            old_case.mkdir(parents=True)
+            (old_case / "old.txt").write_text("old")
+            controller_file = artifacts / "controller.log"
+            controller_file.write_text("outside workspace subtree")
+
+            official_context = object.__new__(ServiceContext)
+            official_context.workspace_root = workspace
+            official_context._reset_workspace_root()
+
+            self.assertTrue(artifacts.is_dir())
+            self.assertTrue(workspace.is_dir())
+            self.assertFalse((workspace / "case-17").exists())
+            self.assertTrue(controller_file.is_file())
+
+            self.assertEqual(live._workspace_path(workspace, str(workspace / "case-17/provider"),
+                                                  allow_directory=True),
+                             workspace / "case-17/provider")
+            self.assertEqual(live._workspace_path(workspace, str(workspace / "case-17/shared/file.txt")),
+                             workspace / "case-17/shared/file.txt")
+            for denied in (str(artifacts / "controller.log"), str(workspace / "case-17/payer/secret.txt"),
+                           str(workspace / "../controller.log")):
+                self.assertIsNone(live._workspace_path(workspace, denied))
 
     def test_b_receipt_is_revoked_when_controller_cleanup_fails(self):
         evidence_root = live.ROOT / "runs" / "real-b-c" / "impl"
