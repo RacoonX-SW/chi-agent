@@ -15,7 +15,7 @@
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | 固定新题资源/统一实验条件，合成边界与独立生命周期通过；新 B、两题各一次 C/确定性部分检查/DeepSeek 评审完成，未为全通过重跑。完整世界检查发现局部目标 rubric 外的错患者副作用，详见 M 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #16](https://github.com/xsw932187210-cell/chi-agent/pull/16) 已合并；M 待推送并创建新的 base=main PR 交用户审核。下一通用改进建议为公开证据驱动的患者身份绑定门禁，尚未实现或追加运行 |
+| PR 与下一步 | [PR #17](https://github.com/xsw932187210-cell/chi-agent/pull/17) 已创建、base=main，交用户审核合并；PR #16 已核对合并。下一通用改进建议为公开证据驱动的患者身份绑定门禁，尚未实现或追加运行 |
 | 未验证项 | 最终付款方批准、独立临床/规则裁决与官方得分、Claude 认证、真实 tokenizer/账单、所选之外任务/架构、患者身份改进、OpenSpec CLI、真实网络/daemon 故障与硬取消仍未补验；DeepSeek 局部评审不替代这些证据 |
 | 真实运行 | M 每题新世界/独立 attempt，完整终态和失败均保留；精确资源清理与累计对账通过。official reward=null，正式入口仍 record_only/null cap；详细结果只见 [M 审核](provider-two-task-baseline-review.md) |
 
