@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 import re
 import sys
 import tempfile
+import tarfile
 import time
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -1069,6 +1071,80 @@ def _projection_run_dir(run_id: str) -> Path:
     return ROOT / REAL_ROOT_RELATIVE / run_id
 
 
+def _capture_review_input(world: Any, capture_root: Path, run_id: str,
+                          execution_identity: dict[str, Any]) -> dict[str, Any]:
+    """Capture only the stopped runner's owned world, never participant outputs."""
+    limit = 16 * 1024 * 1024
+    try:
+        program = (
+            "import sys,urllib.request; "
+            "r=urllib.request.urlopen('http://127.0.0.1:8023/export',timeout=20); "
+            "b=r.read(16777217); "
+            "sys.exit(2) if len(b)>16777216 else sys.stdout.buffer.write(b)"
+        )
+        code, exported = world.exec_run(["python", "-c", program], demux=False)
+        if code != 0 or not isinstance(exported, bytes) or len(exported) > limit:
+            raise ValueError
+        def parse(raw: bytes) -> dict[str, Any]:
+            value = json.loads(raw, object_pairs_hook=_no_duplicate_keys,
+                               parse_constant=lambda _value: (_ for _ in ()).throw(ValueError()))
+            if type(value) is not dict:
+                raise ValueError
+            return value
+
+        def archive_file(path: str, name: str, maximum: int) -> bytes:
+            archive, _ = world.get_archive(path)
+            chunks = bytearray()
+            for chunk in archive:
+                chunks.extend(chunk)
+                if len(chunks) > maximum + 1024 * 1024:
+                    raise ValueError
+            with tarfile.open(fileobj=io.BytesIO(chunks), mode="r:*") as tar:
+                members = tar.getmembers()
+                if len(members) != 1 or members[0].name != name or not members[0].isfile() or members[0].size > maximum:
+                    raise ValueError
+                handle = tar.extractfile(members[0])
+                if handle is None:
+                    raise ValueError
+                payload = handle.read(maximum + 1)
+            if len(payload) > maximum:
+                raise ValueError
+            parse(payload)
+            return payload
+
+        export_data = parse(exported)
+        shared_world_id = export_data.get("world_id")
+        if type(shared_world_id) is not str or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,95}", shared_world_id) is None:
+            raise ValueError
+        expectations = archive_file(f"/opt/chi-bench/tasks/{TASK_ID}/fixtures/expectations.json", "expectations.json", limit)
+        world_filename = f"{shared_world_id}.json"
+        shared_world = archive_file(f"/opt/chi-bench/worlds/{world_filename}", world_filename, 64 * 1024 * 1024)
+        capture_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if capture_root.is_symlink():
+            raise ValueError
+        target = capture_root / run_id
+        target.mkdir(mode=0o700, exist_ok=False)
+        for name, payload in (("exported_state.json", exported), ("expectations.json", expectations),
+                              ("shared_world.json", shared_world)):
+            fd = os.open(target / name, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+        manifest = {"schema": "chi-development-review-capture-v1", "status": "ready",
+                    "run_id": run_id, "task_id": TASK_ID, "world_id": world.id,
+                    "shared_world_id": shared_world_id,
+                    "execution_identity": execution_identity,
+                    "export_sha256": hashlib.sha256(exported).hexdigest(),
+                    "expectations_sha256": hashlib.sha256(expectations).hexdigest(),
+                    "shared_world_sha256": hashlib.sha256(shared_world).hexdigest(),
+                    "official_reward": None}
+        _atomic_json(target / "manifest.json", manifest, exclusive=True)
+        return {"status": "ready", "manifest_sha256": hashlib.sha256((target / "manifest.json").read_bytes()).hexdigest()}
+    except Exception:
+        return {"status": "unavailable", "safe_error_code": "review_input_capture_failed"}
+
+
 def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: Any = None,
                  k: bool = False, _credential: str | None = None,
                  _before_resources: Any = None) -> dict[str, Any]:
@@ -1317,6 +1393,9 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                             "smoke_completed" if kind == "b-smoke" and exit_code == 0 else "runner_failed"
         if exit_code != 0:
             result["primary_error_code"] = "runner_nonzero_exit"
+        elif k and kind == "c-once":
+            result["review_input"] = _capture_review_input(
+                world, ROOT / "runs" / "development-review-inputs", run_id, execution_identity)
     except Exception as exc:
         result["exception_type"] = type(exc).__name__
         if isinstance(exc, OSError):

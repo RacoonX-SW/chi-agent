@@ -167,6 +167,16 @@ backend 仅表示创建新世界、运行一次和清理边界。返回的资源
 
 真实单任务验收检查：固定配置可重放、官方输出真实存在、manifest 与文件相符。reward 为 0 也可以完成“基线运行”验收，但必须报告失败和原始分母；不能改成成功。
 
+## DeepSeek 开发评审（L）
+
+原版 WorkspaceJudge 接受带 run_session 的 runner，PA adapter 与提示可复用，但仅改 CHI_BENCH_JUDGE_MODEL 不会切换 provider。L 通过独立 DeepSeek runner 实现同一 rubric 的开发评审，不修改 vendor、不调用 Claude、不输出冒充官方的 reward/scorecard；结果包含 origin、模型/提示/输入/源码身份、确定性部分检查、每项本地 verdict 与不可判定项，official_reward=null。模型替换的结果不与论文或主办方分数混报。
+
+上次 C 保留了 workspace 与 trace，未在移除 world 前导出完整业务状态。不能从最终聊天或零散工具结果拼成权威 export。L 在模型完成、runner 停止后通过所属 world 的 localhost:8023/export 只读捕获，写到 controller 独有的 evidence 目录；runner 和其工具不挂载此目录。导出成功/失败均记录，不影响本轮资源精确清理，失败不给可评审身份。只支持当前 PA provider contract，其他契约显式拒绝，不宣称全任务覆盖。
+
+评审独立于 participant。首版把官方 adapter 生成的完整 workspace 按相对路径内联为 JSON 数据，通过一次结构化模型请求评审；不提供 tools、shell、MCP、socket、整仓库或环境读取能力。提示增加明确的内联传输/返回 JSON 说明并记录版本；保留原 rubric 与判定规则，不称完全未改的官方协议。超出单次输入界限则拒绝，不静默截断材料。隐藏 expectations/评审材料不回流给 participant，原始 world 只供 adapter 构建目标患者证据。严格校验全部 rubric ID、pass 的 bool 类型、引用/结构；缺项/格式错/超时不转成 NA 或通过。请求在发送前持久记录，HTTP 零重试；有可信 usage 先结算再解析 verdict，未知状态保留并阻挡后续调用。有限时长/输入/输出，金额 record_only/null cap。评审账目单列新增费用，保留原 B/C 累计不重置；实际账单与保守估算分开。
+
+先合成外部边界、固定候选并独立验收，再由主代理使用已有 DeepSeek 认证实际运行。本轮补接导出改变运行源码身份，旧 B 不冒充当前 B；如旧 C 无完整 export，按现有 rebind/new B/new C 协议新建尝试并留存旧账目，不重演旧 claim。正式 G/H 交付默认与原版 Claude 判分暂停保持既定边界，F.5 留待正式配送与冻结。
+
 ## Risks and Open Questions
 
 - 手册访问、全量清单哈希和 Kaggle 接受规则已验证；Writeup 未创建，运行模型/API 与实际接入仍待验证。本地 judge 继续暂缓，首轮 5 元预算已确认。

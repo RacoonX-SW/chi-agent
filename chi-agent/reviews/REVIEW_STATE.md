@@ -4,18 +4,18 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | K 已完成：Terra 文档与实现切换、历史费用接续、PDF/SDK 修复及真实 B3/C2 自主运行；业务回读 submitted / payer intake in_progress。失败与累计费用保留；官方判分暂停，F.5 未完成 |
+| 当前任务 | L 开发中：用户明确要求没有 Claude 时改用 DeepSeek，新增保留官方规则的本地开发评审与 C 终态导出；结果与官方分数分开。K 已完成，原版 Claude 判分暂停，F.5 未完成 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 上次独立审核候选 | `2b6058d76232eccaa968c19d761993e93c34e1fb`，K 含 PDF 与 SDK 历史修复的最终离线复验通过，见 [K 审核](c-development-retry-review.md) |
 | 上次通过的实现提交 | `2b6058d76232eccaa968c19d761993e93c34e1fb`，独立离线通过，当前源码真实 B3/C2 完成；限无评分执行及报告所列业务观察，不代表官方任务得分或最终批准 |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | PR #14 已核对合并，从最新 `origin/main` `3cca5f89de205cb8b608d4bded345e426577461f` 建立 `codex/terra-c-development`，写入前干净；现行模型与文档先更新，随后实现/独立审核与真实 C |
+| 当前分支与接手改动 | PR #15 已核对合并，从最新 `origin/main` `b44ce46384c37353c11f90044e696d7daceadbdb` 建立 `codex/deepseek-development-review`，写入前干净；一个 Terra / high 实现，主代理独立审核后实际试用 |
 | 环境目标与实际 | 复用 Python 3.12 dev/controller/world 和 H 的 SDK 卷，基础/模型锁未改；K 新增独立空卷安装的只读 PDF 依赖，实际身份与安装证据见 K 报告。历史包与跨版本范围见 H/环境报告 |
 | 本地开发预算 | 用户已授权多次 C、取消旧 5 元金额停止条件；新本地 record_only/null cap 接续旧实际费用，不清零历史。请求不自动重试，官方判分暂停。旧 capped 策略保留历史范围；正式评测仍独立 record_only/null cap |
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | K R1–R5 独立关闭；真实 B3/C2 完成，逐 run 对账、B 产物哈希及旧 J 指纹均核对。Terra 最后自测额度中断，主代理未换模型，已独立完成固定快照验收；详细证据只见 K 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #15](https://github.com/xsw932187210-cell/chi-agent/pull/15) 已创建、base=main，交用户审核合并；PR #14 已合并。后续业务质量/正式配送与冻结另行处理，官方判分仍暂停 |
+| PR 与下一步 | [PR #15](https://github.com/xsw932187210-cell/chi-agent/pull/15) 已合并；L 先完成权威终态捕获及隔离的 DeepSeek 评审，再固定候选独立验收和实际试用。正式配送/F.5 与原版 Claude 评分另行处理 |
 | 未验证项 | 最终付款方批准、临床/规则正确性与官方得分、判分认证、真实 tokenizer/账单、其他架构、OpenSpec CLI、真实网络/daemon 故障与硬取消仍未补验 |
 | 真实运行 | 当前源码 B3/C2 退出 0，PDF 实际读取成功，提交状态经官方工具回读；所有资源已清理、pending=null，旧失败与 prior 保留，official reward=null。正式评测入口仍 record_only/null cap |
 

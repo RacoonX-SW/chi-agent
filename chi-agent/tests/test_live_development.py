@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 import os
 import sys
+import tarfile
 import tempfile
 import unittest
 from argparse import Namespace
@@ -15,6 +17,54 @@ from unittest.mock import patch
 import httpx
 
 import live_development as live
+
+
+def test_capture_review_input_bounded_and_fail_closed(tmp_path):
+    class World:
+        id = "synthetic-world"
+
+        def exec_run(self, command, demux=False):
+            assert "127.0.0.1:8023/export" in command[-1]
+            return 0, b'{"world_id":"synthetic-world","audit_logs": []}'
+
+        def get_archive(self, path):
+            assert path in (f"/opt/chi-bench/tasks/{live.TASK_ID}/fixtures/expectations.json",
+                            "/opt/chi-bench/worlds/synthetic-world.json")
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w") as tar:
+                data = (b'{"verifier_contract":"contract_v5"}' if path.endswith("expectations.json")
+                        else b'{"patients":[],"documents":[]}')
+                info = tarfile.TarInfo(Path(path).name)
+                info.size = len(data)
+                tar.addfile(info, io.BytesIO(data))
+            return [buf.getvalue()], {}
+
+    result = live._capture_review_input(World(), tmp_path, "synthetic", {"source": "synthetic"})
+    assert result["status"] == "ready"
+    manifest = json.loads((tmp_path / "synthetic" / "manifest.json").read_text())
+    assert manifest["world_id"] == "synthetic-world"
+    assert manifest["shared_world_id"] == "synthetic-world"
+    assert manifest["official_reward"] is None
+    assert live._capture_review_input(World(), tmp_path, "synthetic", {})["status"] == "unavailable"
+
+    class Failed(World):
+        def exec_run(self, command, demux=False):
+            return 1, b"sensitive error"
+
+    result = live._capture_review_input(Failed(), tmp_path / "failed", "synthetic", {})
+    assert result == {"status": "unavailable", "safe_error_code": "review_input_capture_failed"}
+
+    class BadArchive(World):
+        def get_archive(self, path):
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w") as tar:
+                info = tarfile.TarInfo("expectations.json")
+                info.type = tarfile.SYMTYPE
+                info.linkname = "/etc/passwd"
+                tar.addfile(info)
+            return [buf.getvalue()], {}
+
+    assert live._capture_review_input(BadArchive(), tmp_path / "bad", "synthetic", {})["status"] == "unavailable"
 
 # The isolated runner's container sets this explicitly. The fake container
 # executes in-process, so mirror that one import path for the end-to-end mock.
@@ -803,6 +853,7 @@ class ContinuedDevelopmentTests(unittest.TestCase):
                 wires["c-once"] = FakeWire("c-once")
                 result = live._orchestrate("c-once", run_id, root, _test_context=live._MOCK_ORCHESTRATION_TEST, k=True)
                 self.assertEqual(result["status"], "completed_ungraded", result)
+                self.assertEqual(result["review_input"]["status"], "unavailable")
                 self.assertTrue(result["cleanup"]["world_removed"])
                 self.assertTrue(result["cleanup"]["network_removed"])
             self.assertEqual(len(list((root / "claims").iterdir())), 2)
