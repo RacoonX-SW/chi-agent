@@ -301,6 +301,8 @@ class RealDevelopmentJournal:
                 "tool_history": [], "official_reward": None,
                 "real_usage": {"input_tokens": 0, "output_tokens": 0},
                 "estimated_cost_cny": "0",
+                "known_prefix_usage": {"input_tokens": 0, "output_tokens": 0},
+                "known_prefix_estimated_cost_cny": "0",
                 "campaign_usage_snapshot": {"input_tokens": self.state["known_input_tokens"],
                                              "output_tokens": self.state["known_output_tokens"]},
                 "campaign_estimated_cost_cny_snapshot": self.state["known_settled_cost_cny"],
@@ -382,8 +384,13 @@ class RealDevelopmentJournal:
         run_usage = self.run_doc.setdefault("real_usage", {"input_tokens": 0, "output_tokens": 0})
         run_usage["input_tokens"] += incoming
         run_usage["output_tokens"] += outgoing
-        self.run_doc["estimated_cost_cny"] = str(
-            Decimal(self.run_doc.get("estimated_cost_cny", "0")) + actual_cost)
+        known_prefix_usage = self.run_doc.setdefault(
+            "known_prefix_usage", {"input_tokens": 0, "output_tokens": 0})
+        known_prefix_usage["input_tokens"] += incoming
+        known_prefix_usage["output_tokens"] += outgoing
+        known_prefix_cost = Decimal(self.run_doc.get("known_prefix_estimated_cost_cny", "0")) + actual_cost
+        self.run_doc["known_prefix_estimated_cost_cny"] = str(known_prefix_cost)
+        self.run_doc["estimated_cost_cny"] = str(known_prefix_cost)
         self.run_doc["campaign_usage_snapshot"] = {
             "input_tokens": self.state["known_input_tokens"],
             "output_tokens": self.state["known_output_tokens"],
@@ -474,15 +481,25 @@ class RealDevelopmentJournal:
             if primary_error is None:
                 primary_error = "tool_effect_unknown"
             status = "incomplete"
+        usage_complete = self.state.get("usage_complete") is True
+        known_prefix_usage = dict(self.run_doc.get(
+            "known_prefix_usage", self.run_doc.get("real_usage", {"input_tokens": 0, "output_tokens": 0})))
+        known_prefix_cost = str(self.run_doc.get(
+            "known_prefix_estimated_cost_cny", self.run_doc.get("estimated_cost_cny", "0")))
         self.run_doc.update({"state": status, "primary_error_code": primary_error,
                              "cleanup_error_code": cleanup_error, "official_reward": reward,
-                             "real_usage": dict(self.run_doc.get("real_usage", {}))
-                             if self.state.get("usage_complete") else None,
+                             "real_usage": known_prefix_usage if usage_complete else None,
+                             "estimated_cost_cny": known_prefix_cost if usage_complete else None,
+                             "known_prefix_usage": known_prefix_usage,
+                             "known_prefix_estimated_cost_cny": known_prefix_cost,
                              "campaign_usage": {"input_tokens": self.state["known_input_tokens"],
                                                 "output_tokens": self.state["known_output_tokens"]}
-                             if self.state.get("usage_complete") else None,
+                             if usage_complete else None,
                              "campaign_estimated_cost_cny": str(self.state["known_settled_cost_cny"])
-                             if self.state.get("usage_complete") else None,
+                             if usage_complete else None,
+                             "campaign_known_prefix_usage": {"input_tokens": self.state["known_input_tokens"],
+                                                             "output_tokens": self.state["known_output_tokens"]},
+                             "campaign_known_prefix_estimated_cost_cny": str(self.state["known_settled_cost_cny"]),
                              "prior_spend_cny": self.state["prior_spend_cny"],
                              "prior_source": self.state["prior_source"]})
         self._persist()
@@ -934,7 +951,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                 record["primary_error_code"] = result["primary_error_code"]
                 _atomic_json(claim_path, record)
             except Exception:
-                result["primary_error_code"] = "claim_evidence_persist_failed"
+                result["persistence_error_code"] = "claim_evidence_persist_failed"
     finally:
         if world is not None and client is not None and kind == "c-once":
             try:
@@ -1013,12 +1030,13 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                 claim["finished_at"] = result["finished_at"]
                 _atomic_json(claim_path, claim)
             except Exception:
-                result["cleanup_error_code"] = result.get("cleanup_error_code") or "c_claim_finalization_failed"
+                result["persistence_error_code"] = result.get("persistence_error_code") or "c_claim_finalization_failed"
                 if result["status"] == "completed_ungraded":
-                    result["status"] = "cleanup_failed"
+                    result["status"] = "evidence_write_failed"
         try:
             persist_orchestration()
         except Exception:
+            result["persistence_error_code"] = result.get("persistence_error_code") or "orchestration_evidence_write_failed"
             result["status"] = "evidence_write_failed"
     return result
 

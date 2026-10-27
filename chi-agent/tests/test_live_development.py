@@ -249,6 +249,38 @@ class LiveDevelopmentTests(unittest.TestCase):
             self.assertEqual(replay.exception.code, "real_c_attempt_already_claimed")
             self.assertEqual(json.loads(claim.read_text())["run_id"], "first-c-attempt")
 
+    def test_unknown_usage_keeps_known_prefix_and_never_reports_zero_total(self):
+        from decimal import Decimal
+        from b_execution_policy import load_local_policy
+        from b_provider_profile import load_profile
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            profile, policy = load_profile(), load_local_policy()
+            live.initialize_real_accounting(root, prior_source="offline-unknown-prefix-fixture")
+            journal = live.RealDevelopmentJournal(root, "mock-prefix-unknown", profile=profile, policy=policy)
+            request = httpx.Request("POST", profile.endpoint + "/v1/chat/completions", content=b"mock")
+            body = {"model": profile.model}
+            journal.reserve(profile, request, body, b"settled-prefix", 1024, 1)
+            journal.settle(Decimal("0.000038"), 7, 3)
+            journal.reserve(profile, request, body, b"unknown-request", 1024, 2)
+            journal.mark_unknown("transport_timeout")
+            journal.finalize(status="incomplete", primary_error="transport_timeout")
+            journal.finalize(status="incomplete", primary_error="transport_timeout")
+            doc = json.loads(journal.run_path.read_text())
+            self.assertIsNone(doc["real_usage"])
+            self.assertIsNone(doc["estimated_cost_cny"])
+            self.assertEqual(doc["known_prefix_usage"], {"input_tokens": 7, "output_tokens": 3})
+            self.assertEqual(doc["known_prefix_estimated_cost_cny"], "0.000038")
+            self.assertIsNone(doc["campaign_usage"])
+            self.assertIsNone(doc["campaign_estimated_cost_cny"])
+            self.assertEqual(doc["campaign_known_prefix_usage"], {"input_tokens": 7, "output_tokens": 3})
+            self.assertEqual(doc["campaign_known_prefix_estimated_cost_cny"], "0.000038")
+            journal.close()
+            with self.assertRaises(live.LiveFailure) as blocked:
+                live.RealDevelopmentJournal(root, "mock-prefix-restart", profile=profile, policy=policy)
+            self.assertEqual(blocked.exception.code, "real_accounting_pending_unknown")
+
     def test_real_only_text_block_tool_history_is_strict_and_legacy_default_stays_closed(self):
         from types import SimpleNamespace
         from b_provider_profile import load_profile
@@ -449,16 +481,24 @@ class LiveDevelopmentTests(unittest.TestCase):
                  patch("a_environment.cleanup", return_value={"container_removed": True, "network_removed": True}):
                 self.assertEqual(live._orchestrate("b-smoke", "partial-b", test_root,
                                                    _test_context=live._MOCK_ORCHESTRATION_TEST)["status"], "smoke_completed")
-        docker.fail_network_create = True
+        original_atomic = live._atomic_json
+
+        def fail_claim_reconciliation(path, value, **kwargs):
+            if path.name == live.CLAIM_FILE and value.get("state") == "failed_or_uncertain_claim_retained":
+                raise OSError("synthetic claim persistence failure")
+            return original_atomic(path, value, **kwargs)
+
         started = [item.start() for item in tools]
         try:
-            result = live._orchestrate("c-once", "partial-c", test_root,
-                                       _test_context=live._MOCK_ORCHESTRATION_TEST)
+            with patch.object(docker, "create", side_effect=live.LiveFailure("controlled_network_create_error")), \
+                 patch.object(live, "_atomic_json", side_effect=fail_claim_reconciliation):
+                result = live._orchestrate("c-once", "partial-c", test_root,
+                                           _test_context=live._MOCK_ORCHESTRATION_TEST)
             claim = json.loads((test_root / live.CLAIM_FILE).read_text())
             self.assertEqual(result["status"], "failed")
-            self.assertEqual(result["cleanup_error_code"], "partial_resource_ownership_unknown")
+            self.assertEqual(result["primary_error_code"], "controlled_network_create_error")
+            self.assertEqual(result["persistence_error_code"], "claim_evidence_persist_failed")
             self.assertEqual(claim["terminal_status"], "failed")
-            self.assertEqual(claim["state"], "failed_or_uncertain_claim_retained")
         finally:
             for item in reversed(tools):
                 item.stop()
