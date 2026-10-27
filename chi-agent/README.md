@@ -293,12 +293,52 @@ chi_live_control adopt-prior
 chi_live_control rebind-source --reason 'reviewed implementation for continued C development'
 # 每个新源码身份先取得自己的 B 工具闭环证据
 chi_live_control k-b-smoke --run-id k-b-example-001
-chi_live_control c-run --run-id k-c-example-001
+chi_live_control c-run --run-id m-c-example-001 \
+  --task-id pa_t013_t013_o002_p01_new_referral_provider
 # 上次终态和资源清理符合要求后，可在新世界再次自主尝试
-chi_live_control c-run --run-id k-c-example-002
+chi_live_control c-run --run-id m-c-example-002 \
+  --task-id pa_t019_t019_o001_p01_new_referral_provider
 ```
 
 K 状态固定在 `runs/real-c-development/`：`adoption.json` 保存旧来源，source-transitions 保存源码变更，accounting 累计旧费用与新增费用；claims 与各 run 产物分别保留。源码改变后先 rebind，再做当前源码 B；同一 attempt 不重演，不删除状态重新初始化。pending/未知用量、资源清理或持久化不明时先处理证据，金额上限取消不等于抹掉未知。旧 `plan`/`preflight` 及下方命令继续表示 J 的 5 元历史入口，不能拿它们当作 K 的预检。
+
+`c-run` 现在必须显式提供本轮冻结清单内的 `--task-id`，不再隐式采用旧题。资源定义见 `scripts/provider_task_resources.py`，运行前校验固定版本、文件哈希与普通文件/无链接路径。B 绑定当前源码，可以作为两题的共同前置；每个 C 仍创建自己的新世界和 claim，账目保持累计。任务清单和实验边界见 [M 规格](openspec/changes/provider-two-task-baseline/design.md)，实际结果只查 [M 报告](reviews/provider-two-task-baseline-review.md)。
+
+已有有效资源直接复用。首次仅获取冻结两题必要文件时，在 `chi-agent/` 运行以下 Docker 命令；固定旧 world 镜像和已授权 handbook 仍是前置，不需要重建镜像：
+
+```sh
+docker run --rm -i --read-only --tmpfs /tmp \
+  -v "$PWD/scripts:/workspace/scripts:ro" -v "$PWD/data:/workspace/data:rw" \
+  -w /workspace chi-agent-a-control:latest /opt/a-venv/bin/python - <<'PY'
+import hashlib, json, pathlib, sys
+sys.path.insert(0, "/workspace/scripts")
+import provider_task_resources as resources
+from huggingface_hub import hf_hub_download
+root = pathlib.Path("/workspace")
+target = root / "data/provider-baseline" / resources.REVISION
+manifest = target / "resource-manifest.json"
+if manifest.exists():
+    for task in resources.TASK_FILES:
+        resources.verify(root, task)
+    raise SystemExit("Existing resources verified")
+files = {}
+paths = ["task_index.md"] + [f"prior_auth_provider/tasks/{task}/{name}"
+    for task, names in resources.TASK_FILES.items() for name in names]
+for relative in paths:
+    path = pathlib.Path(hf_hub_download("actava/chi-bench", relative,
+        repo_type="dataset", revision=resources.REVISION, local_dir=str(target)))
+    raw = path.read_bytes()
+    files[relative] = {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+manifest.write_text(json.dumps({"schema": "chi-provider-baseline-resources-v1",
+    "dataset": "actava/chi-bench", "revision": resources.REVISION,
+    "tasks": list(resources.TASK_FILES), "files": files}, indent=2) + "\n")
+for task in resources.TASK_FILES:
+    resources.verify(root, task)
+print("Pinned task resources verified")
+PY
+```
+
+只有选定 task 目录只读挂给 world，participant 仍只接收公开输入、工具说明和既有授权材料。不要在真实运行中人工选择业务动作；观察到结果问题后保留本次尝试，再单独制定通用改进。
 
 已允许路径内的 UTF-8 文本和 PDF 可通过 `local-fs-read` 读取；PDF 是文本提取，不提供 OCR。PDF 上限为 8 MiB、100 页、累计提取 100 万字符、单次返回 10 万字符；可用原有 offset/limit 按行分段。损坏、加密或不支持的二进制返回明确工具错误。解析器版本、锁和包源码纳入 K 身份，缺依赖或不一致会停止；这不扩大 handbook/task/case provider/shared 的路径权限。
 
@@ -306,7 +346,7 @@ K 状态固定在 `runs/real-c-development/`：`adoption.json` 保存旧来源�
 
 `scripts/development_review.py` 用固定 PA 规则和完整证据做本地诊断，报告名为 `development-review.json`，official reward 为 null。原版 Claude 评分与正式交付仍按 [审核状态](reviews/REVIEW_STATE.md) 的范围处理。
 
-新的成功 K C 在 runner 退出后保存 `runs/development-review-inputs/<run-id>/`，包含有来源/hash 的业务 export、expectations 和原始 world；目录不挂给 participant。捕获失败仍清理本次资源，并拒绝评审。旧 C 只有 trace/workspace 时不能补造成完整导出。participant 源码变更仍须 rebind 和当前源码 B，见上节；仅调整独立评审器不改变已捕获 C 的 participant 身份。
+新的 K C 在确认 runner 退出后保存 `runs/development-review-inputs/<run-id>/`，包含有来源/hash 的业务 export、expectations 和原始 world；目录不挂给 participant。新题的非零退出也尝试捕获完整终态，wait 异常先停止并确认 runner；无法确认静止时标记 unavailable。捕获失败仍清理本次资源，并拒绝评审。旧 C 只有 trace/workspace 时不能补造成完整导出。participant 源码变更仍须 rebind 和当前源码 B，见上节；仅调整独立评审器不改变已捕获 C 的 participant 身份。
 
 下面函数在 Bash/Zsh 中从 `chi-agent/` 运行。`plan` 不读输入/密钥、不写状态；`deterministic` 禁网，只返回部分程序检查；只有显式 `review` 注入已有 `.env` 并调用一次 DeepSeek，不自动重试。评审容器没有 Docker socket，不挂整个项目或受限手册。
 
@@ -337,14 +377,16 @@ chi_development_review() {
 }
 chi_development_review plan
 chi_development_review deterministic \
-  --input-dir runs/development-review-inputs/k-c-example-003
+  --input-dir runs/development-review-inputs/m-c-example-001
 # 下一条是真实评审：使用实际已完成的 C ID 和一个新 review-id
 chi_development_review review \
-  --input-dir runs/development-review-inputs/k-c-example-003 \
+  --input-dir runs/development-review-inputs/m-c-example-001 \
   --review-id review-example-001
 ```
 
 评审只把官方 adapter 生成的目标患者证据、Agent 产物和 rubric 按文件路径内联，不向模型提供 tools，也不发送整个原始 world。单次请求大小上限 2 MiB；本地审计 journal 可读到 32 MiB，其内容不直接内联给模型。独立评审生成上限为 32,768 tokens、360 秒总截止，单次在途网络读取最多额外约 60 秒；参赛 Agent 的生成参数由其原 profile 管理。超限、缺材料、字段/引用不合法或 verdict 缺项返回 incomplete，不能当作通过；stdout 只输出安全摘要，逐项判断保存在本地报告。
+
+新题评审核对 task/resource、claim、journal、捕获、清理和已结算用量，付费评审持共享 controller 锁。可信失败终态可作开发诊断，输出保留 `attempt_status`，不把失败改成完成；未知用量、缺来源或未清理时拒绝。确定性结果与 DeepSeek verdict 分别保存，均不生成官方分数。
 
 新增费用在 `runs/development-review/accounting.json` 独立累计，保留原 B/C 账目。发送前先持久占用，可信 usage 先结算；未知响应保留 pending 并阻止下一 review-id，不能删除目录清零后重试。估算使用峰值价格，不等于账单；模型替换后的逐项 verdict 不与主办方 Claude 分数混报。
 

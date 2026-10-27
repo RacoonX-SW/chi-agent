@@ -79,6 +79,54 @@ def verdict(passed=True, ref="source_context/chart_slice.json:1"):
             "session_metadata": {"untrusted": "ignored"}}
 
 
+def test_failed_new_task_review_requires_settled_provenance(capture, monkeypatch):
+    import provider_task_resources as resources
+    folder, kwargs, _ = capture
+    c_root = kwargs["c_root"]
+    task = next(iter(resources.TASK_FILES))
+    resource = {"task_id": task, "world_id": "world-test",
+                "world_sha256": dr._hash((folder / "shared_world.json").read_bytes()),
+                "files": {"fixtures/expectations.json": {"sha256": dr._hash((folder / "expectations.json").read_bytes())}}}
+    monkeypatch.setattr(resources, "identity", lambda value: resource if value == task else (_ for _ in ()).throw(ValueError()))
+    monkeypatch.setattr(live, "_validate_accounting_state", lambda *args, **kw: None)
+    monkeypatch.setattr(live, "_validate_k_provenance", lambda *args: None)
+    def read(path): return json.loads(path.read_text())
+    def write(path, obj): path.write_bytes(dr._json_bytes(obj))
+    manifest = read(folder / "manifest.json")
+    manifest.update(task_id=task, task_resource_identity=resource)
+    write(folder / "manifest.json", manifest)
+    orch_path = c_root / "c-test/orchestration.json"
+    orch = read(orch_path)
+    orch.update(status="runner_failed", primary_error_code="runner_nonzero_exit", task_resource_identity=resource)
+    orch["world"]["task_id"] = task
+    orch["runner"] = {"exit_code": 1, "quiescent": True}
+    orch["review_input"]["manifest_sha256"] = dr._hash((folder / "manifest.json").read_bytes())
+    write(orch_path, orch)
+    claim_path = c_root / "claims/c-test.json"
+    claim = read(claim_path)
+    claim.update(task_id=task, task_resource_identity=resource, terminal_status="runner_failed", primary_error_code="runner_nonzero_exit")
+    write(claim_path, claim)
+    run_path = c_root / "runs/c-test.json"
+    run = read(run_path)
+    run.update(task_id=task, task_resource_identity=resource, state="incomplete", real_usage={"input_tokens": 2, "output_tokens": 1},
+               estimated_cost_cny="0.1", requests=[{"status": "settled", "usage_provenance": "provider_response_usage",
+                                                    "input_tokens": 2, "output_tokens": 1, "estimated_cost_cny": "0.1"}])
+    write(run_path, run)
+    accounting = {"schema": live.K_ACCOUNTING_SCHEMA, "execution_identity": kwargs["identity"], "pending": None,
+                  "usage_complete": True, "known_input_tokens": 2, "known_output_tokens": 1, "known_settled_cost_cny": "0.1"}
+    write(c_root / "accounting.json", accounting)
+    write(c_root / "controller-state.json", {"state": "clean"})
+    assert dr._input(folder, **kwargs)[0]["task_id"] == task
+    accounting["pending"] = {"status": "unknown"}
+    write(c_root / "accounting.json", accounting)
+    with pytest.raises(dr.ReviewError): dr._input(folder, **kwargs)
+    accounting["pending"] = None
+    write(c_root / "accounting.json", accounting)
+    run["requests"][0]["status"] = "unknown"
+    write(run_path, run)
+    with pytest.raises(dr.ReviewError): dr._input(folder, **kwargs)
+
+
 def response(verdict_body=None, usage=True):
     result = {"model": "deepseek-flash", "choices": [{"finish_reason": "stop", "message": {
         "content": json.dumps(verdict_body if verdict_body is not None else verdict()), "reasoning_content": "synthetic"}}]}

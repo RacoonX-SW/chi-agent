@@ -115,8 +115,52 @@ def _input(input_dir: Path, *, input_root: Path = INPUT_ROOT, c_root: Path = C_R
     try:
         current = identity if identity is not None else live._execution_identity(k=True)
         world_id = exported.get("world_id")
+        task_id = manifest.get("task_id")
+        new_task = task_id != live.TASK_ID
+        status = orchestration.get("status")
+        if new_task:
+            from provider_task_resources import identity as task_identity
+            resource = task_identity(task_id)
+            accounting, _ = _object(c_root / "accounting.json", 1_000_000)
+            controller, _ = _object(c_root / "controller-state.json", 1_000_000)
+            if (live._validate_accounting_state(accounting, profile=load_profile(), execution_identity=current)
+                    or controller.get("state") != "clean"):
+                raise ValueError
+            live._validate_k_provenance(c_root, accounting)
+            if (manifest.get("task_resource_identity") != resource
+                or orchestration.get("task_resource_identity") != resource
+                or claim.get("task_resource_identity") != resource
+                or run.get("task_id") != task_id or run.get("task_resource_identity") != resource
+                or world_id != resource["world_id"] or _hash(world_raw) != resource["world_sha256"]
+                or _hash(expect_raw) != resource["files"]["fixtures/expectations.json"]["sha256"]
+                or accounting.get("schema") != live.K_ACCOUNTING_SCHEMA
+                or accounting.get("execution_identity") != current
+                or accounting.get("pending") is not None or accounting.get("usage_complete") is not True
+                or orchestration.get("runner", {}).get("quiescent") is not True
+                or type(orchestration.get("runner", {}).get("exit_code")) is not int
+                or type(run.get("requests")) is not list
+                or any(type(item) is not dict or item.get("status") not in {"settled", "settled_over_reserve"} for item in run["requests"])
+                or run.get("real_usage") is None or run.get("estimated_cost_cny") is None
+                or run.get("persistence_error_code") is not None):
+                raise ValueError
+            requests = run["requests"]
+            for entry in requests:
+                if (entry.get("usage_provenance") != "provider_response_usage"
+                    or any(type(entry.get(k)) is not int or entry[k] < 0 for k in ("input_tokens", "output_tokens"))):
+                    raise ValueError
+            cost = sum((Decimal(entry["estimated_cost_cny"]) for entry in requests), Decimal(0))
+            usage = {"input_tokens": sum(entry["input_tokens"] for entry in requests),
+                     "output_tokens": sum(entry["output_tokens"] for entry in requests)}
+            if (not cost.is_finite() or cost < 0 or Decimal(run["estimated_cost_cny"]) != cost
+                or run["real_usage"] != usage or accounting["known_input_tokens"] < usage["input_tokens"]
+                or accounting["known_output_tokens"] < usage["output_tokens"]
+                or Decimal(accounting["known_settled_cost_cny"]) < cost):
+                raise ValueError
+        success = status == "completed_ungraded"
+        if not success and (not new_task or status not in {"failed", "runner_failed"}):
+            raise ValueError
         if (manifest.get("schema") != "chi-development-review-capture-v1" or manifest.get("status") != "ready"
-            or manifest.get("run_id") != run_id or manifest.get("task_id") != live.TASK_ID
+            or manifest.get("run_id") != run_id
             or manifest.get("official_reward") is not None or manifest.get("execution_identity") != current
             or current.get("vendor", {}).get("commit") != "4444a07fa68a4f1623f841a292a54e284fc8e7f7"
             or not isinstance(world_id, str) or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,95}", world_id) is None
@@ -126,22 +170,22 @@ def _input(input_dir: Path, *, input_root: Path = INPUT_ROOT, c_root: Path = C_R
             or manifest.get("expectations_sha256") != _hash(expect_raw)
             or manifest.get("shared_world_sha256") != _hash(world_raw)
             or orchestration.get("run_id") != run_id or orchestration.get("kind") != "c-once"
-            or orchestration.get("status") != "completed_ungraded" or orchestration.get("official_reward") is not None
-            or not orchestration.get("finished_at") or orchestration.get("runner", {}).get("exit_code") != 0
+            or orchestration.get("official_reward") is not None
+            or not orchestration.get("finished_at") or (success and orchestration.get("runner", {}).get("exit_code") != 0)
             or orchestration.get("cleanup_error_code") is not None or orchestration.get("persistence_error_code") is not None
             or orchestration.get("review_input") != {"status": "ready", "manifest_sha256": _hash(manifest_raw)}
             or orchestration.get("world", {}).get("container_id") != manifest.get("world_id")
-            or orchestration.get("world", {}).get("task_id") != live.TASK_ID
+            or orchestration.get("world", {}).get("task_id") != task_id
             or orchestration.get("world", {}).get("image_id") != "sha256:000ca5096533e5dcb4451dd524e2e6492a1250c23e183241f13cba4e338dad50"
             or any(orchestration.get("cleanup", {}).get(k) is not True for k in ("runner_removed", "world_removed", "network_removed"))
             or run.get("schema") != "chi-real-provider-run-v1" or run.get("campaign_id") != live.CAMPAIGN_ID
-            or run.get("state") != "complete" or run.get("run_id") != run_id
-            or run.get("primary_error_code") is not None or run.get("cleanup_error_code") is not None
+            or run.get("state") != ("complete" if success else "incomplete") or run.get("run_id") != run_id
+            or (success and run.get("primary_error_code") is not None) or run.get("cleanup_error_code") is not None
             or claim.get("schema") != live.CLAIM_SCHEMA or claim.get("campaign_id") != live.CAMPAIGN_ID
-            or claim.get("run_id") != run_id or claim.get("task_id") != live.TASK_ID
-            or claim.get("state") != "runner_started_once" or claim.get("terminal_status") != "completed_ungraded"
+            or claim.get("run_id") != run_id or claim.get("task_id") != task_id
+            or claim.get("state") not in ({"runner_started_once"} if success else {"runner_started_once", "failed_or_uncertain_claim_retained"}) or claim.get("terminal_status") != status
             or claim.get("execution_identity") != current or claim.get("official_reward") is not None
-            or claim.get("primary_error_code") is not None or claim.get("cleanup_error_code") is not None
+            or (success and claim.get("primary_error_code") is not None) or claim.get("cleanup_error_code") is not None
             or not claim.get("finished_at")
             or run.get("execution_identity") != current or run.get("official_reward") is not None):
             raise ValueError
@@ -281,7 +325,9 @@ def plan() -> dict:
 
 def deterministic(input_dir: Path, **input_kwargs: Any) -> dict:
     manifest, exported, expectations, _ = _input(input_dir, **input_kwargs)
+    orchestration, _ = _object(input_kwargs.get("c_root", C_ROOT) / manifest["run_id"] / "orchestration.json", 2 * 1024 * 1024)
     return {"schema": "chi-development-review-deterministic-v1", "run_id": manifest["run_id"],
+            "task_id": manifest["task_id"], "attempt_status": orchestration["status"],
             "partial_checks": _checks(exported, expectations), "official_reward": None}
 
 
@@ -372,11 +418,12 @@ def _write_bytes(path: Path, data: bytes) -> None:
     live._fsync_parent(path)
 
 
-def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
+def _review_unlocked(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
            _transport: Any = None, _secret: str | None = None, **input_kwargs: Any) -> dict:
     if not isinstance(review_id, str) or live.ID_RE.fullmatch(review_id) is None:
         raise ReviewError("review_id_invalid")
     manifest, exported, expectations, world = _input(input_dir, **input_kwargs)
+    orchestration, _ = _object(input_kwargs.get("c_root", C_ROOT) / manifest["run_id"] / "orchestration.json", 2 * 1024 * 1024)
     checks = _checks(exported, expectations)
     files, ids, prompt, prompt_version = _build(exported, expectations, world)
     profile = load_profile()
@@ -431,6 +478,7 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
                             "reserve_upper_cost_cny": str(reserve), "reserve_basis": "profile_peak_prices_not_bill"}
         live._atomic_json(review_root / "accounting.json", state)
         result = {"schema": "chi-development-review-v1", "review_id": review_id, "run_id": manifest["run_id"],
+                  "task_id": manifest["task_id"], "attempt_status": orchestration["status"],
                   "status": "incomplete", "safe_error_code": None, "official_reward": None,
                   "origin": "deepseek_local_development_review", "identity": identity,
                   "partial_deterministic_checks": checks, "verdicts": None}
@@ -522,6 +570,29 @@ def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
         return result
     finally:
         os.close(lock_fd)
+
+
+def review(input_dir: Path, review_id: str, *, review_root: Path = REVIEW_ROOT,
+           _transport: Any = None, _secret: str | None = None, **input_kwargs: Any) -> dict:
+    manifest, _ = _object(input_dir / "manifest.json", 1_000_000)
+    if manifest.get("task_id") == live.TASK_ID:
+        return _review_unlocked(input_dir, review_id, review_root=review_root, _transport=_transport,
+                                _secret=_secret, **input_kwargs)
+    c_root = input_kwargs.get("c_root", C_ROOT)
+    try:
+        _reject_symlink_ancestors(c_root, "input_location_invalid")
+        fd = os.open(c_root / ".controller.lock", os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except Exception:
+        raise ReviewError("input_provenance_invalid") from None
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError:
+            raise ReviewError("controller_busy") from None
+        return _review_unlocked(input_dir, review_id, review_root=review_root, _transport=_transport,
+                                _secret=_secret, **input_kwargs)
+    finally:
+        os.close(fd)
 
 
 def main() -> int:

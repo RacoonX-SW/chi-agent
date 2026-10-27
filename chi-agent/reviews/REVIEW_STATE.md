@@ -1,23 +1,23 @@
 # 审核接续状态
 
-更新：2026-10-27。只保存接续所需状态；实现通过范围以对应报告为准，存储提交不能代替验收。
+更新：2026-10-28。只保存接续所需状态；实现通过范围以对应报告为准，存储提交不能代替验收。
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | L 已完成：新 B/C、隔离权威终态和 DeepSeek 本地开发评审实际闭环通过，失败费用与旧历史保留。结果与官方分数分开；原版 Claude 判分暂停，F.5 未完成 |
+| 当前任务 | M 固定条件基线完成：t013 正常结束；t019 达轮数上限且先向非目标患者提交，保留失败。两题局部检查/DeepSeek verdict 不表示完整任务全成功；Claude 暂停、F.5 未完成 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
-| 上次独立审核候选 | `c275bd5a5688d7736c70ea929cbb2286746d256e`，独立回归、故障/预算检查与真实 DeepSeek 评审通过，见 [L 审核](deepseek-development-review.md) |
-| 上次通过的实现提交 | `c275bd5a5688d7736c70ea929cbb2286746d256e`，独立评审器实际完成；participant 身份与新 B/C 的 `cea979f` 相同，后续仅修评审器和测试，原终态没有重跑或补写 |
+| 上次独立审核候选 | `f28ea578760f1134afe3a44603d856a94f0e2b8c`，最终仅修测试夹具、空 data 独立回归通过；生产身份与 `c4716a0` 相同，见 [M 审核](provider-two-task-baseline-review.md) |
+| 上次通过的实现提交 | `f28ea578760f1134afe3a44603d856a94f0e2b8c`，生产文件与已实际完成 B/C/失败捕获/评审链的 `c4716a0` 完全一致；t019 失败原样保留，旧 L 证据不变 |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | PR #15 已核对合并，从最新 `origin/main` `b44ce46384c37353c11f90044e696d7daceadbdb` 建立 `codex/deepseek-development-review`，写入前干净；一个 Terra / high 实现，主代理独立审核后实际试用 |
-| 环境目标与实际 | L 复用 Python 3.12 dev/controller/world、H SDK 卷与 K PDF 卷，不新增安装或改锁/镜像；实际身份见 L/K 报告。历史干净包与安装范围见 G/H |
-| 本地开发预算 | 多次 C 的 record_only/null cap 授权继续；L DeepSeek 评审有独立 record_only/null cap 账目并计入总估算，旧 J/K 费用和失败均保留。请求不自动重试；原版 Claude 判分暂停。旧 capped 策略保留历史范围；正式评测仍独立 record_only/null cap |
+| 当前分支与接手改动 | PR #16 已核对合并，从最新 `origin/main` `dee5ae0f3616a57c529acb706fe4c829fa16074c` 建立 `codex/two-task-baseline`，写入前干净；一个 Terra / high 实现，主代理独立审核后运行 |
+| 环境目标与实际 | M 复用 Python 3.12 dev/controller/world、H SDK 与 K PDF 卷；仅补固定候选必要资源，新题只读挂给 world，不新增安装或改锁/镜像。实际身份见 M 报告，G/H 安装和打包未重做 |
+| 本地开发预算 | 沿用多次 C 和独立 DeepSeek 评审的 record_only/null cap；M 逐请求及累计对账完成，旧费用/失败/claim 保留，两套 pending=null，未知用量仍阻挡接续。请求零自动重试；旧 capped 策略与正式入口边界保留 |
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
-| 本轮验证 | L R1–R3、真实日志容量及思考输出预算缺口已修并独立复验；新 C 和第二笔 DeepSeek 评审完成，首笔 incomplete/费用保留，输入来源、旧证据、引用和累计账目已独立核对。详细结果只见 L 报告 |
+| 本轮验证 | 固定新题资源/统一实验条件，合成边界与独立生命周期通过；新 B、两题各一次 C/确定性部分检查/DeepSeek 评审完成，未为全通过重跑。完整世界检查发现局部目标 rubric 外的错患者副作用，详见 M 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #16](https://github.com/xsw932187210-cell/chi-agent/pull/16) 已创建、base=main，交用户审核合并；PR #15 已合并。后续建议少量任务泛化与正式配送/F.5，原版 Claude 分数继续单列未运行 |
-| 未验证项 | 最终付款方批准、独立临床/规则裁决与官方得分、Claude 认证、真实 tokenizer/账单、其他任务/架构、OpenSpec CLI、真实网络/daemon 故障与硬取消仍未补验；DeepSeek 局部评审不替代这些证据 |
-| 真实运行 | L 新 B/C 自主完成；C 终态经原版部分检查和 DeepSeek 开发评审通过，资源清理、controller clean、两套 pending=null。旧失败与 prior 保留，official reward=null；正式评测入口仍 record_only/null cap |
+| PR 与下一步 | [PR #17](https://github.com/xsw932187210-cell/chi-agent/pull/17) 已创建、base=main，交用户审核合并；PR #16 已核对合并。下一通用改进建议为公开证据驱动的患者身份绑定门禁，尚未实现或追加运行 |
+| 未验证项 | 最终付款方批准、独立临床/规则裁决与官方得分、Claude 认证、真实 tokenizer/账单、所选之外任务/架构、患者身份改进、OpenSpec CLI、真实网络/daemon 故障与硬取消仍未补验；DeepSeek 局部评审不替代这些证据 |
+| 真实运行 | M 每题新世界/独立 attempt，完整终态和失败均保留；精确资源清理与累计对账通过。official reward=null，正式入口仍 record_only/null cap；详细结果只见 [M 审核](provider-two-task-baseline-review.md) |
 
 接续材料：
 
@@ -32,6 +32,7 @@
 - [真实 B/C 接入与首次试跑审核](real-b-c-ungraded-review.md)
 - [Terra 与多次 C 开发尝试审核](c-development-retry-review.md)
 - [DeepSeek 本地开发评审审核](deepseek-development-review.md)
+- [两个新 PA provider 任务的固定条件基线](provider-two-task-baseline-review.md)
 - [实现子代理与独立审核](../docs/subagent-workflow.md)
 - [D0 接续 Prompt](../docs/d0-handoff-prompts.md)
 - [当前交接规格](../openspec/changes/bootstrap-baseline/handoff.md)
@@ -56,5 +57,6 @@
 | 2026-10-27 | J 真实 B/C 接入与首次试跑 | `9b917f08a465091456329a1dd2d14c2f47a8b266` | `ba6786717a624d328d3f9bc1296392f9637888da` | 最终修复离线通过；前一候选真实 B 成功、唯一 C 启动失败；未重试/未判分 | [真实 B/C 审核](real-b-c-ungraded-review.md) |
 | 2026-10-27 | K Terra 与多次真实 C 开发 | `3cca5f89de205cb8b608d4bded345e426577461f` | `2b6058d76232eccaa968c19d761993e93c34e1fb` | 独立通过；旧历史不变、当前 B3/C2 完成，业务状态已提交/付款方处理中，无评分 | [多次 C 审核](c-development-retry-review.md) |
 | 2026-10-27 | L DeepSeek 本地开发评审 | `b44ce46384c37353c11f90044e696d7daceadbdb` | `c275bd5a5688d7736c70ea929cbb2286746d256e` | 独立通过；新 C 权威捕获、确定性部分与本地逐项评审完成，旧历史/失败费用保留，官方分数 null | [L 审核](deepseek-development-review.md) |
+| 2026-10-28 | M 两个新任务固定条件基线 | `dee5ae0f3616a57c529acb706fe4c829fa16074c` | `f28ea578760f1134afe3a44603d856a94f0e2b8c` | 测试修复后独立通过，生产同真实 c4716a0；t013 完成，t019 轮数耗尽且错患者提交，官方分数 null | [M 审核](provider-two-task-baseline-review.md) |
 
 历史未通过候选及原始合成证据保留；原始日志在忽略目录，不上传 GitHub。沿用一份 D0 交付报告，区分子代理自测与主代理独立证据。历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 仍不是已通过候选。
