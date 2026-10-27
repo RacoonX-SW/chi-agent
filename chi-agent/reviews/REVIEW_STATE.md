@@ -15,7 +15,7 @@
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | K R1–R5 独立关闭；真实 B3/C2 完成，逐 run 对账、B 产物哈希及旧 J 指纹均核对。Terra 最后自测额度中断，主代理未换模型，已独立完成固定快照验收；详细证据只见 K 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #14](https://github.com/xsw932187210-cell/chi-agent/pull/14) 已由用户合并；K 结果正在整理为 base=main PR，交用户审核合并。后续业务质量/正式配送与冻结另行处理，官方判分仍暂停 |
+| PR 与下一步 | [PR #15](https://github.com/xsw932187210-cell/chi-agent/pull/15) 已创建、base=main，交用户审核合并；PR #14 已合并。后续业务质量/正式配送与冻结另行处理，官方判分仍暂停 |
 | 未验证项 | 最终付款方批准、临床/规则正确性与官方得分、判分认证、真实 tokenizer/账单、其他架构、OpenSpec CLI、真实网络/daemon 故障与硬取消仍未补验 |
 | 真实运行 | 当前源码 B3/C2 退出 0，PDF 实际读取成功，提交状态经官方工具回读；所有资源已清理、pending=null，旧失败与 prior 保留，official reward=null。正式评测入口仍 record_only/null cap |
 

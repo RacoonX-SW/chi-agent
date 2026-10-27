@@ -9,7 +9,7 @@
 - [x] K.3 Support serial fresh-world C attempts, persistent per-attempt claims, same-attempt rejection, a controller-wide exclusive lock, source-bound B evidence and exact owned cleanup; preserve request-level zero retries.
 - [x] K.4 Freeze and independently review/retest meaningful migration, accounting, concurrency, repeated-attempt, failure and G/H/J regressions in Python 3.12 Docker.
 - [x] K.5 Execute fresh real B if the implementation identity changed, then autonomous official C attempts; diagnose outside runs, retain each failure, preserve null official reward and separate process completion from business observations.
-- [ ] K.6 Update the existing learning ledger, one new phase report and current state, then push a base=main PR for user review/merge. Do not claim official scoring or F.5 freeze.
+- [x] K.6 Update the existing learning ledger, one new phase report and current state, then push a base=main PR for user review/merge. Do not claim official scoring or F.5 freeze.
 
 ## C. Offline single-attempt lifecycle control
 
