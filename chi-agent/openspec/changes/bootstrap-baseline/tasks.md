@@ -138,7 +138,7 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [x] J.5 Freeze the candidate and independently verify the real paths using synthetic external boundaries in Python 3.12 Docker; include budget/claim/pending, batch schema validation, resource/network/secrets, failure/cleanup and prior G/H regressions.
 - [x] J.6 After offline acceptance and credentials are available, actually perform authenticated provider preflight and one bounded real B; record its effective model, consecutive tool exchanges and usage/cost provenance. Stop rather than silently retry on failure or unknown usage.
 - [ ] J.7 Only after real B success and sufficient known budget, claim and execute one fresh-world C autonomously, retain artifacts and cleanup evidence with official reward null; otherwise record the concrete prerequisite failure without consuming a C attempt.
-- [ ] J.8 Update the learning ledger and one phase report, push and create a base=main PR for user review/merge; disclose actual-run versus offline-only scope, keeping official grading and F.5 deferred.
+- [x] J.8 Update the learning ledger and one phase report, push and create a base=main PR for user review/merge; disclose actual-run versus offline-only scope, keeping official grading and F.5 deferred.
 
 J.7 的唯一真实尝试已执行到官方 bootstrap 失败，模型未启动，因此自主任务执行目标仍未完成；失败 claim 保留，挂载修复仅通过离线复验，不自动补试。实际结果与修复证据见 [J 审核](../../../reviews/real-b-c-ungraded-review.md)。
 

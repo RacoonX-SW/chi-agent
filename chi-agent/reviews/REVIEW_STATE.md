@@ -15,7 +15,7 @@
 | 正式提交前置 | F.2–F.4、G 与 H 的有界离线范围通过。F.5 完整最终冻结、真实接入和正式配送仍未完成 |
 | 本轮验证 | R1–R7 离线关闭；真实 B 通过，C 暴露 R8 workspace bind 冲突，修复后的代码回归与实际合成 Docker bind 检查通过。详细证据与实际费用估算只见 J 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR #12/#13 已由用户合并；J 正在整理 base=main PR 交用户审核。若再试 C，须明确授权并审查新旧源码身份与累计费用接续，不能清除旧 claim。官方判分与 F.5 保留暂停/未完成 |
+| PR 与下一步 | [PR #14](https://github.com/xsw932187210-cell/chi-agent/pull/14) 已推送、base=main，交用户审核合并。若再试 C，须明确授权并审查新旧源码身份与累计费用接续，不能清除旧 claim。官方判分与 F.5 保留暂停/未完成 |
 | 未验证项 | 修复候选的真实 B/C、官方业务效果与判分认证、真实 tokenizer/账单、其他架构、OpenSpec CLI、真实网络/daemon 故障清理与硬取消仍未补验 |
 | 真实运行 | 真实 B 成功；C 启动失败，模型未启动，无业务结果，资源已清理、claim 保留，official reward=null。新源码不继承旧 B 回执；旧 runner/evaluation 与原 cb/Harbor 门禁未放开 |
 
