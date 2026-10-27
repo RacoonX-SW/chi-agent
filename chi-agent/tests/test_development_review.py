@@ -133,6 +133,25 @@ def test_capture_tamper_and_location(capture, tmp_path):
         dr._input(tmp_path / "elsewhere", **kwargs)
 
 
+def test_audit_journal_bound_is_separate_from_inline_input(capture):
+    folder, kwargs, _ = capture
+    journal = kwargs["c_root"] / "runs" / "c-test.json"
+    run = json.loads(journal.read_text())
+    run["synthetic_audit_evidence"] = "x" * (3 * 1024 * 1024)
+    journal.write_bytes(dr._json_bytes(run))
+    assert dr._input(folder, **kwargs)[0]["run_id"] == "c-test"
+    assert dr.MAX_INPUT == 2 * 1024 * 1024
+    run["execution_identity"] = {"synthetic": "wrong"}
+    journal.write_bytes(dr._json_bytes(run))
+    with pytest.raises(dr.ReviewError, match="input_provenance_invalid"):
+        dr._input(folder, **kwargs)
+    run["execution_identity"] = kwargs["identity"]
+    run["synthetic_audit_evidence"] = "x" * dr.MAX_AUDIT_JOURNAL
+    journal.write_bytes(dr._json_bytes(run))
+    with pytest.raises(dr.ReviewError, match="input_invalid"):
+        dr._input(folder, **kwargs)
+
+
 @pytest.mark.parametrize("bad", [verdict("false"), verdict(False, "../secrets:1"), {"rubric_verdicts": {}},
                                   {"rubric_verdicts": {"provider_pre_submission.evidence.synthetic": {"pass": True, "explanation": "", "evidence_refs": []}}}])
 def test_invalid_verdict_still_settles(capture, tmp_path, synthetic_adapter, bad):

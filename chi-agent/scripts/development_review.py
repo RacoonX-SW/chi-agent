@@ -27,6 +27,9 @@ C_ROOT = ROOT / "runs/real-c-development"
 REVIEW_ROOT = ROOT / "runs/development-review"
 MAX_INPUT = 2 * 1024 * 1024
 MAX_RESPONSE = 2 * 1024 * 1024
+# The C audit journal includes tool evidence; it is checked locally and is
+# never included in the model's inline workspace.
+MAX_AUDIT_JOURNAL = 32 * 1024 * 1024
 SUPPLEMENT_VERSION = "inline-evidence-no-tools-v1"
 SUPPLEMENT = ("The workspace files below are supplied inline as a JSON object mapping relative paths "
               "to their complete contents. You have no file tools. Use only these files and return "
@@ -104,7 +107,7 @@ def _input(input_dir: Path, *, input_root: Path = INPUT_ROOT, c_root: Path = C_R
     expectations, expect_raw = _object(input_dir / "expectations.json", 16 * 1024 * 1024)
     world, world_raw = _object(input_dir / "shared_world.json", 64 * 1024 * 1024)
     orchestration, _ = _object(c_root / run_id / "orchestration.json", 2 * 1024 * 1024)
-    run, _ = _object(c_root / "runs" / f"{run_id}.json", 2 * 1024 * 1024)
+    run, _ = _object(c_root / "runs" / f"{run_id}.json", MAX_AUDIT_JOURNAL)
     claim, _ = _object(c_root / "claims" / f"{run_id}.json", 1_000_000)
     try:
         current = identity if identity is not None else live._execution_identity(k=True)
