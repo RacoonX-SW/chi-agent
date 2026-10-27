@@ -162,7 +162,7 @@ J.7 原授权的唯一尝试在官方 bootstrap 失败、模型未启动，历�
 - [x] L.3 Add a separate DeepSeek development-review entry using pinned deterministic checks and PA provider rubrics/prompt. Inline a bounded, complete adapter workspace in one tool-free structured request, validate verdicts strictly, enforce finite time/input/output, preserve request/usage evidence with zero retries, and report unknown/incomplete results honestly.
 - [x] L.4 Independently validate frozen code offline against synthetic provider/world boundaries: input provenance, credential/path isolation, capture/cleanup failure, malformed or missing verdicts, strict booleans, complete inline evidence/no tools, timeout, missing usage, replay/concurrency and previous regressions.
 - [x] L.5 After acceptance, evaluate existing authoritative evidence if available; otherwise perform a fresh authorized B/C with terminal export and then a separate DeepSeek review. Preserve every attempt/cost, report partial deterministic and local semantic findings with official reward null.
-- [ ] L.6 Update one review report and learning ledger, push and create a base=main PR for user review/merge; keep judge adaptation outside the formal bundle and preserve official scoring/F.5 limits.
+- [x] L.6 Update one review report and learning ledger, push and create a base=main PR for user review/merge; keep judge adaptation outside the formal bundle and preserve official scoring/F.5 limits.
 
 ## 3. Verify and hand over
 
