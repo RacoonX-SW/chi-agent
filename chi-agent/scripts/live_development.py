@@ -130,6 +130,8 @@ def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
                 "prior_source", "known_settled_cost_cny", "known_input_tokens", "known_output_tokens",
                 "usage_complete", "pending", "profile_sha256", "execution_identity", "created_at"}
     is_k = state.get("schema") == K_ACCOUNTING_SCHEMA
+    if is_k:
+        required |= {"adoption_sha256", "source_transitions"}
     if set(state) != required or state.get("schema") not in {ACCOUNTING_SCHEMA, K_ACCOUNTING_SCHEMA} \
             or state.get("campaign_id") != CAMPAIGN_ID:
         return "real_accounting_invalid"
@@ -362,12 +364,81 @@ def adopt_prior(old_root: Path, root: Path, *, _test_context: Any = None) -> Non
                      "prior_spend_cny": provenance["prior_estimated_cost_cny"], "known_settled_cost_cny": "0",
                      "prior_source": "adopted_j_campaign:adoption.json"}
         _atomic_json(root / "adoption.json", provenance, exclusive=True)
+        new_state["adoption_sha256"] = hashlib.sha256((root / "adoption.json").read_bytes()).hexdigest()
+        new_state["source_transitions"] = []
         _atomic_json(root / "accounting.json", new_state, exclusive=True)
     except FileExistsError:
         raise LiveFailure("real_accounting_already_initialized") from None
     finally:
         fcntl.flock(lock_fd, fcntl.LOCK_UN)
         os.close(lock_fd)
+
+
+def _validate_k_provenance(root: Path, state: dict[str, Any]) -> None:
+    """Verify self-contained adoption and source history before any paid work."""
+    try:
+        adoption_path = root / "adoption.json"
+        adoption = _read_json(adoption_path)
+        digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+        if adoption.get("schema") != "chi-real-prior-adoption-v1" or digest(adoption_path) != state.get("adoption_sha256"):
+            raise ValueError()
+        usage = adoption.get("prior_usage")
+        hashes = adoption.get("source_files_sha256")
+        if (type(usage) is not dict or set(usage) != {"input_tokens", "output_tokens"}
+                or any(type(usage[x]) is not int or usage[x] < 0 for x in usage)
+                or any(state[f"known_{x}"] < usage[x] for x in usage)
+                or state.get("prior_source") != "adopted_j_campaign:adoption.json"
+                or Decimal(state["prior_spend_cny"]) != Decimal(adoption["prior_estimated_cost_cny"])
+                or Decimal(state["prior_spend_cny"]) <= 0 or type(hashes) is not dict or len(hashes) != 4
+                or any(type(h) is not str or re.fullmatch(r"[0-9a-f]{64}", h) is None for h in hashes.values())):
+            raise ValueError()
+        identity = adoption["old_execution_identity"]
+        minimum_cost = Decimal("0")
+        minimum_input, minimum_output = usage["input_tokens"], usage["output_tokens"]
+        chain = state["source_transitions"]
+        if type(identity) is not dict or type(chain) is not list:
+            raise ValueError()
+        seen = set()
+        for entry in chain:
+            if (type(entry) is not dict or set(entry) != {"previous_accounting_sha256", "sha256"}
+                    or any(type(entry[x]) is not str or re.fullmatch(r"[0-9a-f]{64}", entry[x]) is None for x in entry)):
+                raise ValueError()
+            key = entry["previous_accounting_sha256"]
+            if key in seen:
+                raise ValueError()
+            seen.add(key)
+            path = root / "source-transitions" / f"{key}.json"
+            record = _read_json(path)
+            if (digest(path) != entry["sha256"] or record.get("schema") != "chi-real-source-transition-v1"
+                    or record.get("previous_accounting_sha256") != key or record.get("before") != identity
+                    or type(record.get("after")) is not dict or type(record.get("reason")) is not str
+                    or not record["reason"].strip()):
+                raise ValueError()
+            snapshot = record.get("accounting_snapshot")
+            if (type(snapshot) is not dict or set(snapshot) != {"known_settled_cost_cny", "known_input_tokens", "known_output_tokens"}
+                    or type(snapshot["known_settled_cost_cny"]) is not str
+                    or type(snapshot["known_input_tokens"]) is not int or type(snapshot["known_output_tokens"]) is not int
+                    or not Decimal(snapshot["known_settled_cost_cny"]).is_finite()
+                    or Decimal(snapshot["known_settled_cost_cny"]) < minimum_cost
+                    or snapshot["known_input_tokens"] < minimum_input or snapshot["known_output_tokens"] < minimum_output):
+                raise ValueError()
+            minimum_cost = Decimal(snapshot["known_settled_cost_cny"])
+            minimum_input, minimum_output = snapshot["known_input_tokens"], snapshot["known_output_tokens"]
+            receipt_id, receipt_hash = record.get("previous_b_receipt_run_id"), record.get("previous_b_receipt_sha256")
+            if receipt_hash is not None:
+                if type(receipt_id) is not str or ID_RE.fullmatch(receipt_id) is None:
+                    raise ValueError()
+                receipt_path = root / "b-receipts" / f"{receipt_id}.json"
+                if receipt_path.is_symlink() or digest(receipt_path) != receipt_hash:
+                    raise ValueError()
+            elif receipt_id is not None:
+                raise ValueError()
+            identity = record["after"]
+        if (identity != state["execution_identity"] or Decimal(state["known_settled_cost_cny"]) < minimum_cost
+                or state["known_input_tokens"] < minimum_input or state["known_output_tokens"] < minimum_output):
+            raise ValueError()
+    except Exception:
+        raise LiveFailure("real_provenance_invalid") from None
 
 
 def rebind_source(root: Path, reason: str) -> None:
@@ -385,27 +456,36 @@ def rebind_source(root: Path, reason: str) -> None:
         code = _validate_accounting_state(state, profile=load_profile(), execution_identity=None)
         if code or state.get("schema") != K_ACCOUNTING_SCHEMA or state.get("pending") is not None or not state.get("usage_complete"):
             raise LiveFailure(code or "real_accounting_pending_unknown")
+        _validate_k_provenance(root, state)
         before = state["execution_identity"]
         after = _execution_identity(k=True)
         if before == after:
             raise LiveFailure("source_transition_unchanged")
         receipt_path = root / "b-success.json"
         receipt_hash = None
+        receipt_id = None
         if receipt_path.exists():
             receipt = _read_json(receipt_path)
             _validate_b_receipt(root, receipt, load_profile(), before)
             receipt_hash = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+            receipt_id = receipt["run_id"]
             archive = root / "b-receipts" / f"{receipt['run_id']}.json"
             _atomic_json(archive, receipt, exclusive=True)
         old_hash = hashlib.sha256(path.read_bytes()).hexdigest()
         record = {"schema": "chi-real-source-transition-v1", "before": before, "after": after,
                   "reason": reason.strip(), "previous_accounting_sha256": old_hash,
-                  "previous_b_receipt_sha256": receipt_hash, "timestamp": datetime.now(timezone.utc).isoformat()}
-        _atomic_json(root / "source-transitions" / f"{old_hash}.json", record, exclusive=True)
+                  "previous_b_receipt_sha256": receipt_hash, "previous_b_receipt_run_id": receipt_id,
+                  "accounting_snapshot": {key: state[key] for key in
+                                          ("known_settled_cost_cny", "known_input_tokens", "known_output_tokens")},
+                  "timestamp": datetime.now(timezone.utc).isoformat()}
+        transition_path = root / "source-transitions" / f"{old_hash}.json"
+        _atomic_json(transition_path, record, exclusive=True)
         if receipt_hash is not None:
             receipt_path.unlink()
             _fsync_parent(receipt_path)
         state["execution_identity"] = after
+        state["source_transitions"].append({"previous_accounting_sha256": old_hash,
+                                            "sha256": hashlib.sha256(transition_path.read_bytes()).hexdigest()})
         _atomic_json(path, state)
     except FileExistsError:
         raise LiveFailure("source_transition_incomplete_or_exists") from None
@@ -472,14 +552,38 @@ def _k_run(kind: str, run_id: str, root: Path) -> dict[str, Any]:
         raise LiveFailure(code)
     if state.get("schema") != K_ACCOUNTING_SCHEMA or state.get("pending") is not None or state.get("usage_complete") is not True:
         raise LiveFailure("real_accounting_pending_unknown")
+    _validate_k_provenance(root, state)
     receipt_path = root / "b-success.json"
     if kind == "b-smoke" and receipt_path.exists():
         raise LiveFailure("real_b_smoke_already_succeeded")
     if kind == "c-once":
         _validate_b_receipt(root, _read_json(receipt_path), profile, identity)
+    try:
+        credential = _model_key()
+    except LiveFailure as exc:
+        _atomic_json(root / "pre-resource-failures" / f"{run_id}.json",
+                     {"schema": "chi-real-pre-resource-failure-v1", "run_id": run_id,
+                      "error_code": exc.code, "resources_created": False,
+                      "timestamp": datetime.now(timezone.utc).isoformat()}, exclusive=True)
+        raise
     gate = root / "controller-state.json"
-    _atomic_json(gate, {"schema": "chi-real-controller-state-v1", "state": "active", "run_id": run_id})
-    result = _orchestrate(kind, run_id, root, k=True)
+    armed = False
+    def arm_gate() -> None:
+        nonlocal armed
+        _atomic_json(gate, {"schema": "chi-real-controller-state-v1", "state": "active", "run_id": run_id})
+        armed = True
+    try:
+        result = _orchestrate(kind, run_id, root, k=True, _credential=credential, _before_resources=arm_gate)
+    except Exception as exc:
+        if not armed:
+            code = getattr(exc, "code", "pre_resource_failure")
+            _atomic_json(root / "pre-resource-failures" / f"{run_id}.json",
+                         {"schema": "chi-real-pre-resource-failure-v1", "run_id": run_id,
+                          "error_code": code if SAFE_ERROR_RE.fullmatch(code) else "pre_resource_failure",
+                          "resources_created": False, "timestamp": datetime.now(timezone.utc).isoformat()}, exclusive=True)
+        raise
+    if not armed:
+        raise LiveFailure("controller_gate_not_armed")
     clean = result.get("cleanup_error_code") is None and result.get("persistence_error_code") is None
     _atomic_json(gate, {"schema": "chi-real-controller-state-v1", "state": "clean" if clean else "blocked",
                         "run_id": run_id, "status": result.get("status")})
@@ -525,6 +629,8 @@ class RealDevelopmentJournal:
             if self.state.get("execution_identity") != actual_identity:
                 raise LiveFailure("real_execution_identity_mismatch")
             self._validate_state(actual_identity)
+            if is_k:
+                _validate_k_provenance(root, self.state)
             if self.state.get("pending") is not None or self.state.get("usage_complete") is not True:
                 raise LiveFailure("real_accounting_pending_unknown")
             if self.state.get("profile_sha256") not in {None, profile.sha256}:
@@ -577,6 +683,11 @@ class RealDevelopmentJournal:
         from b_provider_transport import GuardFailure
         self._require_active_lock()
         fresh = _read_json(self.state_path)
+        if self.cap_cny is None:
+            try:
+                _validate_k_provenance(self.root, fresh)
+            except LiveFailure:
+                raise GuardFailure("real_provenance_invalid", "request_guard") from None
         if fresh != self.state or fresh.get("pending") is not None or fresh.get("usage_complete") is not True:
             raise GuardFailure("real_accounting_pending_unknown", "request_guard")
         if profile.sha256 != self.profile.sha256:
@@ -874,7 +985,7 @@ def _transition_c_claim(root: Path, run_id: str, state: str, *,
             os.close(lock)
 
 
-def _copy_projection(root: Path, run_id: str) -> Path:
+def _copy_projection(root: Path, run_id: str, *, output_parent: Path | None = None) -> Path:
     import shutil
     from a_environment import _verify_handbook
 
@@ -898,7 +1009,7 @@ def _copy_projection(root: Path, run_id: str) -> Path:
     except Exception:
         raise LiveFailure("official_task_projection_unavailable") from None
     source = dataset / "prior_auth_provider" / "tasks" / TASK_ID
-    output = _projection_run_dir(run_id) / "projection"
+    output = (output_parent if output_parent is not None else _projection_run_dir(run_id)) / "projection"
     output.mkdir(parents=True, exist_ok=False)
     for filename in ("instruction.md", "tool_reference.md"):
         path = source / filename
@@ -949,13 +1060,17 @@ def _projection_run_dir(run_id: str) -> Path:
 
 
 def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: Any = None,
-                 k: bool = False) -> dict[str, Any]:
+                 k: bool = False, _credential: str | None = None,
+                 _before_resources: Any = None) -> dict[str, Any]:
     """Create an isolated runner; only C owns an official task world."""
     from a_environment import (
         AEnvironmentError, _capture_logs,
         _check_resource_slots, _daemon_path, _docker, _resource_labels,
         _task_environment, wait_world,
     )
+
+    if k and _test_context is not _MOCK_ORCHESTRATION_TEST and not callable(_before_resources):
+        raise LiveFailure("controller_lock_required")
 
     if budget_root.resolve() != (ROOT / (K_ROOT_RELATIVE if k else REAL_ROOT_RELATIVE)).resolve():
         approved_test_root = (ROOT / REAL_ROOT_RELATIVE / "impl").resolve()
@@ -971,6 +1086,8 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
     current = _read_json(budget_root / "accounting.json")
     if current.get("schema") != (K_ACCOUNTING_SCHEMA if k else ACCOUNTING_SCHEMA):
         raise LiveFailure("real_accounting_invalid")
+    if k:
+        _validate_k_provenance(budget_root, current)
     if current.get("pending") is not None or current.get("usage_complete") is not True:
         raise LiveFailure("real_accounting_pending_unknown")
     if current.get("execution_identity") != execution_identity:
@@ -1015,7 +1132,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             raise LiveFailure("budget_insufficient_for_c_once")
     elif (budget_root / "b-success.json").exists():
         raise LiveFailure("real_b_smoke_already_succeeded")
-    secret = _model_key()
+    secret = _credential if _credential is not None else _model_key()
     run_dir = budget_root / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     projection = None
@@ -1045,9 +1162,12 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
     workspace_mount = None
     world_image = None
     sdk_volume = os.environ.get("CHI_MODEL_DEPS_VOLUME", "chi-h-root-model-deps-20261027-v1")
+    if _before_resources is not None:
+        _before_resources()
     try:
         if kind == "c-once":
-            projection = _copy_projection(ROOT, run_id)
+            projection = (_copy_projection(ROOT, run_id, output_parent=run_dir) if k
+                          else _copy_projection(ROOT, run_id))
             result["projection_files"] = ["instruction.md", "tool_reference.md",
                                           "healthverse-task-assets/tool_reference.md",
                                           "chi-bench-task-assets/tool_reference.md",

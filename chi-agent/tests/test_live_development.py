@@ -591,15 +591,121 @@ class LiveDevelopmentTests(unittest.TestCase):
         self.assertEqual(run_doc["orchestration_status"], "cleanup_failed")
 
 
+def _adopt_synthetic_history(base: Path, root: Path) -> None:
+    import hashlib
+    old = base / "prior-fixture"
+    old.mkdir(parents=True)
+    state = live.initialize_real_accounting(old, prior_source="synthetic")
+    state.update(profile_sha256=live.load_profile().sha256, known_input_tokens=7,
+                 known_output_tokens=3, known_settled_cost_cny="0.000038")
+    live._atomic_json(old / "accounting.json", state)
+    (old / ".real-accounting.lock").touch()
+    run = {"schema": "chi-real-provider-run-v1", "campaign_id": live.CAMPAIGN_ID,
+           "state": "complete", "execution_identity": state["execution_identity"],
+           "profile_sha256": state["profile_sha256"], "real_usage": {"input_tokens": 7, "output_tokens": 3},
+           "estimated_cost_cny": "0.000038"}
+    run_path = old / "runs" / "b.json"
+    live._atomic_json(run_path, run)
+    logs = old / "b" / "runner-logs"
+    logs.mkdir(parents=True)
+    for name in ("run_result.json", "run_output.txt", "trace.jsonl", "run_log.txt"):
+        (logs / name).write_text("synthetic")
+    digest = lambda path: hashlib.sha256(path.read_bytes()).hexdigest()
+    receipt = {"schema": live.B_SUCCESS_SCHEMA, "campaign_id": live.CAMPAIGN_ID, "task_id": live.TASK_ID,
+               "run_id": "b", "status": "success", "profile_sha256": state["profile_sha256"],
+               "execution_identity": state["execution_identity"], "usage": run["real_usage"],
+               "estimated_cost_cny": run["estimated_cost_cny"], "official_reward": None,
+               "run_journal_sha256": digest(run_path), "runner_result_sha256": digest(logs / "run_result.json"),
+               "run_output_sha256": digest(logs / "run_output.txt"), "trace_sha256": digest(logs / "trace.jsonl"),
+               "run_log_sha256": digest(logs / "run_log.txt")}
+    live._atomic_json(old / "b-success.json", receipt)
+    claim = {"schema": live.CLAIM_SCHEMA, "campaign_id": live.CAMPAIGN_ID, "task_id": live.TASK_ID,
+             "run_id": "c", "execution_identity": state["execution_identity"],
+             "profile_sha256": state["profile_sha256"], "official_reward": None, "replay_allowed": False,
+             "finished_at": "synthetic", "cleanup_error_code": None, "terminal_status": "failed",
+             "state": "failed_or_uncertain_claim_retained",
+             "b_success_sha256": hashlib.sha256(live._json(receipt).encode()).hexdigest()}
+    live._atomic_json(old / live.CLAIM_FILE, claim)
+    live._atomic_json(old / "c" / "orchestration.json", {"run_id": "c", "status": "failed",
+        "finished_at": "synthetic", "cleanup_error_code": None, "world": {"logs_captured": True},
+        "cleanup": {"world_removed": True, "network_removed": True}})
+    live.adopt_prior(old, root, _test_context=live._MOCK_ORCHESTRATION_TEST)
+    live.rebind_source(root, "synthetic source transition")
+
+
 class ContinuedDevelopmentTests(unittest.TestCase):
+    def test_real_projection_copy_uses_explicit_new_run_directory(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            revision = "5ce88104df2a91e057619eb70fb51f56fc5949eb"
+            dataset = root / "data" / "a-environment" / f"download-{revision}"
+            records = {}
+            for name in ("instruction.md", "tool_reference.md"):
+                relative = f"prior_auth_provider/tasks/{live.TASK_ID}/{name}"
+                path = dataset / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("synthetic public input")
+                records[relative] = {"size": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+            live._atomic_json(dataset / ".a-environment-data-manifest.json", {"revision": revision, "files": records})
+            handbook = root / "data" / "skills" / "managed-care-operations-handbook"
+            handbook.mkdir(parents=True)
+            (handbook / "sample.md").write_text("synthetic")
+            destination = root / "runs" / "real-c-development" / "attempt"
+            with patch("a_environment._verify_handbook"):
+                projection = live._copy_projection(root, "attempt", output_parent=destination)
+            self.assertEqual(projection, destination / "projection")
+            self.assertTrue((projection / "instruction.md").is_file())
+            self.assertFalse((root / "runs" / "real-b-c").exists())
+
+    def test_missing_or_modified_provenance_blocks_before_key_and_resources(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _adopt_synthetic_history(root, root)
+            adoption = root / "adoption.json"
+            original = adoption.read_bytes()
+            transition = next((root / "source-transitions").iterdir())
+            original_transition = transition.read_bytes()
+            for path, payload in ((adoption, None), (adoption, b"{}"), (transition, b"{}")):
+                if payload is None:
+                    path.unlink()
+                else:
+                    path.write_bytes(payload)
+                with patch.object(live, "_model_key") as key, patch.object(live, "_orchestrate") as orchestration:
+                    with self.assertRaises(live.LiveFailure) as error:
+                        live._k_locked(root, lambda: live._k_run("b-smoke", "attempt", root))
+                    self.assertEqual(error.exception.code, "real_provenance_invalid")
+                    key.assert_not_called()
+                    orchestration.assert_not_called()
+                adoption.write_bytes(original)
+                transition.write_bytes(original_transition)
+            state = live._read_json(root / "accounting.json")
+            state["prior_spend_cny"] = "1"
+            live._atomic_json(root / "accounting.json", state)
+            with self.assertRaises(live.LiveFailure):
+                live._k_locked(root, lambda: live._k_run("b-smoke", "attempt", root))
+
+    def test_credential_failure_does_not_poison_controller_gate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _adopt_synthetic_history(root, root)
+            with patch.object(live, "_model_key", side_effect=live.LiveFailure("provider_credential_missing")):
+                with self.assertRaises(live.LiveFailure):
+                    live._k_locked(root, lambda: live._k_run("b-smoke", "first", root))
+            self.assertFalse((root / "controller-state.json").exists())
+            self.assertEqual(live._read_json(root / "pre-resource-failures" / "first.json")["error_code"], "provider_credential_missing")
+            with patch.object(live, "_model_key", return_value="synthetic"), patch.object(
+                    live, "_orchestrate", side_effect=lambda *args, **kw: (
+                        kw["_before_resources"]() or {"status": "smoke_completed"})) as run:
+                live._k_locked(root, lambda: live._k_run("b-smoke", "second", root))
+                run.assert_called_once()
+            self.assertEqual(live._read_json(root / "controller-state.json")["state"], "clean")
+
     def test_two_fresh_mock_worlds_after_current_b(self):
         evidence_root = live.ROOT / "runs" / "real-b-c" / "impl"
         evidence_root.mkdir(parents=True, exist_ok=True)
         root = Path(tempfile.mkdtemp(prefix="mock-k-e2e-", dir=evidence_root))
-        state = live.initialize_real_accounting(root, prior_source="synthetic")
-        state.update(schema=live.K_ACCOUNTING_SCHEMA, cap_cny=None, prior_spend_cny="6",
-                     execution_identity=live._execution_identity(k=True))
-        live._atomic_json(root / "accounting.json", state)
+        _adopt_synthetic_history(root, root)
         docker = FakeDocker(root)
         kind = {"value": "b-smoke"}
         wires = {"b-smoke": FakeWire("b-smoke"), "c-once": FakeWire("c-once")}
@@ -612,7 +718,7 @@ class ContinuedDevelopmentTests(unittest.TestCase):
                    patch("a_environment.wait_world", return_value=0.0),
                    patch("a_environment._capture_logs", return_value=True),
                    patch.object(live, "_official_world_run_dir", side_effect=lambda run_id: root / "worlds" / run_id),
-                   patch.object(live, "_copy_projection", side_effect=lambda _r, run_id: LiveDevelopmentTests._mock_projection(root, run_id)),
+                   patch.object(live, "_copy_projection", side_effect=lambda _r, run_id, **kw: LiveDevelopmentTests._mock_projection(root, run_id)),
                    patch("agents.mcp.MCPServerStreamableHttp", side_effect=lambda *a, **kw: FakeMCP([]))]
         for item in patches:
             item.start()
@@ -701,19 +807,20 @@ class ContinuedDevelopmentTests(unittest.TestCase):
         policy = load_real_development_policy()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            state = live.initialize_real_accounting(root, prior_source="synthetic-fixture")
-            state.update(schema=live.K_ACCOUNTING_SCHEMA, cap_cny=None, prior_spend_cny="6",
-                         execution_identity=live._execution_identity(k=True))
-            live._atomic_json(root / "accounting.json", state)
+            _adopt_synthetic_history(root, root)
             journal = live.RealDevelopmentJournal(root, "k-one", profile=profile, policy=policy)
             request = httpx.Request("POST", profile.endpoint + "/v1/chat/completions", content=b"synthetic")
+            for number in range(1, 4):
+                journal.reserve(profile, request, {"model": profile.model}, b"synthetic", 8192, number)
+                journal.settle(Decimal("2"), 1_000_000, 0)
+            self.assertGreater(journal.cumulative_spend, Decimal("5"))
             journal.reserve(profile, request, {"model": profile.model}, b"synthetic", 1024, 1)
             journal.settle(Decimal("0.000038"), 7, 3)
             journal.reserve(profile, request, {"model": profile.model}, b"synthetic-two", 1024, 2)
             journal.mark_unknown("transport_timeout")
             journal.finalize(status="incomplete")
             self.assertIsNone(journal.run_doc["campaign_estimated_cost_cny"])
-            self.assertEqual(journal.run_doc["prior_spend_cny"], "6")
+            self.assertEqual(journal.run_doc["prior_spend_cny"], "0.000038")
             journal.close()
             with self.assertRaises(live.LiveFailure):
                 live.RealDevelopmentJournal(root, "k-two", profile=profile, policy=policy)
