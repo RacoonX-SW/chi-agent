@@ -118,7 +118,7 @@ H 沿 G 的包/策略/claim 链路添加外部启动输入，最小扩展已有 
 
 B 使用真实 SDK/模型、固定 transport、少量确定性本地测试工具，由模型自己调用；第二个工具依赖首个返回值，至少两次工具往返后有非空最终结果才标记成功。B 不创建官方世界或消耗 C claim。每次实际请求/工具结果具有来源，保留 reasoning_content、assistant content 和 tool call IDs，不能用 fixture 回答代替缺失的真实回执。B 可采用低于 profile ceiling 的小轮数限制，实际限制必须进入证据。
 
-C 仅针对已选 provider task，复用固定官方 world 镜像、entrypoint 与 A 的所有权/清理逻辑，不重建受限镜像或把旧调试世界当初始世界。先核对真实 B 的 source/SDK/profile/budget 身份与已知余额，再持久 claim，之后才创建 world。controller 仅调度 Docker；模型 runner 使用独立容器，不挂 socket、整个原项目、.env 或 task fixtures。代码/vendor/SDK 分别只读挂载，但本地工具不可读这些目录；只投影公开 instruction/tool_reference 与已授权 handbook，scratch/logs 独立可写。world 仅内部任务网络且无 provider/judge 凭据；runner 可连接任务 MCP 与固定 provider。最终清理本轮拥有的 runner/world/network，保留所有证据，主错与清理错分别报告。
+C 仅针对已选 provider task，复用固定官方 world 镜像、entrypoint 与 A 的所有权/清理逻辑，不重建受限镜像或把旧调试世界当初始世界。先核对真实 B 的 source/SDK/profile/budget 身份与已知余额，再持久 claim，之后才创建 world。controller 仅调度 Docker；模型 runner 使用独立容器，不挂 socket、整个原项目、.env 或 task fixtures。代码/vendor/SDK 分别只读挂载，但本地工具不可读这些目录；只投影公开 instruction/tool_reference 与已授权 handbook，scratch/logs 独立可写。world/runner 共享本次专属 artifacts 父目录，挂载到 `/logs/artifacts`；固定官方启动会删除重建其 `workspaces` 子目录，不能把该子目录本身作为挂载根。模型文件工具仍限 workspace 内 case/provider/shared，不因父目录挂载扩大读取范围。world 仅内部任务网络且无 provider/judge 凭据；runner 可连接任务 MCP 与固定 provider。最终清理本轮拥有的 runner/world/network，保留所有证据，主错与清理错分别报告。
 
 固定官方 local-tool factory 提供不受限 shell/Python/文件读写；直接放进有 socket 的 controller 会暴露权限，单纯换 MCP 地址无法解决。因此 participant adapter 在独立 runner 中只提供范围受限的读/list（确需时提供 scratch 写/edit）及 claim_done/sleep，不暴露 shell/Python、环境变量和评分目录；这是自有受控配置，与原版全部本地工具能力不同。MCP 业务工具来自官方运行时 schema，正常病例动作仍由模型自主决定；整批参数在任何动作前检查。运行途中不让人工补业务动作或修结果，官方 reward 为 null，不运行 verifier/judge。
 

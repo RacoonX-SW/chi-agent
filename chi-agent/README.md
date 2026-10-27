@@ -286,7 +286,7 @@ chi_live_control b-smoke --run-id real-b-example-001
 chi_live_control c-once --run-id real-c-example-001
 ```
 
-本地真实账目固定在 `runs/real-b-c/`，不因 run-id 或日志目录改变而重新获得 5 元；不要删除/复制状态来重跑。C 在创建世界前占用一次 claim，异常也保留。已知用量按 provider 回报记录，金额按 profile 高峰价估算，不能当成账单；未知用量/pending 不清零。详细证据位置、错误代码和实际通过范围见 [本轮审核](reviews/real-b-c-ungraded-review.md)。
+本地真实账目固定在 `runs/real-b-c/`，不因 run-id 或日志目录改变而重新获得 5 元；不要删除/复制状态来重跑。C 在创建世界前占用一次 claim，启动失败也保留。源码/profile/SDK 变化会使旧账目和 B 回执不匹配，此时停止，另行审查累计费用与身份接续，不能删除旧证据重新初始化。已知用量按 provider 回报记录，金额按 profile 高峰价估算，不能当成账单；未知用量/pending 不清零。详细证据位置、错误代码和实际通过范围见 [本轮审核](reviews/real-b-c-ungraded-review.md)。
 
 runner 保留任务结果、轨迹、stdout/stderr、逐请求账目与工具 dispatch 记录；官方 reward 始终为 null。只有官方 MCP 业务工具和受限资源文件工具提供给模型，任务由模型自主执行，人工不在试跑中代选动作或修改结果。程序退出、模型声称完成与官方判分分别判断；正式冻结、评分和其他架构另行验收。
 

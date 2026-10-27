@@ -132,13 +132,15 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 用户明确恢复真实 B/C，小额联调成功且预算足够后才创建 C；官方判分仍暂停。每项勾选须注明实际证据，代码离线通过不能代勾真实运行。保持既有正式 entry record_only/null cap 和旧 live 拒绝。
 
 - [x] J.1 Verify merged PRs/latest main, create a new codex branch, record the explicit real B/C authorization and shared 5 CNY boundary, and recheck official provider/profile/tool contracts.
-- [ ] J.2 Add a separate local-development entry, isolated real journal and source/profile/SDK-bound campaign; preserve request reservation, unknown usage, zero retries, bounded output/rounds and single C claim across process/log changes.
-- [ ] J.3 Implement real B smoke using the fixed SDK/model/guard and model-chosen dependent tool calls; validate actual tool-result history and provider usage, keeping estimates separate from billing.
-- [ ] J.4 Implement one fresh official C world with an isolated runner, authorized resource projection and safe local tools; no socket/fixtures/credentials exposed through model tools, no judge invocation, owned resource cleanup and retained artifacts.
-- [ ] J.5 Freeze the candidate and independently verify the real paths using synthetic external boundaries in Python 3.12 Docker; include budget/claim/pending, batch schema validation, resource/network/secrets, failure/cleanup and prior G/H regressions.
-- [ ] J.6 After offline acceptance and credentials are available, actually perform authenticated provider preflight and one bounded real B; record its effective model, consecutive tool exchanges and usage/cost provenance. Stop rather than silently retry on failure or unknown usage.
+- [x] J.2 Add a separate local-development entry, isolated real journal and source/profile/SDK-bound campaign; preserve request reservation, unknown usage, zero retries, bounded output/rounds and single C claim across process/log changes.
+- [x] J.3 Implement real B smoke using the fixed SDK/model/guard and model-chosen dependent tool calls; validate actual tool-result history and provider usage, keeping estimates separate from billing.
+- [x] J.4 Implement one fresh official C world with an isolated runner, authorized resource projection and safe local tools; no socket/fixtures/credentials exposed through model tools, no judge invocation, owned resource cleanup and retained artifacts.
+- [x] J.5 Freeze the candidate and independently verify the real paths using synthetic external boundaries in Python 3.12 Docker; include budget/claim/pending, batch schema validation, resource/network/secrets, failure/cleanup and prior G/H regressions.
+- [x] J.6 After offline acceptance and credentials are available, actually perform authenticated provider preflight and one bounded real B; record its effective model, consecutive tool exchanges and usage/cost provenance. Stop rather than silently retry on failure or unknown usage.
 - [ ] J.7 Only after real B success and sufficient known budget, claim and execute one fresh-world C autonomously, retain artifacts and cleanup evidence with official reward null; otherwise record the concrete prerequisite failure without consuming a C attempt.
 - [ ] J.8 Update the learning ledger and one phase report, push and create a base=main PR for user review/merge; disclose actual-run versus offline-only scope, keeping official grading and F.5 deferred.
+
+J.7 的唯一真实尝试已执行到官方 bootstrap 失败，模型未启动，因此自主任务执行目标仍未完成；失败 claim 保留，挂载修复仅通过离线复验，不自动补试。实际结果与修复证据见 [J 审核](../../../reviews/real-b-c-ungraded-review.md)。
 
 ## 3. Verify and hand over
 
