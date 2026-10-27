@@ -238,14 +238,24 @@ def _execution_identity(*, k: bool = False) -> dict[str, Any]:
             raise LiveFailure("sdk_lock_identity_mismatch") from None
         sdk = expected
     files = ("scripts/live_development.py", "scripts/b_provider_transport.py",
+             "scripts/pdf_resource_reader.py",
              "scripts/model_runner_adapter.py", "scripts/b_provider_profile.py",
              "scripts/a_environment.py", "scripts/b_execution_policy.py",
              "scripts/b_live_preflight.py", "scripts/b_model_adapter.py",
              "profiles/deepseek-flash-prepared.json", "profiles/local-development-policy.json",
              "requirements-model.lock")
+    if k:
+        files += ("requirements-pdf.lock",)
     hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files}
-    return {"vendor": upstream, "sdk": sdk, "application_files_sha256": hashes,
-            "profile_sha256": profile.sha256, "policy_sha256": policy.sha256}
+    identity = {"vendor": upstream, "sdk": sdk, "application_files_sha256": hashes,
+                "profile_sha256": profile.sha256, "policy_sha256": policy.sha256}
+    if k:
+        try:
+            from pdf_resource_reader import dependency_identity
+            identity["pdf_dependency"] = dependency_identity(ROOT / "requirements-pdf.lock")
+        except Exception:
+            raise LiveFailure("pdf_dependency_unavailable_or_mismatch") from None
+    return identity
 
 
 def initialize_real_accounting(root: Path, *, prior_source: str,
@@ -1162,6 +1172,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
     workspace_mount = None
     world_image = None
     sdk_volume = os.environ.get("CHI_MODEL_DEPS_VOLUME", "chi-h-root-model-deps-20261027-v1")
+    pdf_volume = "chi-k-pdf-deps-20261027-v1"
     if _before_resources is not None:
         _before_resources()
     try:
@@ -1181,6 +1192,8 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
         if runner_image.id != "sha256:b22f7c664bf5da8994d7199f1482536b0b4ab36d0d522ae121c4a0562ed044b3":
             raise LiveFailure("runner_image_identity_mismatch")
         client.volumes.get(sdk_volume)
+        if k:
+            client.volumes.get(pdf_volume)
         world_id = run_id
         task_net_name = f"chi-agent-a-net-{world_id}"
         if kind == "c-once":
@@ -1247,6 +1260,8 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             _daemon_path(ROOT, run_dir): {"bind": "/participant/run", "mode": "rw"},
             _daemon_path(ROOT, budget_root): {"bind": "/participant/real-budget", "mode": "rw"},
         }
+        if k:
+            volumes[_daemon_path(ROOT, ROOT / "requirements-pdf.lock")] = {"bind": "/participant/requirements-pdf.lock", "mode": "ro"}
         if projection is not None:
             volumes[_daemon_path(ROOT, projection)] = {"bind": "/participant/projection", "mode": "ro"}
             volumes[_daemon_path(ROOT, projection / "healthverse-task-assets" / "tool_reference.md")] = {
@@ -1265,12 +1280,13 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                      "--logs-dir", "/participant/run/runner-logs", "--instruction-file",
                      ("/participant/projection/instruction.md" if projection is not None else "/participant/run/b-smoke-instruction.md"),
                      "--mcp-url", mcp_url] + (["--k-development"] if k else []),
-            environment={"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": "/model-deps:/participant/vendor/chi-bench/src",
+            environment={"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": ("/pdf-deps:" if k else "") + "/model-deps:/participant/vendor/chi-bench/src",
                          "OPENAI_AGENTS_MODEL": profile.model, "OPENAI_AGENTS_API_MODE": "chat_completions",
                          "OPENAI_AGENTS_MAX_TURNS": "6" if kind == "b-smoke" else str(profile.max_rounds),
                          "OPENAI_AGENTS_REASONING_EFFORT": "high", "OPENAI_AGENTS_MAX_RETRIES": "0",
                          "DEEPSEEK_API_KEY": secret},
-            volumes={**volumes, sdk_volume: {"bind": "/model-deps", "mode": "ro"}},
+            volumes={**volumes, sdk_volume: {"bind": "/model-deps", "mode": "ro"},
+                     **({pdf_volume: {"bind": "/pdf-deps", "mode": "ro"}} if k else {})},
             network=runner_network, detach=True, stdin_open=False, tty=False,
             read_only=True, tmpfs={"/tmp": "rw,noexec,nosuid,size=64m"},
             cap_drop=["ALL"], security_opt=["no-new-privileges:true"], pids_limit=256,
@@ -1283,6 +1299,9 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                             "sdk": sdk, "credentials_in_world": False,
                             "docker_socket_mounted": False, "patient_fixture_projection": False,
                             "judge_enabled": False, "started": False}
+        if k:
+            result["runner"]["pdf_volume"] = pdf_volume
+            result["runner"]["pdf_dependency"] = execution_identity["pdf_dependency"]
         persist_orchestration()
         if tasknet is not None:
             tasknet.connect(runner)
@@ -1477,7 +1496,14 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         try:
             handbook_candidate = Path(path_value).relative_to(handbook_root)
             if ".." not in handbook_candidate.parts:
-                handbook_file = Path(path_value)
+                cursor = handbook_root
+                if not cursor.is_symlink():
+                    for part in handbook_candidate.parts:
+                        cursor = cursor / part
+                        if cursor.is_symlink():
+                            break
+                    else:
+                        handbook_file = cursor
         except Exception:
             pass
         if type(path_value) is not str or (path_value not in allowed_projection and workspace_file is None and handbook_file is None):
@@ -1486,12 +1512,9 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         if path.is_symlink() or not path.is_file():
             return "ERROR: projected file is unavailable"
         offset, limit = args.get("offset"), args.get("limit")
-        text = path.read_text(encoding="utf-8")
-        if offset is not None or limit is not None:
-            lines = text.splitlines(keepends=True)
-            start = max(int(offset or 1) - 1, 0)
-            text = "".join(lines[start:start + int(limit)] if limit is not None else lines[start:])
-        return text
+        from pdf_resource_reader import read_allowed_file
+        pdf_enabled = getattr(getattr(journal, "policy", None), "scope", None) == "real_development"
+        return read_allowed_file(path, offset, limit, pdf_enabled=pdf_enabled)
 
     async def list_files(_ctx: Any, payload: str) -> str:
         args = json.loads(payload)

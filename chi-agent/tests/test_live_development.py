@@ -209,6 +209,33 @@ class FakeDocker:
 
 
 class LiveDevelopmentTests(unittest.TestCase):
+    def test_j_identity_binds_utf8_reader_without_pdf_dependency(self):
+        import hashlib
+        from types import SimpleNamespace
+        identity = live._execution_identity()
+        source = live.ROOT / "scripts" / "pdf_resource_reader.py"
+        self.assertEqual(identity["application_files_sha256"]["scripts/pdf_resource_reader.py"],
+                         hashlib.sha256(source.read_bytes()).hexdigest())
+        self.assertNotIn("pdf_dependency", identity)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace = root / "workspace"
+            target = workspace / "case-1" / "provider" / "text.txt"
+            target.parent.mkdir(parents=True)
+            target.write_text("一\n二\n", encoding="utf-8")
+            ledger = SimpleNamespace(pending_calls=[])
+            class Journal:
+                policy = SimpleNamespace(scope="local_development")
+                def start_dispatch(self, **kwargs): pass
+                def finish_dispatch(self, **kwargs): pass
+                def record_effect(self, effect): pass
+            with patch.object(live, "WORKSPACE_CONTAINER_ROOT", workspace):
+                tool = next(t for t in live._live_tools("c-once", root, root, Journal(), {}, ledger)
+                            if t.name == "local-fs-read")
+                args = {"path": str(target), "offset": 2, "limit": 1}
+                ledger.pending_calls.append({"tool": tool.name, "arguments": args, "call_id": "test"})
+                self.assertEqual(asyncio.run(tool.on_invoke_tool(None, json.dumps(args))), "二\n")
+
     def test_missing_mock_credentials_and_unsupported_response_stop_without_reading_host_env(self):
         with tempfile.TemporaryDirectory() as temp:
             with patch.object(live, "ROOT", Path(temp)), patch.dict(os.environ, {}, clear=True):
