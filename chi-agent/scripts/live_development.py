@@ -23,7 +23,7 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
-from b_execution_policy import load_local_policy
+from b_execution_policy import load_local_policy, load_real_development_policy
 from b_live_preflight import _profile_summary, _source_and_sdk, build_plan
 from b_provider_profile import load_profile
 
@@ -36,6 +36,8 @@ B_SUCCESS_SCHEMA = "chi-real-b-smoke-success-v1"
 _MOCK_ORCHESTRATION_TEST = object()
 CLAIM_FILE = "c-once-claim.json"
 REAL_ROOT_RELATIVE = Path("runs/real-b-c")
+K_ROOT_RELATIVE = Path("runs/real-c-development")
+K_ACCOUNTING_SCHEMA = "chi-real-c-development-accounting-v1"
 WORKSPACE_CONTAINER_ROOT = Path("/logs/artifacts/workspaces")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$")
 SAFE_ERROR_RE = re.compile(r"^[a-z0-9_]{1,64}$")
@@ -110,7 +112,10 @@ def _atomic_json(path: Path, value: dict[str, Any], *, exclusive: bool = False) 
 
 def _read_json(path: Path) -> dict[str, Any]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"), parse_constant=lambda _x: (_ for _ in ()).throw(ValueError()))
+        if path.is_symlink():
+            raise ValueError()
+        value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_no_duplicate_keys,
+                           parse_constant=lambda _x: (_ for _ in ()).throw(ValueError()))
     except Exception:
         raise LiveFailure("real_accounting_invalid") from None
     if type(value) is not dict:
@@ -124,11 +129,12 @@ def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
     required = {"schema", "campaign_id", "namespace", "currency", "cap_cny", "prior_spend_cny",
                 "prior_source", "known_settled_cost_cny", "known_input_tokens", "known_output_tokens",
                 "usage_complete", "pending", "profile_sha256", "execution_identity", "created_at"}
-    if set(state) != required or state.get("schema") != ACCOUNTING_SCHEMA \
+    is_k = state.get("schema") == K_ACCOUNTING_SCHEMA
+    if set(state) != required or state.get("schema") not in {ACCOUNTING_SCHEMA, K_ACCOUNTING_SCHEMA} \
             or state.get("campaign_id") != CAMPAIGN_ID:
         return "real_accounting_invalid"
     if (state.get("namespace") != "real_provider_usage_estimated_cost" or state.get("currency") != "CNY"
-            or state.get("cap_cny") != "5" or type(state.get("prior_source")) is not str
+            or state.get("cap_cny") != (None if is_k else "5") or type(state.get("prior_source")) is not str
             or not state["prior_source"].strip() or type(state.get("created_at")) is not str
             or not state["created_at"].strip()):
         return "real_accounting_invalid"
@@ -142,7 +148,7 @@ def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
             return "real_accounting_invalid"
         if not amount.is_finite() or amount < 0:
             return "real_accounting_invalid"
-    if Decimal(state["prior_spend_cny"]) + Decimal(state["known_settled_cost_cny"]) > Decimal("5"):
+    if not is_k and Decimal(state["prior_spend_cny"]) + Decimal(state["known_settled_cost_cny"]) > Decimal("5"):
         return "real_accounting_invalid"
     try:
         datetime.fromisoformat(state["created_at"].replace("Z", "+00:00"))
@@ -201,7 +207,7 @@ def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
         expected_cumulative = Decimal(state["prior_spend_cny"]) + Decimal(state["known_settled_cost_cny"]) + reserve
         if (Decimal(pending["reserve_upper_cost_cny"]) != reserve
                 or Decimal(pending["cumulative_upper_cost_cny"]) != expected_cumulative
-                or expected_cumulative > Decimal("5")
+                or (not is_k and expected_cumulative > Decimal("5"))
                 or state.get("profile_sha256") != profile.sha256):
             return "real_accounting_invalid"
     elif state.get("usage_complete") is not True:
@@ -209,9 +215,9 @@ def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
     return None
 
 
-def _execution_identity() -> dict[str, Any]:
+def _execution_identity(*, k: bool = False) -> dict[str, Any]:
     profile = load_profile()
-    policy = load_local_policy()
+    policy = load_real_development_policy() if k else load_local_policy()
     import model_runner_adapter as adapter
     upstream = adapter._upstream_identity()
     try:
@@ -272,6 +278,214 @@ def initialize_real_accounting(root: Path, *, prior_source: str,
     return state
 
 
+def _validate_b_receipt(root: Path, receipt: dict[str, Any], profile: Any,
+                        identity: dict[str, Any]) -> None:
+    if (receipt.get("schema") != B_SUCCESS_SCHEMA or receipt.get("status") != "success"
+            or receipt.get("campaign_id") != CAMPAIGN_ID or receipt.get("task_id") != TASK_ID
+            or receipt.get("profile_sha256") != profile.sha256
+            or receipt.get("execution_identity") != identity or receipt.get("official_reward") is not None):
+        raise LiveFailure("real_b_success_evidence_mismatch")
+    run_id = receipt.get("run_id")
+    if type(run_id) is not str or ID_RE.fullmatch(run_id) is None:
+        raise LiveFailure("real_b_success_evidence_invalid")
+    run_path = root / "runs" / f"{run_id}.json"
+    run = _read_json(run_path)
+    logs = root / run_id / "runner-logs"
+    if (run.get("schema") != "chi-real-provider-run-v1" or run.get("campaign_id") != CAMPAIGN_ID
+            or run.get("state") != "complete" or run.get("execution_identity") != identity
+            or run.get("profile_sha256") != profile.sha256 or run.get("real_usage") != receipt.get("usage")
+            or run.get("estimated_cost_cny") != receipt.get("estimated_cost_cny")):
+        raise LiveFailure("real_b_success_evidence_mismatch")
+    files = [(run_path, "run_journal_sha256"), (logs / "run_result.json", "runner_result_sha256"),
+             (logs / "run_output.txt", "run_output_sha256"), (logs / "trace.jsonl", "trace_sha256"),
+             (logs / "run_log.txt", "run_log_sha256")]
+    for path, key in files:
+        if path.is_symlink() or not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != receipt.get(key):
+            raise LiveFailure("real_b_success_evidence_mismatch")
+
+
+def adopt_prior(old_root: Path, root: Path, *, _test_context: Any = None) -> None:
+    """Import verified terminal J evidence once, without altering predecessor bytes."""
+    import fcntl
+    if _test_context is not _MOCK_ORCHESTRATION_TEST and (
+            old_root.resolve() != (ROOT / REAL_ROOT_RELATIVE).resolve()
+            or root.resolve() != (ROOT / K_ROOT_RELATIVE).resolve()):
+        raise LiveFailure("real_budget_root_mismatch")
+    if old_root.is_symlink() or root.is_symlink() or not old_root.is_dir():
+        raise LiveFailure("real_accounting_invalid")
+    root.mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(old_root / ".real-accounting.lock", os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise LiveFailure("real_accounting_busy_or_pending") from None
+        state_path = old_root / "accounting.json"
+        receipt_path = old_root / "b-success.json"
+        claim_path = old_root / CLAIM_FILE
+        state, receipt, claim = (_read_json(path) for path in (state_path, receipt_path, claim_path))
+        profile = load_profile()
+        code = _validate_accounting_state(state, profile=profile, execution_identity=None)
+        if code or state.get("schema") != ACCOUNTING_SCHEMA or state.get("pending") is not None or not state.get("usage_complete"):
+            raise LiveFailure(code or "real_accounting_pending_unknown")
+        _validate_b_receipt(old_root, receipt, profile, state["execution_identity"])
+        claim_run = claim.get("run_id")
+        if (claim.get("schema") != CLAIM_SCHEMA or claim.get("campaign_id") != CAMPAIGN_ID
+                or claim.get("task_id") != TASK_ID or type(claim_run) is not str
+                or ID_RE.fullmatch(claim_run) is None or claim.get("execution_identity") != state["execution_identity"]
+                or claim.get("profile_sha256") != profile.sha256 or claim.get("official_reward") is not None
+                or claim.get("replay_allowed") is not False or not claim.get("finished_at")
+                or claim.get("state") != "failed_or_uncertain_claim_retained" or claim.get("terminal_status") != "failed"
+                or claim.get("cleanup_error_code") is not None
+                or claim.get("b_success_sha256") != hashlib.sha256(_json(receipt).encode()).hexdigest()):
+            raise LiveFailure("prior_claim_invalid")
+        orchestration = _read_json(old_root / claim_run / "orchestration.json")
+        cleanup = orchestration.get("cleanup")
+        world = orchestration.get("world")
+        if (orchestration.get("run_id") != claim_run or orchestration.get("status") != claim.get("terminal_status")
+                or not orchestration.get("finished_at") or orchestration.get("cleanup_error_code") is not None
+                or orchestration.get("persistence_error_code") is not None or type(cleanup) is not dict
+                or type(world) is not dict or world.get("logs_captured") is not True
+                or cleanup.get("world_removed") is not True or cleanup.get("network_removed") is not True
+                or "runner" in orchestration):
+            raise LiveFailure("prior_claim_invalid")
+        usage = receipt.get("usage")
+        if (type(usage) is not dict or usage != {"input_tokens": state["known_input_tokens"], "output_tokens": state["known_output_tokens"]}
+                or Decimal(receipt["estimated_cost_cny"]) != Decimal(state["known_settled_cost_cny"])
+                or Decimal(state["prior_spend_cny"]) + Decimal(state["known_settled_cost_cny"]) <= 0):
+            raise LiveFailure("prior_usage_inconsistent")
+        provenance = {"schema": "chi-real-prior-adoption-v1", "old_execution_identity": state["execution_identity"],
+                      "source_files_sha256": {str(path.relative_to(old_root)): hashlib.sha256(path.read_bytes()).hexdigest()
+                                              for path in (state_path, receipt_path, claim_path, old_root / claim_run / "orchestration.json")},
+                      "prior_usage": usage, "prior_estimated_cost_cny": str(Decimal(state["prior_spend_cny"]) + Decimal(state["known_settled_cost_cny"]))}
+        new_state = {**state, "schema": K_ACCOUNTING_SCHEMA, "cap_cny": None,
+                     "prior_spend_cny": provenance["prior_estimated_cost_cny"], "known_settled_cost_cny": "0",
+                     "prior_source": "adopted_j_campaign:adoption.json"}
+        _atomic_json(root / "adoption.json", provenance, exclusive=True)
+        _atomic_json(root / "accounting.json", new_state, exclusive=True)
+    except FileExistsError:
+        raise LiveFailure("real_accounting_already_initialized") from None
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
+
+
+def rebind_source(root: Path, reason: str) -> None:
+    import fcntl
+    if type(reason) is not str or not reason.strip() or len(reason) > 300:
+        raise LiveFailure("source_transition_reason_invalid")
+    lock_fd = os.open(root / ".real-accounting.lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise LiveFailure("real_accounting_busy_or_pending") from None
+        path = root / "accounting.json"
+        state = _read_json(path)
+        code = _validate_accounting_state(state, profile=load_profile(), execution_identity=None)
+        if code or state.get("schema") != K_ACCOUNTING_SCHEMA or state.get("pending") is not None or not state.get("usage_complete"):
+            raise LiveFailure(code or "real_accounting_pending_unknown")
+        before = state["execution_identity"]
+        after = _execution_identity(k=True)
+        if before == after:
+            raise LiveFailure("source_transition_unchanged")
+        receipt_path = root / "b-success.json"
+        receipt_hash = None
+        if receipt_path.exists():
+            receipt = _read_json(receipt_path)
+            _validate_b_receipt(root, receipt, load_profile(), before)
+            receipt_hash = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+            archive = root / "b-receipts" / f"{receipt['run_id']}.json"
+            _atomic_json(archive, receipt, exclusive=True)
+        old_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+        record = {"schema": "chi-real-source-transition-v1", "before": before, "after": after,
+                  "reason": reason.strip(), "previous_accounting_sha256": old_hash,
+                  "previous_b_receipt_sha256": receipt_hash, "timestamp": datetime.now(timezone.utc).isoformat()}
+        _atomic_json(root / "source-transitions" / f"{old_hash}.json", record, exclusive=True)
+        if receipt_hash is not None:
+            receipt_path.unlink()
+            _fsync_parent(receipt_path)
+        state["execution_identity"] = after
+        _atomic_json(path, state)
+    except FileExistsError:
+        raise LiveFailure("source_transition_incomplete_or_exists") from None
+    finally:
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
+
+
+def _check_k_attempts_clean(root: Path) -> None:
+    claims = root / "claims"
+    if claims.is_symlink():
+        raise LiveFailure("prior_cleanup_unverified")
+    if not claims.exists():
+        return
+    for path in claims.iterdir():
+        if path.is_symlink() or not path.is_file() or path.suffix != ".json":
+            raise LiveFailure("prior_cleanup_unverified")
+        claim = _read_json(path)
+        run_id = claim.get("run_id")
+        if type(run_id) is not str or ID_RE.fullmatch(run_id) is None or path.name != f"{run_id}.json":
+            raise LiveFailure("prior_cleanup_unverified")
+        run = _read_json(root / run_id / "orchestration.json")
+        cleanup = run.get("cleanup")
+        if (claim.get("schema") != CLAIM_SCHEMA or not claim.get("finished_at")
+                or claim.get("cleanup_error_code") is not None or not run.get("finished_at")
+                or claim.get("terminal_status") != run.get("status")
+                or run.get("cleanup_error_code") is not None or run.get("persistence_error_code") is not None
+                or type(cleanup) is not dict
+                or ("runner" in run and cleanup.get("runner_removed") is not True)
+                or ("world" in run and "container_id" in run["world"] and cleanup.get("world_removed") is not True)
+                or ("world" in run and "network_id" in run["world"] and cleanup.get("network_removed") is not True)):
+            raise LiveFailure("prior_cleanup_unverified")
+
+
+def _k_locked(root: Path, operation: Any) -> Any:
+    import fcntl
+    root.mkdir(parents=True, exist_ok=True)
+    fd = os.open(root / ".controller.lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise LiveFailure("controller_busy") from None
+        _check_k_attempts_clean(root)
+        gate = root / "controller-state.json"
+        if gate.exists() and _read_json(gate).get("state") != "clean":
+            raise LiveFailure("prior_cleanup_unverified")
+        return operation()
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def _k_run(kind: str, run_id: str, root: Path) -> dict[str, Any]:
+    if ((root / run_id).exists() or (root / run_id).is_symlink()
+            or (root / "runs" / f"{run_id}.json").exists()
+            or (root / "claims" / f"{run_id}.json").exists()):
+        raise LiveFailure("run_id_exists")
+    state = _read_json(root / "accounting.json")
+    profile = load_profile()
+    identity = _execution_identity(k=True)
+    code = _validate_accounting_state(state, profile=profile, execution_identity=identity)
+    if code:
+        raise LiveFailure(code)
+    if state.get("schema") != K_ACCOUNTING_SCHEMA or state.get("pending") is not None or state.get("usage_complete") is not True:
+        raise LiveFailure("real_accounting_pending_unknown")
+    receipt_path = root / "b-success.json"
+    if kind == "b-smoke" and receipt_path.exists():
+        raise LiveFailure("real_b_smoke_already_succeeded")
+    if kind == "c-once":
+        _validate_b_receipt(root, _read_json(receipt_path), profile, identity)
+    gate = root / "controller-state.json"
+    _atomic_json(gate, {"schema": "chi-real-controller-state-v1", "state": "active", "run_id": run_id})
+    result = _orchestrate(kind, run_id, root, k=True)
+    clean = result.get("cleanup_error_code") is None and result.get("persistence_error_code") is None
+    _atomic_json(gate, {"schema": "chi-real-controller-state-v1", "state": "clean" if clean else "blocked",
+                        "run_id": run_id, "status": result.get("status")})
+    return result
+
+
 class RealDevelopmentJournal:
     """Real-only persistent accounting; never reads or writes synthetic journals."""
 
@@ -280,13 +494,14 @@ class RealDevelopmentJournal:
 
         if not isinstance(run_id, str) or ID_RE.fullmatch(run_id) is None:
             raise LiveFailure("run_id_invalid")
-        if policy.scope != "local_development" or policy.hard_cap_cny != Decimal("5"):
+        is_k = policy.scope == "real_development" and policy.mode == "record_only" and policy.hard_cap_cny is None
+        if not is_k and (policy.scope != "local_development" or policy.hard_cap_cny != Decimal("5")):
             raise LiveFailure("execution_policy_invalid")
         self.root = root
         self.run_id = run_id
         self.profile = profile
         self.policy = policy
-        self.cap_cny = Decimal("5")
+        self.cap_cny = None if is_k else Decimal("5")
         self.state_path = root / "accounting.json"
         self.run_path = root / "runs" / f"{run_id}.json"
         self.lock_path = root / ".real-accounting.lock"
@@ -304,7 +519,9 @@ class RealDevelopmentJournal:
         self._lock_owned = True
         try:
             self.state = _read_json(self.state_path)
-            actual_identity = _execution_identity()
+            if self.state.get("schema") != (K_ACCOUNTING_SCHEMA if is_k else ACCOUNTING_SCHEMA):
+                raise LiveFailure("real_accounting_invalid")
+            actual_identity = _execution_identity(k=True) if is_k else _execution_identity()
             if self.state.get("execution_identity") != actual_identity:
                 raise LiveFailure("real_execution_identity_mismatch")
             self._validate_state(actual_identity)
@@ -328,7 +545,7 @@ class RealDevelopmentJournal:
                 "known_prefix_estimated_cost_cny": "0",
                 "campaign_usage_snapshot": {"input_tokens": self.state["known_input_tokens"],
                                              "output_tokens": self.state["known_output_tokens"]},
-                "campaign_estimated_cost_cny_snapshot": self.state["known_settled_cost_cny"],
+                "campaign_estimated_cost_cny_snapshot": str(self.cumulative_spend) if is_k else self.state["known_settled_cost_cny"],
             }
             _atomic_json(self.run_path, self.run_doc, exclusive=True)
         except Exception:
@@ -366,7 +583,7 @@ class RealDevelopmentJournal:
             raise GuardFailure("real_profile_mismatch", "request_guard")
         reserve = (Decimal(profile.input_reserve_tokens) * profile.input_price
                    + Decimal(max_output) * profile.output_price) / Decimal(1_000_000)
-        if self.cumulative_spend + reserve > self.cap_cny:
+        if self.cap_cny is not None and self.cumulative_spend + reserve > self.cap_cny:
             raise GuardFailure("budget_exhausted", "request_guard")
         self.state["profile_sha256"] = profile.sha256
         entry = {"round": round_number, "status": "pending", "input_reserve_tokens": profile.input_reserve_tokens,
@@ -418,7 +635,8 @@ class RealDevelopmentJournal:
             "input_tokens": self.state["known_input_tokens"],
             "output_tokens": self.state["known_output_tokens"],
         }
-        self.run_doc["campaign_estimated_cost_cny_snapshot"] = self.state["known_settled_cost_cny"]
+        self.run_doc["campaign_estimated_cost_cny_snapshot"] = (str(self.cumulative_spend)
+            if self.cap_cny is None else self.state["known_settled_cost_cny"])
         self.state["pending"] = None
         self.state["usage_complete"] = True
         self.run_doc["state"] = "settled"
@@ -518,11 +736,11 @@ class RealDevelopmentJournal:
                              "campaign_usage": {"input_tokens": self.state["known_input_tokens"],
                                                 "output_tokens": self.state["known_output_tokens"]}
                              if usage_complete else None,
-                             "campaign_estimated_cost_cny": str(self.state["known_settled_cost_cny"])
+                             "campaign_estimated_cost_cny": str(self.cumulative_spend if self.cap_cny is None else Decimal(self.state["known_settled_cost_cny"]))
                              if usage_complete else None,
                              "campaign_known_prefix_usage": {"input_tokens": self.state["known_input_tokens"],
                                                              "output_tokens": self.state["known_output_tokens"]},
-                             "campaign_known_prefix_estimated_cost_cny": str(self.state["known_settled_cost_cny"]),
+                             "campaign_known_prefix_estimated_cost_cny": str(self.cumulative_spend if self.cap_cny is None else Decimal(self.state["known_settled_cost_cny"])),
                              "prior_spend_cny": self.state["prior_spend_cny"],
                              "prior_source": self.state["prior_source"]})
         self._persist()
@@ -578,7 +796,7 @@ def _budget_preflight(root: Path, *, profile: Any | None = None,
                 "source": state.get("prior_source"), "safe_error_code": "real_accounting_pending_unknown"}
     prior = Decimal(state["prior_spend_cny"])
     settled = Decimal(state["known_settled_cost_cny"])
-    if prior + settled > Decimal("5"):
+    if state.get("schema") == ACCOUNTING_SCHEMA and prior + settled > Decimal("5"):
         return {"status": "invalid", "real_aggregate_cost_cny": None,
                 "source": None, "safe_error_code": "real_accounting_invalid"}
     return {"status": "known", "prior_spend_cny": state["prior_spend_cny"],
@@ -613,8 +831,8 @@ def build_preflight(root: Path) -> dict[str, Any]:
             "readiness": "technical_only_not_authorized"}
 
 
-def _claim_c_once(root: Path, run_id: str, b_success: dict[str, Any]) -> Path:
-    claim = root / CLAIM_FILE
+def _claim_c_once(root: Path, run_id: str, b_success: dict[str, Any], *, k: bool = False) -> Path:
+    claim = root / "claims" / f"{run_id}.json" if k else root / CLAIM_FILE
     record = {"schema": CLAIM_SCHEMA, "campaign_id": CAMPAIGN_ID, "task_id": TASK_ID,
               "run_id": run_id, "state": "claimed_before_world_creation", "replay_allowed": False,
               "official_reward": None, "b_success_sha256": hashlib.sha256(_json(b_success).encode()).hexdigest(),
@@ -631,10 +849,10 @@ def _claim_c_once(root: Path, run_id: str, b_success: dict[str, Any]) -> Path:
 
 
 def _transition_c_claim(root: Path, run_id: str, state: str, *,
-                        execution_identity: dict[str, Any], profile_sha256: str) -> None:
+                        execution_identity: dict[str, Any], profile_sha256: str, k: bool = False) -> None:
     import fcntl
 
-    path = root / CLAIM_FILE
+    path = root / "claims" / f"{run_id}.json" if k else root / CLAIM_FILE
     lock = os.open(root / ".c-claim.lock", os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -730,7 +948,8 @@ def _projection_run_dir(run_id: str) -> Path:
     return ROOT / REAL_ROOT_RELATIVE / run_id
 
 
-def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: Any = None) -> dict[str, Any]:
+def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: Any = None,
+                 k: bool = False) -> dict[str, Any]:
     """Create an isolated runner; only C owns an official task world."""
     from a_environment import (
         AEnvironmentError, _capture_logs,
@@ -738,18 +957,20 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
         _task_environment, wait_world,
     )
 
-    if budget_root.resolve() != (ROOT / REAL_ROOT_RELATIVE).resolve():
+    if budget_root.resolve() != (ROOT / (K_ROOT_RELATIVE if k else REAL_ROOT_RELATIVE)).resolve():
         approved_test_root = (ROOT / REAL_ROOT_RELATIVE / "impl").resolve()
         if (_test_context is not _MOCK_ORCHESTRATION_TEST
                 or approved_test_root not in budget_root.resolve().parents):
             raise LiveFailure("real_budget_root_mismatch")
     profile = load_profile()
-    execution_identity = _execution_identity()
+    execution_identity = _execution_identity(k=True) if k else _execution_identity()
     state = _budget_preflight(budget_root, profile=profile, execution_identity=execution_identity)
     if state.get("status") != "known" or not state.get("settled_estimated_cost_cny"):
         raise LiveFailure(state.get("safe_error_code", "real_budget_unknown"))
     # A known accounting record is required before any provider or Docker side effect.
     current = _read_json(budget_root / "accounting.json")
+    if current.get("schema") != (K_ACCOUNTING_SCHEMA if k else ACCOUNTING_SCHEMA):
+        raise LiveFailure("real_accounting_invalid")
     if current.get("pending") is not None or current.get("usage_complete") is not True:
         raise LiveFailure("real_accounting_pending_unknown")
     if current.get("execution_identity") != execution_identity:
@@ -789,8 +1010,8 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             raise LiveFailure("real_b_success_evidence_mismatch")
         reserve = (Decimal(profile.input_reserve_tokens) * profile.input_price
                    + Decimal(profile.max_output_tokens) * profile.output_price) / Decimal(1_000_000)
-        remaining = Decimal(current["cap_cny"]) - Decimal(current["prior_spend_cny"]) - Decimal(current["known_settled_cost_cny"])
-        if current.get("usage_complete") is not True or remaining < reserve:
+        remaining = None if k else Decimal(current["cap_cny"]) - Decimal(current["prior_spend_cny"]) - Decimal(current["known_settled_cost_cny"])
+        if current.get("usage_complete") is not True or (remaining is not None and remaining < reserve):
             raise LiveFailure("budget_insufficient_for_c_once")
     elif (budget_root / "b-success.json").exists():
         raise LiveFailure("real_b_smoke_already_succeeded")
@@ -858,7 +1079,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                     raise LiveFailure("runner_resource_preflight_failed") from None
             else:
                 raise LiveFailure("runner_resource_already_exists")
-            claim_path = _claim_c_once(budget_root, run_id, b_success or {})
+            claim_path = _claim_c_once(budget_root, run_id, b_success or {}, k=k)
             result["c_claim_path"] = str(claim_path.relative_to(ROOT))
             persist_orchestration()
             a_run_dir.mkdir(parents=True, exist_ok=False)
@@ -923,7 +1144,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                      "--kind", kind, "--run-id", run_id, "--budget-root", "/participant/real-budget",
                      "--logs-dir", "/participant/run/runner-logs", "--instruction-file",
                      ("/participant/projection/instruction.md" if projection is not None else "/participant/run/b-smoke-instruction.md"),
-                     "--mcp-url", mcp_url],
+                     "--mcp-url", mcp_url] + (["--k-development"] if k else []),
             environment={"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": "/model-deps:/participant/vendor/chi-bench/src",
                          "OPENAI_AGENTS_MODEL": profile.model, "OPENAI_AGENTS_API_MODE": "chat_completions",
                          "OPENAI_AGENTS_MAX_TURNS": "6" if kind == "b-smoke" else str(profile.max_rounds),
@@ -982,6 +1203,8 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                     world, _official_world_run_dir(run_id), client,
                     deadline=time.monotonic() + 30,
                 )
+                if result["world"]["logs_captured"] is not True:
+                    result["cleanup_error_code"] = result.get("cleanup_error_code") or "world_log_capture_failed"
             except Exception as exc:
                 result["world"]["log_capture_error_type"] = type(exc).__name__
                 result["cleanup_error_code"] = result.get("cleanup_error_code") or "world_log_capture_failed"
@@ -1496,7 +1719,8 @@ async def _worker_run(args: argparse.Namespace) -> int:
         raise LiveFailure("run_id_invalid")
     _validate_worker_mounts(args)
     profile = load_profile()
-    policy = load_local_policy()
+    k = getattr(args, "k_development", False)
+    policy = load_real_development_policy() if k else load_local_policy()
     instruction_file = args.instruction_file
     logs_dir = args.logs_dir
     logs_dir.mkdir(parents=True, exist_ok=False)
@@ -1505,7 +1729,8 @@ async def _worker_run(args: argparse.Namespace) -> int:
         raise LiveFailure("provider_credential_missing")
     if kind == "c-once":
         _transition_c_claim(args.budget_root, run_id, "runner_started_once",
-                            execution_identity=_execution_identity(), profile_sha256=profile.sha256)
+                            execution_identity=_execution_identity(k=True) if k else _execution_identity(),
+                            profile_sha256=profile.sha256, k=k)
     journal = RealDevelopmentJournal(args.budget_root, run_id, profile=profile, policy=policy)
     ledger = Ledger("real-provider", initial_cost_cny=float(journal.cumulative_spend),
                     prior_cost_source=journal.state["prior_source"])
@@ -1555,7 +1780,7 @@ async def _worker_run(args: argparse.Namespace) -> int:
             output_ceiling = min(profile.max_output_tokens, 1024) if kind == "b-smoke" else profile.max_output_tokens
             client_http = httpx.AsyncClient(transport=GuardedTransport(
                 profile=profile, journal=journal, lower=http_transport, ledger=ledger,
-                cap_cny=Decimal("5"),
+                cap_cny=policy.hard_cap_cny,
                 validate_response=lambda payload: _validate_live_response(payload, ledger, profile, schemas, allowed_names,
                                                                            journal, raw_names, kind=kind,
                                                                            observed_history=exchanges),
@@ -1815,6 +2040,12 @@ def _parser() -> argparse.ArgumentParser:
         cmd = sub.add_parser(name)
         cmd.add_argument("--run-id", required=True)
         cmd.add_argument("--budget-root", type=Path, default=ROOT / REAL_ROOT_RELATIVE)
+    sub.add_parser("adopt-prior")
+    transition = sub.add_parser("rebind-source")
+    transition.add_argument("--reason", required=True)
+    for name in ("k-b-smoke", "c-run"):
+        cmd = sub.add_parser(name)
+        cmd.add_argument("--run-id", required=True)
     worker = sub.add_parser("worker")
     worker.add_argument("--kind", choices=("b-smoke", "c-once"), required=True)
     worker.add_argument("--run-id", required=True)
@@ -1822,12 +2053,29 @@ def _parser() -> argparse.ArgumentParser:
     worker.add_argument("--logs-dir", type=Path, required=True)
     worker.add_argument("--instruction-file", type=Path, required=True)
     worker.add_argument("--mcp-url", required=True)
+    worker.add_argument("--k-development", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        k_root = ROOT / K_ROOT_RELATIVE
+        if args.command == "adopt-prior":
+            _k_locked(k_root, lambda: adopt_prior(ROOT / REAL_ROOT_RELATIVE, k_root))
+            print(_json({"status": "adopted", "official_reward": None}))
+            return 0
+        if args.command == "rebind-source":
+            _k_locked(k_root, lambda: rebind_source(k_root, args.reason))
+            print(_json({"status": "rebound", "official_reward": None}))
+            return 0
+        if args.command in {"k-b-smoke", "c-run"}:
+            if ID_RE.fullmatch(args.run_id) is None:
+                raise LiveFailure("run_id_invalid")
+            kind = "b-smoke" if args.command == "k-b-smoke" else "c-once"
+            result = _k_locked(k_root, lambda: _k_run(kind, args.run_id, k_root))
+            print(_json(result))
+            return 0 if result.get("status") in {"completed_ungraded", "smoke_completed"} else 1
         if args.command == "plan":
             print(_json(build_read_only_plan()))
             return 0
