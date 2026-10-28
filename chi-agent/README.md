@@ -257,7 +257,7 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 用户已授权多次本地 C 开发尝试并取消旧 5 元金额停止条件；K 策略独立为 real_development / record_only / null cap。运行前先核对 [REVIEW_STATE](reviews/REVIEW_STATE.md) 的验收与实际授权。参赛模型的基础 SDK 继续复用 H 的卷；PDF 读取使用独立的固定依赖，不改原 SDK 卷。
 
-所有真实 DeepSeek 请求（含确认子请求和开发评审）还须遵守[调用时段约定](../COLLABORATION.md#deepseek-api-调用时段2026-10-28)。启动前核对北京时间并为完整运行留足窗口；预计跨入禁用时段则延后。依用户要求仅放在文档中，由主代理按协作规则执行，不添加程序时钟拦截。
+本节直连 DeepSeek 官方 API 的真实请求（含确认子请求和开发评审）须遵守[调用时段约定](../COLLABORATION.md#deepseek-api-调用时段2026-10-28)。启动前核对北京时间并为完整运行留足窗口；预计跨入禁用时段则延后。经 OpenCode 调用 DeepSeek 不受这条避峰限制，可全天安排已授权工作。依用户要求仅放在文档中，不添加程序时钟拦截。
 
 从 `chi-agent/` 目录运行。首次在空 PDF 卷安装；已有通过核对的卷直接复用，安装也在 Docker 中：
 
@@ -371,6 +371,68 @@ K 的 `c-run` 默认启用患者确认；启动命令不变，操作员无需在
 确认后，每次 MCP 业务副作用和 workspace 写/edit 都核对患者及已观察的 order/case/form/document 等归属。未绑定、跨患者、猜测 ID、未知工具或身份冲突明确拒绝；不静默切换患者，未证明 line_updates 归属时拒绝。患者源文档与病例文档分别跟踪，共用 form 模板按 case 配对。
 
 语义确认仍来自同 provider，存在模型偏差；来源/身份检查不能证明医学语义正确。完整 world 的非目标患者业务写入、正常结束和目标结果须结合检查，不能只看局部 rubric。设计与实验边界见 [N 规格](openspec/changes/provider-patient-binding/design.md)，实际候选、失败和回归结果见 [N 报告](reviews/provider-patient-binding-review.md)。正式配送入口与 F.5 不在本轮迁移范围。
+
+## OpenCode Go 的 V4.1 Flash 接入
+
+`.env` 本地新增 `OPENCODE_API_KEY`，保留原 `DEEPSEEK_API_KEY`，不要把 Key 放入命令正文或 Git。Go 使用正式 ID `deepseek-v4.1-flash` 和 `/inference/go/openai/v1/chat/completions`；SDK base URL 为 `https://opencode.ai/inference/go/openai/v1`，不能套用 native 的 URL 或 pay-as-you-go 路径。
+
+`scripts/opencode_go_provider.py` 提供独立的 Go 适配与固定 coding 工具探针，下一项正式入口接线可以复用。当前 CLI 不接受患者、任务指令、MCP 或任意 prompt；不能用它替代 `c-run` 或开发评审。Go 的非编码 CHI 用途支持仍待确认。**OpenCode 请求不受 DeepSeek 官方 API 的避峰时段限制，可全天执行已授权工作**；运行前仍核对控制台 Extra Usage 关闭和用量状态，不因等待官方 API 折扣时段而延后。
+
+以下从项目目录运行，复用已有镜像和 SDK 卷，不安装依赖。`plan` / `preflight` 只读，`offline` 用临时账目与模拟 HTTP，均不需要 Key：
+
+```sh
+mkdir -p runs/opencode-go-development
+go_offline() {
+  docker run --rm --network none --read-only --tmpfs /tmp \
+    -e PYTHONDONTWRITEBYTECODE=1 \
+    -e PYTHONPATH=/workspace/scripts:/model-deps \
+    -v "$PWD/scripts:/workspace/scripts:ro" \
+    -v "$PWD/profiles:/workspace/profiles:ro" \
+    -v "$PWD/requirements-model.lock:/workspace/requirements-model.lock:ro" \
+    -v "$PWD/runs/opencode-go-development:/workspace/runs/opencode-go-development:ro" \
+    -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+    -w /workspace chi-agent-dev:latest \
+    /opt/venv/bin/python scripts/opencode_go_provider.py "$@"
+}
+go_offline plan
+go_offline preflight
+go_offline offline
+```
+
+真实入口为 `smoke --run-id <新的唯一ID>`。须从已审核源码执行，单独挂载 `runs/opencode-go-development/` 为可写；仅向该容器注入 `OPENCODE_API_KEY`，使用外网但不挂任务资源、`.env`、手册、Docker socket 或旧运行目录。不要在生产账本上运行 `offline` 合成调用。实际受审命令与结果见[Go 审核报告](reviews/opencode-go-provider-review.md)。
+
+需要真实探针时，可在禁网容器从现有 `.env` 生成仅含 Go Key 的临时 0600 文件；下面的外网容器不会接收其他凭据。先核对当前授权，不重复执行已用过的 run-id：
+
+```sh
+(
+  set -eu
+  go_probe_auth_dir="$(mktemp -d)"
+  trap 'rm -f "$go_probe_auth_dir/go.env"; rmdir "$go_probe_auth_dir"' EXIT
+  docker run --rm --network none --read-only --tmpfs /tmp --env-file .env \
+    -v "$go_probe_auth_dir:/auth:rw" chi-agent-dev:latest /opt/venv/bin/python -c '
+import os
+key = os.environ["OPENCODE_API_KEY"]
+assert key.strip() and "\n" not in key and "\r" not in key
+fd = os.open("/auth/go.env", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, "w") as out:
+    out.write("OPENCODE_API_KEY=" + key + "\n")
+'
+  docker run --rm --read-only --tmpfs /tmp --env-file "$go_probe_auth_dir/go.env" \
+    -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/workspace/scripts:/model-deps \
+    -v "$PWD/scripts:/workspace/scripts:ro" -v "$PWD/profiles:/workspace/profiles:ro" \
+    -v "$PWD/requirements-model.lock:/workspace/requirements-model.lock:ro" \
+    -v "$PWD/runs/opencode-go-development:/workspace/runs/opencode-go-development:rw" \
+    -v chi-h-root-model-deps-20261027-v1:/model-deps:ro -w /workspace \
+    chi-agent-dev:latest /opt/venv/bin/python scripts/opencode_go_provider.py \
+    smoke --run-id go-coding-new-001
+)
+```
+
+源码变化后先离线审核，再以禁网容器、相同源码/依赖、Go 账本可写挂载，显式执行 `rebind-source --reason '<变更原因>'`。此命令不读 Key、不发 API，要求 profile/SDK 不变、旧用量/费用完整、无 pending/halt 和历史审计通过；归档旧 accounting 原字节，登记转换后继续原累计。`.rebind-pending` 或不完整转换会阻断，不得删除标记、归档或原根目录绕过。
+
+新账本分别累计 Go 返回的余额扣费、模型价目价值和套餐消耗，单位均为 USD；原 CNY 账目不迁移、不相加。订阅月费另计。未知用量保留 pending 并阻止后续请求，重复 ID 不覆盖，账单来源异常先结算已知费用再停止；不能删除账本清零或自动回退到余额/native。
+
+模型标称 1M 上下文由 [OpenCode 模型信息](https://opencode.ai/data/deepseek/deepseek-v4-1-flash)及 [DeepSeek 规格](https://api-docs.deepseek.com/quick_start/pricing/)支持，本探针没有百万 token 实测。`deepseek-flash[1m]` 来自 [Claude Code 专用接入示例](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/)，不追加到 Go 的正式模型 ID；单次输出上限与上下文容量分开设置。
 
 ## DeepSeek 本地开发评审
 

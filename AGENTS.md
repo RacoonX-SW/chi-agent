@@ -19,7 +19,7 @@
 - 安装、下载、调试、测试和运行均在 Docker；宿主机用于编辑、Git 和 Docker。开发/调度 Python 的目标主次版本对齐固定官方任务环境（当前 3.12），迁移要单独验证；修改约定不表示现有镜像/依赖锁已经迁移。详见 [Docker 工作流](chi-agent/docs/docker-workflow.md)。
 - 文档按 [COLLABORATION.md](COLLABORATION.md) 的职责分配维护，状态只在 `REVIEW_STATE.md` 保存一份短摘要，详细结果只在一份阶段报告。README 写怎么运行，OpenSpec 写做什么，学习账本只记关键讲解、疑问与取舍；不把相同状态、SHA、测试数量复制到各入口，不为日常问答新增交接文件。
 - 历史 Luna（包括 D0/A 双代理）和 Python 3.13 记录保留其证据意义，不改写成 Terra，也不作为后续默认配置；当前规则以本文件及协作约定为准。开发子代理模型与参赛运行时模型分别配置；改变协作/环境约定不自动恢复下一开发阶段、模型 API、判分或付费运行，实际授权见审核接续状态。
-- DeepSeek 的所有真实 API 调用须先核对[调用时段约定](COLLABORATION.md#deepseek-api-调用时段2026-10-28)；禁用时段推进代码、离线验证和教学，不因已有调用授权跳过时段限制。
+- 仅 **DeepSeek 官方 API 直连**须遵守[调用时段约定](COLLABORATION.md#deepseek-api-调用时段2026-10-28)；经 OpenCode 调用 DeepSeek 不受该避峰限制，可全天安排已授权工作。按实际提供方/端点区分，不按模型名套用；仍仅在文档执行，不新增程序时钟门禁。
 - 不操作、调试或监控 Antigravity，不设置后台轮询或自动唤醒。凭据、手册、数据、vendor checkout、原始运行轨迹及受限产物不上传；完整上传边界见 GitHub 工作流。
 
 ## 边参赛边学习
