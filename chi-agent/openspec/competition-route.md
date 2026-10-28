@@ -38,6 +38,8 @@ M 的两个新任务固定条件基线揭示了目标案件局部检查以外的
 
 [O 请求次数反馈](changes/request-budget-awareness/proposal.md) 接续运行收束问题：在 K 自主 C 使用 50 次共享请求契约，并在每次主调用前提供可信剩余信息，保留患者门禁与原完成工具语义。该组合变化的独立审核、真实回归及限制只见 [O 报告](../reviews/request-budget-awareness-review.md)，不把正常退出自动当作业务成功。
 
+[P 字段依据提示](changes/referral-field-guidance/proposal.md) 从 t013 的字段选择继续改进现有建案/提交工具指导。按用户成本取舍，先离线验证，t019 暂停付费重跑，t013 优先；提示接入与真实业务有效性分别确认，详见 [P 报告](../reviews/referral-field-guidance-review.md)。
+
 ## 阶段 3：跨领域、小批量与必要并发
 
 逐步纳入医院侧、保险方和照护管理的代表任务。批量与并发是评测组织方式，不等于为每道题写专用 Agent。任务清单和调用数量依据实际资源与预算决定，不把全量 75 题当作参赛资格条件。

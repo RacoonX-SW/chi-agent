@@ -257,7 +257,7 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 用户已授权多次本地 C 开发尝试并取消旧 5 元金额停止条件；K 策略独立为 real_development / record_only / null cap。运行前先核对 [REVIEW_STATE](reviews/REVIEW_STATE.md) 的验收与实际授权。参赛模型的基础 SDK 继续复用 H 的卷；PDF 读取使用独立的固定依赖，不改原 SDK 卷。
 
-所有真实 DeepSeek 请求（含确认子请求和开发评审）还须遵守[调用时段约定](../COLLABORATION.md#deepseek-api-调用时段2026-10-28)。启动前核对北京时间并为完整运行留足窗口；预计跨入禁用时段则延后。当前由主代理执行这条协作约束，代码没有时钟门禁。
+所有真实 DeepSeek 请求（含确认子请求和开发评审）还须遵守[调用时段约定](../COLLABORATION.md#deepseek-api-调用时段2026-10-28)。启动前核对北京时间并为完整运行留足窗口；预计跨入禁用时段则延后。依用户要求仅放在文档中，由主代理按协作规则执行，不添加程序时钟拦截。
 
 从 `chi-agent/` 目录运行。首次在空 PDF 卷安装；已有通过核对的卷直接复用，安装也在 Docker 中：
 
@@ -353,6 +353,12 @@ K 的 `c-run` 使用来源受控的执行契约：SDK 主循环最多 50 轮，�
 反馈解释现有收尾成本：尚未声明完成时，从当前响应选择完成工具到最终回复至少两次请求（包含本次）；完成声明已返回后，当前请求可生成最终回复。剩余次数较少时给软提醒，不硬扣业务轮数、不改变完成工具终止语义。50 是上限，符合公开任务要求就应及时结束；未完成时应如实说明，正常退出也不自动证明业务成功。每个主请求的反馈身份/计数及实际 provider round 保存于 run journal，源码变化仍需 rebind 和新 B。
 
 这是增加请求空间与运行时提示的组合改动；实验边界见 [O 规格](openspec/changes/request-budget-awareness/design.md)，实际结果见 [O 报告](reviews/request-budget-awareness-review.md)。
+
+### 自主 C 的申请字段提示
+
+K C 在现有建案与提交工具的原 description 后，追加通用公开字段依据提示：分别核对服务类别和照护地点，机构名称本身不决定地点/级别；提交前把 request、form 和 evidence package 与原始公开材料核对。无需新参数、额外工具或确认模型，仍由 Agent 选择业务动作；这不是程序对字段语义的硬校验。
+
+`scripts/referral_field_guidance.py` 保存版本与文本。run journal 的 `referral_field_guidance` 记录整体指导及各工具原/后 description 的 hash；新模块进入 K 源码身份，沿用原 rebind/新 B 前置。仅 K C 追加，B/J/正式入口及无关工具保持原行为。实验和实际验证边界见 [P 报告](reviews/referral-field-guidance-review.md)；哪些任务安排付费验证只查 [审核状态](reviews/REVIEW_STATE.md)。
 
 ### 自主 C 的患者确认与写入门禁
 
