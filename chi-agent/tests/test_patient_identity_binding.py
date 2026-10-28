@@ -38,9 +38,7 @@ def observations():
 
 def verdict(status="unique_match"):
     return json.dumps({"status": status, "selected_patient_id": "P1",
-                       "candidates": [{"patient_id": "P1", "verdict": "match"},
-                                      {"patient_id": "P2", "verdict": "mismatch"},
-                                      {"patient_id": "P3", "verdict": "mismatch"}],
+                       "matches": ["P1"], "mismatches": ["P2", "P3"], "unknown": [],
                        "evidence": [{"instruction_quote": "90 day treatment trial",
                                      "chart_quote": "90 day treatment trial"}]})
 
@@ -64,19 +62,54 @@ def test_unique_match_citations_and_candidate_coverage():
     guard.confirmation_input("P1", history)
     fake = json.loads(verdict())
     fake["evidence"][0]["chart_quote"] = "fabricated"
-    assert guard.assess("P1", json.dumps(fake)) == "invalid_confirmation"
+    assert guard.assess("P1", json.dumps(fake))["reason"] == "evidence_invalid"
     fake = json.loads(verdict())
-    fake["candidates"][2]["verdict"] = "unknown"
-    assert guard.assess("P1", json.dumps(fake)) == "invalid_confirmation"
-    assert guard.assess("P1", verdict("ambiguous")) == "ambiguous"
+    fake["mismatches"].remove("P3")
+    fake["unknown"].append("P3")
+    assert guard.assess("P1", json.dumps(fake)) == {"status": "needs_observation", "reason": "unresolved_candidates", "unknown_ids": ["P3"]}
+    assert guard.assess("P1", verdict("ambiguous"))["status"] == "ambiguous"
     assert guard.bound is None
     guard.confirmations = 2
     with pytest.raises(pib.Refusal, match="confirmation_unavailable"):
         guard.confirmation_input("P1", history)
     guard.confirmations = 0
-    assert guard.assess("P1", verdict()) == "unique_match"
+    assert guard.assess("P1", verdict())["status"] == "unique_match"
     assert guard.bound == "P1"
     with pytest.raises(pib.Refusal): guard.confirmation_input("P2", history)
+
+
+def test_partition_coverage_and_feedback_with_large_roster():
+    guard, history = observations()
+    items = guard.roster["items"]
+    items.extend({"id": f"P{i}", "dob": "1985-01-01", "sex": "female"} for i in range(4, 66))
+    guard.roster["value"]["total"] = len(items)
+    guard.roster["text"] = json.dumps(guard.roster["value"])
+    history[0]["result"] = guard.roster["text"]
+    evidence = json.loads(guard.confirmation_input("P1", history))
+    assert evidence["expected_count"] == 65
+    assert evidence["required_candidate_ids"] == [f"P{i}" for i in range(1, 66)]
+    candidate = json.loads(verdict())
+    candidate["mismatches"] = [f"P{i}" for i in range(2, 9)]
+    result = guard.assess("P1", json.dumps(candidate))
+    assert result == {"status": "invalid", "reason": "candidate_coverage_incomplete", "expected_count": 65,
+                      "actual_count": 8, "expected_ids": sorted(f"P{i}" for i in range(1, 66)),
+                      "actual_ids": sorted(f"P{i}" for i in range(1, 9)),
+                      "missing_ids": sorted(f"P{i}" for i in range(9, 66)), "unexpected_ids": []}
+    candidate["mismatches"] = [f"P{i}" for i in range(2, 66)]
+    candidate["unknown"] = ["P2"]
+    assert guard.assess("P1", json.dumps(candidate))["reason"] == "candidate_partition_duplicate"
+    candidate["mismatches"].remove("P2")
+    assert guard.assess("P1", json.dumps(candidate))["unknown_ids"] == ["P2"]
+    candidate["unknown"] = []
+    candidate["mismatches"].append("P2")
+    candidate["selected_patient_id"] = "P2"
+    assert guard.assess("P1", json.dumps(candidate)) == {"status": "mismatch", "reason": "selected_candidate_mismatch"}
+    assert guard.bound is None
+    candidate["selected_patient_id"] = "P1"
+    candidate["evidence"][0]["chart_quote"] = "not present"
+    assert guard.assess("P1", json.dumps(candidate))["reason"] == "evidence_invalid"
+    assert guard.assess("P1", '{"status":"unique_match","status":"unique_match"}')["reason"] == "confirmation_format_invalid"
+    assert guard.bound is None
 
 
 def test_cross_patient_orders_cases_forms_documents_and_conflicting_result():
@@ -268,8 +301,8 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mixed_con
             elif name == "forms.save_form_response": value = {"saved_responses": [{"case_id": "C1"}]}
             else: raise AssertionError(name)
             return CallToolResult(content=[TextContent(type="text", text=json.dumps(value))])
-    payload = json.dumps({"status": "unique_match", "selected_patient_id": "P1", "candidates": [
-        {"patient_id": "P1", "verdict": "match"}, {"patient_id": "P2", "verdict": "mismatch"}],
+    payload = json.dumps({"status": "unique_match", "selected_patient_id": "P1", "matches": ["P1"],
+        "mismatches": ["P2"], "unknown": [],
         "evidence": [{"instruction_quote": "90 day treatment trial", "chart_quote": "90 day treatment trial"}]})
     responses = [
         _completion(calls=[_call("search", "chart__search_patients", {}),

@@ -1783,12 +1783,12 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
                 request_context.reset(token)
         choices = response.choices
         if len(choices) != 1 or choices[0].finish_reason != "stop" or not isinstance(choices[0].message.content, str):
-            result = "invalid_confirmation"
+            result = {"status": "invalid", "reason": "confirmation_format_invalid"}
         else:
             result = binding.assess(args["patient_id"], choices[0].message.content)
         binding.event("confirmation_result", attempt=binding.confirmations, result=result,
                       response_content=choices[0].message.content if len(choices) == 1 else None)
-        return f"patient confirmation: {result}"
+        return json.dumps(result, ensure_ascii=False)
 
     def fn(name: str, description: str, schema: dict[str, Any], callback: Any) -> Any:
         async def tracked(ctx: Any, payload: str) -> Any:
