@@ -79,10 +79,12 @@ native 历史保守估算仍为 P 报告的 **121.571472 CNY**，原约 50 CNY �
 
 主代理运行前保存的 **42,739** 个旧文件最终逐字节哈希相同，未清零或改写旧失败、费用、claim；Go q001 原文件也与接续前 hash 相同。最终 Go 账目在只读副本的完整历史审核通过，pending=null、halted=null，仅一次显式 source transition。所有 Go 新文件经禁网检查不含两项配置秘密。两次 `--rm` 容器均不存在，临时 Go Key env 文件及其专用目录已删除；没有创建世界/网络资源，没有修改 `.env`。证据 `evidence/post-audit.json`，原始运行留在忽略的 `runs/opencode-go-development/`。
 
-上传前对明确的 13 个变更文件禁网检查：无两项配置秘密、本地 Markdown 目标存在；不含 `.env`、vendor、数据或原始运行，证据 `evidence/upload-audit.json`。`git diff --check` 通过，文档补齐不改变受审 provider 源码身份。
+首次推送前对当时明确的 13 个变更文件禁网检查：无两项配置秘密、本地 Markdown 目标存在；不含 `.env`、vendor、数据或原始运行，证据 `evidence/upload-audit.json`。`git diff --check` 通过，文档补齐不改变受审 provider 源码身份。
 
 ## 下一步
 
 正式评测入口及提交包仍需独立接线、源码身份和部署验证；先核对 Go 的 CHI 非编码用途支持、十一月隐私条件，再扩展当前固定 coding 请求契约及官方 harness 的角色/工具边界，不能只更换 Key 或删除 `live` 拒绝判断。若该用途不在套餐支持范围，保留的 native 路由仍可作为明确的备选，不静默 fallback。下一通用改进优先为提供方协议回归样本：对可选终态字段和工具阶段必需字段分别建契约，用已留存响应离线复现，避免为了排协议问题反复付费。
 
 这次教学已结合“标称上下文/客户端后缀/单次输出”和“工程拒绝/模型修正验证/正式任务成功”展开；没有新增用户亲自修改或运行 SDK 的证据。t013 收束、t019 付费暂停、Claude/正式 live/F.5 原边界继续保留。Q 已推送并创建 base=main [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)，交用户审核，不自行 merge/auto-merge。
+
+用户随后澄清避峰仅针对官方 API，OpenCode 可全天安排已授权工作；现行规则见[协作约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)。已在同一待合并 PR 更正文档，不改变以上实测时刻、源码身份、原始证据或账目；本次修订没有新增模型调用。

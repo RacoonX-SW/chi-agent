@@ -18,7 +18,7 @@
 
 ## 本轮接口与授权边界
 
-提供 provider 层的严格客户端/SDK model 接口，下一阶段可显式复用。当前公开 CLI 只允许 plan/preflight、离线合成和固定 coding smoke，不接受任意指令文件、任务 ID、MCP 世界或评审载荷。真实探针通过自己的新 attempt/锁，走与离线相同的 SDK/transport/journal，零自动重试；不读 `.env` 全文到日志。真实调用仍遵守协作时段，程序不新增时钟门禁。
+提供 provider 层的严格客户端/SDK model 接口，下一阶段可显式复用。当前公开 CLI 只允许 plan/preflight、离线合成和固定 coding smoke，不接受任意指令文件、任务 ID、MCP 世界或评审载荷。真实探针通过自己的新 attempt/锁，走与离线相同的 SDK/transport/journal，零自动重试；不读 `.env` 全文到日志。用户已明确本 Go 路径不受 DeepSeek 官方 API 的避峰时段限制，可全天安排已授权验证；只有显式改回官方 API 时才适用该窗口。程序不新增时钟门禁。
 
 不为了绕过用途边界把医院任务伪装成代码、不冒充 OpenCode 客户端；临床模拟用途的服务支持、十一月隐私条款和正式启动参数在下一阶段重新核对。此次不迁移 native 开发 worker 的账本或 source receipt；正式入口接线须单独规格与身份验收。
 
@@ -28,7 +28,7 @@
 2. 任意 route/model/header 篡改、外域/重定向、错误工具/重复 call ID、未完成工具历史、流式/非预期 wire 被拒绝；秘密不出现在文件或异常中。
 3. 429/timeout/取消/缺失或非法 usage/持久化失败不自动重试，已发送请求保留 pending 并阻断后续 attempt；已知用量而模型/内容错误先结算后报错。
 4. 成功/失败尝试均保留；重复 ID、并发 claim、旧 source/profile 或损坏状态不能清零重跑。Go USD 三项累计与旧 CNY 账目隔离。
-5. 主代理在固定源码上独立审核并 Docker 禁网复验；Key 存在、时段与数据来源满足时，仅执行一次新 coding smoke。若提供方实际响应不满足协议，保留失败和未知，不盲重试或编造实测通过。
+5. 主代理在固定源码上独立审核并 Docker 禁网复验；Key 存在、数据来源及执行范围核对后，仅执行一次新 coding smoke。Go 无上述避峰时段要求。若提供方实际响应不满足协议，保留失败和未知，不盲重试或编造实测通过。
 
 ### 首次真实响应后的工程兼容补充
 

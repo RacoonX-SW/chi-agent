@@ -13,7 +13,7 @@
 | 环境目标与实际 | Q 复用 Python 3.12 dev、H SDK/K PDF 卷，无安装/下载/改锁/镜像；仅新增 Go profile/模块，不改 native 源码、原50次/患者门禁，G/H未重做；未创建任务世界 |
 | 本地开发预算 | record_only/null cap 不变。旧 native K/review pending=null；独立 Go USD 唯一账本已显式 source rebind，原账字节归档、失败 run 不变，最终 pending/halt=null。未知用量仍阻断、零自动重试 |
 | 后续费用规划 | native 约50 CNY规划维持 P 后口径；Go 订阅固定费、余额扣费、价目价值和套餐消耗分列，不换算/混入CNY或清零。全部尝试与金额仅见 [Q报告](opencode-go-provider-review.md#总用量保留与清理)，账户此前Go消费/余量未核清；不自动恢复 t019/Claude/F.5 |
-| DeepSeek 调用时段 | 后续全部真实请求受[调用时段约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)约束；用户明确仅以文档协作规则执行，不新增程序时钟门禁，不自动唤醒 |
+| DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | Q 仅两个固定 coding attempt：首次本地终止协议拒绝，离线修复/显式接续后完成一个新 attempt，均已结算。临床/手册/评分未发Go，非编码用途支持待确认；t013收束、t019付费暂停 |
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | Go 来源受限请求/历史、可选终态字段、USD完整性与中断、跨源码历史审计及真实coding闭环通过；旧运行文件hash全部不变，新Go文件无配置秘密，临时凭据/两个探针容器已清理。仅接入结论，无1M实测/CHI泛化结论 |

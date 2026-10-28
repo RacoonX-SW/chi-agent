@@ -257,7 +257,7 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 用户已授权多次本地 C 开发尝试并取消旧 5 元金额停止条件；K 策略独立为 real_development / record_only / null cap。运行前先核对 [REVIEW_STATE](reviews/REVIEW_STATE.md) 的验收与实际授权。参赛模型的基础 SDK 继续复用 H 的卷；PDF 读取使用独立的固定依赖，不改原 SDK 卷。
 
-所有真实 DeepSeek 请求（含确认子请求和开发评审）还须遵守[调用时段约定](../COLLABORATION.md#deepseek-api-调用时段2026-10-28)。启动前核对北京时间并为完整运行留足窗口；预计跨入禁用时段则延后。依用户要求仅放在文档中，由主代理按协作规则执行，不添加程序时钟拦截。
+本节直连 DeepSeek 官方 API 的真实请求（含确认子请求和开发评审）须遵守[调用时段约定](../COLLABORATION.md#deepseek-api-调用时段2026-10-28)。启动前核对北京时间并为完整运行留足窗口；预计跨入禁用时段则延后。经 OpenCode 调用 DeepSeek 不受这条避峰限制，可全天安排已授权工作。依用户要求仅放在文档中，不添加程序时钟拦截。
 
 从 `chi-agent/` 目录运行。首次在空 PDF 卷安装；已有通过核对的卷直接复用，安装也在 Docker 中：
 
@@ -376,7 +376,7 @@ K 的 `c-run` 默认启用患者确认；启动命令不变，操作员无需在
 
 `.env` 本地新增 `OPENCODE_API_KEY`，保留原 `DEEPSEEK_API_KEY`，不要把 Key 放入命令正文或 Git。Go 使用正式 ID `deepseek-v4.1-flash` 和 `/inference/go/openai/v1/chat/completions`；SDK base URL 为 `https://opencode.ai/inference/go/openai/v1`，不能套用 native 的 URL 或 pay-as-you-go 路径。
 
-`scripts/opencode_go_provider.py` 提供独立的 Go 适配与固定 coding 工具探针，下一项正式入口接线可以复用。当前 CLI 不接受患者、任务指令、MCP 或任意 prompt；不能用它替代 `c-run` 或开发评审。Go 的非编码 CHI 用途支持仍待确认。每次真实调用前核对[时段约定](../COLLABORATION.md#deepseek-api-调用时段2026-10-28)与控制台 Extra Usage 关闭；程序不新增时钟拦截。
+`scripts/opencode_go_provider.py` 提供独立的 Go 适配与固定 coding 工具探针，下一项正式入口接线可以复用。当前 CLI 不接受患者、任务指令、MCP 或任意 prompt；不能用它替代 `c-run` 或开发评审。Go 的非编码 CHI 用途支持仍待确认。**OpenCode 请求不受 DeepSeek 官方 API 的避峰时段限制，可全天执行已授权工作**；运行前仍核对控制台 Extra Usage 关闭和用量状态，不因等待官方 API 折扣时段而延后。
 
 以下从项目目录运行，复用已有镜像和 SDK 卷，不安装依赖。`plan` / `preflight` 只读，`offline` 用临时账目与模拟 HTTP，均不需要 Key：
 
