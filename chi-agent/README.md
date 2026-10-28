@@ -257,6 +257,8 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 用户已授权多次本地 C 开发尝试并取消旧 5 元金额停止条件；K 策略独立为 real_development / record_only / null cap。运行前先核对 [REVIEW_STATE](reviews/REVIEW_STATE.md) 的验收与实际授权。参赛模型的基础 SDK 继续复用 H 的卷；PDF 读取使用独立的固定依赖，不改原 SDK 卷。
 
+所有真实 DeepSeek 请求（含确认子请求和开发评审）还须遵守[调用时段约定](../COLLABORATION.md#deepseek-api-调用时段2026-10-28)。启动前核对北京时间并为完整运行留足窗口；预计跨入禁用时段则延后。当前由主代理执行这条协作约束，代码没有时钟门禁。
+
 从 `chi-agent/` 目录运行。首次在空 PDF 卷安装；已有通过核对的卷直接复用，安装也在 Docker 中：
 
 ```sh

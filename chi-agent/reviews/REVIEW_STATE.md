@@ -12,6 +12,7 @@
 | 当前分支与接手改动 | PR #18 已核对合并，从最新 `origin/main` `88fa271081ac337cd1d547200ce202295e21d844` 建立 `codex/request-budget-awareness`，写入前干净；一个 Terra / high 实现，主代理独立审核后运行 |
 | 环境目标与实际 | O 复用 Python 3.12 dev/controller/world、H SDK 与 K PDF 卷及原固定资源；没有新下载/安装、改锁、镜像或provider profile，G/H安装打包未重做。K C有效50次独立于旧默认30，详见O报告 |
 | 本地开发预算 | 沿用多次 C 和独立 DeepSeek 评审的 record_only/null cap；O逐请求/旧账/累计对账通过，两套pending=null、controller clean、精确资源已清理；未知用量仍阻挡，零自动重试，旧capped/正式边界保留 |
+| DeepSeek 调用时段 | 后续全部真实请求受[调用时段约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)约束，禁用时段推进离线工作；时段许可不代替原授权/预算，当前没有程序时钟门禁或自动唤醒 |
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | O两题以相同固定源码/配置运行，反馈对应共享计数，原始证据/确认契约未改。两题正常结束且只影响目标患者；t013局部字段失败保留。均未超过原30次或触发低余额提醒，不证明50额度/提醒有效；两题仍为开发题 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
