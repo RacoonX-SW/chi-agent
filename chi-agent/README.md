@@ -342,6 +342,18 @@ PY
 
 已允许路径内的 UTF-8 文本和 PDF 可通过 `local-fs-read` 读取；PDF 是文本提取，不提供 OCR。PDF 上限为 8 MiB、100 页、累计提取 100 万字符、单次返回 10 万字符；可用原有 offset/limit 按行分段。损坏、加密或不支持的二进制返回明确工具错误。解析器版本、锁和包源码纳入 K 身份，缺依赖或不一致会停止；这不扩大 handbook/task/case provider/shared 的路径权限。
 
+### 自主 C 的患者确认与写入门禁
+
+K 的 `c-run` 默认启用患者确认；启动命令不变，操作员无需在运行中手动绑定或代选患者。Agent 先通过公开 MCP 查完整未过滤 roster，再查看待选者及同 sex、DOB 年差不超过 1 的近邻病例；默认一页或按某患者过滤的查询不能证明已覆盖候选。缺少完整可见病例时，工具返回需补查的 ID，保持只读。
+
+`local-read-patient-observation` 只按 patient_id/offset 有界回读已经成功查询的 chart，无法读取任意路径；可用于补齐官方截断返回的内容。`local-confirm-patient` 必须单独调用，带来自公开 instruction 和所选 chart 的真实原文引文。它使用同一 DeepSeek client/GuardedTransport 做一次无工具匹配检查，核对完整候选集合、唯一性和引用，最多两次；不确定、矛盾或缺材料不绑定。
+
+确认请求与主循环共用原来的累计账目及 **30 次总 provider 请求**上限和零重试；主业务单次输出仍为 8192，只有源代码构造的 K C 无工具确认请求使用 32768，最多两次。角色和限额不能由 Agent 参数或 HTTP 字段指定；它占用原有请求空间，费用按对应上限预留并结算。协议/材料 hash、provider round、finish_reason、内容是否存在及拒绝/绑定事件保存于该 run journal。已知用量的截断/格式失败明确拒绝且保持未绑定，不在工具内重试；取消仍停止，导致未知用量时保留已有 pending，已结算用量不倒退成未知。源码变更仍须 rebind 和新 B，旧费用/claim 不清零。
+
+确认后，每次 MCP 业务副作用和 workspace 写/edit 都核对患者及已观察的 order/case/form/document 等归属。未绑定、跨患者、猜测 ID、未知工具或身份冲突明确拒绝；不静默切换患者，未证明 line_updates 归属时拒绝。患者源文档与病例文档分别跟踪，共用 form 模板按 case 配对。
+
+语义确认仍来自同 provider，存在模型偏差；来源/身份检查不能证明医学语义正确。完整 world 的非目标患者业务写入、正常结束和目标结果须结合检查，不能只看局部 rubric。设计与实验边界见 [N 规格](openspec/changes/provider-patient-binding/design.md)，实际候选、失败和回归结果见 [N 报告](reviews/provider-patient-binding-review.md)。正式配送入口与 F.5 不在本轮迁移范围。
+
 ## DeepSeek 本地开发评审
 
 `scripts/development_review.py` 用固定 PA 规则和完整证据做本地诊断，报告名为 `development-review.json`，official reward 为 null。原版 Claude 评分与正式交付仍按 [审核状态](reviews/REVIEW_STATE.md) 的范围处理。
