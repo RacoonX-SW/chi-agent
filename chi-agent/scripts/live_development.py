@@ -258,7 +258,7 @@ def _execution_identity(*, k: bool = False) -> dict[str, Any]:
              "requirements-model.lock")
     if k:
         files += ("requirements-pdf.lock", "scripts/provider_task_resources.py", "scripts/patient_identity_binding.py",
-                  "scripts/request_budget.py")
+                  "scripts/request_budget.py", "scripts/referral_field_guidance.py")
     hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files}
     identity = {"vendor": upstream, "sdk": sdk, "application_files_sha256": hashes,
                 "profile_sha256": profile.sha256, "policy_sha256": policy.sha256}
@@ -1665,6 +1665,27 @@ def _tool_schema(tool: Any) -> tuple[str, dict[str, Any]] | None:
     return name, schema
 
 
+def _apply_referral_guidance(function_tool: Any, raw_name: str, journal: RealDevelopmentJournal) -> Any:
+    from referral_field_guidance import VERSION, GUIDANCE_SHA256, append_description
+    try:
+        applied = append_description(raw_name, function_tool.description)
+    except ValueError:
+        raise LiveFailure("referral_guidance_description_invalid") from None
+    if applied is None:
+        return function_tool
+    description, details = applied
+    recorded = journal.run_doc.setdefault("referral_field_guidance", {
+        "version": VERSION, "guidance_sha256": GUIDANCE_SHA256, "tools": {}})
+    if (recorded.get("version") != VERSION or recorded.get("guidance_sha256") != GUIDANCE_SHA256
+            or (raw_name in recorded["tools"] and recorded["tools"][raw_name] != details)):
+        raise LiveFailure("referral_guidance_identity_conflict")
+    function_tool.description = description
+    if raw_name not in recorded["tools"]:
+        recorded["tools"][raw_name] = details
+        journal._persist()
+    return function_tool
+
+
 def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealDevelopmentJournal,
                 schemas: dict[str, dict[str, Any]], ledger: Any, *, binding: Any = None,
                 binding_lock: Any = None, openai_client: Any = None, profile: Any = None,
@@ -2264,6 +2285,9 @@ async def _worker_run(args: argparse.Namespace) -> int:
             journal._persist()
         if binding is not None:
             from patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION, PROMPT, PROMPT_VERSION
+            from referral_field_guidance import VERSION as REFERRAL_GUIDANCE_VERSION, GUIDANCE_SHA256
+            journal.run_doc["referral_field_guidance"] = {
+                "version": REFERRAL_GUIDANCE_VERSION, "guidance_sha256": GUIDANCE_SHA256, "tools": {}}
             binding.event("protocol", prompt_version=PROMPT_VERSION, prompt_sha256=hashlib.sha256(PROMPT.encode()).hexdigest(),
                           confirm_tool_description_sha256=hashlib.sha256(CONFIRM_DESCRIPTION.encode()).hexdigest(),
                           read_tool_description_sha256=hashlib.sha256(READ_DESCRIPTION.encode()).hexdigest())
@@ -2377,10 +2401,13 @@ async def _worker_run(args: argparse.Namespace) -> int:
 
             def strict_to_function_tool(_cls: Any, tool: Any, server: Any, convert_schemas_to_strict: bool,
                                         agent: Any = None, failure_error_function: Any = None):
-                return original_to_function.__func__(
+                function_tool = original_to_function.__func__(
                     _cls, tool, server, convert_schemas_to_strict, agent=agent,
                     failure_error_function=None,
                 )
+                if k and kind == "c-once":
+                    _apply_referral_guidance(function_tool, getattr(tool, "name", None), journal)
+                return function_tool
 
             MCPUtil.to_function_tool = classmethod(strict_to_function_tool)
             if kind == "b-smoke":
