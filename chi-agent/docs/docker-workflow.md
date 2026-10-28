@@ -46,6 +46,12 @@
 
 本流程来自 N 阶段一次实际拒绝及核对后的重新获批，历史事实和本地证据指针见 [N 审核报告](../reviews/provider-patient-binding-review.md)；不将一次获批解释为所有后续载荷都已预先批准。
 
+### OpenCode Go 接入探针的外发范围
+
+Go 是新增提供方，目的地为 `https://opencode.ai/inference/go/openai/v1/chat/completions`；原 native 评审目的地的核对不能直接证明这个新接点已通过。当前 Go CLI 只发固定自造代码题与无副作用合成工具结果；从受审源码快照启动，只注入 Go Key，不挂 `.env`、手册、数据、旧运行目录、MCP 世界或 Docker socket。调用前核对固定消息/工具、源码身份、无配置秘密进入正文，审批说明写出实际核对结果；Key 只作必要 Bearer 认证。
+
+Go 非编码 CHI 用途支持和正式接线仍是后续范围，本轮不以这次探针代替临床载荷的来源审计或服务用途确认；不伪装业务请求为 coding。控制台 Extra Usage 由用户核对关闭；客户端核验返回的 billing source、保存全部已知 USD 用量，异常或未知时停止而不自动重试。详细证据见 [Go 审核](../reviews/opencode-go-provider-review.md)。
+
 ## 构建、验证与交付
 
 保留可用镜像及依赖缓存；源码、资源版本或构建输入变化时才按需重建，清理缓存后需要重新下载属于正常情况。下载慢、环境失败、工具失败、Agent 失败与官方结果分别记录，不能把环境中断记成 reward=0。
