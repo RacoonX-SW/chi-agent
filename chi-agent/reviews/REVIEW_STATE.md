@@ -17,7 +17,7 @@
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | P 固定快照独立离线通过，提示与实际SDK wire/hash相符，两个不同合成参数原样到后端；无真实 B/C/评审，不把提示接入等同 t013 已修复。O 原结果保留 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #19](https://github.com/xsw932187210-cell/chi-agent/pull/19)已核对合并；P 按[字段提示规格](../openspec/changes/referral-field-guidance/design.md)推进，独立审核后创建 base=main PR 交用户决定合并，不自行merge/auto-merge |
+| PR 与下一步 | [PR #19](https://github.com/xsw932187210-cell/chi-agent/pull/19)已核对合并；P 已推送 base=main 的 [draft PR #20](https://github.com/xsw932187210-cell/chi-agent/pull/20)，仅离线通过。允许时段继续 P.4 的新 B/t013 验证，t019付费暂停；不自行merge/auto-merge |
 | 未验证项 | P 字段提示的真实收益与新源码业务表现；O组合改动的单项因果、额外额度和软提醒的真实收益、未见任务可靠性、t013服务地点选择、最终付款方批准、独立临床/规则裁决与官方得分、真实账单/缓存、正式配送/F.5、OpenSpec CLI、真实硬取消/daemon故障 |
 | 真实运行 | P 在用户禁用时段仅做离线工作，真实验证留待允许窗口，不后台等待。O 原尝试/费用及模拟载荷审计保留；official_reward=null，正式入口仍原record_only/null cap。详情见[P审核](referral-field-guidance-review.md) |
 
