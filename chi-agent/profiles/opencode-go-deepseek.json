@@ -1,0 +1,17 @@
+{
+  "schema": "chi-opencode-go-profile-v1",
+  "profile_id": "opencode-go-deepseek-v4.1-flash-v1",
+  "base_url": "https://opencode.ai/inference/go/openai/v1",
+  "model": "deepseek-v4.1-flash",
+  "key_env": "OPENCODE_API_KEY",
+  "user_agent": "chi-agent",
+  "session_header": "x-opencode-session",
+  "max_requests": 6,
+  "max_output_tokens": 1024,
+  "documented_context_tokens": 1048576,
+  "context_evidence": "documentation_only_not_measured",
+  "thinking": {"type": "enabled"},
+  "reasoning_effort": "high",
+  "currency": "USD",
+  "automatic_retries": 0
+}
