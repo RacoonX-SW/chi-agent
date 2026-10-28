@@ -362,6 +362,8 @@ K 的 `c-run` 默认启用患者确认；启动命令不变，操作员无需在
 
 下面函数在 Bash/Zsh 中从 `chi-agent/` 运行。`plan` 不读输入/密钥、不写状态；`deterministic` 禁网，只返回部分程序检查；只有显式 `review` 注入已有 `.env` 并调用一次 DeepSeek，不自动重试。评审容器没有 Docker socket，不挂整个项目或受限手册。
 
+执行 `review` 前按 [DeepSeek 开发评审的数据来源与审批证据](docs/docker-workflow.md#deepseek-开发评审的数据来源与审批证据)核对本次载荷，并在审批说明中引用固定官方合成数据声明、既有用户授权、实际发送范围及秘密缺席的离线证据。“本地”指本地编排，实际仍向外部 DeepSeek API 发送材料；检查通过与后续审批是否获准分别记录。
+
 ```sh
 mkdir -p runs/development-review-inputs runs/development-review
 chi_development_review() {

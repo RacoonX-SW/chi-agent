@@ -34,6 +34,7 @@
 - [DeepSeek 本地开发评审审核](deepseek-development-review.md)
 - [两个新 PA provider 任务的固定条件基线](provider-two-task-baseline-review.md)
 - [患者确认与绑定独立审核及开发回归](provider-patient-binding-review.md)
+- [DeepSeek 评审的数据来源与审批证据](../docs/docker-workflow.md#deepseek-开发评审的数据来源与审批证据)
 - [实现子代理与独立审核](../docs/subagent-workflow.md)
 - [D0 接续 Prompt](../docs/d0-handoff-prompts.md)
 - [当前交接规格](../openspec/changes/bootstrap-baseline/handoff.md)
