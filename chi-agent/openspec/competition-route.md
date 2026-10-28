@@ -36,6 +36,8 @@
 
 M 的两个新任务固定条件基线揭示了目标案件局部检查以外的错患者副作用，[N 患者确认与绑定](changes/provider-patient-binding/proposal.md) 据此增加公开证据确认和跨患者写入门禁，再以原两题作开发回归。M 原始发现见 [M 报告](../reviews/provider-two-task-baseline-review.md)，改进证据、仍未解决的运行收束及下一实验建议见 [N 报告](../reviews/provider-patient-binding-review.md)；不能把局部 verdict 当完整任务成功，也不把已见题回归写成新的泛化证据。
 
+[O 请求次数反馈](changes/request-budget-awareness/proposal.md) 接续运行收束问题：在 K 自主 C 使用 50 次共享请求契约，并在每次主调用前提供可信剩余信息，保留患者门禁与原完成工具语义。该组合变化的独立审核、真实回归及限制只见 [O 报告](../reviews/request-budget-awareness-review.md)，不把正常退出自动当作业务成功。
+
 ## 阶段 3：跨领域、小批量与必要并发
 
 逐步纳入医院侧、保险方和照护管理的代表任务。批量与并发是评测组织方式，不等于为每道题写专用 Agent。任务清单和调用数量依据实际资源与预算决定，不把全量 75 题当作参赛资格条件。
