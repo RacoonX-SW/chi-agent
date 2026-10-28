@@ -257,7 +257,8 @@ def _execution_identity(*, k: bool = False) -> dict[str, Any]:
              "profiles/deepseek-flash-prepared.json", "profiles/local-development-policy.json",
              "requirements-model.lock")
     if k:
-        files += ("requirements-pdf.lock", "scripts/provider_task_resources.py", "scripts/patient_identity_binding.py")
+        files += ("requirements-pdf.lock", "scripts/provider_task_resources.py", "scripts/patient_identity_binding.py",
+                  "scripts/request_budget.py")
     hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files}
     identity = {"vendor": upstream, "sdk": sdk, "application_files_sha256": hashes,
                 "profile_sha256": profile.sha256, "policy_sha256": policy.sha256}
@@ -707,7 +708,8 @@ class RealDevelopmentJournal:
         _atomic_json(self.run_path, self.run_doc)
 
     def reserve(self, profile: Any, request: Any, body: dict[str, Any], raw: bytes,
-                max_output: int, round_number: int, *, purpose: str | None = None) -> Decimal:
+                max_output: int, round_number: int, *, purpose: str | None = None,
+                budget_feedback: dict | None = None) -> Decimal:
         from b_provider_transport import GuardFailure
         self._require_active_lock()
         fresh = _read_json(self.state_path)
@@ -727,6 +729,15 @@ class RealDevelopmentJournal:
                 raise GuardFailure("confirmation_policy_invalid", "request_guard")
         elif type(max_output) is not int or not 1 <= max_output <= profile.max_output_tokens:
             raise GuardFailure("output_limit", "request_guard")
+        if budget_feedback is not None:
+            from request_budget import feedback, claim_recorded
+            try:
+                _, expected_feedback = feedback(round_number - 1, claim_recorded(self))
+                if (self.policy.scope != "real_development" or self.run_doc.get("run_kind") != "c-once"
+                        or purpose is not None or budget_feedback != expected_feedback):
+                    raise ValueError
+            except Exception:
+                raise GuardFailure("request_budget_feedback_invalid", "request_guard") from None
         reserve = (Decimal(profile.input_reserve_tokens) * profile.input_price
                    + Decimal(max_output) * profile.output_price) / Decimal(1_000_000)
         if self.cap_cny is not None and self.cumulative_spend + reserve > self.cap_cny:
@@ -741,6 +752,8 @@ class RealDevelopmentJournal:
         if purpose is not None:
             entry["purpose"] = purpose
         self.state["pending"] = {"run_id": self.run_id, **entry}
+        if budget_feedback is not None:
+            entry["request_budget_feedback"] = budget_feedback
         self.state["usage_complete"] = False
         self.run_doc["requests"].append(entry)
         self.run_doc["state"] = "pending"
@@ -1444,6 +1457,11 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
             )
         runner_name = f"chi-agent-real-runner-{run_id}"
         runner_network = "bridge"
+        if k and kind == "c-once":
+            from request_budget import MAX_REQUESTS
+            runner_max_turns = str(MAX_REQUESTS)
+        else:
+            runner_max_turns = "6" if kind == "b-smoke" else str(profile.max_rounds)
         volumes = {
             _daemon_path(ROOT, ROOT / "scripts"): {"bind": "/participant/scripts", "mode": "ro"},
             _daemon_path(ROOT, ROOT / "vendor" / "chi-bench"): {"bind": "/participant/vendor/chi-bench", "mode": "ro"},
@@ -1474,7 +1492,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
                      "--mcp-url", mcp_url] + (["--k-development", "--task-id", task_id] if k and kind == "c-once" else (["--k-development"] if k else [])),
             environment={"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": ("/pdf-deps:" if k else "") + "/model-deps:/participant/vendor/chi-bench/src",
                          "OPENAI_AGENTS_MODEL": profile.model, "OPENAI_AGENTS_API_MODE": "chat_completions",
-                         "OPENAI_AGENTS_MAX_TURNS": "6" if kind == "b-smoke" else str(profile.max_rounds),
+                         "OPENAI_AGENTS_MAX_TURNS": runner_max_turns,
                          "OPENAI_AGENTS_REASONING_EFFORT": "high", "OPENAI_AGENTS_MAX_RETRIES": "0",
                          "DEEPSEEK_API_KEY": secret},
             volumes={**volumes, sdk_volume: {"bind": "/model-deps", "mode": "ro"},
@@ -2236,7 +2254,14 @@ async def _worker_run(args: argparse.Namespace) -> int:
     b_success_candidate: dict[str, Any] | None = None
     restore: list[tuple[Any, str, Any]] = []
     runner_stdout, runner_stderr = io.StringIO(), io.StringIO()
+    original_max_turns = os.environ.get("OPENAI_AGENTS_MAX_TURNS")
+    overridden_max_turns = bool(k and kind == "c-once")
     try:
+        if overridden_max_turns:
+            from request_budget import K_C_CONTRACT, MAX_REQUESTS
+            os.environ["OPENAI_AGENTS_MAX_TURNS"] = str(MAX_REQUESTS)
+            journal.run_doc["run_kind"] = "c-once"
+            journal._persist()
         if binding is not None:
             from patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION, PROMPT, PROMPT_VERSION
             binding.event("protocol", prompt_version=PROMPT_VERSION, prompt_sha256=hashlib.sha256(PROMPT.encode()).hexdigest(),
@@ -2291,14 +2316,31 @@ async def _worker_run(args: argparse.Namespace) -> int:
                 validate_response=validate_provider_response,
                 allowed_tool_names=allowed_names,
                 observe_request=lambda body: _observe_live_history(body, exchanges, ledger.rounds),
-                max_rounds=6 if kind == "b-smoke" else profile.max_rounds,
+                max_rounds=6 if kind == "b-smoke" else (MAX_REQUESTS if overridden_max_turns else profile.max_rounds),
                 allow_text_blocks_in_tool_history=kind == "c-once",
                 confirmation_context=request_context.get if request_context is not None else None,
+                **({"run_contract": K_C_CONTRACT,
+                    "base_system_instructions": official_runner.SYSTEM_PROMPT} if overridden_max_turns else {}),
             ), trust_env=False, follow_redirects=False, timeout=httpx.Timeout(60.0, connect=10.0))
             openai_client = AsyncOpenAI(api_key=secret, base_url=profile.endpoint + "/v1",
                                         http_client=client_http, max_retries=0)
-            sdk_model = OpenAIChatCompletionsModel(model=profile.model, openai_client=openai_client,
-                                                   should_replay_reasoning_content=_same_route_reasoning)
+            if overridden_max_turns:
+                from request_budget import feedback, claim_recorded
+                class BudgetedModel(OpenAIChatCompletionsModel):
+                    async def get_response(self, system_instructions: str | None, *args: Any, **kwargs: Any):
+                        if system_instructions != official_runner.SYSTEM_PROMPT:
+                            raise LiveFailure("request_budget_base_prompt_invalid")
+                        try:
+                            suffix, _ = feedback(ledger.rounds, claim_recorded(journal))
+                        except ValueError:
+                            ledger.error_code = "provider_request_limit_reached"
+                            raise LiveFailure("provider_request_limit_reached") from None
+                        return await super().get_response(system_instructions + suffix, *args, **kwargs)
+                model_class = BudgetedModel
+            else:
+                model_class = OpenAIChatCompletionsModel
+            sdk_model = model_class(model=profile.model, openai_client=openai_client,
+                                    should_replay_reasoning_content=_same_route_reasoning)
 
             @asynccontextmanager
             async def model_context(_model: str, _mode: str):
@@ -2409,7 +2451,11 @@ async def _worker_run(args: argparse.Namespace) -> int:
                 except SystemExit as exc:
                     result_code = int(exc.code or 0)
                     if result_code:
-                        primary_error = ledger.error_code or "official_runner_failed"
+                        if (overridden_max_turns and ledger.rounds == MAX_REQUESTS
+                                and "Agent error: MaxTurnsExceeded:" in runner_stderr.getvalue()):
+                            primary_error = "provider_request_limit_reached"
+                        else:
+                            primary_error = ledger.error_code or "official_runner_failed"
                 except Exception as exc:
                     result_code = 1
                     primary_error = getattr(exc, "code", "official_runner_failed")
@@ -2421,6 +2467,11 @@ async def _worker_run(args: argparse.Namespace) -> int:
             result_code = 1
             runner_stderr.write(f"setup_exception_type={type(exc).__name__}\n")
     finally:
+        if overridden_max_turns:
+            if original_max_turns is None:
+                os.environ.pop("OPENAI_AGENTS_MAX_TURNS", None)
+            else:
+                os.environ["OPENAI_AGENTS_MAX_TURNS"] = original_max_turns
         for obj, attr, original in reversed(restore):
             try:
                 setattr(obj, attr, original)

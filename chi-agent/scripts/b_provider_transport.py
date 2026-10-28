@@ -687,7 +687,8 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                  observe_request: Callable[[dict[str, Any]], None] | None = None,
                  max_rounds: int | None = None,
                  allow_text_blocks_in_tool_history: bool = False,
-                 confirmation_context: Callable[[], Any] | None = None):
+                 confirmation_context: Callable[[], Any] | None = None,
+                 run_contract: Any = None, base_system_instructions: str | None = None):
         if not is_validated_profile(profile):
             raise GuardFailure("profile_untrusted_or_stale", "preflight")
         journal._require_active_lock()
@@ -708,9 +709,24 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         if confirmation_context is not None and (not callable(confirmation_context) or journal.policy.scope != "real_development"):
             raise GuardFailure("confirmation_policy_invalid", "preflight")
         self.confirmation_context = confirmation_context
-        if max_rounds is not None and (type(max_rounds) is not int or not 1 <= max_rounds <= profile.max_rounds):
-            raise GuardFailure("round_limit_invalid", "preflight")
-        self.max_rounds = max_rounds if max_rounds is not None else profile.max_rounds
+        self.run_contract = run_contract
+        self.base_system_instructions = base_system_instructions
+        if run_contract is not None:
+            from request_budget import K_C_CONTRACT, MAX_REQUESTS
+            from chi_bench.experiment.agents.openai_agents_runner import SYSTEM_PROMPT
+            if (run_contract is not K_C_CONTRACT or journal.policy.scope != "real_development"
+                    or journal.run_doc.get("run_kind") != "c-once"
+                    or journal.run_doc.get("schema") != "chi-real-provider-run-v1"
+                    or journal.state.get("schema") != "chi-real-c-development-accounting-v1"
+                    or confirmation_context is None
+                    or max_rounds != MAX_REQUESTS or type(max_rounds) is not int
+                    or base_system_instructions != SYSTEM_PROMPT):
+                raise GuardFailure("round_limit_invalid", "preflight")
+            self.max_rounds = MAX_REQUESTS
+        else:
+            if max_rounds is not None and (type(max_rounds) is not int or not 1 <= max_rounds <= profile.max_rounds):
+                raise GuardFailure("round_limit_invalid", "preflight")
+            self.max_rounds = max_rounds if max_rounds is not None else profile.max_rounds
         if type(allow_text_blocks_in_tool_history) is not bool:
             raise GuardFailure("history_policy_invalid", "preflight")
         self.allow_text_blocks_in_tool_history = allow_text_blocks_in_tool_history
@@ -768,8 +784,19 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             raise GuardFailure("generation_limit_ambiguous", "request_guard")
         if ("modalities" in body and body["modalities"] != ["text"]) or "audio" in body:
             raise GuardFailure("generation_shape_unsupported", "request_guard")
+        if self.ledger.rounds >= self.max_rounds and getattr(self, "run_contract", None) is not None:
+            raise GuardFailure("provider_request_limit_reached", "request_guard")
         if not isinstance(body.get("messages"), list) or self.ledger.rounds >= self.max_rounds:
             raise GuardFailure("round_or_history_invalid", "request_guard")
+        if getattr(self, "run_contract", None) is not None and context is None:
+            from request_budget import feedback, claim_recorded
+            try:
+                suffix, _ = feedback(self.ledger.rounds, claim_recorded(self.journal))
+                if (not body["messages"] or body["messages"][0] != {"role": "system", "content": self.base_system_instructions + suffix}
+                        or any(type(item) is dict and item.get("role") == "system" for item in body["messages"][1:])):
+                    raise ValueError
+            except Exception:
+                raise GuardFailure("request_budget_feedback_invalid", "request_guard") from None
         tools = body.get("tools", [])
         if not isinstance(tools, list):
             raise GuardFailure("tool_schema_invalid", "request_guard")
@@ -900,7 +927,12 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             max_output = body["max_tokens"]
             next_round = self.ledger.rounds + 1
             context = self.confirmation_context() if self.confirmation_context is not None else None
-            if context is None:
+            if context is None and self.run_contract is not None:
+                from request_budget import feedback, claim_recorded
+                _, budget_record = feedback(self.ledger.rounds, claim_recorded(self.journal))
+                self.journal.reserve(self.profile, request, body, raw, max_output, next_round,
+                                     budget_feedback=budget_record)
+            elif context is None:
                 self.journal.reserve(self.profile, request, body, raw, max_output, next_round)
             else:
                 self.journal.reserve(self.profile, request, body, raw, max_output, next_round,

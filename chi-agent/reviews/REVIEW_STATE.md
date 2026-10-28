@@ -4,20 +4,21 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | N 实现、独立审核与原两题开发回归完成，待用户 PR 审核：公开证据确认及患者/实体门禁已接入 K C；t019 正常结束且无错患者提交，t013 目标提交但总请求耗尽。Claude/F.5 继续暂停 |
+| 当前任务 | O 实现、独立审核及两题开发回归完成，待用户 PR 审核：K 自主 C 共享50次（含确认）并逐请求提供可信反馈；两题正常结束，但t013服务地点检查失败，不能称业务全通过。Claude/F.5继续暂停 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
-| 上次独立审核候选 | `77c25b04216bc492ed9cc25196abb2cf019d01ea`，N-R2 可信角色上限、结算元数据及错误响应边界经固定快照/SDK/患者实体独立检查通过，见 [N 审核](provider-patient-binding-review.md) |
-| 上次通过的实现提交 | `77c25b04216bc492ed9cc25196abb2cf019d01ea`，离线实现和新源码 B 通过，原两题真实结果按上列限制；此前 N/M/L 失败、claim 和费用均保留，不称业务全通过 |
+| 上次独立审核候选 | `98e01ee152028a3d99267b38cd90245bbad24c1f`，O 独立 50 次契约、可信新鲜反馈及默认入口隔离经固定快照/SDK/额外边界检查通过，见 [O 审核](request-budget-awareness-review.md) |
+| 上次通过的实现提交 | `98e01ee152028a3d99267b38cd90245bbad24c1f`，离线实现/新B通过，两题真实结果按当前任务限制；此前 N/M/L 失败、claim 和费用均保留，不扩大为任务或泛化全通过 |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | PR #17 已核对合并，从最新 `origin/main` `2b29a69dd9628586daa9481b11af6b8223b0b079` 建立 `codex/patient-identity-binding`，写入前干净；一个 Terra / high 实现，主代理独立审核后运行 |
-| 环境目标与实际 | N 复用 Python 3.12 dev/controller/world、H SDK 与 K PDF 卷及 M 固定资源，没有新下载/安装、改锁或镜像；G/H 安装和打包未重做。身份核对与结果见 N 报告 |
-| 本地开发预算 | 沿用多次 C 和独立 DeepSeek 评审的 record_only/null cap；N 逐请求/旧账/累计对账通过，两套 pending=null、controller clean、精确资源已清理；未知用量仍阻挡接续，零自动重试；旧 capped/正式入口边界保留 |
+| 当前分支与接手改动 | PR #18 已核对合并，从最新 `origin/main` `88fa271081ac337cd1d547200ce202295e21d844` 建立 `codex/request-budget-awareness`，写入前干净；一个 Terra / high 实现，主代理独立审核后运行 |
+| 环境目标与实际 | O 复用 Python 3.12 dev/controller/world、H SDK 与 K PDF 卷及原固定资源；没有新下载/安装、改锁、镜像或provider profile，G/H安装打包未重做。K C有效50次独立于旧默认30，详见O报告 |
+| 本地开发预算 | 沿用多次 C 和独立 DeepSeek 评审的 record_only/null cap；O逐请求/旧账/累计对账通过，两套pending=null、controller clean、精确资源已清理；未知用量仍阻挡，零自动重试，旧capped/正式边界保留 |
+| DeepSeek 调用时段 | 后续全部真实请求受[调用时段约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)约束，禁用时段推进离线工作；时段许可不代替原授权/预算，当前没有程序时钟门禁或自动唤醒 |
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
-| 本轮验证 | 最终源码保持同一模型/提示/角色配置完成两题回归，完整导出均只影响目标患者；t013 未正常结束，不能只据局部 verdict 算成功。工程修复前全部失败和评审不完整均见 N 报告；两题已成开发题，无新泛化证据 |
+| 本轮验证 | O两题以相同固定源码/配置运行，反馈对应共享计数，原始证据/确认契约未改。两题正常结束且只影响目标患者；t013局部字段失败保留。均未超过原30次或触发低余额提醒，不证明50额度/提醒有效；两题仍为开发题 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #17](https://github.com/xsw932187210-cell/chi-agent/pull/17) 已合并；[PR #18](https://github.com/xsw932187210-cell/chi-agent/pull/18) 为本分支 base=main，待用户审核合并，未开启 auto-merge。下一建议为包含确认子请求的剩余请求提示/完成收束，须另立有界规格 |
-| 未验证项 | 未见任务的患者匹配可靠性、t013 正常收束、最终付款方批准、独立临床/规则裁决与官方得分、Claude 认证、真实 tokenizer/账单、其他任务/架构、OpenSpec CLI、真实网络/daemon 故障与硬取消；同 provider 确认/局部评审不替代这些证据 |
-| 真实运行 | N 均新世界/独立 attempt，完整终态和全部失败保留，无人工业务代选、无隐藏答案回灌；official reward=null，正式入口仍 record_only/null cap。详细结果只见 [N 审核](provider-patient-binding-review.md) |
+| PR 与下一步 | [PR #18](https://github.com/xsw932187210-cell/chi-agent/pull/18)已合并；O 已推送 [PR #19](https://github.com/xsw932187210-cell/chi-agent/pull/19)，base=main，待用户审核决定合并，不自行merge/auto-merge。下一建议为公开证据驱动的申请关键字段来源/提交前一致性检查，须另立有界规格 |
+| 未验证项 | O组合改动的单项因果、额外额度和软提醒的真实收益、未见任务可靠性、t013服务地点选择、最终付款方批准、独立临床/规则裁决与官方得分、真实账单/缓存、正式配送/F.5、OpenSpec CLI、真实硬取消/daemon故障 |
+| 真实运行 | O均新世界/独立attempt，全部结果和费用保留，评审载荷审计hash与实际请求一致，无人工业务代选/隐藏答案回灌；official_reward=null，正式入口仍原record_only/null cap。详细结果只见[O审核](request-budget-awareness-review.md) |
 
 接续材料：
 
@@ -34,6 +35,7 @@
 - [DeepSeek 本地开发评审审核](deepseek-development-review.md)
 - [两个新 PA provider 任务的固定条件基线](provider-two-task-baseline-review.md)
 - [患者确认与绑定独立审核及开发回归](provider-patient-binding-review.md)
+- [请求预算反馈与 50 次开发上限审核](request-budget-awareness-review.md)
 - [DeepSeek 评审的数据来源与审批证据](../docs/docker-workflow.md#deepseek-开发评审的数据来源与审批证据)
 - [实现子代理与独立审核](../docs/subagent-workflow.md)
 - [D0 接续 Prompt](../docs/d0-handoff-prompts.md)
@@ -61,5 +63,6 @@
 | 2026-10-27 | L DeepSeek 本地开发评审 | `b44ce46384c37353c11f90044e696d7daceadbdb` | `c275bd5a5688d7736c70ea929cbb2286746d256e` | 独立通过；新 C 权威捕获、确定性部分与本地逐项评审完成，旧历史/失败费用保留，官方分数 null | [L 审核](deepseek-development-review.md) |
 | 2026-10-28 | M 两个新任务固定条件基线 | `dee5ae0f3616a57c529acb706fe4c829fa16074c` | `f28ea578760f1134afe3a44603d856a94f0e2b8c` | 测试修复后独立通过，生产同真实 c4716a0；t013 完成，t019 轮数耗尽且错患者提交，官方分数 null | [M 审核](provider-two-task-baseline-review.md) |
 | 2026-10-28 | N 公开患者确认与实体绑定 | `2b29a69dd9628586daa9481b11af6b8223b0b079` | `77c25b04216bc492ed9cc25196abb2cf019d01ea` | 独立离线/新 B 通过；最终两题均只影响目标，t019 正常结束，t013 总请求耗尽；早期失败全部保留，官方分数 null | [N 审核](provider-patient-binding-review.md) |
+| 2026-10-28 | O 可信请求预算反馈与50次开发上限 | `88fa271081ac337cd1d547200ce202295e21d844` | `98e01ee152028a3d99267b38cd90245bbad24c1f` | 独立离线/新B通过；两题正常结束且只影响目标，但t013服务地点检查失败；组合变化无单项因果或泛化结论，官方分数null | [O审核](request-budget-awareness-review.md) |
 
 历史未通过候选及原始合成证据保留；原始日志在忽略目录，不上传 GitHub。沿用一份 D0 交付报告，区分子代理自测与主代理独立证据。历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 仍不是已通过候选。

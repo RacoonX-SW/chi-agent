@@ -277,7 +277,7 @@ def test_dispatch_serializes_and_refuses_cross_patient_before_backend():
     assert FakeUtil.count == 1
 
 
-@pytest.mark.parametrize("mode", ["success", "mixed_confirmation", "length_then_success", "wrong_role", "function_call"])
+@pytest.mark.parametrize("mode", ["success", "mixed_confirmation", "length_then_success", "wrong_role", "function_call", "claim_done", "exhausted_after_confirmation", "exhausted_main_only"])
 def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
     from argparse import Namespace
     import httpx
@@ -343,6 +343,13 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
             _completion(calls=[_call("confirm_again", "local-confirm-patient", {"patient_id": "P1",
                 "instruction_quote": "90 day treatment trial", "chart_quote": "90 day treatment trial"})]),
             _completion(text=payload)]
+    elif mode == "claim_done":
+        responses[-1:] = [_completion(calls=[_call("claim", "local-claim_done", {})]),
+                          _completion(text="Completed synthetic task.")]
+    elif mode == "exhausted_after_confirmation":
+        responses[4:] = [_completion(calls=[_call(f"sleep{index}", "local-sleep", {"seconds": 0})]) for index in range(46)]
+    elif mode == "exhausted_main_only":
+        responses[:] = [_completion(calls=[_call(f"sleep{index}", "local-sleep", {"seconds": 0})]) for index in range(50)]
     elif mode in {"wrong_role", "function_call"}:
         invalid = _completion(text=payload)
         message = invalid["choices"][0]["message"]
@@ -355,7 +362,7 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
     def reply(request):
         body = json.loads(request.content)
         wire.append(body)
-        if len(wire) == 4 or (mode == "length_then_success" and len(wire) == 6):
+        if (len(wire) == 4 and mode != "exhausted_main_only") or (mode == "length_then_success" and len(wire) == 6):
             assert body.get("tools", []) == []
         if len(wire) > 4:
             assert not any(payload in str(item.get("content")) for item in body["messages"])
@@ -368,6 +375,13 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
                      _test_context=live._MOCK_ORCHESTRATION_TEST)
     status = asyncio.run(live._worker_run(args))
     journal = json.loads((root / "runs/flow.json").read_text())
+    if mode == "exhausted_main_only":
+        assert status == 1 and len(wire) == 50 and not responses
+        assert journal["primary_error_code"] == "provider_request_limit_reached"
+        assert all(entry["status"] == "settled" for entry in journal["requests"])
+        assert json.loads((root / "accounting.json").read_text())["pending"] is None
+        assert not backend
+        return
     assert any(event.get("event") == "refusal" and event.get("call_id") == "blocked"
                for event in journal["patient_binding_events"])
     if mode == "mixed_confirmation":
@@ -385,12 +399,35 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
         assert journal["requests"][3]["status"] == "settled"
         assert json.loads((root / "accounting.json").read_text())["pending"] is None
         return
+    if mode == "exhausted_after_confirmation":
+        assert status == 1 and len(wire) == 50 and not responses
+        assert journal["primary_error_code"] == "provider_request_limit_reached"
+        assert all(entry["status"] == "settled" for entry in journal["requests"])
+        assert len(journal["requests"]) == 50
+        assert sum(entry.get("purpose") == "patient_confirmation" for entry in journal["requests"]) == 1
+        assert json.loads((root / "accounting.json").read_text())["pending"] is None
+        assert all(name not in {"cases.create_from_order", "forms.save_form_response"} for name, _ in backend)
+        return
     assert status == 0, (tmp_path / "logs/run_log.txt").read_text()
-    assert not responses and len(wire) == (10 if mode == "length_then_success" else 8)
+    assert not responses and len(wire) == (10 if mode == "length_then_success" else 9 if mode == "claim_done" else 8)
     assert [name for name, _ in backend] == ["chart.search_patients", "chart.get_patient_chart_by_patient",
         "chart.get_patient_chart_by_patient", "cases.create_from_order", "forms.list_required_forms", "forms.save_form_response"]
     assert all(entry["status"] == "settled" for entry in journal["requests"])
     assert len(journal["requests"]) == len(wire)
+    import request_budget
+    for index, body in enumerate(wire, 1):
+        request_entry = journal["requests"][index - 1]
+        system_text = body["messages"][0]["content"]
+        if request_entry.get("purpose") == "patient_confirmation":
+            assert system_text == pib.PROMPT and "request_budget_feedback" not in request_entry
+        else:
+            suffix, record = request_budget.feedback(index - 1, mode == "claim_done" and index == len(wire))
+            assert system_text.endswith(suffix) and system_text.count("<runtime_request_budget ") == 1
+            assert sum(message.get("role") == "system" for message in body["messages"]) == 1
+            assert all("<runtime_request_budget " not in str(message.get("content"))
+                       for message in body["messages"] if message.get("role") == "tool")
+            assert request_entry["request_budget_feedback"] == record
+    assert "max_turns=50" in (tmp_path / "logs/run_log.txt").read_text()
     if mode == "length_then_success":
         assert journal["requests"][3]["response_metadata"]["finish_reason"] == "length"
         assert any(event.get("event") == "confirmation_result" and event.get("result", {}).get("reason") == "confirmation_output_truncated"
