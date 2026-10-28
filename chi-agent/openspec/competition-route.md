@@ -34,7 +34,7 @@
 
 改进应可用于同类新任务，不硬编码任务 ID 对应的答案、终态、表单值或文档产物。对照运行固定任务、模型和可比预算；更换模型时单独记录变量。
 
-M 的两个新任务固定条件基线揭示了目标案件局部检查以外的错患者副作用。下一候选变更为公开证据驱动的患者身份绑定与跨患者写入门禁，具体证据和验证方案见 [M 报告](../reviews/provider-two-task-baseline-review.md)；当前仅提出，不在本轮改策略或追加回归，不能把局部 verdict 当完整任务成功。
+M 的两个新任务固定条件基线揭示了目标案件局部检查以外的错患者副作用，[N 患者确认与绑定](changes/provider-patient-binding/proposal.md) 据此增加公开证据确认和跨患者写入门禁，再以原两题作开发回归。M 原始发现见 [M 报告](../reviews/provider-two-task-baseline-review.md)，改进证据、仍未解决的运行收束及下一实验建议见 [N 报告](../reviews/provider-patient-binding-review.md)；不能把局部 verdict 当完整任务成功，也不把已见题回归写成新的泛化证据。
 
 ## 阶段 3：跨领域、小批量与必要并发
 

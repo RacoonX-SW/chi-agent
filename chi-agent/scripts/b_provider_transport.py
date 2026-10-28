@@ -8,6 +8,7 @@ Persistent journals created here are explicitly synthetic-only.
 from __future__ import annotations
 
 import hashlib
+import asyncio
 import json
 import os
 import re
@@ -685,7 +686,8 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                  allowed_tool_names: set[str] | frozenset[str],
                  observe_request: Callable[[dict[str, Any]], None] | None = None,
                  max_rounds: int | None = None,
-                 allow_text_blocks_in_tool_history: bool = False):
+                 allow_text_blocks_in_tool_history: bool = False,
+                 confirmation_context: Callable[[], Any] | None = None):
         if not is_validated_profile(profile):
             raise GuardFailure("profile_untrusted_or_stale", "preflight")
         journal._require_active_lock()
@@ -703,6 +705,9 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         # add validated names before the first model response is checked.
         self.allowed_tool_names = allowed_tool_names if isinstance(allowed_tool_names, set) else frozenset(allowed_tool_names)
         self.observe_request = observe_request
+        if confirmation_context is not None and (not callable(confirmation_context) or journal.policy.scope != "real_development"):
+            raise GuardFailure("confirmation_policy_invalid", "preflight")
+        self.confirmation_context = confirmation_context
         if max_rounds is not None and (type(max_rounds) is not int or not 1 <= max_rounds <= profile.max_rounds):
             raise GuardFailure("round_limit_invalid", "preflight")
         self.max_rounds = max_rounds if max_rounds is not None else profile.max_rounds
@@ -730,7 +735,23 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         if body.get("model") != self.profile.model:
             raise GuardFailure("request_model_mismatch", "request_guard")
         max_output = body.get("max_tokens")
-        if isinstance(max_output, bool) or not isinstance(max_output, int) or not 1 <= max_output <= self.profile.max_output_tokens:
+        context_provider = getattr(self, "confirmation_context", None)
+        context = context_provider() if context_provider is not None else None
+        if context is not None:
+            from patient_identity_binding import PROMPT, CONFIRM_MAX_OUTPUT_TOKENS
+            messages = body.get("messages")
+            if (type(context) is not tuple or len(context) != 2 or context[0] != "patient_confirmation"
+                    or type(context[1]) is not str or len(context[1]) != 64
+                    or set(body) != {"model", "messages", "max_tokens", "response_format", "thinking", "reasoning_effort"}
+                    or type(max_output) is not int or max_output != CONFIRM_MAX_OUTPUT_TOKENS
+                    or body.get("response_format") != {"type": "json_object"}
+                    or type(messages) is not list or len(messages) != 2
+                    or messages[0] != {"role": "system", "content": PROMPT}
+                    or type(messages[1]) is not dict or set(messages[1]) != {"role", "content"}
+                    or messages[1].get("role") != "user" or type(messages[1].get("content")) is not str
+                    or hashlib.sha256(messages[1]["content"].encode()).hexdigest() != context[1]):
+                raise GuardFailure("confirmation_request_invalid", "request_guard")
+        elif isinstance(max_output, bool) or not isinstance(max_output, int) or not 1 <= max_output <= self.profile.max_output_tokens:
             raise GuardFailure("output_limit", "request_guard")
         if body.get("reasoning_effort") != "high" or body.get("thinking") != {"type": "enabled"}:
             raise GuardFailure("wire_profile_mismatch", "request_guard")
@@ -878,7 +899,12 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             body = self._validate_request(request, raw)
             max_output = body["max_tokens"]
             next_round = self.ledger.rounds + 1
-            self.journal.reserve(self.profile, request, body, raw, max_output, next_round)
+            context = self.confirmation_context() if self.confirmation_context is not None else None
+            if context is None:
+                self.journal.reserve(self.profile, request, body, raw, max_output, next_round)
+            else:
+                self.journal.reserve(self.profile, request, body, raw, max_output, next_round,
+                                     purpose="patient_confirmation")
         except GuardFailure as exc:
             self.ledger.error_code = exc.code
             self.journal.mark_error(exc.code)
@@ -894,10 +920,18 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                                      "body": body, "body_sha256": hashlib.sha256(raw).hexdigest(),
                                      "wire_bytes": len(raw), "token_bound": "documented_context_ceiling_not_measured",
                                      "provenance": "real_sdk_serialized_http_request"})
-        if self.observe_request is not None:
-            self.observe_request(body)
         try:
+            if self.observe_request is not None:
+                self.observe_request(body)
             response = await self.lower.handle_async_request(request)
+        except asyncio.CancelledError:
+            self.ledger.error_code = "transport_cancelled"
+            self.ledger.usage_complete = False
+            self.ledger.aggregate_input_tokens = None
+            self.ledger.aggregate_output_tokens = None
+            self.ledger.aggregate_cost_cny = None
+            self.journal.mark_unknown("transport_cancelled")
+            raise
         except httpx.ConnectError:
             self.ledger.error_code = "transport_connect_error"
             self.ledger.usage_complete = False
@@ -938,7 +972,18 @@ class GuardedTransport(httpx.AsyncBaseTransport):
                 raise GuardFailure("response_shape_invalid", "response_validation")
             incoming, outgoing = self._usage(payload)
             actual_cost = (Decimal(incoming) * self.profile.input_price + Decimal(outgoing) * self.profile.output_price) / MILLION
-            within_reserve = self.journal.settle(actual_cost, incoming, outgoing)
+            if context is None:
+                within_reserve = self.journal.settle(actual_cost, incoming, outgoing)
+            else:
+                choices = payload.get("choices")
+                choice = choices[0] if type(choices) is list and len(choices) == 1 and type(choices[0]) is dict else {}
+                message = choice.get("message") if type(choice.get("message")) is dict else {}
+                finish = choice.get("finish_reason")
+                metadata = {"purpose": "patient_confirmation", "round": next_round,
+                            "request_sha256": hashlib.sha256(raw).hexdigest(),
+                            "finish_reason": finish if type(finish) is str and finish in {"stop", "length"} else "other",
+                            "content_present": isinstance(message.get("content"), str) and bool(message["content"].strip())}
+                within_reserve = self.journal.settle(actual_cost, incoming, outgoing, response_metadata=metadata)
             self.ledger.known_input_tokens += incoming
             self.ledger.known_output_tokens += outgoing
             self.ledger.usage_complete = True
@@ -956,6 +1001,15 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             # consumed response preserves cached decoded bytes; rebuilding it
             # with content-encoding would decode gzip a second time.
             return response
+        except asyncio.CancelledError:
+            self.ledger.error_code = "transport_cancelled"
+            if self.journal.state.get("pending") is not None:
+                self.ledger.usage_complete = False
+                self.ledger.aggregate_input_tokens = None
+                self.ledger.aggregate_output_tokens = None
+                self.ledger.aggregate_cost_cny = None
+                self.journal.mark_unknown("transport_cancelled")
+            raise
         except GuardFailure as exc:
             self.ledger.error_code = exc.code
             if self.journal.state.get("pending") is not None:

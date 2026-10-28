@@ -342,6 +342,18 @@ PY
 
 已允许路径内的 UTF-8 文本和 PDF 可通过 `local-fs-read` 读取；PDF 是文本提取，不提供 OCR。PDF 上限为 8 MiB、100 页、累计提取 100 万字符、单次返回 10 万字符；可用原有 offset/limit 按行分段。损坏、加密或不支持的二进制返回明确工具错误。解析器版本、锁和包源码纳入 K 身份，缺依赖或不一致会停止；这不扩大 handbook/task/case provider/shared 的路径权限。
 
+### 自主 C 的患者确认与写入门禁
+
+K 的 `c-run` 默认启用患者确认；启动命令不变，操作员无需在运行中手动绑定或代选患者。Agent 先通过公开 MCP 查完整未过滤 roster，再查看待选者及同 sex、DOB 年差不超过 1 的近邻病例；默认一页或按某患者过滤的查询不能证明已覆盖候选。缺少完整可见病例时，工具返回需补查的 ID，保持只读。
+
+`local-read-patient-observation` 只按 patient_id/offset 有界回读已经成功查询的 chart，无法读取任意路径；可用于补齐官方截断返回的内容。`local-confirm-patient` 必须单独调用，带来自公开 instruction 和所选 chart 的真实原文引文。它使用同一 DeepSeek client/GuardedTransport 做一次无工具匹配检查，核对完整候选集合、唯一性和引用，最多两次；不确定、矛盾或缺材料不绑定。
+
+确认请求与主循环共用原来的累计账目及 **30 次总 provider 请求**上限和零重试；主业务单次输出仍为 8192，只有源代码构造的 K C 无工具确认请求使用 32768，最多两次。角色和限额不能由 Agent 参数或 HTTP 字段指定；它占用原有请求空间，费用按对应上限预留并结算。协议/材料 hash、provider round、finish_reason、内容是否存在及拒绝/绑定事件保存于该 run journal。已知用量的截断/格式失败明确拒绝且保持未绑定，不在工具内重试；取消仍停止，导致未知用量时保留已有 pending，已结算用量不倒退成未知。源码变更仍须 rebind 和新 B，旧费用/claim 不清零。
+
+确认后，每次 MCP 业务副作用和 workspace 写/edit 都核对患者及已观察的 order/case/form/document 等归属。未绑定、跨患者、猜测 ID、未知工具或身份冲突明确拒绝；不静默切换患者，未证明 line_updates 归属时拒绝。患者源文档与病例文档分别跟踪，共用 form 模板按 case 配对。
+
+语义确认仍来自同 provider，存在模型偏差；来源/身份检查不能证明医学语义正确。完整 world 的非目标患者业务写入、正常结束和目标结果须结合检查，不能只看局部 rubric。设计与实验边界见 [N 规格](openspec/changes/provider-patient-binding/design.md)，实际候选、失败和回归结果见 [N 报告](reviews/provider-patient-binding-review.md)。正式配送入口与 F.5 不在本轮迁移范围。
+
 ## DeepSeek 本地开发评审
 
 `scripts/development_review.py` 用固定 PA 规则和完整证据做本地诊断，报告名为 `development-review.json`，official reward 为 null。原版 Claude 评分与正式交付仍按 [审核状态](reviews/REVIEW_STATE.md) 的范围处理。
@@ -349,6 +361,8 @@ PY
 新的 K C 在确认 runner 退出后保存 `runs/development-review-inputs/<run-id>/`，包含有来源/hash 的业务 export、expectations 和原始 world；目录不挂给 participant。新题的非零退出也尝试捕获完整终态，wait 异常先停止并确认 runner；无法确认静止时标记 unavailable。捕获失败仍清理本次资源，并拒绝评审。旧 C 只有 trace/workspace 时不能补造成完整导出。participant 源码变更仍须 rebind 和当前源码 B，见上节；仅调整独立评审器不改变已捕获 C 的 participant 身份。
 
 下面函数在 Bash/Zsh 中从 `chi-agent/` 运行。`plan` 不读输入/密钥、不写状态；`deterministic` 禁网，只返回部分程序检查；只有显式 `review` 注入已有 `.env` 并调用一次 DeepSeek，不自动重试。评审容器没有 Docker socket，不挂整个项目或受限手册。
+
+执行 `review` 前按 [DeepSeek 开发评审的数据来源与审批证据](docs/docker-workflow.md#deepseek-开发评审的数据来源与审批证据)核对本次载荷，并在审批说明中引用固定官方合成数据声明、既有用户授权、实际发送范围及秘密缺席的离线证据。“本地”指本地编排，实际仍向外部 DeepSeek API 发送材料；检查通过与后续审批是否获准分别记录。
 
 ```sh
 mkdir -p runs/development-review-inputs runs/development-review
