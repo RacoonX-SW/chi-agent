@@ -15,7 +15,7 @@
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | O两题以相同固定源码/配置运行，反馈对应共享计数，原始证据/确认契约未改。两题正常结束且只影响目标患者；t013局部字段失败保留。均未超过原30次或触发低余额提醒，不证明50额度/提醒有效；两题仍为开发题 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #18](https://github.com/xsw932187210-cell/chi-agent/pull/18)已合并；O本分支将创建base=main PR交用户审核，不自行merge/auto-merge。下一建议为公开证据驱动的申请关键字段来源/提交前一致性检查，须另立有界规格 |
+| PR 与下一步 | [PR #18](https://github.com/xsw932187210-cell/chi-agent/pull/18)已合并；O 已推送 [PR #19](https://github.com/xsw932187210-cell/chi-agent/pull/19)，base=main，待用户审核决定合并，不自行merge/auto-merge。下一建议为公开证据驱动的申请关键字段来源/提交前一致性检查，须另立有界规格 |
 | 未验证项 | O组合改动的单项因果、额外额度和软提醒的真实收益、未见任务可靠性、t013服务地点选择、最终付款方批准、独立临床/规则裁决与官方得分、真实账单/缓存、正式配送/F.5、OpenSpec CLI、真实硬取消/daemon故障 |
 | 真实运行 | O均新世界/独立attempt，全部结果和费用保留，评审载荷审计hash与实际请求一致，无人工业务代选/隐藏答案回灌；official_reward=null，正式入口仍原record_only/null cap。详细结果只见[O审核](request-budget-awareness-review.md) |
 
