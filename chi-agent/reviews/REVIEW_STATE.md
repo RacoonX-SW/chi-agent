@@ -12,6 +12,7 @@
 | 当前分支与接手改动 | 从已合并 PR #19 的最新 `origin/main` `a1aa625c3b9fbc36df2fd6bf57e67787b5f2e526` 建立 `codex/referral-field-provenance`，写入前干净；沿用同一个 Terra / high 实现，主代理独立审核/Git |
 | 环境目标与实际 | P 复用 Python 3.12 dev、H SDK 与 K PDF 卷，只做禁网验证，未运行 controller/world；无安装/下载、改锁/镜像/profile，G/H未重做，原50次/患者门禁保持 |
 | 本地开发预算 | 沿用 record_only/null cap；P 账目复核与 O 最终值一致，零新增真实请求/费用，未 rebind/冒用旧 B，两套pending=null、controller clean；未知用量仍阻挡，零自动重试 |
+| 后续费用规划 | 用户选择从本次规划起新增约 50 CNY DeepSeek API 费用安排必要验收和少量未见题验证；起点见 P 账目核对，不清零历史，不改 record_only/null cap，不默认花完或恢复 t019/Claude/F.5。候选分配与建议排期见[截止前路线](../openspec/competition-route.md#截止前排期2026-10-28提案) |
 | DeepSeek 调用时段 | 后续全部真实请求受[调用时段约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)约束；用户明确仅以文档协作规则执行，不新增程序时钟门禁，不自动唤醒 |
 | 付费验证范围 | 用户为节省 Token 暂停 t019 的付费 C/评审，优先 t013；保留合成离线回归。P 固定候选/独立审核后，仅在允许时段做必要新 B 和至多一次 t013 C/检查/评审；不默认恢复 t019，旧通过不冒充新源码实测 |
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
