@@ -15,7 +15,7 @@
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | 最终源码保持同一模型/提示/角色配置完成两题回归，完整导出均只影响目标患者；t013 未正常结束，不能只据局部 verdict 算成功。工程修复前全部失败和评审不完整均见 N 报告；两题已成开发题，无新泛化证据 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #17](https://github.com/xsw932187210-cell/chi-agent/pull/17) 已合并；N 完成后创建本分支 base=main PR 交用户审核，不自行 merge。下一建议为包含确认子请求的剩余请求提示/完成收束，须另立有界规格 |
+| PR 与下一步 | [PR #17](https://github.com/xsw932187210-cell/chi-agent/pull/17) 已合并；[PR #18](https://github.com/xsw932187210-cell/chi-agent/pull/18) 为本分支 base=main，待用户审核合并，未开启 auto-merge。下一建议为包含确认子请求的剩余请求提示/完成收束，须另立有界规格 |
 | 未验证项 | 未见任务的患者匹配可靠性、t013 正常收束、最终付款方批准、独立临床/规则裁决与官方得分、Claude 认证、真实 tokenizer/账单、其他任务/架构、OpenSpec CLI、真实网络/daemon 故障与硬取消；同 provider 确认/局部评审不替代这些证据 |
 | 真实运行 | N 均新世界/独立 attempt，完整终态和全部失败保留，无人工业务代选、无隐藏答案回灌；official reward=null，正式入口仍 record_only/null cap。详细结果只见 [N 审核](provider-patient-binding-review.md) |
 
