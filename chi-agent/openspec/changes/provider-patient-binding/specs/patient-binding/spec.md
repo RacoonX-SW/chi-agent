@@ -21,11 +21,15 @@ Known patient/order/case/form/document and workspace relationships SHALL be chec
 - **THEN** the batch cannot cause a side effect by racing the guard
 
 ### Requirement: Share guarded accounting and preserve failures
-Confirmation requests SHALL count toward the same provider request/output limits and persistent accounting, with separate purpose and prompt/evidence provenance, zero automatic retry and at most two explicit confirmations.
+Confirmation requests SHALL count toward the same 30 provider requests and persistent accounting, with separate purpose and prompt/evidence provenance, zero automatic retry and at most two explicit confirmations. Main requests retain the profile output ceiling of 8192; only a source-controlled K C confirmation role with the exact no-tool request contract MAY reserve and generate up to 32768. Request JSON or model tool arguments MUST NOT grant that role.
 
 #### Scenario: A request settles but confirmation is invalid
-- **WHEN** JSON, references or semantic completeness fail
-- **THEN** the cost remains settled and the patient remains unbound
+- **WHEN** a known-usage confirmation has length termination, empty/invalid JSON, invalid references or incomplete semantics
+- **THEN** safe response metadata and cost remain durably settled, the patient remains unbound, and an explicit refusal is returned without automatic retry or a false network/unknown-effect classification
+
+#### Scenario: A main request attempts to use the confirmation ceiling
+- **WHEN** any untrusted request field or ordinary main request asks for 32768 output tokens
+- **THEN** it is rejected before provider dispatch; K confirmation pending records are accepted only with the exact trusted role and bounded reserve, while other paths keep their existing ceiling
 
 #### Scenario: Usage or execution becomes uncertain
 - **WHEN** timeout, cancellation, observer failure or unknown result leaves a pending request/effect

@@ -7,6 +7,7 @@ from datetime import date
 from typing import Any
 
 PROMPT_VERSION = "patient-binding-public-observations-v2"
+CONFIRM_MAX_OUTPUT_TOKENS = 32768
 CONFIRM_DESCRIPTION = "Before business writes, choose a patient after a complete unfiltered roster and charts of similar candidates; provide exact quotes from the instruction and that patient's chart, and call this tool alone. Confirmation compares public evidence and may refuse ambiguity."
 READ_DESCRIPTION = "Read a bounded page of a previously returned patient chart; use offsets until complete."
 PROMPT = ("Compare the complete public instruction, the complete roster, and all supplied charts. Return JSON only. "

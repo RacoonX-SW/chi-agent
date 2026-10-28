@@ -140,18 +140,23 @@ def test_cross_patient_orders_cases_forms_documents_and_conflicting_result():
     with pytest.raises(pib.Refusal): guard.check("cases.create_from_order", {"patient_id": "P1"})
 
 
-def test_confirm_uses_guarded_shared_budget_and_two_attempt_limit(tmp_path):
+@pytest.mark.parametrize("first_result", ["ambiguous", "length", "empty", "invalid_json"])
+def test_confirm_uses_guarded_shared_budget_and_two_attempt_limit(tmp_path, first_result):
     import httpx
     from openai import AsyncOpenAI
     import b_provider_profile as profiles
     import b_provider_transport as transport
+    import b_execution_policy as policies
     import live_development as live
     import model_runner_adapter as adapter
+    from test_live_development import _adopt_synthetic_history
+    import contextvars
 
     async def run():
         profile = profiles.load_profile(today=datetime.date(2026, 10, 26))
-        journal = transport.SyntheticJournal(tmp_path, "confirmation")
-        journal._persist = journal._persist_run
+        _adopt_synthetic_history(tmp_path, tmp_path)
+        journal = live.RealDevelopmentJournal(tmp_path, "confirmation", profile=profile,
+                                               policy=policies.load_real_development_policy())
         journal.start_dispatch = lambda **_kw: None
         journal.finish_dispatch = lambda **_kw: None
         guard, history = observations()
@@ -163,30 +168,44 @@ def test_confirm_uses_guarded_shared_budget_and_two_attempt_limit(tmp_path):
                 self.calls += 1
                 body = json.loads(request.content)
                 assert body.get("tools", []) == []
-                assert body["max_tokens"] == profile.max_output_tokens
-                content = verdict("ambiguous" if self.calls == 1 else "unique_match")
+                assert body["max_tokens"] == pib.CONFIRM_MAX_OUTPUT_TOKENS
+                if self.calls == 1:
+                    content = {"ambiguous": verdict("ambiguous"), "length": None, "empty": "", "invalid_json": "not-json"}[first_result]
+                    finish = "length" if first_result == "length" else "stop"
+                else:
+                    content, finish = verdict(), "stop"
                 return httpx.Response(200, json={"id": "mock", "object": "chat.completion", "created": 1,
-                    "model": profile.model, "choices": [{"index": 0, "finish_reason": "stop",
+                    "model": profile.model, "choices": [{"index": 0, "finish_reason": finish,
                     "message": {"role": "assistant", "content": content, "reasoning_content": "test"}}],
                     "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20}}, request=request)
         lower = Lower()
+        context = contextvars.ContextVar("confirmation-test", default=None)
         guarded = transport.GuardedTransport(profile=profile, journal=journal, lower=lower, ledger=ledger,
-                   cap_cny=Decimal("5"), validate_response=lambda _value: None, allowed_tool_names=set())
+                   cap_cny=None, validate_response=lambda _value: None, allowed_tool_names=set(),
+                   confirmation_context=context.get)
         client = AsyncOpenAI(api_key="synthetic", base_url=profile.endpoint + "/v1",
                              http_client=httpx.AsyncClient(transport=guarded), max_retries=0)
         schemas = {}
         tools = live._live_tools("c-once", tmp_path, tmp_path, journal, schemas, ledger, binding=guard,
-                                 binding_lock=asyncio.Lock(), openai_client=client, profile=profile, exchanges=history)
+                                 binding_lock=asyncio.Lock(), openai_client=client, profile=profile, exchanges=history,
+                                 request_context=context)
         confirm = next(tool for tool in tools if tool.name == "local-confirm-patient")
         for index in range(2):
             args = {"patient_id": "P1", "instruction_quote": "90 day treatment trial",
                     "chart_quote": "90 day treatment trial"}
             ledger.pending_calls.append({"call_id": f"confirm{index}", "tool": confirm.name, "arguments": args})
             answer = await confirm.on_invoke_tool(None, json.dumps(args))
-            assert ("ambiguous" if index == 0 else "unique_match") in answer
+            if index == 0:
+                expected = {"ambiguous": "semantic_ambiguous", "length": "confirmation_output_truncated",
+                            "empty": "confirmation_empty", "invalid_json": "confirmation_format_invalid"}[first_result]
+                assert json.loads(answer)["reason"] == expected
+                assert guard.bound is None and ledger.error_code is None
+            else:
+                assert json.loads(answer)["status"] == "unique_match"
         assert guard.bound == "P1"
         assert lower.calls == ledger.rounds == guard.confirmations == 2
         assert all(entry["status"] == "settled" for entry in journal.run_doc["requests"])
+        assert journal.run_doc["requests"][0]["response_metadata"]["finish_reason"] == ("length" if first_result == "length" else "stop")
         assert journal.state["pending"] is None
         with pytest.raises(pib.Refusal): guard.confirmation_input("P1", history)
         await client.close()
@@ -258,8 +277,8 @@ def test_dispatch_serializes_and_refuses_cross_patient_before_backend():
     assert FakeUtil.count == 1
 
 
-@pytest.mark.parametrize("mixed_confirmation", [False, True])
-def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mixed_confirmation):
+@pytest.mark.parametrize("mode", ["success", "mixed_confirmation", "length_then_success", "wrong_role", "function_call"])
+def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
     from argparse import Namespace
     import httpx
     from mcp.types import CallToolResult, TextContent, Tool
@@ -310,18 +329,33 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mixed_con
         _completion(calls=[_call("chart1", "chart__get_patient_chart_by_patient", {"patient_id": "P1"}),
                            _call("chart2", "chart__get_patient_chart_by_patient", {"patient_id": "P2"})]),
         _completion(calls=[_call("confirm", "local-confirm-patient", {"patient_id": "P1", "instruction_quote": "90 day treatment trial", "chart_quote": "90 day treatment trial"})]
-                    + ([_call("race", "cases__create_from_order", {"patient_id": "P1"})] if mixed_confirmation else [])),
+                    + ([_call("race", "cases__create_from_order", {"patient_id": "P1"})] if mode == "mixed_confirmation" else [])),
         _completion(text=payload),
         _completion(calls=[_call("create", "cases__create_from_order", {"patient_id": "P1"})]),
         _completion(calls=[_call("forms", "forms__list_required_forms", {"case_id": "C1"})]),
         _completion(calls=[_call("save", "forms__save_form_response", {"case_id": "C1", "form_id": "F1"})]),
         _completion(text="Completed synthetic task."),
     ]
+    if mode == "length_then_success":
+        truncated = _completion(text=None)
+        truncated["choices"][0]["finish_reason"] = "length"
+        responses[3:4] = [truncated,
+            _completion(calls=[_call("confirm_again", "local-confirm-patient", {"patient_id": "P1",
+                "instruction_quote": "90 day treatment trial", "chart_quote": "90 day treatment trial"})]),
+            _completion(text=payload)]
+    elif mode in {"wrong_role", "function_call"}:
+        invalid = _completion(text=payload)
+        message = invalid["choices"][0]["message"]
+        if mode == "wrong_role":
+            message["role"] = "user"
+        else:
+            message["function_call"] = {"name": "synthetic", "arguments": "{}"}
+        responses[3:] = [invalid, _completion(text="No patient was confirmed.")]
     wire = []
     def reply(request):
         body = json.loads(request.content)
         wire.append(body)
-        if len(wire) == 4:
+        if len(wire) == 4 or (mode == "length_then_success" and len(wire) == 6):
             assert body.get("tools", []) == []
         if len(wire) > 4:
             assert not any(payload in str(item.get("content")) for item in body["messages"])
@@ -336,18 +370,31 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mixed_con
     journal = json.loads((root / "runs/flow.json").read_text())
     assert any(event.get("event") == "refusal" and event.get("call_id") == "blocked"
                for event in journal["patient_binding_events"])
-    if mixed_confirmation:
+    if mode == "mixed_confirmation":
         assert status == 1
         assert len(wire) == 3
-        assert all(name != "cases.create_from_order" for name, _ in backend)
+        assert all(name not in {"cases.create_from_order", "forms.save_form_response"} for name, _ in backend)
         assert not any(event.get("purpose") == "patient_confirmation" for event in journal["patient_binding_events"])
         return
+    if mode in {"wrong_role", "function_call"}:
+        assert status == 0 and len(wire) == 5 and not responses
+        assert all(name not in {"cases.create_from_order", "forms.save_form_response"} for name, _ in backend)
+        assert not any(event.get("event") == "patient_bound" for event in journal["patient_binding_events"])
+        assert any(event.get("event") == "confirmation_result" and event.get("result", {}).get("reason") == "confirmation_format_invalid"
+                   for event in journal["patient_binding_events"])
+        assert journal["requests"][3]["status"] == "settled"
+        assert json.loads((root / "accounting.json").read_text())["pending"] is None
+        return
     assert status == 0, (tmp_path / "logs/run_log.txt").read_text()
-    assert not responses and len(wire) == 8
+    assert not responses and len(wire) == (10 if mode == "length_then_success" else 8)
     assert [name for name, _ in backend] == ["chart.search_patients", "chart.get_patient_chart_by_patient",
         "chart.get_patient_chart_by_patient", "cases.create_from_order", "forms.list_required_forms", "forms.save_form_response"]
     assert all(entry["status"] == "settled" for entry in journal["requests"])
-    assert len(journal["requests"]) == 8
+    assert len(journal["requests"]) == len(wire)
+    if mode == "length_then_success":
+        assert journal["requests"][3]["response_metadata"]["finish_reason"] == "length"
+        assert any(event.get("event") == "confirmation_result" and event.get("result", {}).get("reason") == "confirmation_output_truncated"
+                   for event in journal["patient_binding_events"])
     assert any(event.get("purpose") == "patient_confirmation" and event.get("provider_round") == 4
                for event in journal["patient_binding_events"])
     assert json.loads((root / "accounting.json").read_text())["pending"] is None

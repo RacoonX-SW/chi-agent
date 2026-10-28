@@ -4,7 +4,7 @@
 
 基线为已合并 PR #17 的 `2b29a69dd9628586daa9481b11af6b8223b0b079`，工作分支 `codex/patient-identity-binding`。唯一实现代理继续 gpt-6.1-terra/high，主代理规格/独立审核/真实验证/GitHub。开发授权沿用真实 DeepSeek、多次本地尝试、record_only/null cap；未知用量阻挡接续，Claude/F.5 暂停。
 
-本轮只改变患者确认/绑定机制及其必要的通用工具说明和确认提示。官方 base system prompt、participant DeepSeek profile、thinking/high、每次输出 8192、总 provider 请求上限 30、镜像/锁/Python 3.12、资源和 reviewer 配置保持原值。确认子请求也占这 30 次，SDK 主循环 turns 与总 provider 请求数分别记录。新确认提示、工具协议和来源/参数进入源码身份；不是声称提示未改变的实验。
+本轮只改变患者确认/绑定机制及其必要的通用工具说明、确认提示和角色输出边界。官方 base system prompt、participant DeepSeek profile、thinking/high、主业务每次输出 8192、总 provider 请求上限 30、镜像/锁/Python 3.12、资源和 reviewer 配置保持原值。确认子请求也占这 30 次，SDK 主循环 turns 与总 provider 请求数分别记录。新确认提示、工具协议和来源/参数进入源码身份；不是声称提示未改变的实验。
 
 真实回归复用 M 冻结的 t013/t019，资源不重新下载，均已成为开发题，不称未见泛化证据。每个新 attempt 用新世界、独立 run-id 和同一旧累计账目；独立审核后 rebind/new B，再各一次 C/完整终态/确定性部分检查/DeepSeek 开发评审。工程修复需要新源码审核/B，保留此前失败，不自动重试。
 
@@ -19,6 +19,10 @@
 付费确认前，完整**未过滤** roster 中与待确认者同 sex、DOB 年相差不超过 1 的年龄近邻，必须都有真实完整 chart；否则返回缺少观察的 ID，不消耗两次语义确认机会。过滤后 total=items 不是全候选覆盖，无效 DOB/sex、重复或冲突身份拒绝。该 cohort 只强制相似候选比较，不等于穷尽语义候选；确认器仍看全 roster，其他未见 chart 的候选若无法排除必须返回 unknown。紧凑响应覆盖每个 roster ID 的匹配状态，选中者给出原文引用；其余候选的语义排除仍是模型判断，不冒充确定性证明。
 
 首轮真实回归暴露了 v1 只说“每个 candidate chart”而模型仅返回已见病例的协议歧义。修复采用明确的三个 ID 数组分区（匹配/不匹配/未知），输入显式提供完整 required_candidate_ids 与 expected_count；程序验证每个 ID 的类型、无重复/交集、并集恰等于完整 roster，再判断 unknown、唯一匹配和真实引文。响应结构错误、覆盖不足、未知候选、选择不一致、引用不成立分别返回 safe reason 与有界的数量/公开 ID 诊断，不能只给笼统 invalid。另一患者被建议为匹配者时不自动绑定，仍需主模型显式选择和确认。此项只修协议/反馈，不改变模型、输出或轮数，也不放宽不真实引用。
+
+第二次真实回归的确认请求在 8192 生成 tokens 后校验失败，全部用量已结算；旧日志未留 finish_reason，不能断言网络故障或确切截断原因。N-R2 撤销“确认器与业务共享同一单次输出上限”的初始假设：仅 K C 由源代码构造、持锁的无工具确认请求采用 32768，主业务/B/J/正式入口仍 8192（B 自身更低上限保留），总 30 次/最多两次确认不变。沿用同一 client/transport/journal，预留、usage 上界和 K pending 读取校验均按可信角色选择；角色不接受模型参数或任意 HTTP 字段指定。确认请求还须精确满足固定提示、模型、消息结构、JSON 格式和思考参数；不能全局放宽 profile。32768 与现有本地评审角色相同，可能增加费用，全部显式计入旧累计账目。
+
+确认响应先持久结算可信 usage 及安全元数据（round、角色、finish_reason、content_present、请求身份），再处理内容。已知 usage 的 length、空内容或格式错误返回明确 refusal，保持未绑定；只有主模型显式再次调用才占第二次机会，不在工具内重试。该已知不完整响应不伪装成 ConnectionError 或未知副作用。HTTP/取消/缺 usage/未知工具结果仍停止，pending 不清；响应元数据或结算持久化失败不得继续。aggregate 清 pending 前须已有可追溯的逐请求结算证据，崩溃不能造成无凭据放行。
 
 原版 oversize wrapper 可能截断 MCP 输出并给出当前文件工具不能读取的路径。监控层完整结果与主模型已见内容须明确区分；可以提供 registry 范围内、有界、只读的 observation 回读工具/回执，不扩大任意文件权限。不得让主模型伪称读过不可见内容；确认器使用的完整内容及返回的引用都记录来源。
 

@@ -176,19 +176,29 @@ def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
         return "real_profile_mismatch"
     pending = state.get("pending")
     if pending is not None:
+        if type(pending) is not dict:
+            return "real_accounting_invalid"
         pending_keys = {"run_id", "round", "status", "input_reserve_tokens", "output_reserve_tokens",
                         "reserve_upper_cost_cny", "cumulative_upper_cost_cny", "request_sha256",
                         "request_wire_bytes", "route", "model", "reserve_basis"}
+        confirmation = is_k and type(pending) is dict and pending.get("purpose") == "patient_confirmation"
+        if confirmation:
+            from patient_identity_binding import CONFIRM_MAX_OUTPUT_TOKENS
+            pending_keys.add("purpose")
+            output_valid = type(pending.get("output_reserve_tokens")) is int and pending["output_reserve_tokens"] == CONFIRM_MAX_OUTPUT_TOKENS
+            wire_limit = 8 * 1024 * 1024
+        else:
+            output_valid = type(pending.get("output_reserve_tokens")) is int and 1 <= pending["output_reserve_tokens"] <= profile.max_output_tokens
+            wire_limit = 1_048_576
         if (type(pending) is not dict or set(pending) != pending_keys
                 or type(pending.get("run_id")) is not str or ID_RE.fullmatch(pending["run_id"]) is None
                 or type(pending.get("round")) is not int or pending["round"] < 1
                 or pending.get("status") not in {"pending", "unknown"}
                 or type(pending.get("input_reserve_tokens")) is not int
                 or pending.get("input_reserve_tokens") != profile.input_reserve_tokens
-                or type(pending.get("output_reserve_tokens")) is not int
-                or not 1 <= pending["output_reserve_tokens"] <= profile.max_output_tokens
+                or not output_valid
                 or type(pending.get("request_wire_bytes")) is not int
-                or not 1 <= pending["request_wire_bytes"] <= 1_048_576
+                or not 1 <= pending["request_wire_bytes"] <= wire_limit
                 or type(pending.get("request_sha256")) is not str
                 or re.fullmatch(r"[0-9a-f]{64}", pending["request_sha256"]) is None
                 or pending.get("route") != profile.endpoint + "/v1/chat/completions"
@@ -697,7 +707,7 @@ class RealDevelopmentJournal:
         _atomic_json(self.run_path, self.run_doc)
 
     def reserve(self, profile: Any, request: Any, body: dict[str, Any], raw: bytes,
-                max_output: int, round_number: int) -> Decimal:
+                max_output: int, round_number: int, *, purpose: str | None = None) -> Decimal:
         from b_provider_transport import GuardFailure
         self._require_active_lock()
         fresh = _read_json(self.state_path)
@@ -710,6 +720,13 @@ class RealDevelopmentJournal:
             raise GuardFailure("real_accounting_pending_unknown", "request_guard")
         if profile.sha256 != self.profile.sha256:
             raise GuardFailure("real_profile_mismatch", "request_guard")
+        if purpose is not None:
+            from patient_identity_binding import CONFIRM_MAX_OUTPUT_TOKENS
+            if (purpose != "patient_confirmation" or self.policy.scope != "real_development"
+                    or type(max_output) is not int or max_output != CONFIRM_MAX_OUTPUT_TOKENS):
+                raise GuardFailure("confirmation_policy_invalid", "request_guard")
+        elif type(max_output) is not int or not 1 <= max_output <= profile.max_output_tokens:
+            raise GuardFailure("output_limit", "request_guard")
         reserve = (Decimal(profile.input_reserve_tokens) * profile.input_price
                    + Decimal(max_output) * profile.output_price) / Decimal(1_000_000)
         if self.cap_cny is not None and self.cumulative_spend + reserve > self.cap_cny:
@@ -721,6 +738,8 @@ class RealDevelopmentJournal:
                  "request_sha256": hashlib.sha256(raw).hexdigest(), "request_wire_bytes": len(raw),
                  "route": str(request.url), "model": body["model"],
                  "reserve_basis": "documented_peak_price_and_context_ceiling_not_tokenizer_measured"}
+        if purpose is not None:
+            entry["purpose"] = purpose
         self.state["pending"] = {"run_id": self.run_id, **entry}
         self.state["usage_complete"] = False
         self.run_doc["requests"].append(entry)
@@ -732,7 +751,7 @@ class RealDevelopmentJournal:
             raise GuardFailure("journal_write_failed", "request_guard") from None
         return reserve
 
-    def settle(self, actual_cost: Decimal, incoming: int, outgoing: int) -> bool:
+    def settle(self, actual_cost: Decimal, incoming: int, outgoing: int, *, response_metadata: dict | None = None) -> bool:
         from b_provider_transport import GuardFailure
         self._require_active_lock()
         pending = self.state.get("pending")
@@ -741,12 +760,26 @@ class RealDevelopmentJournal:
         reserve = Decimal(pending["reserve_upper_cost_cny"])
         within = actual_cost <= reserve
         entry = self.run_doc["requests"][-1]
+        if pending.get("purpose") == "patient_confirmation":
+            if (type(response_metadata) is not dict or set(response_metadata) != {"purpose", "round", "request_sha256", "finish_reason", "content_present"}
+                    or response_metadata.get("purpose") != "patient_confirmation"
+                    or response_metadata.get("round") != pending["round"]
+                    or response_metadata.get("request_sha256") != pending["request_sha256"]
+                    or response_metadata.get("finish_reason") not in {"stop", "length", "other"}
+                    or type(response_metadata.get("content_present")) is not bool):
+                raise GuardFailure("confirmation_metadata_invalid", "response_accounting")
+            entry["response_metadata"] = response_metadata
+        elif response_metadata is not None:
+            raise GuardFailure("confirmation_metadata_invalid", "response_accounting")
         entry.update({"status": "settled" if within else "settled_over_reserve",
                       "usage_provenance": "provider_response_usage",
                       "input_tokens": incoming, "output_tokens": outgoing,
                       "estimated_cost_cny": str(actual_cost),
                       "known_aggregate_estimated_cost_cny": str(self.cumulative_spend + actual_cost),
                       "reserve_comparison": "within" if within else "exceeded"})
+        if response_metadata is not None:
+            # Durable per-request settlement precedes clearing aggregate pending.
+            _atomic_json(self.run_path, self.run_doc)
         self.state["known_settled_cost_cny"] = str(Decimal(self.state["known_settled_cost_cny"]) + actual_cost)
         self.state["known_input_tokens"] += incoming
         self.state["known_output_tokens"] += outgoing
@@ -1754,7 +1787,7 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
             return f"REFUSED: {exc}"
 
     async def confirm_patient(_ctx: Any, payload: str) -> str:
-        from patient_identity_binding import PROMPT, PROMPT_VERSION, MAX_CONFIRM_INPUT, Refusal
+        from patient_identity_binding import PROMPT, PROMPT_VERSION, MAX_CONFIRM_INPUT, CONFIRM_MAX_OUTPUT_TOKENS, Refusal
         args = json.loads(payload)
         try:
             evidence = binding.confirmation_input(args["patient_id"], exchanges or [])
@@ -1772,22 +1805,36 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         binding.event("confirmation_attempt", attempt=binding.confirmations, purpose="patient_confirmation",
                       prompt_version=PROMPT_VERSION, prompt_sha256=hashlib.sha256(PROMPT.encode()).hexdigest(),
                       evidence_sha256=hashlib.sha256(evidence.encode()).hexdigest(), provider_round=ledger.rounds + 1)
-        token = request_context.set("patient_confirmation") if request_context is not None else None
+        token = request_context.set(("patient_confirmation", hashlib.sha256(evidence.encode()).hexdigest())) if request_context is not None else None
         try:
             response = await openai_client.chat.completions.create(
                 model=profile.model, messages=[{"role": "system", "content": PROMPT}, {"role": "user", "content": evidence}],
-                max_tokens=profile.max_output_tokens, response_format={"type": "json_object"},
+                max_tokens=CONFIRM_MAX_OUTPUT_TOKENS, response_format={"type": "json_object"},
                 extra_body={"thinking": {"type": "enabled"}, "reasoning_effort": "high"})
         finally:
             if token is not None:
                 request_context.reset(token)
-        choices = response.choices
-        if len(choices) != 1 or choices[0].finish_reason != "stop" or not isinstance(choices[0].message.content, str):
+        choices = getattr(response, "choices", None)
+        choice = choices[0] if type(choices) is list and len(choices) == 1 else None
+        message = getattr(choice, "message", None)
+        content = getattr(message, "content", None)
+        finish_reason = getattr(choice, "finish_reason", None)
+        if choice is None or message is None:
             result = {"status": "invalid", "reason": "confirmation_format_invalid"}
+        elif (getattr(message, "role", None) != "assistant"
+              or getattr(message, "tool_calls", None) not in (None, [])
+              or getattr(message, "function_call", None) is not None):
+            result = {"status": "invalid", "reason": "confirmation_format_invalid"}
+        elif finish_reason == "length":
+            result = {"status": "invalid", "reason": "confirmation_output_truncated"}
+        elif finish_reason != "stop":
+            result = {"status": "invalid", "reason": "confirmation_format_invalid"}
+        elif not isinstance(content, str) or not content.strip():
+            result = {"status": "invalid", "reason": "confirmation_empty"}
         else:
-            result = binding.assess(args["patient_id"], choices[0].message.content)
+            result = binding.assess(args["patient_id"], content)
         binding.event("confirmation_result", attempt=binding.confirmations, result=result,
-                      response_content=choices[0].message.content if len(choices) == 1 else None)
+                      response_content=content if isinstance(content, str) else None)
         return json.dumps(result, ensure_ascii=False)
 
     def fn(name: str, description: str, schema: dict[str, Any], callback: Any) -> Any:
@@ -2232,13 +2279,10 @@ async def _worker_run(args: argparse.Namespace) -> int:
             http_transport = httpx.AsyncHTTPTransport(retries=0, verify=True)
             output_ceiling = min(profile.max_output_tokens, 1024) if kind == "b-smoke" else profile.max_output_tokens
             def validate_provider_response(payload: dict[str, Any]) -> None:
-                if request_context is not None and request_context.get() == "patient_confirmation":
-                    choices = payload.get("choices")
-                    if (type(choices) is not list or len(choices) != 1 or type(choices[0]) is not dict
-                            or choices[0].get("finish_reason") != "stop"
-                            or type(choices[0].get("message")) is not dict
-                            or choices[0]["message"].get("tool_calls") not in (None, [])):
-                        raise LiveFailure("patient_confirmation_response_invalid")
+                if request_context is not None and request_context.get() is not None:
+                    if payload.get("model") != profile.raw["response_model"]:
+                        raise LiveFailure("response_model_mismatch")
+                    return
                 _validate_live_response(payload, ledger, profile, schemas, allowed_names, journal, raw_names,
                                         kind=kind, observed_history=exchanges, binding=binding)
             client_http = httpx.AsyncClient(transport=GuardedTransport(
@@ -2249,6 +2293,7 @@ async def _worker_run(args: argparse.Namespace) -> int:
                 observe_request=lambda body: _observe_live_history(body, exchanges, ledger.rounds),
                 max_rounds=6 if kind == "b-smoke" else profile.max_rounds,
                 allow_text_blocks_in_tool_history=kind == "c-once",
+                confirmation_context=request_context.get if request_context is not None else None,
             ), trust_env=False, follow_redirects=False, timeout=httpx.Timeout(60.0, connect=10.0))
             openai_client = AsyncOpenAI(api_key=secret, base_url=profile.endpoint + "/v1",
                                         http_client=client_http, max_retries=0)
