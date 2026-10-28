@@ -273,3 +273,103 @@ def test_wire_history_completeness_and_content_provenance(tmp_path):
         assert journal.state['pending'] is None
     finally:
         journal.finish('failed', 'synthetic', 0); journal.close()
+
+
+def test_stop_without_reasoning_or_with_null(tmp_path):
+    for suffix, value in [('missing', 'missing'), ('null', None)]:
+        responder = go._offline_responder()
+        def reply(req):
+            data = json.loads(responder(req).read())
+            if data['choices'][0]['finish_reason'] == 'stop':
+                if value == 'missing': data['choices'][0]['message'].pop('reasoning_content')
+                else: data['choices'][0]['message']['reasoning_content'] = None
+            return httpx.Response(200, request=req, json=data)
+        assert run(tmp_path, suffix, reply)['status'] == 'complete'
+
+
+def changed_identity(identity, suffix):
+    import copy
+    result = copy.deepcopy(identity)
+    result['files_sha256']['scripts/opencode_go_provider.py'] = suffix * 64
+    return result
+
+
+def test_rebind_preserves_history_and_chained_identity(tmp_path, monkeypatch):
+    identity = go.source_identity()
+    assert run(tmp_path, 'old', go._offline_responder())['status'] == 'complete'
+    original = (tmp_path / 'accounting.json').read_bytes()
+    old_run = (tmp_path / 'runs/old.json').read_bytes()
+    newer = changed_identity(identity, 'a')
+    monkeypatch.setattr(go, 'source_identity', lambda: newer)
+    with pytest.raises(go.GoFailure): go.GoJournal(tmp_path, 'blocked', newer)
+    result = go.rebind_source(tmp_path, 'SDK final response compatibility')
+    assert result['status'] == 'rebound'
+    state = read(tmp_path, 'accounting.json')
+    transition = state['source_transitions'][0]
+    assert (tmp_path / 'source-archives' / (transition['id'] + '.json')).read_bytes() == original
+    assert (tmp_path / 'runs/old.json').read_bytes() == old_run
+    assert state['known_input_tokens'] == 30 and state['identity'] == newer
+    assert run(tmp_path, 'new', go._offline_responder())['status'] == 'complete'
+    latest = changed_identity(identity, 'b')
+    monkeypatch.setattr(go, 'source_identity', lambda: latest)
+    go.rebind_source(tmp_path, 'second tested source')
+    assert run(tmp_path, 'latest', go._offline_responder())['status'] == 'complete'
+    assert read(tmp_path, 'accounting.json')['known_input_tokens'] == 90
+    (tmp_path / 'runs/old.json').write_bytes(old_run + b' ')
+    with pytest.raises(go.GoFailure): go.GoJournal(tmp_path, 'tampered', latest)
+
+
+def test_rebind_requires_complete_accounting_and_archive_integrity(tmp_path, monkeypatch):
+    identity = go.source_identity()
+    assert run(tmp_path, 'old', go._offline_responder())['status'] == 'complete'
+    newer = changed_identity(identity, 'a')
+    monkeypatch.setattr(go, 'source_identity', lambda: newer)
+    go.rebind_source(tmp_path, 'compatibility')
+    transition = read(tmp_path, 'accounting.json')['source_transitions'][0]
+    archive = tmp_path / 'source-archives' / (transition['id'] + '.json')
+    archive.unlink()
+    with pytest.raises(go.GoFailure): go.GoJournal(tmp_path, 'missing', newer)
+    with pytest.raises(go.GoFailure): go.rebind_source(tmp_path, 'again')
+
+
+def test_interrupted_rebind_blocks_future_attempts(tmp_path, monkeypatch):
+    identity = go.source_identity()
+    assert run(tmp_path, 'old', go._offline_responder())['status'] == 'complete'
+    newer = changed_identity(identity, 'a')
+    monkeypatch.setattr(go, 'source_identity', lambda: newer)
+    atomic = go._atomic
+    def fault(path, value, **kwargs):
+        if path.name == 'accounting.json' and value.get('source_transitions'):
+            raise OSError('synthetic crash')
+        return atomic(path, value, **kwargs)
+    monkeypatch.setattr(go, '_atomic', fault)
+    with pytest.raises(OSError): go.rebind_source(tmp_path, 'compatibility')
+    assert (tmp_path / '.rebind-pending').is_file()
+    with pytest.raises(go.GoFailure): go.GoJournal(tmp_path, 'blocked', identity)
+    with pytest.raises(go.GoFailure): go.rebind_source(tmp_path, 'again')
+
+
+def test_tool_calls_still_require_reasoning_and_profile_rebind_rejected(tmp_path, monkeypatch):
+    responder = go._offline_responder()
+    def reply(req):
+        data = json.loads(responder(req).read())
+        del data['choices'][0]['message']['reasoning_content']
+        return httpx.Response(200, request=req, json=data)
+    assert run(tmp_path, 'failed', reply)['safe_error_code'] == 'go_response_invalid'
+    before = (tmp_path / 'accounting.json').read_bytes()
+    identity = go.source_identity()
+    identity['profile_sha256'] = 'a' * 64
+    monkeypatch.setattr(go, 'source_identity', lambda: identity)
+    with pytest.raises(go.GoFailure): go.rebind_source(tmp_path, 'profile change forbidden')
+    assert (tmp_path / 'accounting.json').read_bytes() == before
+    assert not (tmp_path / '.rebind-pending').exists()
+
+
+def test_rebind_unknown_usage_cannot_proceed(tmp_path, monkeypatch):
+    identity = go.source_identity()
+    def reply(req): return httpx.Response(429, request=req)
+    assert run(tmp_path, 'unknown', reply)['status'] == 'failed'
+    monkeypatch.setattr(go, 'source_identity', lambda: changed_identity(identity, 'a'))
+    with pytest.raises(go.GoFailure): go.rebind_source(tmp_path, 'unknown usage')
+    assert read(tmp_path, 'accounting.json')['pending']['status'] == 'unknown'
+    assert not (tmp_path / '.rebind-pending').exists()

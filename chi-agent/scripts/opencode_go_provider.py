@@ -185,7 +185,7 @@ def _billing(usage: dict) -> tuple[dict, str | None]:
 
 class GoJournal:
     """One source-bound USD namespace; prior account history is not presumed zero."""
-    def __init__(self, root: Path, run_id: str, identity: dict):
+    def __init__(self, root: Path, run_id: str, identity: dict, *, maintenance: bool = False):
         if not ID_RE.fullmatch(run_id): raise GoFailure("run_id_invalid")
         from b_provider_transport import _reject_symlink_ancestors
         try:
@@ -200,7 +200,9 @@ class GoJournal:
         self.root, self.run_id = root, run_id
         self.state_path, self.run_path = root / "accounting.json", root / "runs" / f"{run_id}.json"
         try:
+            if (root / ".rebind-pending").exists() or (root / ".rebind-pending").is_symlink(): raise GoFailure("go_rebind_incomplete")
             if not self.state_path.exists():
+                if maintenance: raise GoFailure("go_history_missing")
                 if any(item.name != ".lock" for item in root.iterdir()): raise GoFailure("go_history_missing")
                 state = {"schema": "chi-opencode-go-usd-v1", "identity": identity, "currency": "USD",
                          "account_prior_history": "unknown", "pending": None, "usage_complete": True,
@@ -214,6 +216,7 @@ class GoJournal:
                 raise GoFailure("go_usage_unknown")
             self._audit_runs()
             if self.state["halted"] is not None: raise GoFailure("go_billing_halted")
+            if maintenance: return
             _reject_symlink_ancestors(self.run_path.parent, "path_invalid")
             if self.run_path.exists() or self.run_path.is_symlink(): raise GoFailure("run_id_exists")
             self.run = {"schema": "chi-opencode-go-probe-run-v1", "run_id": run_id, "identity": identity,
@@ -229,7 +232,7 @@ class GoJournal:
                 "known_input_tokens", "known_output_tokens", "charged_usd_known", "list_cost_usd_known", "allowance_usd_known",
                 "charged_complete", "list_cost_complete", "allowance_complete"}
         try:
-            if (set(s) != keys or s["schema"] != "chi-opencode-go-usd-v1" or s["currency"] != "USD"
+            if (set(s) not in (keys, keys | {"source_transitions"}) or s["schema"] != "chi-opencode-go-usd-v1" or s["currency"] != "USD"
                     or s["identity"] != identity or s["account_prior_history"] != "unknown"
                     or type(s["usage_complete"]) is not bool or s["halted"] not in (None, "billing_source_unexpected", "billing_details_unknown")
                     or any(type(s[k]) is not int or s[k] < 0 for k in ("known_input_tokens", "known_output_tokens"))
@@ -248,17 +251,7 @@ class GoJournal:
         except Exception:
             raise GoFailure("go_state_invalid") from None
 
-    def _audit_runs(self) -> None:
-        runs = self.root / "runs"
-        if runs.is_symlink(): raise GoFailure("go_history_invalid")
-        if not runs.exists():
-            if any(self.state[k] != 0 for k in ("known_input_tokens", "known_output_tokens")):
-                raise GoFailure("go_history_invalid")
-            entries = []
-        else:
-            from b_provider_transport import _reject_symlink_ancestors
-            _reject_symlink_ancestors(runs, "path_invalid")
-            entries = list(runs.iterdir())
+    def _audit_set(self, entries: list[Path], state: dict, identities: dict) -> None:
         tokens_in = tokens_out = 0
         sums = {"charged_usd": Decimal(0), "list_cost_usd": Decimal(0), "allowance_usd": Decimal(0)}
         complete = {name: True for name in sums}
@@ -268,7 +261,7 @@ class GoJournal:
                 if path.is_symlink() or not path.is_file() or path.suffix != ".json" or not ID_RE.fullmatch(path.stem): raise ValueError
                 run = _object(path)
                 if (run.get("schema") != "chi-opencode-go-probe-run-v1" or run.get("run_id") != path.stem
-                        or run.get("identity") != self.state["identity"] or run.get("status") not in {"complete", "failed"}
+                        or run.get("identity") != identities[path.stem] or run.get("status") not in {"complete", "failed"}
                         or type(run.get("requests")) is not list): raise ValueError
                 for item in run["requests"]:
                     if (type(item) is not dict or item.get("status") != "settled"
@@ -291,12 +284,58 @@ class GoJournal:
                         amount = item["billing"].get(name)
                         if amount is None: complete[name] = False
                         else: sums[name] += Decimal(_amount(amount))
-            if (tokens_in != self.state["known_input_tokens"] or tokens_out != self.state["known_output_tokens"]
-                    or any(sums[name] != Decimal(self.state[name + "_known"]) for name in sums)
-                    or expected_halt != self.state["halted"]
-                    or any(complete[name] != self.state[key] for name, key in
+            if (tokens_in != state["known_input_tokens"] or tokens_out != state["known_output_tokens"]
+                    or any(sums[name] != Decimal(state[name + "_known"]) for name in sums)
+                    or expected_halt != state["halted"]
+                    or any(complete[name] != state[key] for name, key in
                            (("charged_usd", "charged_complete"), ("list_cost_usd", "list_cost_complete"),
                             ("allowance_usd", "allowance_complete")))): raise ValueError
+        except Exception:
+            raise GoFailure("go_history_invalid") from None
+
+
+    def _audit_runs(self) -> None:
+        try:
+            runs = self.root / "runs"
+            if runs.is_symlink(): raise ValueError
+            entries = list(runs.iterdir()) if runs.exists() else []
+            by_id = {}
+            for path in entries:
+                if path.is_symlink() or not path.is_file() or path.suffix != ".json" or not ID_RE.fullmatch(path.stem): raise ValueError
+                by_id[path.stem] = path
+            transitions = self.state.get("source_transitions", [])
+            if type(transitions) is not list: raise ValueError
+            archives = self.root / "source-archives"
+            if archives.is_symlink(): raise ValueError
+            archive_names = {p.name for p in archives.iterdir()} if archives.exists() else set()
+            if archive_names != {t["id"] + ".json" for t in transitions}: raise ValueError
+            identities, previous_snapshot, previous_new = {}, {}, None
+            for index, transition in enumerate(transitions):
+                if (type(transition) is not dict or set(transition) != {"id", "reason", "old_identity", "new_identity", "accounting_sha256", "runs_sha256"}
+                        or not re.fullmatch(r"[0-9a-f]{32}", transition["id"])
+                        or type(transition["reason"]) is not str or not transition["reason"]
+                        or type(transition["runs_sha256"]) is not dict
+                        or (previous_new is not None and transition["old_identity"] != previous_new)):
+                    raise ValueError
+                archive = archives / (transition["id"] + ".json")
+                raw = _read_regular(archive, 32 * 1024 * 1024)
+                if _sha(raw) != transition["accounting_sha256"]: raise ValueError
+                archived = _object(archive)
+                if (archived.get("identity") != transition["old_identity"]
+                        or archived.get("source_transitions", []) != transitions[:index]
+                        or archived.get("pending") is not None or archived.get("usage_complete") is not True
+                        or archived.get("halted") is not None): raise ValueError
+                snapshot = transition["runs_sha256"]
+                if not previous_snapshot.items() <= snapshot.items(): raise ValueError
+                for run_id, digest in snapshot.items():
+                    if run_id not in by_id or _sha(_read_regular(by_id[run_id], 32 * 1024 * 1024)) != digest: raise ValueError
+                    if run_id not in identities: identities[run_id] = transition["old_identity"]
+                self._audit_set([by_id[x] for x in snapshot], archived, identities)
+                previous_snapshot, previous_new = snapshot, transition["new_identity"]
+            if transitions and previous_new != self.state["identity"]: raise ValueError
+            for run_id in by_id:
+                if run_id not in identities: identities[run_id] = self.state["identity"]
+            self._audit_set(entries, self.state, identities)
         except Exception:
             raise GoFailure("go_history_invalid") from None
 
@@ -448,14 +487,16 @@ class GoGuard(httpx.AsyncBaseTransport):
             raise GoFailure("go_response_invalid")
         choice = choices[0]
         message = choice.get("message")
-        if (type(message) is not dict or message.get("role") != "assistant" or type(message.get("reasoning_content")) is not str
+        if (type(message) is not dict or message.get("role") != "assistant"
                 or message.get("function_call") is not None): raise GoFailure("go_response_invalid")
         if choice.get("finish_reason") == "stop":
-            if (not self.verified or not isinstance(message.get("content"), str) or not message["content"].strip()
+            if (message.get("reasoning_content") is not None and type(message.get("reasoning_content")) is not str
+                    or not self.verified or not isinstance(message.get("content"), str) or not message["content"].strip()
                     or message.get("tool_calls") not in (None, []) or self.pending_calls):
                 raise GoFailure("go_final_invalid")
             return
         calls = message.get("tool_calls")
+        if type(message.get("reasoning_content")) is not str: raise GoFailure("go_response_invalid")
         if choice.get("finish_reason") != "tool_calls" or type(calls) is not list or not calls:
             raise GoFailure("go_response_invalid")
         parsed, ids = [], set()
@@ -652,6 +693,7 @@ def preflight() -> dict:
         try:
             from b_provider_transport import _reject_symlink_ancestors
             _reject_symlink_ancestors(DEFAULT_ROOT, "path_invalid")
+            if (DEFAULT_ROOT / ".rebind-pending").exists() or (DEFAULT_ROOT / ".rebind-pending").is_symlink(): raise ValueError
             if not (DEFAULT_ROOT / "accounting.json").exists():
                 entries = list(DEFAULT_ROOT.iterdir())
                 if entries and not (len(entries) == 1 and entries[0].name == ".lock" and entries[0].is_file() and not entries[0].is_symlink()): raise ValueError
@@ -670,6 +712,53 @@ def preflight() -> dict:
     result["identity"] = identity
     result["account_prior_history"] = "unknown"
     return result
+
+
+def rebind_source(root: Path, reason: str) -> dict:
+    if type(reason) is not str or not reason.strip() or len(reason) > 200 or any(ord(c) < 32 for c in reason):
+        raise GoFailure("go_rebind_reason_invalid")
+    if not root.is_dir() or root.is_symlink(): raise GoFailure("go_history_missing")
+    old_identity = _object(root / "accounting.json").get("identity")
+    new_identity = source_identity()
+    journal = GoJournal(root, "rebind-source", old_identity, maintenance=True)
+    try:
+        old = journal.state
+        if (type(old_identity) is not dict or old_identity == new_identity
+                or old_identity.get("profile_sha256") != new_identity.get("profile_sha256")
+                or old_identity.get("sdk") != new_identity.get("sdk")
+                or not all(old[k] is True for k in ("charged_complete", "list_cost_complete", "allowance_complete"))):
+            raise GoFailure("go_rebind_not_allowed")
+        original = _read_regular(journal.state_path, 32 * 1024 * 1024)
+        if _object(journal.state_path) != old: raise GoFailure("go_state_invalid")
+        runs = root / "runs"
+        snapshot = {p.stem: _sha(_read_regular(p, 32 * 1024 * 1024)) for p in runs.iterdir()} if runs.exists() else {}
+        transition_id = uuid.uuid4().hex
+        marker = root / ".rebind-pending"
+        _atomic(marker, {"schema": "chi-go-rebind-pending-v1", "id": transition_id}, exclusive=True)
+        archives = root / "source-archives"
+        archives.mkdir(exist_ok=True)
+        if archives.is_symlink() or not archives.is_dir(): raise GoFailure("go_history_invalid")
+        archive = archives / (transition_id + ".json")
+        fd = os.open(archive, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(original); stream.flush(); os.fsync(stream.fileno())
+        directory = os.open(archives, os.O_RDONLY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+        transition = {"id": transition_id, "reason": reason.strip(), "old_identity": old_identity,
+                      "new_identity": new_identity, "accounting_sha256": _sha(original), "runs_sha256": snapshot}
+        updated = dict(old)
+        updated["identity"] = new_identity
+        updated["source_transitions"] = old.get("source_transitions", []) + [transition]
+        _atomic(journal.state_path, updated)
+        marker.unlink()
+        directory = os.open(root, os.O_RDONLY)
+        try: os.fsync(directory)
+        finally: os.close(directory)
+        return {"status": "rebound", "transition_id": transition_id, "accounting_sha256": transition["accounting_sha256"],
+                "historical_runs": len(snapshot)}
+    finally:
+        journal.close()
 
 
 def _offline_responder():
@@ -695,6 +784,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="mode", required=True)
     for name in ("plan", "preflight", "offline"): sub.add_parser(name)
+    rebind = sub.add_parser("rebind-source")
+    rebind.add_argument("--reason", required=True)
     smoke = sub.add_parser("smoke")
     smoke.add_argument("--run-id", required=True)
     args = parser.parse_args(argv)
@@ -703,6 +794,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.mode == "plan": result = plan()
         elif args.mode == "preflight": result = preflight()
+        elif args.mode == "rebind-source": result = rebind_source(DEFAULT_ROOT, args.reason)
         elif args.mode == "offline":
             with tempfile.TemporaryDirectory(prefix="opencode-go-offline-") as directory:
                 result = asyncio.run(_run_probe(Path(directory), "offline-synthetic", "synthetic-key",
