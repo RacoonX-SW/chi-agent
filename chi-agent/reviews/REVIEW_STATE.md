@@ -18,7 +18,7 @@
 | 正式提交前置 | F.2–F.4、G/H 离线范围通过，K 本地受控真实接入已跑通；正式评测包/官方 harness 的 live 配送及 F.5 完整冻结仍未完成 |
 | 本轮验证 | Go 来源受限请求/历史、可选终态字段、USD完整性与中断、跨源码历史审计及真实coding闭环通过；旧运行文件hash全部不变，新Go文件无配置秘密，临时凭据/两个探针容器已清理。仅接入结论，无1M实测/CHI泛化结论 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #20](https://github.com/xsw932187210-cell/chi-agent/pull/20)已核对合并；Q 将以 base=main PR 交用户审核。下一项先核对 Go 的非编码 CHI 用途和十一月隐私条件，再制定正式入口/提交包接线规格；不直接替换Key跑任务，不自行merge/auto-merge |
+| PR 与下一步 | [PR #20](https://github.com/xsw932187210-cell/chi-agent/pull/20)已核对合并；Q 的 base=main [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)已推送、待用户审核合并。下一项先核对 Go 的非编码 CHI 用途和十一月隐私条件，再制定正式入口/提交包接线规格；不直接替换Key跑任务，不自行merge/auto-merge |
 | 未验证项 | Go 的CHI/临床评审支持、正式契约/包接线、1M长上下文和精确上游快照/账单/长期缓存；P/O稳定因果收益、未见迁移、最终批准/独立临床裁决/官方得分；正式配送/F.5、OpenSpec CLI、真实硬取消/daemon故障 |
 | 真实运行 | Q 两次独立coding会话在允许时段执行，均保留完整安全正文/用量/工具事件；原 native 证据继续见 P。无CHIGo世界/评分调用，official_reward=null，正式入口record_only/null不变 |
 

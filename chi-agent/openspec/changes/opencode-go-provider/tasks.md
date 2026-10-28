@@ -8,4 +8,4 @@
 - [x] 核对 Key 存在、时段和合成载荷，执行有界真实 coding 探针；所有结果如实记录。
 - [x] 对首次终态协议故障修复，明确 source rebind、真实响应禁网回放和一个新真实 attempt，保留所有历史。
 - [x] 按职责更新 README、学习账本、审核状态和一份阶段报告。
-- [ ] 显式提交/推送并创建 base=main PR，交用户审核，不自行合并。
+- [x] 显式提交/推送并创建 base=main [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)，交用户审核，不自行合并。
