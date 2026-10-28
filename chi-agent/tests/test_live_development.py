@@ -141,7 +141,9 @@ class FakeMCP:
         schema = lambda: {"type": "object", "properties": {"case_id": {"type": "string"}},
                           "required": ["case_id"], "additionalProperties": False}
         return [Tool(name="cases.lookup_case", description="Lookup case", inputSchema=schema()),
-                Tool(name="cases.list_case_documents", description="List documents", inputSchema=schema())]
+                Tool(name="cases.list_case_documents", description="List documents", inputSchema=schema()),
+                Tool(name="cases.create_from_order", description="Original create", inputSchema=schema()),
+                Tool(name="auth.submit_authorization", description="Original submit", inputSchema=schema())]
 
     async def call_tool(self, name, arguments, **_kwargs):
         from mcp.types import CallToolResult, TextContent
@@ -529,6 +531,9 @@ class LiveDevelopmentTests(unittest.TestCase):
                                  msg=f"result={result_b}; transport_factories={transport_factories}; "
                                      f"mock runner error: {fake_docker.containers.created[-1].error}")
                 self.assertEqual(len(wire_by_kind["b-smoke"].requests), 3)
+                from referral_field_guidance import MARKER
+                for body in wire_by_kind["b-smoke"].requests:
+                    assert all(MARKER not in item["function"].get("description", "") for item in body.get("tools", []))
                 runner_b = fake_docker.containers.created[-1]
                 self.assertTrue(runner_b.options["read_only"])
                 self.assertEqual(runner_b.options["cap_drop"], ["ALL"])
@@ -544,6 +549,11 @@ class LiveDevelopmentTests(unittest.TestCase):
                                  msg=f"mock C request shapes: {request_debug}")
                 self.assertIsNone(result_c["official_reward"])
                 self.assertEqual(len(wire_by_kind["c-once"].requests), 2)
+                for body in wire_by_kind["c-once"].requests:
+                    descriptions = {item["function"]["name"]: item["function"].get("description") for item in body.get("tools", [])}
+                    self.assertEqual(descriptions["cases__create_from_order"], "Original create")
+                    self.assertEqual(descriptions["auth__submit_authorization"], "Original submit")
+                    self.assertTrue(all(MARKER not in (description or "") for description in descriptions.values()))
                 self.assertEqual([item["name"] for item in mcp_calls],
                                  ["cases.lookup_case", "cases.list_case_documents"])
                 runner_c = fake_docker.containers.created[-1]

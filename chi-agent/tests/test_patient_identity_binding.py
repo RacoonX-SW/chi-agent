@@ -277,7 +277,7 @@ def test_dispatch_serializes_and_refuses_cross_patient_before_backend():
     assert FakeUtil.count == 1
 
 
-@pytest.mark.parametrize("mode", ["success", "mixed_confirmation", "length_then_success", "wrong_role", "function_call", "claim_done", "exhausted_after_confirmation", "exhausted_main_only"])
+@pytest.mark.parametrize("mode", ["success", "mixed_confirmation", "length_then_success", "wrong_role", "function_call", "claim_done", "exhausted_after_confirmation", "exhausted_main_only", "guidance_a", "guidance_b"])
 def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
     from argparse import Namespace
     import httpx
@@ -303,7 +303,8 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
     schemas = {
         "chart.search_patients": {"type": "object", "properties": {}, "additionalProperties": False},
         "chart.get_patient_chart_by_patient": {"type": "object", "properties": {"patient_id": {"type": "string"}}, "required": ["patient_id"], "additionalProperties": False},
-        "cases.create_from_order": {"type": "object", "properties": {"patient_id": {"type": "string"}}, "required": ["patient_id"], "additionalProperties": False},
+        "cases.create_from_order": {"type": "object", "properties": {"patient_id": {"type": "string"}, "site_of_service": {"type": "string", "enum": ["synthetic_a", "synthetic_b"]}}, "required": ["patient_id"], "additionalProperties": False},
+        "auth.submit_authorization": {"type": "object", "properties": {"case_id": {"type": "string"}, "channel": {"type": "string"}}, "required": ["case_id", "channel"], "additionalProperties": False},
         "forms.list_required_forms": {"type": "object", "properties": {"case_id": {"type": "string"}}, "required": ["case_id"], "additionalProperties": False},
         "forms.save_form_response": {"type": "object", "properties": {"case_id": {"type": "string"}, "form_id": {"type": "string"}}, "required": ["case_id", "form_id"], "additionalProperties": False},
     }
@@ -316,6 +317,7 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
             if name == "chart.search_patients": value = roster
             elif name == "chart.get_patient_chart_by_patient": value = charts[arguments["patient_id"]]
             elif name == "cases.create_from_order": value = case
+            elif name == "auth.submit_authorization": value = {"case": case["case"]}
             elif name == "forms.list_required_forms": value = {"items": [{"form_id": "F1"}]}
             elif name == "forms.save_form_response": value = {"saved_responses": [{"case_id": "C1"}]}
             else: raise AssertionError(name)
@@ -350,6 +352,11 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
         responses[4:] = [_completion(calls=[_call(f"sleep{index}", "local-sleep", {"seconds": 0})]) for index in range(46)]
     elif mode == "exhausted_main_only":
         responses[:] = [_completion(calls=[_call(f"sleep{index}", "local-sleep", {"seconds": 0})]) for index in range(50)]
+    elif mode in {"guidance_a", "guidance_b"}:
+        site = "synthetic_a" if mode == "guidance_a" else "synthetic_b"
+        responses[4] = _completion(calls=[_call("create", "cases__create_from_order", {"patient_id": "P1", "site_of_service": site})])
+        responses[-1:] = [_completion(calls=[_call("submit", "auth__submit_authorization", {"case_id": "C1", "channel": "synthetic_channel"})]),
+                          _completion(text="Completed synthetic task.")]
     elif mode in {"wrong_role", "function_call"}:
         invalid = _completion(text=payload)
         message = invalid["choices"][0]["message"]
@@ -409,9 +416,12 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
         assert all(name not in {"cases.create_from_order", "forms.save_form_response"} for name, _ in backend)
         return
     assert status == 0, (tmp_path / "logs/run_log.txt").read_text()
-    assert not responses and len(wire) == (10 if mode == "length_then_success" else 9 if mode == "claim_done" else 8)
-    assert [name for name, _ in backend] == ["chart.search_patients", "chart.get_patient_chart_by_patient",
-        "chart.get_patient_chart_by_patient", "cases.create_from_order", "forms.list_required_forms", "forms.save_form_response"]
+    assert not responses and len(wire) == (10 if mode == "length_then_success" else 9 if mode in {"claim_done", "guidance_a", "guidance_b"} else 8)
+    expected_backend = ["chart.search_patients", "chart.get_patient_chart_by_patient", "chart.get_patient_chart_by_patient",
+                        "cases.create_from_order", "forms.list_required_forms", "forms.save_form_response"]
+    if mode in {"guidance_a", "guidance_b"}:
+        expected_backend.append("auth.submit_authorization")
+    assert [name for name, _ in backend] == expected_backend
     assert all(entry["status"] == "settled" for entry in journal["requests"])
     assert len(journal["requests"]) == len(wire)
     import request_budget
@@ -428,6 +438,27 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
                        for message in body["messages"] if message.get("role") == "tool")
             assert request_entry["request_budget_feedback"] == record
     assert "max_turns=50" in (tmp_path / "logs/run_log.txt").read_text()
+    if mode in {"guidance_a", "guidance_b"}:
+        import referral_field_guidance as guidance
+        recorded = journal["referral_field_guidance"]
+        assert recorded["version"] == guidance.VERSION and recorded["guidance_sha256"] == guidance.GUIDANCE_SHA256
+        assert set(recorded["tools"]) == set(guidance.GUIDANCE)
+        for request in wire:
+            if not request.get("tools"):
+                assert guidance.MARKER not in json.dumps(request)
+                continue
+            by_name = {tool["function"]["name"]: tool["function"] for tool in request["tools"]}
+            for raw_name, text in guidance.GUIDANCE.items():
+                function = by_name[raw_name.replace(".", "__")]
+                assert function["description"] == "synthetic\n\n" + guidance.MARKER + "\n" + text
+                assert function["description"].count(guidance.MARKER) == 1
+                assert function["parameters"] == schemas[raw_name]
+                assert recorded["tools"][raw_name]["original_description_sha256"] == guidance.sha256("synthetic")
+                assert recorded["tools"][raw_name]["appended_description_sha256"] == guidance.sha256(function["description"])
+            assert by_name["chart__search_patients"]["description"] == "synthetic"
+        create_args = next(args for name, args in backend if name == "cases.create_from_order")
+        assert create_args["site_of_service"] == ("synthetic_a" if mode == "guidance_a" else "synthetic_b")
+        assert next(args for name, args in backend if name == "auth.submit_authorization") == {"case_id": "C1", "channel": "synthetic_channel"}
     if mode == "length_then_success":
         assert journal["requests"][3]["response_metadata"]["finish_reason"] == "length"
         assert any(event.get("event") == "confirmation_result" and event.get("result", {}).get("reason") == "confirmation_output_truncated"
