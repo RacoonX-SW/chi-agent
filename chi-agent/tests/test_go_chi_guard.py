@@ -1,8 +1,10 @@
 import json
+import hashlib
 import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 
@@ -33,19 +35,34 @@ def request(data):
 
 
 class GuardTests(unittest.IsolatedAsyncioTestCase):
+    async def test_main_truncation_settles_and_stops(self):
+        with tempfile.TemporaryDirectory() as directory:
+            j = ChiJournal(Path(directory), identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+            async def answer(req):
+                return httpx.Response(200, request=req, json={"usage": USAGE, "model": "deepseek-v4.1-flash",
+                    "choices": [{"finish_reason": "length", "message": {"role": "assistant", "content": "partial"}}]})
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                             system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
+            with self.assertRaisesRegex(GoFailure, "chi_output_truncated"):
+                await guard.handle_async_request(request(body()))
+            self.assertEqual(j.run["requests"][0]["status"], "settled")
+            j.finish("failed"); j.close()
+
     async def test_request_51_never_reaches_lower_transport(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             j = ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
             for i in range(50):
-                j.reserve(str(i).encode(), "main"); j.settle(USAGE)
+                j.reserve(str(i).encode(), "main")
+                j.record_response(json.dumps({"usage": USAGE}).encode(), 200, 1)
+                j.settle(USAGE); j.record_diagnostic("ok", 1)
             calls = []
             async def answer(req):
                 calls.append(req)
                 return httpx.Response(500, request=req)
             guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
                              system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
-            with self.assertRaisesRegex(GoFailure, "chi_request_invalid"):
+            with self.assertRaisesRegex(GoFailure, "chi_request_limit"):
                 await guard.handle_async_request(request(body(49)))
             self.assertEqual(calls, [])
             self.assertEqual(len(j.run["requests"]), 50)
@@ -62,6 +79,8 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await guard.handle_async_request(request(body()))
             self.assertIsNotNone(j.state["pending"])
+            diagnostic = json.loads((root / "wire-evidence" / "r" / "001-diagnostic.json").read_text())
+            self.assertEqual(diagnostic["code"], "chi_cancelled")
             j.finish("failed"); j.close()
             with self.assertRaisesRegex(GoFailure, "chi_usage_unknown"):
                 ChiJournal(root, identity="a" * 64, evaluation="e", task="other", attempt="b", run="s")
@@ -116,15 +135,124 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
     async def test_known_usage_settled_before_invalid_content(self):
         with tempfile.TemporaryDirectory() as directory:
             j = ChiJournal(Path(directory), identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+            usage = {**USAGE, "completion_tokens_details": {"reasoning_tokens": 1},
+                     "prompt_tokens_details": {"cached_tokens": 1}}
+            payload = {"usage": usage, "model": "wrong", "choices": []}
             async def answer(req):
-                return httpx.Response(200, request=req, json={"usage": USAGE, "model": "wrong", "choices": []})
+                return httpx.Response(200, request=req, json=payload)
             guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
                              system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
             with self.assertRaisesRegex(GoFailure, "chi_response_invalid"):
                 await guard.handle_async_request(request(body()))
             self.assertIsNone(j.state["pending"])
             self.assertEqual(j.run["requests"][0]["status"], "settled")
+            ev = Path(directory) / "wire-evidence" / "r"
+            request_doc = json.loads((ev / "001-request.json").read_text())
+            response_doc = json.loads((ev / "001-response.json").read_text())
+            diagnostic = json.loads((ev / "001-diagnostic.json").read_text())
+            self.assertEqual(json.loads(request_doc["body_utf8"]), body())
+            self.assertEqual(json.loads(response_doc["body_utf8"]), payload)
+            self.assertEqual(response_doc["raw_sha256"], hashlib.sha256(response_doc["body_utf8"].encode()).hexdigest())
+            self.assertEqual(response_doc["usage"], usage)
+            self.assertGreaterEqual(response_doc["elapsed_ms"], 0)
+            self.assertEqual(diagnostic["code"], "chi_response_invalid")
             j.finish("failed"); j.close()
+            reopened = ChiJournal(Path(directory), identity="a" * 64, evaluation="e", task="t", attempt="b", run="s")
+            reopened.finish("failed"); reopened.close()
+            (ev / "001-response.json").unlink()
+            with self.assertRaisesRegex(GoFailure, "chi_history_invalid"):
+                ChiJournal(Path(directory), identity="a" * 64, evaluation="e", task="t", attempt="c", run="t")
+
+    async def test_secret_echo_is_redacted_after_known_usage_settlement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            j = ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+            usage = {**USAGE, "diagnostic": SECRET}
+            async def answer(req):
+                return httpx.Response(200, request=req, json={"usage": usage, "model": "deepseek-v4.1-flash",
+                    "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": SECRET}}]})
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                             system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
+            with self.assertRaisesRegex(GoFailure, "chi_secret_in_body"):
+                await guard.handle_async_request(request(body()))
+            doc = json.loads((root / "wire-evidence" / "r" / "001-response.json").read_text())
+            self.assertEqual(doc["redaction"], "secret_detected")
+            self.assertIsNone(doc["body_utf8"])
+            self.assertEqual(doc["usage"]["diagnostic"], "[REDACTED]")
+            self.assertNotIn(SECRET, (root / "wire-evidence" / "r" / "001-response.json").read_text())
+            self.assertEqual(j.run["requests"][0]["status"], "settled")
+            j.finish("failed"); j.close()
+            next_j = ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="b", run="s")
+            next_j.finish("failed"); next_j.close()
+
+    async def test_response_persistence_failure_keeps_known_usage_and_blocks_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            j = ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+            async def answer(req):
+                return httpx.Response(200, request=req, json={"usage": USAGE, "model": "deepseek-v4.1-flash",
+                    "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "done"}}]})
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                             system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
+            from go_chi_journal import write_evidence
+            def fail_response(root, run, number, kind, value):
+                if kind == "response": raise OSError("synthetic write failure")
+                return write_evidence(root, run, number, kind, value)
+            with patch("go_chi_journal.write_evidence", side_effect=fail_response):
+                with self.assertRaisesRegex(GoFailure, "chi_evidence_persistence_failed"):
+                    await guard.handle_async_request(request(body()))
+            self.assertEqual(j.run["requests"][0]["usage"]["input_tokens"], 3)
+            j.finish("failed"); j.close()
+            with self.assertRaisesRegex(GoFailure, "chi_history_invalid"):
+                ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="b", run="s")
+
+    async def test_unknown_usage_and_http_error_leave_explainable_pending(self):
+        for status, payload, expected in ((200, {"error": "missing usage"}, "chi_usage_unknown"),
+                                          (503, {"error": "unavailable"}, "chi_http_error")):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                j = ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+                sends = []
+                async def answer(req):
+                    sends.append(req)
+                    return httpx.Response(status, request=req, json=payload)
+                guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                                 system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
+                with self.assertRaisesRegex(GoFailure, expected):
+                    await guard.handle_async_request(request(body()))
+                self.assertEqual(len(sends), 1)
+                ev = root / "wire-evidence" / "r"
+                response = json.loads((ev / "001-response.json").read_text())
+                diagnostic = json.loads((ev / "001-diagnostic.json").read_text())
+                self.assertEqual(response["http_status"], status)
+                self.assertEqual(diagnostic["code"], expected)
+                self.assertIsNotNone(j.state["pending"])
+                j.finish("failed"); j.close()
+                with self.assertRaisesRegex(GoFailure, "chi_usage_unknown"):
+                    ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="b", run="s")
+
+    async def test_invalid_json_is_distinct_and_known_http_error_is_settled(self):
+        for status, response_body, expected, settled in (
+            (200, b"{invalid", "chi_response_json_invalid", False),
+            (503, json.dumps({"usage": USAGE, "error": "unavailable"}).encode(), "chi_http_error", True),
+        ):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                j = ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+                async def answer(req):
+                    return httpx.Response(status, request=req, content=response_body)
+                guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                                 system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
+                with self.assertRaisesRegex(GoFailure, expected):
+                    await guard.handle_async_request(request(body()))
+                self.assertEqual(j.run["requests"][0]["status"] == "settled", settled)
+                response_doc = json.loads((root / "wire-evidence" / "r" / "001-response.json").read_text())
+                self.assertEqual(response_doc["http_status"], status)
+                if status == 200:
+                    self.assertEqual(response_doc["redaction"], "unparseable_body")
+                else:
+                    self.assertEqual(response_doc["usage"], USAGE)
+                j.finish("failed", expected); j.close()
 
     async def test_stale_feedback_is_rejected_before_dispatch(self):
         with tempfile.TemporaryDirectory() as directory:

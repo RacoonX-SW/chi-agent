@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import time
 
 import httpx
 
@@ -57,6 +58,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 or request.headers.get_list("user-agent") != ["chi-agent"]
                 or request.headers.get_list("x-opencode-session") != [self.session]):
             raise GoFailure("chi_headers_invalid")
+        if len(self.journal.run["requests"]) >= (6 if self.journal.run["kind"] == "coding_b" else 50):
+            raise GoFailure("chi_request_limit")
         try:
             body = json.loads(raw, object_pairs_hook=_unique,
                               parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
@@ -100,6 +103,14 @@ class ChiGuard(httpx.AsyncBaseTransport):
         msg = choice.get("message")
         if type(msg) is not dict or msg.get("role") != "assistant" or msg.get("function_call") is not None:
             raise GoFailure("chi_response_invalid")
+        if choice.get("finish_reason") == "length":
+            if purpose != "confirmation":
+                raise GoFailure("chi_output_truncated")
+            if (msg.get("tool_calls") not in (None, []) or
+                    msg.get("content") is not None and type(msg.get("content")) is not str or
+                    msg.get("reasoning_content") is not None and type(msg.get("reasoning_content")) is not str):
+                raise GoFailure("chi_response_invalid")
+            return
         if choice.get("finish_reason") == "stop":
             if (not isinstance(msg.get("content"), str) or not msg["content"].strip()
                     or msg.get("tool_calls") not in (None, [])
@@ -140,35 +151,75 @@ class ChiGuard(httpx.AsyncBaseTransport):
         try:
             raw = request.content
             purpose = self._validate(request, raw)
-            self.journal.reserve(raw, purpose)
+            self.journal.reserve(raw, purpose, secrets=(self.secret, self.session))
         except Exception as exc:
             self.error = exc.code if isinstance(exc, GoFailure) else "chi_persistence_failed"
             raise GoFailure(self.error) from None
+        start = time.monotonic()
+        persistence_failed = False
         try:
             response = await self.lower.handle_async_request(request)
-            if response.status_code != 200:
-                raise GoFailure("chi_http_error")
             raw_response = await response.aread()
-            if len(raw_response) > 4 * 1024 * 1024:
-                raise GoFailure("chi_usage_unknown")
-            payload = json.loads(raw_response, object_pairs_hook=_unique,
-                                 parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-            if type(payload) is not dict or type(payload.get("usage")) is not dict:
-                raise GoFailure("chi_usage_unknown")
+            payload = None
+            if len(raw_response) <= 4 * 1024 * 1024:
+                try:
+                    payload = json.loads(raw_response, object_pairs_hook=_unique,
+                                         parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                except Exception:
+                    pass
+            known = False
             try:
                 GuardedTransport._usage(payload)
+                known = True
             except Exception:
-                raise GoFailure("chi_usage_unknown") from None
-            self.journal.settle(payload["usage"])
+                pass
+            try:
+                self.journal.record_response(raw_response, response.status_code, int((time.monotonic() - start) * 1000),
+                                             secrets=(self.secret, self.session))
+            except Exception:
+                persistence_failed = True
+                if known:
+                    try: self.journal.settle(payload["usage"])
+                    except Exception: pass
+                raise GoFailure("chi_evidence_persistence_failed") from None
+            if known:
+                try:
+                    self.journal.settle(payload["usage"])
+                except GoFailure:
+                    raise
+                except Exception:
+                    persistence_failed = True
+                    raise GoFailure("chi_persistence_failed") from None
+            if response.status_code != 200:
+                raise GoFailure("chi_http_error")
+            if len(raw_response) > 4 * 1024 * 1024:
+                raise GoFailure("chi_response_too_large")
+            if type(payload) is not dict:
+                raise GoFailure("chi_response_json_invalid")
+            if not known:
+                raise GoFailure("chi_usage_unknown")
             if _contains_secret(payload, self.secret, self.session):
                 raise GoFailure("chi_secret_in_body")
             if (payload["usage"]["prompt_tokens"] > 1048576
                     or payload["usage"]["completion_tokens"] > (1024 if self.journal.run["kind"] == "coding_b" else 32768 if purpose == "confirmation" else 8192)):
                 raise GoFailure("chi_usage_over_limit")
             self._response(payload, purpose)
+            try:
+                self.journal.record_diagnostic("ok", int((time.monotonic() - start) * 1000))
+            except Exception:
+                persistence_failed = True
+                raise GoFailure("chi_evidence_persistence_failed") from None
             return response
         except BaseException as exc:
-            self.error = exc.code if isinstance(exc, GoFailure) else "chi_transport_unknown"
+            self.error = ("chi_cancelled" if isinstance(exc, asyncio.CancelledError) else
+                          exc.code if isinstance(exc, GoFailure) else
+                          "chi_timeout" if isinstance(exc, httpx.TimeoutException) else
+                          "chi_transport_error" if isinstance(exc, httpx.RequestError) else "chi_transport_unknown")
+            if not persistence_failed:
+                try:
+                    self.journal.record_diagnostic(self.error, int((time.monotonic() - start) * 1000))
+                except Exception:
+                    self.error = "chi_evidence_persistence_failed"
             if isinstance(exc, asyncio.CancelledError):
                 raise
             raise GoFailure(self.error) from None

@@ -293,6 +293,9 @@ def main(argv=None):
             (logs_dir / "run_result.json").write_text(json.dumps({"status": "complete", "official_reward": None,
                 "run_id": args.run_id, "requests": len(journal.run["requests"]),
                 "usage": journal.usage_totals()}, sort_keys=True), encoding="utf-8")
+            (logs_dir / "run_log.txt").write_text(json.dumps({"status": "complete", "safe_error_code": None,
+                "provider_requests": len(journal.run["requests"]), "tool_events": len(journal.run["tool_events"]),
+                "official_reward": None}, sort_keys=True), encoding="utf-8")
         else:
             import httpx
             from go_chi_runtime import run_chi
@@ -302,6 +305,7 @@ def main(argv=None):
                 lower=httpx.AsyncHTTPTransport(retries=0, verify=True)))
         journal.finish("complete")
         if args.mode == "coding-b":
+            journal.prepare_b_receipt()
             b_receipt = copy.deepcopy(journal.run)
         output = {"status": "complete", "run_id": args.run_id, "identity_sha256": identity,
                   "usage": journal.usage_totals(), "official_reward": None}
@@ -318,6 +322,9 @@ def main(argv=None):
             try:
                 if "logs_dir" in locals() and logs_dir.is_dir():
                     (logs_dir / "run_error.json").write_text(json.dumps(output, sort_keys=True), encoding="utf-8")
+                    (logs_dir / "run_log.txt").write_text(json.dumps({"status": "incomplete", "safe_error_code": error,
+                        "provider_requests": len(journal.run["requests"]), "tool_events": len(journal.run["tool_events"]),
+                        "official_reward": None}, sort_keys=True), encoding="utf-8")
             except Exception:
                 output["safe_error_code"] = "chi_log_persistence_failed"
         if isinstance(exc, KeyboardInterrupt): output["safe_error_code"] = "chi_interrupted"

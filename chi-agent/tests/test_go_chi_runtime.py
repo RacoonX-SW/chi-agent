@@ -71,6 +71,12 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                     journal.close()
 
     async def test_provider_confirmation_shares_budget_and_refreshes_feedback(self):
+        await self._exercise_confirmation(False)
+
+    async def test_confirmation_truncation_returns_to_model_without_binding(self):
+        await self._exercise_confirmation(True)
+
+    async def _exercise_confirmation(self, truncated):
         import json
         patients = [{"id": "P1", "dob": "1970-01-01", "sex": "male"}]
         roster = {"items": patients, "total": 1}
@@ -101,7 +107,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                 if "response_format" in body:
                     verdict = {"status": "unique_match", "selected_patient_id": "P1", "matches": ["P1"], "mismatches": [], "unknown": [],
                                "evidence": [{"instruction_quote": "90 day treatment trial", "chart_quote": "90 day treatment trial"}]}
-                    message, finish = {"role": "assistant", "content": json.dumps(verdict)}, "stop"
+                    message, finish = {"role": "assistant", "content": json.dumps(verdict)}, "length" if truncated else "stop"
                 elif index < 4:
                     name, args = [("chart__search_patients", {}), ("chart__get_patient_chart_by_patient", {"patient_id": "P1"}),
                                   ("local-confirm-patient", {"patient_id": "P1", "instruction_quote": "90 day treatment trial", "chart_quote": "90 day treatment trial"})][index - 1]
@@ -123,6 +129,60 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("Already sent before this request: 4", calls[4]["messages"][0]["content"])
                 self.assertEqual([item["purpose"] for item in journal.run["requests"]], ["main", "main", "main", "confirmation", "main"])
                 self.assertTrue(any(e["event"] == "confirmation_result" for e in journal.run["patient_binding_events"]))
+                if truncated:
+                    result = next(e["result"] for e in journal.run["patient_binding_events"] if e["event"] == "confirmation_result")
+                    self.assertEqual(result, {"status": "invalid", "reason": "confirmation_output_truncated"})
+                    self.assertFalse(any(e["event"] == "patient_bound" for e in journal.run["patient_binding_events"]))
+                    tool_result = next(m for m in calls[4]["messages"] if m.get("tool_call_id") == "call_3")
+                    self.assertIn("confirmation_output_truncated", tool_result["content"])
+                journal.finish("complete")
+            finally:
+                journal.close()
+
+    async def test_mcp_business_error_reaches_model_without_retry(self):
+        import json
+        from mcp.types import CallToolResult, TextContent
+        class ErrorServer(Server):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                return CallToolResult(isError=True, content=[TextContent(type="text", text="validation: missing business prerequisite")])
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            journal = ChiJournal(root / "state", identity="a" * 64, evaluation="eval", task="provider", attempt="a", run="run")
+            instruction = root / "instruction.md"; instruction.write_text("Synthetic instruction")
+            handbook, workspace = root / "handbook", root / "workspace"; handbook.mkdir(); workspace.mkdir()
+            server = ErrorServer("people.list_contacts")
+            requests = []
+            async def wire(request):
+                requests.append(json.loads(request.content)); n = len(requests)
+                if n < 3:
+                    name = "people__list_contacts" if n == 1 else "local-claim_done"
+                    message = {"role": "assistant", "content": None, "reasoning_content": "reason", "tool_calls": [
+                        {"id": f"call_{n}", "type": "function", "function": {"name": name, "arguments": "{}"}}]}
+                    finish = "tool_calls"
+                else:
+                    message, finish = {"role": "assistant", "content": "Unable to complete due to the prerequisite."}, "stop"
+                return httpx.Response(200, request=request, json={"id": "synthetic", "object": "chat.completion", "created": 0,
+                    "model": "deepseek-v4.1-flash", "choices": [{"index": 0, "message": message, "finish_reason": finish}],
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5, "cost": 0,
+                              "opencode": {"billing_source": "go", "list_cost": 0.1, "allowance": 0.1}}})
+            try:
+                output = await run_chi(journal, "synthetic-secret", role="provider", instruction="Synthetic instruction",
+                    mcp_url="http://synthetic.invalid/mcp", instruction_path=instruction, logs_dir=root / "logs",
+                    workspace_root=workspace, handbook_root=handbook, tool_references=[], lower=httpx.MockTransport(wire),
+                    server_factory=lambda _url: server)
+                self.assertIn("Unable to complete", output)
+                self.assertEqual(server.calls, [("people.list_contacts", {})])
+                tool = next(m for m in requests[1]["messages"] if m.get("tool_call_id") == "call_1")
+                self.assertIn("validation: missing business prerequisite", tool["content"])
+                self.assertTrue(json.loads(tool["content"])["isError"])
+                self.assertEqual([(e["call_id"], e["event"]) for e in journal.run["tool_events"]],
+                                 [("call_1", "started"), ("call_1", "returned_error"),
+                                  ("call_2", "started"), ("call_2", "returned")])
+                evidence = json.loads((root / "state" / "tool-evidence" / "run" / "call_1.json").read_text())
+                self.assertIn("validation: missing business prerequisite", evidence["body_utf8"])
+                self.assertFalse(journal.run["patient_binding_events"])
+                self.assertTrue((root / "logs" / "run_log.txt").is_file())
                 journal.finish("complete")
             finally:
                 journal.close()

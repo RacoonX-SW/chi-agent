@@ -23,6 +23,7 @@ MAX_FILE_BYTES = 16 * 1024 * 1024
 # input boundary; no directory walk of the project or vendor tree is used.
 PACKAGE_FILES: dict[str, str] = {
     "scripts/go_chi_entry.py": "scripts/go_chi_entry.py",
+    "scripts/go_chi_evidence.py": "scripts/go_chi_evidence.py",
     "scripts/go_chi_bundle.py": "scripts/go_chi_bundle.py",
     "scripts/go_chi_contract.py": "scripts/go_chi_contract.py",
     "scripts/go_chi_guard.py": "scripts/go_chi_guard.py",

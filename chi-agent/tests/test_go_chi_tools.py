@@ -13,7 +13,11 @@ from go_chi_tools import local_tools
 class Journal:
     def record_claim(self):
         pass
-    def record_tool(self, *_args):
+    def record_tool(self, *_args, **_kwargs):
+        pass
+    def start_tool(self, *_args):
+        pass
+    def refuse_tool(self, *_args, **_kwargs):
         pass
 
 
@@ -33,7 +37,7 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
                 tool_references=[], handbook_root=handbook, journal=Journal(), binding=None,
                 guard_getter=lambda: holder["guard"], client_getter=lambda: None,
                 confirmation_context=contextvars.ContextVar("test", default=None), exchanges=[], dispatch_lock=asyncio.Lock())
-            guard = SimpleNamespace(contract=ToolContract([Converter.tool_to_openai(t) for t in tools]))
+            guard = SimpleNamespace(contract=ToolContract([Converter.tool_to_openai(t) for t in tools]), secret="secret", session="session")
             holder["guard"] = guard
             path = str(workspace / "case" / "provider" / "result.txt")
             import json

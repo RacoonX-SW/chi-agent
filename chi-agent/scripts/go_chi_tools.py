@@ -135,6 +135,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             confirmation_context.reset(token)
         choice = response.choices[0]
         content = choice.message.content
+        if choice.finish_reason == "length":
+            result = {"status": "invalid", "reason": "confirmation_output_truncated"}
+            binding.event("confirmation_result", attempt=binding.confirmations, result=result)
+            return json.dumps(result, ensure_ascii=False)
         if choice.finish_reason != "stop" or not isinstance(content, str) or not content.strip():
             return json.dumps({"status": "invalid", "reason": "confirmation_format_invalid"})
         result = binding.assess(args["patient_id"], content)
@@ -173,14 +177,27 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                 if not pending:
                     raise GoFailure("chi_local_dispatch_unvalidated")
                 selected = pending[0]
-                try:
-                    reason = (binding.batch_refusals.get(selected["id"])
-                              if binding is not None and name in {"local-fs-write", "local-fs-edit"} else None)
-                    output = "REFUSED: " + reason if reason is not None else await callback(args)
-                    journal.record_tool(selected["id"], name, output)
+                reason = (binding.batch_refusals.get(selected["id"])
+                          if binding is not None and name in {"local-fs-write", "local-fs-edit"} else None)
+                if reason is not None:
+                    output = "REFUSED: " + reason
+                    journal.refuse_tool(selected["id"], name, args, output, secrets=(guard.secret, guard.session))
                     guard.contract.record_result(selected["id"], output)
                     return output
-                except BaseException:
+                journal.start_tool(selected["id"], name, args)
+                try:
+                    output = await callback(args)
+                    guard.contract.record_result(selected["id"], output)
+                    journal.record_tool(selected["id"], name, output,
+                                        event="refused" if output.startswith("REFUSED:") else "returned",
+                                        secrets=(guard.secret, guard.session))
+                    return output
+                except BaseException as exc:
+                    code = ("chi_tool_cancelled" if isinstance(exc, __import__("asyncio").CancelledError) else
+                            exc.code if isinstance(exc, GoFailure) else "chi_tool_execution_failed")
+                    try: journal.record_tool(selected["id"], name, code, event="failed",
+                                             secrets=(guard.secret, guard.session))
+                    except Exception: pass
                     if binding is not None and name in {"local-fs-write", "local-fs-edit", "local-confirm-patient"}:
                         binding.poisoned = True
                     raise

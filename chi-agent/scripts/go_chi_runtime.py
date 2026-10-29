@@ -21,14 +21,22 @@ def coding_tools(guard_getter):
                            if record["name"] == name and record["arguments"] == args and record["result"] is None]
                 if len(pending) != 1:
                     raise ValueError
+                guard.journal.start_tool(pending[0]["id"], name, args)
                 if name == "inspect_code":
                     result = "def add(a, b):\n    return a - b\n"
                 else:
                     result = "verification:pass" if _matches_patch(args["code"]) else "verification:fail"
-                guard.journal.record_tool(pending[0]["id"], name, result)
                 guard.contract.record_result(pending[0]["id"], result)
+                guard.journal.record_tool(pending[0]["id"], name, result, secrets=(guard.secret, guard.session))
                 return result
-            except Exception:
+            except BaseException as exc:
+                if "pending" in locals() and len(pending) == 1:
+                    code = "chi_tool_cancelled" if isinstance(exc, __import__("asyncio").CancelledError) else "chi_b_dispatch_failed"
+                    try: guard.journal.record_tool(pending[0]["id"], name, code, event="failed",
+                                                   secrets=(guard.secret, guard.session))
+                    except Exception: pass
+                if isinstance(exc, __import__("asyncio").CancelledError):
+                    raise
                 raise GoFailure("chi_b_dispatch_invalid") from None
         return FunctionTool(name=name, description=B_DESCRIPTIONS[name], params_json_schema=B_SCHEMAS[name],
                             on_invoke_tool=invoke, strict_json_schema=False)
@@ -74,6 +82,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     import contextvars
     import re
     import uuid
+    import time
     import httpx
     from openai import AsyncOpenAI
     from agents import Agent, ModelSettings, ModelRetrySettings, Runner, set_tracing_disabled
@@ -95,6 +104,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         raise GoFailure("chi_transport_missing")
     logs_dir = __import__("pathlib").Path(logs_dir)
     logs_dir.mkdir(mode=0o700, parents=False, exist_ok=False)
+    run_started = time.monotonic()
     context = contextvars.ContextVar("chi_confirmation", default=None)
     holder, exchanges = {}, []
     binding = PatientBinding(instruction, journal) if role == "provider" else None
@@ -202,6 +212,14 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                 official._dump_trace(trace_path=logs_dir / "trace.jsonl", instruction=instruction,
                                      system_prompt=official.SYSTEM_PROMPT, result=run_result,
                                      model="deepseek-v4.1-flash")
+        except Exception:
+            failure = failure or "chi_log_persistence_failed"
+        try:
+            summary = {"status": "incomplete" if failure else "complete", "safe_error_code": failure,
+                       "provider_requests": len(journal.run["requests"]),
+                       "tool_events": len(journal.run["tool_events"]),
+                       "elapsed_ms": int((time.monotonic() - run_started) * 1000), "official_reward": None}
+            (logs_dir / "run_log.txt").write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
         except Exception:
             failure = failure or "chi_log_persistence_failed"
     if failure is not None:

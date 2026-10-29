@@ -124,19 +124,28 @@ class MCPBridge:
                         reason = str(exc)
                 if reason is not None:
                     result = "REFUSED: " + reason
-                    self.guard.journal.record_tool(selected["id"], canonical, result)
+                    self.guard.journal.refuse_tool(selected["id"], canonical, args, result,
+                                                   secrets=(self.guard.secret, self.guard.session))
                     self.guard.contract.record_result(selected["id"], result)
                     return result
+            self.guard.journal.start_tool(selected["id"], canonical, args)
             try:
                 response = await self.server.call_tool(raw, args)
-                if getattr(response, "isError", False):
-                    raise GoFailure("chi_mcp_tool_failed")
-                if self.binding is not None:
+                is_error = getattr(response, "isError", False)
+                if type(is_error) is not bool:
+                    raise GoFailure("chi_mcp_result_invalid")
+                if is_error:
+                    from mcp.types import CallToolResult, TextContent
+                    if (not isinstance(response, CallToolResult) or type(response.content) is not list
+                            or not response.content or not all(isinstance(item, TextContent)
+                                                               and type(item.text) is str for item in response.content)):
+                        raise GoFailure("chi_mcp_result_invalid")
+                if self.binding is not None and not is_error:
                     self.binding.observe(selected["id"], canonical, args, response)
                 value = response.model_dump(mode="json", exclude_none=True)
                 content = getattr(response, "content", None)
                 structured = getattr(response, "structuredContent", None)
-                if (structured is None and type(content) is list and len(content) == 1
+                if (not is_error and structured is None and type(content) is list and len(content) == 1
                         and getattr(content[0], "type", None) == "text"
                         and type(getattr(content[0], "text", None)) is str):
                     result = content[0].text
@@ -145,10 +154,19 @@ class MCPBridge:
                     # content in readable form for patient visibility checks.
                     prefix = json.dumps(structured, ensure_ascii=False) + "\n" if type(structured) is dict else ""
                     result = prefix + json.dumps(value, ensure_ascii=False, allow_nan=False)
-                self.guard.journal.record_tool(selected["id"], canonical, result)
                 self.guard.contract.record_result(selected["id"], result)
+                self.guard.journal.record_tool(selected["id"], canonical, result,
+                                               event="returned_error" if is_error else "returned",
+                                               secrets=(self.guard.secret, self.guard.session))
                 return result
-            except BaseException:
+            except BaseException as exc:
+                code = ("chi_tool_cancelled" if isinstance(exc, asyncio.CancelledError) else
+                        exc.code if isinstance(exc, GoFailure) else "chi_mcp_transport_error")
+                try:
+                    self.guard.journal.record_tool(selected["id"], canonical, code, event="failed",
+                                                   secrets=(self.guard.secret, self.guard.session))
+                except Exception:
+                    pass
                 if self.binding is not None:
                     self.binding.poisoned = True
                 raise
