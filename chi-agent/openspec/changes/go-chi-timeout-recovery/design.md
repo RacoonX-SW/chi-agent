@@ -39,3 +39,27 @@ Guard 在发送和完整读取响应的 I/O 边界，分别施加 B/主请求120
 覆盖实际SDK的main/confirmation用途超时、正确HTTP extensions、总时限及取消诊断、零重试/未知阻断；准入耗尽不reserve、已发请求过准入窗口仍可完成；controller上下限在资源/Key前拒绝；旧/新证据校验、元数据篡改、pending/halt历史检查、坏hash/链接/缺件/并发、Console导出缺字段/错用途/模型/参数/数值/关联均不放行。可缩短测试用时或模拟时钟，但不实际等待数分钟。适当回归全部Go与受影响包测试，独立导出/解包预检，不重复G/H安装。
 
 固定候选后主代理独立差异/调用链检查和Docker复验，用真实旧历史/用户JSON只读验证missing-field结论并证明主账/旧证据字节不变。所有成功/失败、工具/费用/耗时写一份T报告，代码/规格/说明显式提交推送、base=main PR由用户合并；不merge/auto-merge。
+
+## PR #24反馈：费用记录优先，不因缺少精确金额停止
+
+用户2026-10-30再次明确Go额度充足，要充分用于开发实验，不因金额或费用精度反复暂停。PR #24核对仍open/unmerged，按同一PR反馈修订；c587b44的原离线通过范围和当时零真实调用记录保留，不改写。
+
+新Go CHI来源/attempt采用显式版本化费用策略，绑定profile/包/launch。有效token usage完整校验继续；仅缺失或null的charged/list/allowance/billing_source留null、费用complete=false、原billing_error/警告，record_only/null cap下不作为当前或后续新请求的致命halt。不得修改旧Q/native的_billing或历史契约；旧attempt未标新策略仍按旧规则审计，原run/wire/seal/receipt/归档不改。三项USD不可合并、估算填齐或将null变0。
+
+明确非Go来源或已知余额额外实扣仍阻断，保持Extra Usage关闭；尤其“缺source但正数charged”不能误作普通缺项放行。非法类型、负数/NaN、损坏证据与token缺失/冲突不归为正常费用缺项。HTTP零重试、主/确认共享50、确认2、B6和角色/患者/历史门禁保留。
+
+用户随后明确选择“允许留档后继续新试次”：只针对当前已有官方后台tokens/Console导出、run已失败封存的旧超时，允许显式留档后解除其对新独立试次的全局准入阻断。它不是结算、不是补业务结果、不是原trial重试。原request仍pending/unknown、原run失败/claim/wire/tool/seal/费用不变，旧未知和费用complete=false继续展示，Console tokens/cost只作旁证，不并入原wire已结算总额。不得把本次决定扩成以后未知请求自动放行。本条不恢复Claude、付费临床评审、t013/t019或F.5。
+
+### 显式留档事件
+
+增加单次`acknowledge-unsettled`操作者接点，当前包/SDK预检后持旧Q→CHI锁；必须给预期旧identity、当前账SHA、精确run/round/request SHA、官方provider文件及SHA、明确用户决定/原因。完整旧账审计先过，目标必须是唯一active pending且对应已failed/封存的run，有诊断/工具终态，无不明inflight或其他安全halt。校验该provider导出及请求长度，但明确legacy关联未唯一证明，用户接受的是留档继续，不伪造认证/结算。
+
+先把旧chi-accounting.json原字节按SHA保存到不可变留档目录，保存原提供方文件和绑定精确目标/原因的事件；使用exclusive写入、marker、fsync与原子主账更新。原旧账/事件/来源链必须互相绑定，原attempt前缀/内容不变；只把此目标从有效准入阻断集合移出，历史未结算状态另列。事件/原账/提供方文件缺失、篡改、链接、孤儿、重复目标或事务中断均阻断，不自动修复。来源迁移须验证并保留留档链，旧B不转给新来源。任何新的未确认token/响应仍按既有规则停止，不自动再次留档。
+
+完整审计、汇总、inspect及迁移共用同一留档事件验证结果；账目旧pending不能静默消失或变settled。已知金额/完整性和未结算请求数量保持真实，展示历史未结算与当前active pending的区别。原source-archives/wire/tool/seal/receipt路径与字节不变，不把原raw响应以Console导出替代。只允许按本规格显式变化的主账及新留档文件，主代理核对旧hash和归档原字节。
+
+### 固定新来源与有限真实恢复
+
+费用策略与留档实现先Docker合成/故障自测、停写、主代理固定新候选独立审核；真实留档前先在完整旧账副本证明所有目标/原字节/费用与事务故障边界。通过后对固定旧根做一次显式留档，再显式来源迁移，取得新候选自己的B。用户已授权Go必要实验，恢复清单固定为最多1次新B≤6、1次t012开发回归≤50、原S冻结的t014/t017各1次≤50，总≤156实际请求；不恢复原四个旧配置、不换题、不追加到成功。
+
+继续使用原S三个任务资源/世界/镜像/模型/公开提示/工具策略，只因本轮费用/留档/时间修复而重新固定包/运行/操作者配置。每次fresh world、独占新attempt，串行，完整终态/全局快照和适用无模型检查照常；无人工选业务动作。新的未知token/响应、非Go/额外实扣、证据损坏或未清理资源时停止后续；正常已知失败保留并按清单观察其余题，不自动HTTP重试。仍不据一次/两题宣称通用能力或官方得分。

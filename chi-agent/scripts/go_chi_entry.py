@@ -23,14 +23,14 @@ from evaluation_bundle import BundleFailure, _check_components, _read_regular_bo
 from go_chi_bundle import validate_bundle
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
-from go_chi_policy import TIME_POLICY
+from go_chi_policy import TIME_POLICY, FEE_POLICY
 from opencode_go_provider import GoFailure, INSTRUCTION, SYSTEM, load_profile
 
 CONFIG = {"schema": "chi-go-evaluation-entry-v1", "provider_profile_id": "opencode-go-deepseek-v4.1-flash-v1",
           "policy_mode": "record_only", "hard_cap_usd": None, "chi_max_requests": 50,
           "chi_max_output_tokens": 8192, "confirmation_max_requests": 2,
           "confirmation_max_output_tokens": 32768, "coding_b_max_requests": 6,
-          "coding_b_max_output_tokens": 1024, "automatic_retries": 0, "time_policy": TIME_POLICY}
+          "coding_b_max_output_tokens": 1024, "automatic_retries": 0, "time_policy": TIME_POLICY, "fee_policy": FEE_POLICY}
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -172,7 +172,7 @@ def _handbook_digest(root: Path) -> str:
 
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("preflight", "coding-b", "live", "audit-history", "rebind-history", "inspect-history"))
+    parser.add_argument("mode", choices=("preflight", "coding-b", "live", "audit-history", "rebind-history", "inspect-history", "acknowledge-unsettled"))
     parser.add_argument("--bundle-sha256", required=True)
     parser.add_argument("--evaluation-id")
     parser.add_argument("--task-id")
@@ -187,6 +187,10 @@ def _parser():
     parser.add_argument("--migration-reason")
     parser.add_argument("--provider-record", type=Path)
     parser.add_argument("--provider-record-sha256")
+    parser.add_argument("--target-run")
+    parser.add_argument("--target-round", type=int)
+    parser.add_argument("--expected-request-sha256")
+    parser.add_argument("--acknowledgement-reason")
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
     parser.add_argument("--mcp-url")
@@ -230,15 +234,22 @@ def main(argv=None):
             print(json.dumps({"status": "identity_verified", "identity_sha256": identity,
                               "identity": identity_detail, "official_reward": None}, sort_keys=True))
             return 0
-        if args.mode in {"audit-history", "rebind-history", "inspect-history"}:
-            from go_chi_journal import audit_or_rebind, inspect_history
+        if args.mode in {"audit-history", "rebind-history", "inspect-history", "acknowledge-unsettled"}:
+            from go_chi_journal import audit_or_rebind, inspect_history, acknowledge_unsettled
             if args.history_mode != "local" or args.local_q_root is None or args.output_root is None:
                 raise GoFailure("chi_local_history_required")
             qroot = _path(args.local_q_root, exists=True)
             root = _path(args.output_root, exists=True)
             if root != qroot / "chi-evaluation": raise GoFailure("chi_local_history_path_invalid")
             q = acquire_existing_history(qroot)
-            if args.mode == 'inspect-history':
+            if args.mode == 'acknowledge-unsettled':
+                if args.provider_record is None or args.provider_record_sha256 is None:
+                    raise GoFailure('chi_provider_record_invalid')
+                result = acknowledge_unsettled(root, identity=args.expected_old_identity,
+                    accounting_sha256=args.expected_accounting_sha256, run=args.target_run, round_number=args.target_round,
+                    request_sha256=args.expected_request_sha256, provider_path=args.provider_record,
+                    provider_sha256=args.provider_record_sha256, reason=args.acknowledgement_reason)
+            elif args.mode == 'inspect-history':
                 result = inspect_history(root, args.expected_old_identity, args.expected_accounting_sha256)
                 if (args.provider_record is None) != (args.provider_record_sha256 is None):
                     raise GoFailure('chi_provider_record_invalid')
@@ -265,7 +276,7 @@ def main(argv=None):
                 or not _disjoint(logs_dir, output_root) or logs_dir.exists() or not logs_dir.parent.is_dir()):
             raise GoFailure("chi_output_path_invalid")
         instruction_path = instruction = None
-        launch = {"kind": "coding_b", "instruction_sha256": hashlib.sha256(INSTRUCTION.encode()).hexdigest()}
+        launch = {"kind": "coding_b", "instruction_sha256": hashlib.sha256(INSTRUCTION.encode()).hexdigest(), "fee_policy": FEE_POLICY}
         if args.mode == "live":
             instruction_path, instruction = _instruction(args.instruction_file)
             if not _disjoint(instruction_path, output_root) or not _disjoint(instruction_path, logs_dir) or not _disjoint(instruction_path, bundle):
@@ -293,7 +304,7 @@ def main(argv=None):
                     raise GoFailure("chi_reference_invalid")
             references = {str(path): hashlib.sha256(_read_regular_bounded(_path(path, exists=True), 16 * 1024 * 1024,
                             "chi_reference_invalid")).hexdigest() for path in args.tool_reference}
-            launch = {"kind": "chi", "role": args.role,
+            launch = {"kind": "chi", "role": args.role, "fee_policy": FEE_POLICY,
                       "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(),
                       "mcp_url_sha256": hashlib.sha256(args.mcp_url.encode()).hexdigest(),
                       "tool_references_sha256": references, "handbook_sha256": _handbook_digest(handbook)}

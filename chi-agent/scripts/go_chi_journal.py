@@ -10,6 +10,7 @@ import fcntl
 import copy
 import hashlib
 import json
+import math
 import os
 import re
 from decimal import Decimal
@@ -20,10 +21,34 @@ from b_provider_transport import _reject_symlink_ancestors
 from go_chi_evidence import (envelope, write as write_evidence, verify as verify_evidence,
                              write_tool, verify_tool)
 from evaluation_bundle import _read_regular_bounded, _write_exclusive, _fsync_dir
+from go_chi_policy import FEE_POLICY
 
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MAX_STATE_BYTES = 32 * 1024 * 1024
+
+
+def _fee_decision(usage: dict, policy: str | None) -> tuple[dict, str | None, str | None]:
+    """Keep provider billing_error, separately derive the versioned stop decision."""
+    billed, error = _billing(usage)
+    if policy is None:
+        return billed, error, error
+    if policy != FEE_POLICY:
+        raise GoFailure('chi_fee_policy_invalid')
+    details = usage.get('opencode')
+    if details is not None and type(details) is not dict: raise GoFailure('chi_billing_invalid')
+    details = details or {}
+    for value in (usage.get('cost'), details.get('list_cost'), details.get('allowance')):
+        if value is not None and (type(value) not in (int, float) or value < 0 or value > 1_000_000_000
+                                  or not math.isfinite(value)):
+            raise GoFailure('chi_billing_invalid')
+    source = details.get('billing_source')
+    if source is not None and type(source) is not str: raise GoFailure('chi_billing_invalid')
+    if 'estimated' in details and (type(details['estimated']) is not bool or details['estimated']):
+        raise GoFailure('chi_billing_invalid')
+    if (source is not None and source not in {'go', 'go-plus'}) or (usage.get('cost') is not None and usage['cost'] > 0):
+        return billed, error, 'billing_source_unexpected'
+    return billed, error, None
 
 
 def _state_object(path: Path) -> dict:
@@ -52,6 +77,76 @@ def _receipt(run: dict, identity: str) -> dict:
 def _seal(run: dict, identity: str) -> dict:
     return {"schema": "chi-go-run-seal-v1", "identity": identity,
             "run": run["run"], "run_sha256": _run_digest(run)}
+
+
+def _acknowledged(root: Path, state: dict) -> dict:
+    """Validate the append-only acknowledgement chain and return its targets."""
+    refs = state.get('acknowledgements', [])
+    if type(refs) is not list: raise ValueError
+    directory = root / 'unsettled-acknowledgements'
+    if directory.is_symlink(): raise ValueError
+    if directory.exists() and not refs: raise ValueError
+    expected, targets = set(), {}
+    for index, ref in enumerate(refs, 1):
+        if type(ref) is not dict or set(ref) != {'event_sha256'} or type(ref['event_sha256']) is not str or not DIGEST.fullmatch(ref['event_sha256']): raise ValueError
+        event_name = f'{index:04d}-event-{ref["event_sha256"]}.json'
+        event_raw = _read_regular_bounded(directory / event_name, 1024 * 1024, 'chi_history_invalid')
+        if hashlib.sha256(event_raw).hexdigest() != ref['event_sha256']: raise ValueError
+        from opencode_go_provider import _unique
+        event = json.loads(event_raw, object_pairs_hook=_unique, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+        if (type(event) is not dict or set(event) != {'schema', 'identity', 'accounting_sha256', 'provider_sha256', 'run', 'round', 'request_sha256', 'reason'}
+                or event['schema'] != 'chi-go-unsettled-ack-v1'
+                or any(type(event[k]) is not str or not DIGEST.fullmatch(event[k]) for k in ('identity', 'accounting_sha256', 'provider_sha256', 'request_sha256'))
+                or type(event['run']) is not str or not ID.fullmatch(event['run'])
+                or type(event['round']) is not int or event['round'] < 1
+                or type(event['reason']) is not str or not event['reason'].strip() or len(event['reason']) > 256): raise ValueError
+        names = {'event': event_name, 'accounting': f'{index:04d}-accounting-{event["accounting_sha256"]}.json',
+                 'provider': f'{index:04d}-provider-{event["provider_sha256"]}.json'}
+        expected.update(names.values())
+        raws = {kind: _read_regular_bounded(directory / names[kind], MAX_STATE_BYTES if kind == 'accounting' else 1024 * 1024, 'chi_history_invalid')
+                for kind in ('accounting', 'provider')}
+        if (hashlib.sha256(raws['accounting']).hexdigest() != event['accounting_sha256']
+                or hashlib.sha256(raws['provider']).hexdigest() != event['provider_sha256']): raise ValueError
+        snapshot = json.loads(raws['accounting'], object_pairs_hook=_unique, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+        target = (event['run'], event['round'])
+        required_keys = {'schema', 'identity', 'account_prior_history', 'attempts', 'pending', 'halted'}
+        if (type(snapshot) is not dict or not required_keys <= set(snapshot)
+                or set(snapshot) - required_keys - {'source_transitions', 'acknowledgements'}
+                or snapshot['schema'] != 'chi-go-evaluation-usd-v1' or snapshot['account_prior_history'] != 'unknown'
+                or target in targets or snapshot.get('identity') != event['identity']
+                or snapshot.get('acknowledgements', []) != refs[:index-1]
+                or snapshot.get('pending') != {'run': event['run'], 'round': event['round']}
+                or snapshot.get('halted') is not None or type(snapshot.get('attempts')) is not list
+                or state['attempts'][:len(snapshot['attempts'])] != snapshot['attempts']): raise ValueError
+        pending_targets = {(a['run'], n) for a in snapshot['attempts']
+                           for n, request in enumerate(a['requests'], 1)
+                           if request['status'] in {'pending', 'unknown'}}
+        if not set(targets) <= pending_targets or pending_targets - set(targets) != {target}: raise ValueError
+        transitions = snapshot.get('source_transitions', [])
+        current_transitions = state.get('source_transitions', [])
+        if (type(transitions) is not list or transitions != current_transitions[:len(transitions)]
+                or (current_transitions[len(transitions)]['old_identity'] if len(transitions) < len(current_transitions)
+                    else state['identity']) != event['identity']): raise ValueError
+        attempt = next(a for a in snapshot['attempts'] if a['run'] == event['run'])
+        request = attempt['requests'][event['round'] - 1]
+        if (attempt['status'] != 'failed' or request['status'] not in {'pending', 'unknown'}
+                or request['request_sha256'] != event['request_sha256'] or request['diagnostic_evidence_sha256'] is None
+                or request['response_evidence_sha256'] is not None): raise ValueError
+        request_doc = verify_evidence(root, event['run'], event['round'], 'request', request['request_evidence_sha256'])
+        diagnostic = verify_evidence(root, event['run'], event['round'], 'diagnostic', request['diagnostic_evidence_sha256'])
+        if diagnostic.get('code') != 'chi_timeout' or request_doc.get('dispatch') is not None: raise ValueError
+        from go_chi_inspect import inspect_provider
+        body = request_doc.get('body_utf8')
+        pending = {'kind': attempt['kind'], 'purpose': request['purpose'], 'dispatch': request_doc.get('dispatch'),
+                   'body_bytes': len(body.encode()) if body is not None else None}
+        if pending['body_bytes'] is None and pending['dispatch'] is None: raise ValueError
+        provider_result = inspect_provider(directory / names['provider'], event['provider_sha256'], pending)
+        if provider_result['correlation']['status'] == 'mismatch': raise ValueError
+        targets[target] = event
+    if directory.exists() and ({p.name for p in directory.iterdir()} != expected
+            or any(p.is_symlink() or not p.is_file() for p in directory.iterdir())): raise ValueError
+    if expected and not directory.is_dir(): raise ValueError
+    return targets
 
 
 def publish_b_receipt(root: Path, identity: str, run: dict) -> None:
@@ -140,7 +235,9 @@ def inspect_history(root: Path, expected_identity: str, expected_sha256: str) ->
         pending = state['pending']
         result = {'status': 'inspected', 'execution_allowed': False, 'identity': expected_identity,
                   'accounting_sha256': expected_sha256, 'pending': pending, 'halted': state['halted'],
-                  'usage': auditor.usage_totals(), 'missing': []}
+                  'usage': auditor.usage_totals(), 'missing': [],
+                  'acknowledged_unsettled': [{'run': e['run'], 'round': e['round'], 'request_sha256': e['request_sha256'],
+                                               'status': 'unsettled'} for e in _acknowledged(root, state).values()]}
         for attempt in state['attempts']:
             for item in attempt['requests']:
                 if item['status'] == 'settled':
@@ -160,6 +257,68 @@ def inspect_history(root: Path, expected_identity: str, expected_sha256: str) ->
             for field in ('charged_usd', 'billing_source', 'list_cost_usd', 'allowance_usd'):
                 if field not in result['missing']: result['missing'].append(field)
         return result
+    finally:
+        os.close(lock)
+
+
+def acknowledge_unsettled(root: Path, *, identity: str, accounting_sha256: str, run: str, round_number: int,
+                          request_sha256: str, provider_path: Path, provider_sha256: str, reason: str) -> dict:
+    """Record the user's bounded decision; neither settle nor alter the failed attempt."""
+    from evaluation_bundle import _check_components
+    from go_chi_inspect import inspect_provider
+    if (any(type(x) is not str or not DIGEST.fullmatch(x) for x in (identity, accounting_sha256, request_sha256, provider_sha256))
+            or type(run) is not str or not ID.fullmatch(run) or type(round_number) is not int or round_number < 1
+            or type(reason) is not str or not reason.strip() or len(reason) > 256): raise GoFailure('chi_ack_invalid')
+    root = Path(root); _reject_symlink_ancestors(root, 'chi_path_invalid')
+    lock = os.open(root / '.lock', os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        path = root / 'chi-accounting.json'
+        raw = _read_regular_bounded(path, MAX_STATE_BYTES, 'chi_history_invalid')
+        if hashlib.sha256(raw).hexdigest() != accounting_sha256: raise GoFailure('chi_ack_hash_mismatch')
+        auditor = object.__new__(ChiJournal); auditor.root, auditor.path, auditor.state = root, path, _state_object(path)
+        auditor._validate(identity)
+        state = auditor.state
+        if state['pending'] != {'run': run, 'round': round_number} or state['halted'] is not None:
+            raise GoFailure('chi_ack_target_invalid')
+        attempt = next((a for a in state['attempts'] if a['run'] == run), None)
+        if attempt is None or attempt['status'] != 'failed' or round_number > len(attempt['requests']): raise GoFailure('chi_ack_target_invalid')
+        request = attempt['requests'][round_number - 1]
+        if (request['status'] not in {'pending', 'unknown'} or request['request_sha256'] != request_sha256
+                or request['diagnostic_evidence_sha256'] is None or request['response_evidence_sha256'] is not None): raise GoFailure('chi_ack_target_invalid')
+        inflight = root / 'tool-inflight'
+        if inflight.exists() and any(any(p.iterdir()) for p in inflight.iterdir()): raise GoFailure('chi_ack_inflight')
+        doc = verify_evidence(root, run, round_number, 'request', request['request_evidence_sha256'])
+        diagnostic = verify_evidence(root, run, round_number, 'diagnostic', request['diagnostic_evidence_sha256'])
+        if diagnostic.get('code') != 'chi_timeout' or doc.get('dispatch') is not None: raise GoFailure('chi_ack_target_invalid')
+        body = doc.get('body_utf8')
+        pending = {'kind': attempt['kind'], 'purpose': request['purpose'], 'dispatch': doc.get('dispatch'),
+                   'body_bytes': len(body.encode()) if body is not None else None}
+        if pending['body_bytes'] is None and pending['dispatch'] is None: raise GoFailure('chi_ack_target_invalid')
+        result = inspect_provider(provider_path, provider_sha256, pending)
+        if result['correlation']['status'] == 'mismatch': raise GoFailure('chi_ack_provider_mismatch')
+        provider_path = _check_components(Path(provider_path), 'chi_provider_record_invalid', final_may_be_missing=False)
+        provider_raw = _read_regular_bounded(provider_path, 1024 * 1024, 'chi_provider_record_invalid')
+        if hashlib.sha256(provider_raw).hexdigest() != provider_sha256: raise GoFailure('chi_provider_record_invalid')
+        refs = state.get('acknowledgements', []); index = len(refs) + 1
+        event = {'schema': 'chi-go-unsettled-ack-v1', 'identity': identity, 'accounting_sha256': accounting_sha256,
+                 'provider_sha256': provider_sha256, 'run': run, 'round': round_number,
+                 'request_sha256': request_sha256, 'reason': reason.strip()}
+        event_raw = (json.dumps(event, ensure_ascii=True, sort_keys=True, separators=(',', ':')) + '\n').encode()
+        marker = root / 'acknowledgement.pending'
+        _write_exclusive(marker, b'acknowledgement in progress\n'); _fsync_dir(root)
+        directory = root / 'unsettled-acknowledgements'
+        directory.mkdir(mode=0o700, exist_ok=True); _reject_symlink_ancestors(directory, 'chi_path_invalid'); _fsync_dir(root)
+        for kind, payload in (('accounting', raw), ('provider', provider_raw), ('event', event_raw)):
+            _write_exclusive(directory / f'{index:04d}-{kind}-{hashlib.sha256(payload).hexdigest()}.json', payload)
+            _fsync_dir(directory)
+        updated = copy.deepcopy(state)
+        updated['pending'] = None
+        updated['acknowledgements'] = refs + [{'event_sha256': hashlib.sha256(event_raw).hexdigest()}]
+        _atomic(path, updated)
+        marker.unlink(); _fsync_dir(root)
+        return {'status': 'acknowledged_unsettled', 'run': run, 'round': round_number,
+                'execution_allowed': False, 'settled': False, 'event_sha256': hashlib.sha256(event_raw).hexdigest()}
     finally:
         os.close(lock)
 
@@ -239,8 +398,10 @@ class ChiJournal:
     def _validate(self, identity: str) -> None:
         try:
             s = self.state
-            if (self.root / "migration.pending").exists() or (self.root / "migration.pending").is_symlink():
+            if any((self.root / name).exists() or (self.root / name).is_symlink() for name in ('migration.pending', 'acknowledgement.pending')):
                 raise ValueError
+            acknowledged = _acknowledged(self.root, s)
+            used_acknowledgements = set()
             transitions = s.get("source_transitions", [])
             if type(transitions) is not list: raise ValueError
             archive = self.root / "source-archives"
@@ -263,10 +424,15 @@ class ChiJournal:
                 attempts = snapshot.get("attempts")
                 if (snapshot.get("identity") != transition["old_identity"]
                         or snapshot.get("source_transitions", []) != transitions[:index]
+                        or snapshot.get('acknowledgements', []) != s.get('acknowledgements', [])[:len(snapshot.get('acknowledgements', []))]
                         or snapshot.get("pending") is not None or snapshot.get("halted") is not None
                         or type(attempts) is not list or attempts[:len(previous_attempts)] != previous_attempts
                         or s["attempts"][:len(attempts)] != attempts
                         or any(a.get("status") not in {"complete", "failed"} for a in attempts)):
+                    raise ValueError
+                acknowledged_prefix = set(list(acknowledged)[:len(snapshot.get('acknowledgements', []))])
+                if any((a['run'], n) not in acknowledged_prefix for a in attempts
+                       for n, req in enumerate(a['requests'], 1) if req['status'] in {'pending', 'unknown'}):
                     raise ValueError
                 for attempt in attempts[len(previous_attempts):]:
                     run_identities[attempt["run"]] = transition["old_identity"]
@@ -289,7 +455,7 @@ class ChiJournal:
                         if (path.is_symlink() or not path.is_file()
                                 or (directory.name, path.name) != allowed_pending): raise ValueError
             keys = {"schema", "identity", "account_prior_history", "attempts", "pending", "halted"}
-            if (type(s) is not dict or set(s) not in (keys, keys | {"source_transitions"})
+            if (type(s) is not dict or not keys <= set(s) or set(s) - keys - {'source_transitions', 'acknowledgements'}
                     or s["schema"] != "chi-go-evaluation-usd-v1" or s["identity"] != identity
                     or s["account_prior_history"] != "unknown" or type(s["attempts"]) is not list
                     or s["halted"] not in (None, "billing_details_unknown", "billing_source_unexpected")):
@@ -315,6 +481,8 @@ class ChiJournal:
                         or a["status"] not in {"started", "complete", "failed"} or type(a["requests"]) is not list
                         or len(a["requests"]) > (6 if a["kind"] == "coding_b" else 50)):
                     raise ValueError
+                fee_policy = a['launch'].get('fee_policy')
+                if fee_policy not in (None, FEE_POLICY): raise ValueError
                 if a["safe_error_code"] in {"chi_evidence_persistence_failed", "chi_persistence_failed",
                                              "chi_log_persistence_failed", "chi_b_receipt_persistence_failed",
                                              "chi_cleanup_failed"}:
@@ -377,6 +545,7 @@ class ChiJournal:
                     raise ValueError
                 confirms = 0
                 for index, item in enumerate(a["requests"], 1):
+                    effective_fee_stop = None
                     if (type(item) is not dict or item.get("round") != index
                             or item.get("purpose") not in {"main", "confirmation"}
                             or (a["kind"] == "coding_b" and item.get("purpose") != "main")
@@ -429,7 +598,7 @@ class ChiJournal:
                                             or usage.get("completion_tokens") != item["usage"]["output_tokens"]): raise ValueError
                                     from b_provider_transport import GuardedTransport
                                     GuardedTransport._usage({"usage": usage})
-                                    billed, billing_error = _billing(usage)
+                                    billed, billing_error, effective_fee_stop = _fee_decision(usage, fee_policy)
                                     if billed != item["billing"] or billing_error != item["billing_error"]:
                                         raise ValueError
                             elif (evidence.get("schema") != "chi-go-diagnostic-v1"
@@ -444,7 +613,11 @@ class ChiJournal:
                     if confirms > 2 or halt is not None or pending is not None:
                         raise ValueError
                     if item.get("status") in {"pending", "unknown"}:
-                        pending = {"run": a["run"], "round": index}
+                        target = (a['run'], index)
+                        if target in acknowledged:
+                            used_acknowledgements.add(target)
+                        else:
+                            pending = {"run": a["run"], "round": index}
                     elif item.get("status") == "settled":
                         if (type(item["usage"]) is not dict or set(item["usage"]) != {"input_tokens", "output_tokens"}
                                 or any(type(v) is not int or v < 0 for v in item["usage"].values())
@@ -460,12 +633,12 @@ class ChiJournal:
                                     "billing_source_unexpected" if billed["billing_source"] not in {"go", "go-plus"}
                                     or (billed["charged_usd"] is not None and Decimal(billed["charged_usd"]) != 0) else
                                     "billing_details_unknown" if any(billed[k] is None for k in ("charged_usd", "list_cost_usd", "allowance_usd")) else None)
-                        if inferred != item["billing_error"]:
+                        if fee_policy is None and inferred != item["billing_error"]:
                             raise ValueError
-                        halt = inferred
+                        halt = inferred if fee_policy is None else effective_fee_stop
                     else:
                         raise ValueError
-            if pending != s["pending"] or halt != s["halted"]:
+            if used_acknowledgements != set(acknowledged) or pending != s["pending"] or halt != s["halted"]:
                 raise ValueError
             evidence_root = self.root / "wire-evidence"
             if evidence_root.is_symlink(): raise ValueError
@@ -634,15 +807,16 @@ class ChiJournal:
         if self.state["pending"] is None:
             raise GoFailure("chi_pending_invalid")
         try:
-            incoming, outgoing = usage["prompt_tokens"], usage["completion_tokens"]
-            if any(type(x) is not int or x < 0 for x in (incoming, outgoing)):
-                raise ValueError
-            billed, halt = _billing(usage)
+            from b_provider_transport import GuardedTransport
+            incoming, outgoing = GuardedTransport._usage({'usage': usage})
+            billed, billing_error, halt = _fee_decision(usage, self.run['launch'].get('fee_policy'))
+        except GoFailure:
+            raise
         except Exception:
             raise GoFailure("chi_usage_unknown") from None
         entry = self.run["requests"][-1]
         entry.update(status="settled", usage={"input_tokens": incoming, "output_tokens": outgoing},
-                     billing=billed, billing_error=halt)
+                     billing=billed, billing_error=billing_error)
         self.state["halted"] = halt
         self.state["pending"] = None
         self._persist()
@@ -679,12 +853,23 @@ class ChiJournal:
         totals = {name: Decimal(0) for name in names}
         complete = {name: True for name in names}
         incoming = outgoing = 0
+        warnings = 0
+        unsettled = []
+        billing_incomplete = False
         for attempt in self.state["attempts"]:
             for request in attempt["requests"]:
                 if request["status"] != "settled":
+                    billing_incomplete = True
+                    unsettled.append({'run': attempt['run'], 'round': request['round'], 'status': request['status']})
                     for name in names:
                         complete[name] = False
                     continue
+                billed = request['billing']
+                billing_incomplete = billing_incomplete or any(value is None for value in billed.values())
+                warnings += (attempt['launch'].get('fee_policy') == FEE_POLICY
+                             and request['billing_error'] == 'billing_details_unknown'
+                             and (billed['charged_usd'] is None or Decimal(billed['charged_usd']) == 0)
+                             and (billed['billing_source'] is None or billed['billing_source'] in {'go', 'go-plus'}))
                 incoming += request["usage"]["input_tokens"]
                 outgoing += request["usage"]["output_tokens"]
                 for name in names:
@@ -695,7 +880,9 @@ class ChiJournal:
                         totals[name] += Decimal(value)
         return {"input_tokens_known": incoming, "output_tokens_known": outgoing,
                 "usd": {name: {"known": str(totals[name]), "complete": complete[name]} for name in names},
-                "account_prior_history": "unknown"}
+                "account_prior_history": "unknown", 'billing_details_warnings': warnings,
+                'billing_complete': not billing_incomplete and all(complete.values()),
+                'unsettled_requests': unsettled}
 
     def close(self) -> None:
         if self.lock is not None:

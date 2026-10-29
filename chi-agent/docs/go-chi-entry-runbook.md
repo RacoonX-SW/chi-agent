@@ -24,6 +24,8 @@ HTTP 连接/写入/连接池等待分别为 10/60/60 秒；主请求读取超时
 
 美元账目分别列 Go 余额实扣、模型价目价值、套餐消耗；三者不可相加，也不与旧 CNY 相加。独立 evaluation 目录表示隔离运行状态，不表示本项目或账户历史清零。订阅固定费另计，余额扣费为零仍会消耗套餐额度。Extra Usage 已由用户确认关闭；程序不自动开启或回退到 balance/native。
 
+新来源的 `go-chi-record-incomplete-fees-v1` 仅将缺失或 null 的费用明细记录为警告；实际 token 仍须完整有效。原 `billing_error` 与 null 均保留，汇总标识费用不完整；明确非 Go 来源或已知正数实扣仍停止。旧来源按其原费用规则审计。
+
 ## 提供方条件和结果解释
 
 用户已知悉 [Go 官方文档](https://opencode.ai/v2/docs/console/go/) 尚未明确非编码 CHI 支持，决定按真实开发用途继续使用；不得声称官方已许可，也不伪装请求为 coding。当前 DeepSeek ZDR 月度协议只明确到 2026-10-31，十一月运行前人工复核，程序没有时钟门禁或后台等待。
@@ -95,6 +97,8 @@ python /package/scripts/go_chi_entry.py live \
 候选包预检取得新运行身份后，在已审核旧账副本上先使用 `audit-history`，再用 `rebind-history`。两者都需要 `--bundle-sha256`、`--history-mode local`、`--local-q-root /prior-go`、`--output-root /prior-go/chi-evaluation`、`--expected-old-identity` 和 `--expected-accounting-sha256`；迁移另需 `--migration-reason`。新身份只能由所选包预检计算，不能作为任意 CLI 值传入。两者不读取 Key、不发模型请求；按 Q 再 CHI 顺序锁定并检查证据。迁移归档旧账原字节，保留旧 seal、receipt 和其他证据的原路径；中断标记或缺件需要人工调查，不应删除标记绕过。旧 B 收据不授权新身份，须取得该候选自己的 B。
 
 `inspect-history` 使用相同的本地根、期望旧身份与主账 SHA，可只读检查含 pending/halt 的历史；可选同时提供 `--provider-record` 和 `--provider-record-sha256` 检查 Console 导出。可读取的旧请求正文只输出字节数，并与导出的 content-length 核对；字节数一致不证明唯一关联。输出只报告验证状态、费用字段缺口及有限关联信息，不输出原账户、会话或地理信息。Console cost 保留原始意义，不能推算余额实扣、价目价值或套餐消耗；检查成功不解除 pending、授权运行或修改旧证据。
+
+用户已明确允许当前旧超时保留未结算记录后继续新独立试次。`acknowledge-unsettled` 使用相同本地身份与主账 SHA 参数，另须指定 `--target-run`、`--target-round`、`--expected-request-sha256`、`--provider-record`、`--provider-record-sha256` 和 `--acknowledgement-reason`。入口只接受无 dispatch、无响应、诊断为超时且已失败封存的旧请求，审计后归档旧主账原字节、提供方记录和决定事件，解除该请求对新试次的有效准入阻断；原请求仍未结算，Console token/费用不并入账目，原失败、seal 与证据不变。事件不是运行授权，也不会自动重发或放行未来未知请求。中断标记及异常文件需人工调查，不能删除后绕过检查。
 
 ## 操作者单次调度
 

@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | T用途等待/运行收尾/关联元数据/只读查账在[所述技术范围](go-chi-timeout-recovery-review.md)独立离线通过；官方Console/用户JSON仅部分费用证据，未清S未知占位、未恢复模型调用。[PR #24](https://github.com/xsw932187210-cell/chi-agent/pull/24)待用户审核合并 |
+| 当前任务 | PR #24仍开放，按[费用反馈修订](../openspec/changes/go-chi-timeout-recovery/design.md#pr-24反馈费用记录优先不因缺少精确金额停止)实现新来源金额缺项warning。用户已明确允许对当前旧超时保留失败/未结算并显式留档后继续新独立试次；先代码/副本独立审核，尚未实际留档/迁移/恢复模型 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 上次独立审核候选 | T `c587b446a54833393c1feb7deaeb3ac6fca47bfb`；用途超时、准入/收尾、dispatch和未结算历史/导出检查独立离线通过；范围/身份/证据只见[T报告](go-chi-timeout-recovery-review.md)，没有真实B/C或费用核销 |
 | 上次通过的实现提交 | T同上SHA仅限离线工程范围；S通过范围保留在[S报告](go-chi-batch-recovery-review.md)。P t013已收束，Q/R/S失败/claim/费用保留；official_reward=null |
