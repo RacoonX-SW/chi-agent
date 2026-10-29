@@ -11,8 +11,8 @@
 | 环境、Python 版本目标与容器边界 | [Docker 工作流](docs/docker-workflow.md) |
 | 分支、PR 与上传范围 | [GitHub 工作流](docs/github-workflow.md) |
 | 教学方式、理解进度与下一学习点 | [学习约定](docs/learning-agreement.md) |
-| 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
-| 验收契约与实现任务 | [验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md)、[任务](openspec/changes/bootstrap-baseline/tasks.md) |
+| 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[Go CHI 入口与独立包](openspec/changes/chi-go-evaluation-entry/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
+| 验收契约与实现任务 | [Go CHI 接线设计](openspec/changes/chi-go-evaluation-entry/design.md)、[本轮任务](openspec/changes/chi-go-evaluation-entry/tasks.md)、[历史验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md) |
 
 本页只维护运行方法与入口；阶段结果和详细证据集中到状态页及其链接的阶段报告。命令示例中的模型名称不表示已经可用或获准调用。
 
@@ -376,7 +376,7 @@ K 的 `c-run` 默认启用患者确认；启动命令不变，操作员无需在
 
 `.env` 本地新增 `OPENCODE_API_KEY`，保留原 `DEEPSEEK_API_KEY`，不要把 Key 放入命令正文或 Git。Go 使用正式 ID `deepseek-v4.1-flash` 和 `/inference/go/openai/v1/chat/completions`；SDK base URL 为 `https://opencode.ai/inference/go/openai/v1`，不能套用 native 的 URL 或 pay-as-you-go 路径。
 
-`scripts/opencode_go_provider.py` 提供独立的 Go 适配与固定 coding 工具探针，下一项正式入口接线可以复用。当前 CLI 不接受患者、任务指令、MCP 或任意 prompt；不能用它替代 `c-run` 或开发评审。Go 的非编码 CHI 用途支持仍待确认。**OpenCode 请求不受 DeepSeek 官方 API 的避峰时段限制，可全天执行已授权工作**；运行前仍核对控制台 Extra Usage 关闭和用量状态，不因等待官方 API 折扣时段而延后。
+`scripts/opencode_go_provider.py` 提供独立的 Go 适配与固定 coding 工具探针；下方新 CHI 包复用其提供方接点。该探针 CLI 不接受患者、任务指令、MCP 或任意 prompt，不能替代 `c-run` 或开发评审。Go 的非编码 CHI 用途支持仍待确认。**OpenCode 请求不受 DeepSeek 官方 API 的避峰时段限制，可全天执行已授权工作**；运行前仍核对控制台 Extra Usage 关闭和用量状态，不因等待官方 API 折扣时段而延后。
 
 以下从项目目录运行，复用已有镜像和 SDK 卷，不安装依赖。`plan` / `preflight` 只读，`offline` 用临时账目与模拟 HTTP，均不需要 Key：
 
@@ -433,6 +433,29 @@ with os.fdopen(fd, "w") as out:
 新账本分别累计 Go 返回的余额扣费、模型价目价值和套餐消耗，单位均为 USD；原 CNY 账目不迁移、不相加。订阅月费另计。未知用量保留 pending 并阻止后续请求，重复 ID 不覆盖，账单来源异常先结算已知费用再停止；不能删除账本清零或自动回退到余额/native。
 
 模型标称 1M 上下文由 [OpenCode 模型信息](https://opencode.ai/data/deepseek/deepseek-v4-1-flash)及 [DeepSeek 规格](https://api-docs.deepseek.com/quick_start/pricing/)支持，本探针没有百万 token 实测。`deepseek-flash[1m]` 来自 [Claude Code 专用接入示例](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/)，不追加到 Go 的正式模型 ID；单次输出上限与上下文容量分开设置。
+
+## Go CHI 独立包入口
+
+`scripts/go_chi_entry.py` 接收外部 instruction、一个角色 MCP、日志目录和 evaluation/task/attempt/run 身份；它只在经过 manifest 校验的导出包内运行。原 `opencode_go_provider.py` 继续是固定 coding 探针，原 `evaluation_entry.py` 的 live 拒绝保持。实际已验证范围、固定候选和限制只查 [审核状态](reviews/REVIEW_STATE.md)。
+
+从本项目目录导出一个新包，目标必须尚不存在；此步骤禁网且不读 Key：
+
+```sh
+mkdir -p runs/go-chi-exports
+docker run --rm --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -v "$PWD:/source:ro" -v "$PWD/runs/go-chi-exports:/exports:rw" \
+  -w /tmp chi-agent-dev:latest /opt/venv/bin/python \
+  /source/scripts/go_chi_bundle.py build --target /exports/go-chi-001
+```
+
+构建输出的 manifest SHA 通过 `--bundle-sha256` 显式传入新入口；`preflight` 只读核对包、配置、固定上游、SDK 和 PDF 依赖，`coding-b` 取得当前身份的 B 收据，`live` 再运行外部任务。包外提供固定官方 checkout、锁定依赖、授权资源、凭据和可写状态/日志；完整挂载及启动命令见 [Go 包 runbook](docs/go-chi-entry-runbook.md)，导出后为 `RUN_CHI_GO.md`。程序包不含 vendor、任务、手册、凭据或开发轨迹。
+
+新 CHI 任务沿用主请求/患者确认合计 50 次、主输出 8192、确认最多两次/32768 及每次主请求的可信剩余反馈；B 另为 6 次/1024，不把探针配置当正式任务配置。provider 使用患者和实体绑定门禁及通用字段提示；payer/CM 只使用所选角色工具与角色/shared 文件范围，不能把协议演练写成三赛道业务通过。
+
+本地继续开发使用 `--history-mode local --local-q-root /prior-go --output-root /prior-go/chi-evaluation`，审计并持锁既有 Go 历史，新的 CHI 状态固定在子目录。外部独立 evaluation 使用显式 `external` 模式；这不代表账户此前消费为零。record_only/null cap、三项 USD 分列、未知阻断和零自动重试保持；旧 CNY 不与 USD 相加。新源码身份当前保守拒绝旧 CHI 状态，不提供自动迁移或清账重跑。
+
+用户已知悉 Go 非编码用途尚未获得官方确认并决定继续使用，十一月隐私条件仍需运行前人工复核；不伪装请求，不增加时钟门禁。完整 Harbor 配送与 F.5、原版 Claude 判分分别按审核状态管理。
 
 ## DeepSeek 本地开发评审
 

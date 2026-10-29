@@ -1,0 +1,13 @@
+{
+  "schema": "chi-go-evaluation-entry-v1",
+  "provider_profile_id": "opencode-go-deepseek-v4.1-flash-v1",
+  "policy_mode": "record_only",
+  "hard_cap_usd": null,
+  "chi_max_requests": 50,
+  "chi_max_output_tokens": 8192,
+  "confirmation_max_requests": 2,
+  "confirmation_max_output_tokens": 32768,
+  "coding_b_max_requests": 6,
+  "coding_b_max_output_tokens": 1024,
+  "automatic_retries": 0
+}
