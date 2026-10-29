@@ -1,6 +1,6 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。单题本地执行与 L 评审闭环后，按 [两个新任务的固定条件基线](changes/provider-two-task-baseline/proposal.md) 检查同一 Agent 的新任务表现；复用现有循环和评审，模型替换的结果与官方 Claude 分数分开。旧尝试/账目保留，正式入口 record_only/null cap 与 F.5 最终冻结边界延续。实现分工按 [当前工作流](../docs/subagent-workflow.md)，不操作 Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前按 [Go CHI 入口与独立包](changes/chi-go-evaluation-entry/proposal.md) 接续截止前的可运行包工作，固定契约、外部输入、角色工具和一次未用于调参的兼容任务；原版 Claude 与 F.5 最终配送仍暂停。先前 [两个新任务的固定条件基线](changes/provider-two-task-baseline/proposal.md) 保留为开发证据；旧尝试/账目、record_only/null cap 继续保留。实现分工按 [当前工作流](../docs/subagent-workflow.md)，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 
@@ -22,7 +22,7 @@
 | 11/11–11/13 | 最终材料审核并交付 | 包排除秘密/手册/开发账目，独立启动证据可查；材料可具体审阅，发布/私有发送按用户最终授权执行，保留交付记录 |
 | 11/14–11/15 | 缓冲 | 仅修阻塞运行、材料或交付的问题，避免引入未经验证的大改 |
 
-正式入口是当前关键交付缺口：`evaluation_entry.py live` 仍明确拒绝真实执行，G/H 只证明相应离线接点；本地 K 跑通不等于提交包已可运行。下一正式接入须核对现有模型/工具/凭据与官方入口契约，按独立规格实现与审核，不能只去掉暂停判断。复用现有镜像、锁和 SDK/PDF 卷，不默认重做已通过的 G/H 安装；运行平台或依赖确有变化时，补必要的针对性复现。
+正式交付分为技术入口和最终配送：R 新增 `go_chi_entry.py` 的独立包外部输入接点，原 `evaluation_entry.py live` 仍明确拒绝真实执行；本地 K 调度器、独立 runner 与完整官方 Harbor 配送分别验证。R 的真实尝试及限制只查审核状态和阶段报告，不能以 coding 探针或模型读取工具成功代替业务验收。复用现有镜像、锁和 SDK/PDF 卷，不默认重做已通过的 G/H 安装；运行平台或依赖确有变化时，补必要的针对性复现。
 
 用户新增 OpenCode Go 后，先按 [Go 接入规格](changes/opencode-go-provider/design.md)验证固定 coding 接点、独立 USD 用量与历史接续，再在正式入口变更中扩展可信任务契约。Go 对非编码 CHI/独立评审的用途支持、十一月隐私条款及提供方响应行为须分别核对，不能以 coding 探针代替。原约 50 CNY 的 API 规划不自动变成 Go 额度或重新充满；Go 固定订阅费、余额实扣及套餐消耗分别报告，不据实扣 0 宣称无限试题。
 
