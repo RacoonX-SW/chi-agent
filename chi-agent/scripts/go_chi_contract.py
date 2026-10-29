@@ -91,7 +91,7 @@ class ToolContract:
         """Validate all IDs and arguments before committing any batch record."""
         try:
             if (type(message) is not dict or message.get("role") != "assistant"
-                    or type(message.get("reasoning_content")) is not str
+                    or ("reasoning_content" in message and type(message["reasoning_content"]) is not str)
                     or message.get("content") is not None and type(message["content"]) is not str
                     or type(message.get("tool_calls")) is not list or not message["tool_calls"]):
                 raise ValueError

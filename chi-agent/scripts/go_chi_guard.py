@@ -124,9 +124,13 @@ class ChiGuard(httpx.AsyncBaseTransport):
                     raise GoFailure("chi_b_incomplete")
         elif purpose == "main" and choice.get("finish_reason") == "tool_calls":
             # Store exactly the assistant representation required for subsequent history.
-            clean = {"role": "assistant", "content": msg.get("content"),
-                     "reasoning_content": msg.get("reasoning_content"), "tool_calls": msg.get("tool_calls")}
+            clean = {"role": "assistant", "content": msg.get("content"), "tool_calls": msg.get("tool_calls")}
             try:
+                reasoning = msg.get("reasoning_content")
+                if reasoning is not None:
+                    if type(reasoning) is not str:
+                        raise ContractFailure("chi_reasoning_invalid")
+                    clean["reasoning_content"] = reasoning
                 if self.journal.run["kind"] == "coding_b":
                     calls = clean["tool_calls"]
                     records = self.contract.records

@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | S 正在按[有界规格](../openspec/changes/go-chi-batch-recovery/design.md)推进 Go CHI 有效混批恢复、显式账源迁移和可靠终态捕获；先固定两道新题、离线审核再真实验证。详细尝试集中在 [S 报告](go-chi-batch-recovery-review.md)。R 的一次 C 失败及缺原终态保留 |
+| 当前任务 | S 首候选独立离线/旧账迁移/真世界无 Key 捕获已通过，新 B 首个已结算响应因工具阶段缺可选 reasoning 被过严契约拒绝；四 C 未启动。正在按[兼容修订](../openspec/changes/go-chi-batch-recovery/design.md)离线修复、重固定/审核；全部尝试见 [S 报告](go-chi-batch-recovery-review.md)，R 原失败/终态缺口不改 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 上次独立审核候选 | R `5b60b3122bf8c689b47750c5681a7a5a188d8443`；关闭首候选 R1–R4，独立离线技术检查与新 B 通过，C 业务未通过。包/运行身份及证据只见 [R 审核](chi-go-evaluation-entry-review.md#返工候选的独立通过范围) |
 | 上次通过的实现提交 | R 同上 SHA 仅限技术接线/离线与 B，不代表 CHI 成功。P t013 当前开发检查已收束，Q coding 历史保留；official_reward=null，旧失败/claim/费用不变 |
@@ -14,9 +14,9 @@
 | 本地开发预算 | record_only/null cap 不变。R 本地 CHI 固定在旧 Go 账根的 chi-evaluation 子目录，运行全程审计/持旧 Q 锁；旧账原字节保留。最终已完整审计 CHI/Q 证据且 pending/halt=null，native K/review pending=null；未知用量阻断、零自动重试 |
 | 后续费用规划 | native 规划维持 P 后口径；Go 余额实扣、价目价值、套餐消耗分列 USD，订阅固定费另计，不混 CNY 或清零。累计及本轮金额仅见 [R 报告](chi-go-evaluation-entry-review.md#环境包与用量口径)，账户其他消费/余量未核清；不自动恢复 t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
-| 付费验证范围 | 用户批准 S 独立审核后最多 1 次新 B（≤6）、2 次 t012 开发回归及 2 道预先冻结新题各一次（各≤50，含确认子请求），总计≤206；同一候选，不按失败自动追加。Go 用途未获官方确认一项用户知悉并决定继续。t013/t019、Claude/付费临床评审暂停 |
+| 付费验证范围 | S 原 1B+四C 规格的首 B 已用 1 请求失败；按必要兼容修订另限修复候选一次 B≤6，仍仅两次 t012 和 t014/t017 各一次 C≤50，全轮≤207，第二 B 再失败则收束。先新候选独立审核/显式迁移，不自动重试。Go 用途未确认用户知悉；t013/t019、Claude/付费临床评审暂停 |
 | 正式提交前置 | F.2–F.4、G/H 历史离线范围保留；R 可独立导出并从外部输入运行，原 stock harness 不自动选用。完整 Harbor 类型/配送及 F.5 最终冻结仍未验证 |
-| 本轮验证 | S 尚在实现前冻结/开发，未预填通过、未调用新模型请求；前一轮 R 独立离线和新 B 技术范围保留，缺终态的原 C 不能补作。完整原始证据在忽略目录 |
+| 本轮验证 | S 首候选 `1f44ef564a5b4d8795b6f4fdd981cc78c5a68e01` 独立离线技术检查通过；一次 B 协议兼容失败、用量已知且完整审计 pending/halt=null，不代表业务通过。修复候选未定，尚无其 B/C。详细数值/身份只见 S 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
 | PR 与下一步 | [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)与 [PR #22](https://github.com/xsw932187210-cell/chi-agent/pull/22)均已核对合并。S 完成后推送新分支并建 base=main PR，由用户审核合并；主代理不 merge/auto-merge。十一月隐私人工复核，未声称官方支持非编码 CHI |
 | 未验证项 | Go 非编码 CHI/临床评审支持、十一月 ZDR、1M 上下文和精确上游快照/账单/长期缓存；P/O 稳定因果收益、未见迁移、最终批准/临床裁决/官方得分；完整 Harbor/F.5、CHI 源码身份迁移、OpenSpec CLI、真实硬取消/daemon 故障 |

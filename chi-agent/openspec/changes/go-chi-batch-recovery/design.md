@@ -49,6 +49,16 @@ PR #22 已实际核对合并，merge `575b6d1ae5d1f7944166e92a22ce33d3f9e46fc9`�
 
 ## 验收证据
 
+### S 首 B 后的有界兼容修订
+
+受审首候选的新 B 只有一个 HTTP 200 已结算请求，给出合法 `inspect_code({})`，但 message 没有 `reasoning_content`，被过严的工具响应契约判 `chi_tool_batch_invalid`（B 包装层又掩为 `chi_entry_failed`）；无工具执行、无 receipt、pending/halt=null。原尝试/费用/配置和归档不改写。Q 曾仅修 final 的可选 reasoning，此次证据明确是 tool 阶段，不能用旧 final 结论代替本次验证。
+
+这是提供方响应兼容故障。按用户已授权的必要实验与 Go 充分使用范围，本轮有限增加 **修复候选的至多一次新 B（≤6 请求）**，不增加/替换四次 C；全轮上限变为首 B 已用 1 + 新 B≤6 + 四 C≤200 = **207**，不是自动重试/无限运行。第二 B 再失败即收束，不追加第三 B。先实现、固定新候选、主代理独立审核/回放，再显式第二次迁移并取得新来源自己的 B；未运行的旧 C 配置保留并注明 superseded，不覆写。
+
+兼容只限字段缺失/null：原响应 wire 证据仍逐字保存；字段为字符串（包括空串）时保持精确回放约束；其他类型仍致命。对于没有推理文本的响应，按固定 SDK 实际序列化的 assistant 历史表示保留“无字段”，不伪造推理文本或填充空串，不改 HTTP 原响应。所有角色、content、ID、schema、参数、history、model/endpoint、budget/billing/未知阻断与旧 live 拒绝门禁继续。不能接受删除/替换既有推理、为原本无字段的历史注入推理、增删消息或伪造工具结果。
+
+同时让 B SDK 异常保留 `guard.error` 的具体安全码及主错误，不能覆盖旧记录或自动重发请求。离线必须覆盖 absent/null/empty/string、错误类型、原响应回放完整 SDK 工具往返、字段存在/不存在两种历史篡改及非法批次；本次补测只针对实际缺口，已通过的无关 G/H 或 C 不重做。新包/配置/身份另冻结，模型/公开提示/其余执行条件和三题输入不变。
+
 2026-10-29 开发前已在 Docker 执行选择：固定索引 SHA-256 `8751f9ae3132a861f389d85d66ba0cca5a52fddb17fe3e2ab4dc92f2804ccc91`，四个剩余兼容条目中按规则选定 `pa_t014_t014_o001_p01_new_referral_provider` 和 `pa_t017_t017_o001_p01_new_referral_provider`，均为 provider/new_referral/contract_v5、无输入 PDF。排除清单、选择器和输出保存在本轮忽略的 operator-audit/evidence；未读取标题、instruction excerpt 或 fixture 内容。即使失败也不替换这两题。
 
 独立审核必须覆盖：有效混批所有入口零执行/逐 ID 拒绝/自主改正、非法批次仍致命、单独确认及跨患者写入门禁、50/51 与确认共享、零重试/取消/未知阻断；旧 v1 真实账目副本及多次迁移、篡改/缺件/中断/并发/B 收据隔离；controller 缺依赖在创建资源和读取 Key 前拒绝、runner 失败也捕获/主错误不覆盖、清理与缺捕获真实限界；独立包原工作区不可见启动与最终归档身份。

@@ -60,7 +60,12 @@ async def run_coding_b(client, guard, tools):
                       model_settings=ModelSettings(max_tokens=1024, reasoning={"effort": "high"},
                           extra_body={"thinking": {"type": "enabled"}}, extra_headers={"User-Agent": "chi-agent"},
                           retry=ModelRetrySettings(max_retries=0)))
-        result = await Runner.run(agent, input=B_INSTRUCTION, max_turns=6)
+        try:
+            result = await Runner.run(agent, input=B_INSTRUCTION, max_turns=6)
+        except Exception:
+            if guard.error is not None:
+                raise GoFailure(guard.error) from None
+            raise
         if guard.error is not None or not isinstance(result.final_output, str) or not result.final_output.strip():
             raise GoFailure(guard.error or "chi_b_incomplete")
         if len(guard.contract.records) != 2 or guard.contract.records[-1]["result"] != "verification:pass":
