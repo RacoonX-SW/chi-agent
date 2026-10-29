@@ -52,3 +52,5 @@ GitHub核对PR #23 closed/merged，merge/latest origin/main=`25336ed774be934af1d
 代码在上述离线/故障/只读证据范围通过，尚无新来源的真实B/C，也未验证真实88秒确认在新配置下的结果、硬取消/daemon故障或完整计费恢复。旧主账identity不改为T；pending阻断来源迁移和模型调用。要恢复须取得可核验、可关联的完整费用来源，再制定独立结算/恢复方案；本轮没有实现或暗中启用人工回填/自动核销。
 
 最终Docker核对旧 **49230文件/30链接** 全部原字节不变，旧范围无新增/删除路径；Q/CHI全部归档/wire/工具/seal/receipt完整，主账仍SHA `0832f113ccb8dd5342f06e6ae211af3eaf87e9e9d8032d65d1c85d705e0aa55b`，pending仍为S第9请求。33冻结源文件和归档身份不变；两种原Key存在、没有准备运行Key文件；342个新文件/18086444 bytes扫描无配置秘密，原JSON原字节不变。完整输出为忽略的`evidence/final-audit.json`，最终上传另按显式源码/文档清单和patch扫描，不上传该JSON或原始轨迹。
+
+上传24份受审代码/合成测试/配置/职责文档，完整patch及路径秘密扫描通过；分支已推送。首次GitHub创建因连接中断未得到结果，先查询确认无open PR再补建，成功创建并附加base=main的[PR #24](https://github.com/xsw932187210-cell/chi-agent/pull/24)。这是GitHub传输重试，不是模型请求重试；由用户审核合并，未merge/auto-merge。文档提交和PR不替代上列c587b44源码验收身份。

@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | T用途等待/运行收尾/关联元数据/只读查账在[所述技术范围](go-chi-timeout-recovery-review.md)独立离线通过；官方Console/用户JSON仅部分费用证据，未清S未知占位、未恢复模型调用。待提交本轮PR由用户审核 |
+| 当前任务 | T用途等待/运行收尾/关联元数据/只读查账在[所述技术范围](go-chi-timeout-recovery-review.md)独立离线通过；官方Console/用户JSON仅部分费用证据，未清S未知占位、未恢复模型调用。[PR #24](https://github.com/xsw932187210-cell/chi-agent/pull/24)待用户审核合并 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 上次独立审核候选 | T `c587b446a54833393c1feb7deaeb3ac6fca47bfb`；用途超时、准入/收尾、dispatch和未结算历史/导出检查独立离线通过；范围/身份/证据只见[T报告](go-chi-timeout-recovery-review.md)，没有真实B/C或费用核销 |
 | 上次通过的实现提交 | T同上SHA仅限离线工程范围；S通过范围保留在[S报告](go-chi-batch-recovery-review.md)。P t013已收束，Q/R/S失败/claim/费用保留；official_reward=null |
@@ -18,7 +18,7 @@
 | 正式提交前置 | F.2–F.4、G/H 历史离线范围保留；R 可独立导出并从外部输入运行，原 stock harness 不自动选用。完整 Harbor 类型/配送及 F.5 最终冻结仍未验证 |
 | 本轮验证 | T固定候选独立全量/专项/SDK边界与实际包/归档通过；原旧历史/用户JSON只读核对缺项正确，所有旧文件/账内容原字节不变。详细数值/尝试/身份/限制只见T报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #23](https://github.com/xsw932187210-cell/chi-agent/pull/23)已核对合并；T即将推送并创建新base=main PR交用户审核，不merge/auto-merge。当前JSON缺完整response费用和legacy关联证据，不据此核销；后续先取得充分来源再定结算/恢复方案，十一月隐私仍人工复核 |
+| PR 与下一步 | [PR #23](https://github.com/xsw932187210-cell/chi-agent/pull/23)已核对合并；T已推送并创建base=main的[PR #24](https://github.com/xsw932187210-cell/chi-agent/pull/24)，交用户审核，未merge/auto-merge。当前JSON缺完整response费用和legacy关联证据，不据此核销；后续先取得充分来源再定结算/恢复方案，十一月隐私仍人工复核 |
 | 未验证项 | 当前未知请求的可信结算/恢复、真实混批恢复与 t014/t017 未见迁移；Go 非编码 CHI/临床评审支持、十一月 ZDR、1M、精确上游模型快照/账单/长期缓存；P/O 稳定因果收益、最终批准/临床裁决/官方得分；完整 Harbor/F.5、OpenSpec CLI、真实硬取消/daemon 故障 |
 | 真实运行 | S 首 B 失败保留，修复候选新 B 成功；首次 t012 在确认子请求超时，三 C 未运行，无人工代选/自动重试。Go 付费开发评审尚未切换。Q/native 历史保留，Claude 调用为零，official_reward=null |
 
