@@ -121,6 +121,49 @@ def audit_or_rebind(root: Path, expected_identity: str, expected_sha256: str,
         os.close(lock)
 
 
+def inspect_history(root: Path, expected_identity: str, expected_sha256: str) -> dict:
+    """Read-only audit under CHI lock; caller holds the independently audited Q lock."""
+    root = Path(root)
+    if any(type(x) is not str or not DIGEST.fullmatch(x) for x in (expected_identity, expected_sha256)):
+        raise GoFailure('chi_inspect_invalid')
+    _reject_symlink_ancestors(root, 'chi_path_invalid')
+    lock = os.open(root / '.lock', os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        path = root / 'chi-accounting.json'
+        raw = _read_regular_bounded(path, MAX_STATE_BYTES, 'chi_history_invalid')
+        if hashlib.sha256(raw).hexdigest() != expected_sha256: raise GoFailure('chi_inspect_hash_mismatch')
+        auditor = object.__new__(ChiJournal)
+        auditor.root, auditor.path, auditor.state = root, path, _state_object(path)
+        auditor._validate(expected_identity)
+        state = auditor.state
+        pending = state['pending']
+        result = {'status': 'inspected', 'execution_allowed': False, 'identity': expected_identity,
+                  'accounting_sha256': expected_sha256, 'pending': pending, 'halted': state['halted'],
+                  'usage': auditor.usage_totals(), 'missing': []}
+        for attempt in state['attempts']:
+            for item in attempt['requests']:
+                if item['status'] == 'settled':
+                    for field in ('charged_usd', 'billing_source', 'list_cost_usd', 'allowance_usd'):
+                        if item['billing'][field] is None and field not in result['missing']:
+                            result['missing'].append(field)
+        if pending is not None:
+            attempt = next(a for a in state['attempts'] if a['run'] == pending['run'])
+            request = attempt['requests'][pending['round'] - 1]
+            doc = verify_evidence(root, pending['run'], pending['round'], 'request', request['request_evidence_sha256'])
+            result['pending_request'] = {'purpose': request['purpose'], 'request_sha256': request['request_sha256'],
+                                         'dispatch': doc.get('dispatch'), 'run_status': attempt['status'], 'kind': attempt['kind'],
+                                         'body_bytes': len(doc['body_utf8'].encode('utf-8')) if doc.get('body_utf8') is not None else None}
+            if doc.get('dispatch') is None: result['missing'].append('dispatch_metadata')
+            if doc.get('body_utf8') is None: result['missing'].append('request_body_bytes')
+            if request['response_evidence_sha256'] is None: result['missing'].append('provider_response')
+            for field in ('charged_usd', 'billing_source', 'list_cost_usd', 'allowance_usd'):
+                if field not in result['missing']: result['missing'].append(field)
+        return result
+    finally:
+        os.close(lock)
+
+
 class ChiJournal:
     """Exclusive one-identity namespace with immutable attempt claims.
 
@@ -342,6 +385,9 @@ class ChiJournal:
                         raise ValueError
                     required = {"round", "purpose", "max_tokens", "request_sha256", "status",
                                 "request_evidence_sha256", "response_evidence_sha256", "diagnostic_evidence_sha256"}
+                    if 'dispatch_version' in item:
+                        required.add('dispatch_version')
+                        if item['dispatch_version'] != 'chi-go-dispatch-v1': raise ValueError
                     if item.get("status") == "settled":
                         required |= {"usage", "billing", "billing_error"}
                     if set(item) != required:
@@ -353,6 +399,16 @@ class ChiJournal:
                             or req.get("raw_sha256") != item["request_sha256"]): raise ValueError
                     if req.get("body_utf8") is not None and hashlib.sha256(req["body_utf8"].encode()).hexdigest() != req["raw_sha256"]:
                         raise ValueError
+                    if ('dispatch' in req) != ('dispatch_version' in item): raise ValueError
+                    if 'dispatch' in req:
+                        dispatch = req['dispatch']
+                        if (type(dispatch) is not dict or set(dispatch) != {'version', 'purpose', 'session_sha256', 'started_utc_ms', 'body_bytes'}
+                                or dispatch['version'] != 'chi-go-dispatch-v1' or dispatch['purpose'] != item['purpose']
+                                or type(dispatch['session_sha256']) is not str or not DIGEST.fullmatch(dispatch['session_sha256'])
+                                or type(dispatch['started_utc_ms']) is not int or dispatch['started_utc_ms'] <= 0
+                                or type(dispatch['body_bytes']) is not int or not 0 < dispatch['body_bytes'] <= 8 * 1024 * 1024
+                                or (req.get('body_utf8') is not None and dispatch['body_bytes'] != len(req['body_utf8'].encode()))):
+                            raise ValueError
                     expected_evidence.add((a["run"], f"{index:03d}-request.json"))
                     for kind in ("response", "diagnostic"):
                         ref = item[kind + "_evidence_sha256"]
@@ -524,7 +580,7 @@ class ChiJournal:
         except Exception:
             raise GoFailure("chi_evidence_persistence_failed") from None
 
-    def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = ()) -> None:
+    def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None) -> None:
         if self.state["pending"] is not None or self.state["halted"] is not None:
             raise GoFailure("chi_usage_unknown")
         if purpose not in {"main", "confirmation"} or type(raw) is not bytes:
@@ -535,13 +591,21 @@ class ChiJournal:
             raise GoFailure("chi_request_limit")
         if purpose == "confirmation" and sum(x["purpose"] == "confirmation" for x in self.run["requests"]) >= 2:
             raise GoFailure("chi_confirmation_limit")
+        if dispatch is not None and (type(dispatch) is not dict or set(dispatch) != {'version', 'purpose', 'session_sha256', 'started_utc_ms', 'body_bytes'}
+                or dispatch['version'] != 'chi-go-dispatch-v1' or dispatch['purpose'] != purpose
+                or type(dispatch['session_sha256']) is not str or not DIGEST.fullmatch(dispatch['session_sha256'])
+                or type(dispatch['started_utc_ms']) is not int or dispatch['started_utc_ms'] <= 0
+                or type(dispatch['body_bytes']) is not int or not 0 < dispatch['body_bytes'] <= 8 * 1024 * 1024
+                or dispatch['body_bytes'] != len(raw)):
+            raise GoFailure('chi_reservation_invalid')
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
         entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
                  "max_tokens": 1024 if self.run["kind"] == "coding_b" else 8192 if purpose == "main" else 32768,
                  "request_sha256": hashlib.sha256(raw).hexdigest(), "status": "pending",
                  "request_evidence_sha256": None, "response_evidence_sha256": None,
                  "diagnostic_evidence_sha256": None}
-        request_doc = envelope(raw, kind="request", secrets=secrets)
+        if dispatch is not None: entry['dispatch_version'] = 'chi-go-dispatch-v1'
+        request_doc = envelope(raw, kind="request", secrets=secrets, dispatch=dispatch)
         entry["request_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "request", request_doc)
         self.run["requests"].append(entry)
         self.state["pending"] = {"run": self.run["run"], "round": entry["round"]}

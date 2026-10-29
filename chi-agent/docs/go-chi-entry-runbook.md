@@ -16,6 +16,8 @@ Agent 可见资源只包括公开 instruction/工具参考、已授权的 manage
 
 自主任务的 SDK turns 和共享 provider 请求上限均为 50；患者确认最多两次，也消耗这 50 次。主请求输出上限 8192，确认 32768。可信剩余次数由程序根据已发送数生成，确认后刷新；工具调用次数不等于模型请求数。coding B 是独立固定探针合约，最多 6 次/1024 输出，不显示 50 次任务反馈，不作为临床业务成功证据。
 
+HTTP 连接/写入/连接池等待分别为 10/60/60 秒；主请求读取超时 60 秒，确认请求读取超时 360 秒。Guard 对完整发送与读取再施加主请求 120 秒、确认 420 秒绝对上限。B 的新请求只在开始后 180 秒内准入，C 为 900 秒；窗口内已发出的请求可以继续至其自身上限。控制器配置 `timeout_seconds` 的范围为 B 360–3600 秒、C 1380–3600 秒。超时不触发自动重试，未知用量仍阻断后续调用。
+
 工具响应的 `reasoning_content` 缺失或为 null 时，按 SDK 实际历史表示不附加该字段；字符串（包括空串）按原值回放，其他类型仍拒绝。原始 HTTP 响应证据保持不变，后续历史仍须与已验证结果严格一致。
 
 默认 evaluation 策略是 `record_only`、金额 cap=null；不继承本机开发期人民币限额。每 evaluation/task/attempt/run 有独占身份，失败也保留；不能换 run-id 绕过同一 attempt 或删除 pending/旧账重跑。未知用量、账源异常、持久化不明都阻止后续请求；已知用量先结算，再判断模型响应/业务是否有效。包/源码变化不能自动冒用旧 B 收据或覆盖旧记录。
@@ -91,6 +93,8 @@ python /package/scripts/go_chi_entry.py live \
 ## 显式本地账目接续
 
 候选包预检取得新运行身份后，在已审核旧账副本上先使用 `audit-history`，再用 `rebind-history`。两者都需要 `--bundle-sha256`、`--history-mode local`、`--local-q-root /prior-go`、`--output-root /prior-go/chi-evaluation`、`--expected-old-identity` 和 `--expected-accounting-sha256`；迁移另需 `--migration-reason`。新身份只能由所选包预检计算，不能作为任意 CLI 值传入。两者不读取 Key、不发模型请求；按 Q 再 CHI 顺序锁定并检查证据。迁移归档旧账原字节，保留旧 seal、receipt 和其他证据的原路径；中断标记或缺件需要人工调查，不应删除标记绕过。旧 B 收据不授权新身份，须取得该候选自己的 B。
+
+`inspect-history` 使用相同的本地根、期望旧身份与主账 SHA，可只读检查含 pending/halt 的历史；可选同时提供 `--provider-record` 和 `--provider-record-sha256` 检查 Console 导出。可读取的旧请求正文只输出字节数，并与导出的 content-length 核对；字节数一致不证明唯一关联。输出只报告验证状态、费用字段缺口及有限关联信息，不输出原账户、会话或地理信息。Console cost 保留原始意义，不能推算余额实扣、价目价值或套餐消耗；检查成功不解除 pending、授权运行或修改旧证据。
 
 ## 操作者单次调度
 

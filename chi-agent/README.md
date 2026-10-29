@@ -11,8 +11,8 @@
 | 环境、Python 版本目标与容器边界 | [Docker 工作流](docs/docker-workflow.md) |
 | 分支、PR 与上传范围 | [GitHub 工作流](docs/github-workflow.md) |
 | 教学方式、理解进度与下一学习点 | [学习约定](docs/learning-agreement.md) |
-| 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[Go CHI 混批恢复](openspec/changes/go-chi-batch-recovery/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
-| 验收契约与实现任务 | [Go CHI 接线设计](openspec/changes/chi-go-evaluation-entry/design.md)、[本轮设计](openspec/changes/go-chi-batch-recovery/design.md)与[任务](openspec/changes/go-chi-batch-recovery/tasks.md)、[历史验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md) |
+| 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[Go 确认超时修复](openspec/changes/go-chi-timeout-recovery/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
+| 验收契约与实现任务 | [Go CHI 接线设计](openspec/changes/chi-go-evaluation-entry/design.md)、[本轮设计](openspec/changes/go-chi-timeout-recovery/design.md)与[任务](openspec/changes/go-chi-timeout-recovery/tasks.md)、[历史验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md) |
 
 本页只维护运行方法与入口；阶段结果和详细证据集中到状态页及其链接的阶段报告。命令示例中的模型名称不表示已经可用或获准调用。
 

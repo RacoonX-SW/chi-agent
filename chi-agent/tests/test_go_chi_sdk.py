@@ -195,7 +195,11 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
             journal = ChiJournal(Path(directory), identity="a" * 64, evaluation="e", task="synthetic", attempt="a", run="b", kind="coding_b")
             holder = {}
             tools = coding_tools(lambda: holder["guard"])
-            guard = ChiGuard(journal, "synthetic-secret", "chi-" + "a" * 32, httpx.MockTransport(_offline_responder()),
+            lower = _offline_responder(); timeouts = []
+            def answer(request):
+                timeouts.append(dict(request.extensions['timeout']))
+                return lower(request)
+            guard = ChiGuard(journal, "synthetic-secret", "chi-" + "a" * 32, httpx.MockTransport(answer),
                              tools=[Converter.tool_to_openai(t) for t in tools], system=SYSTEM, instruction=INSTRUCTION,
                              claimed=lambda: False, confirmation=lambda: None)
             holder["guard"] = guard
@@ -205,6 +209,7 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
             try:
                 self.assertTrue(await run_coding_b(client, guard, tools))
                 self.assertEqual(len(journal.run["requests"]), 3)
+                self.assertEqual(timeouts, [{'connect': 10, 'read': 60, 'write': 60, 'pool': 60}] * 3)
                 journal.finish("complete")
             finally:
                 await client.close()

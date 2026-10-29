@@ -23,13 +23,14 @@ from evaluation_bundle import BundleFailure, _check_components, _read_regular_bo
 from go_chi_bundle import validate_bundle
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
+from go_chi_policy import TIME_POLICY
 from opencode_go_provider import GoFailure, INSTRUCTION, SYSTEM, load_profile
 
 CONFIG = {"schema": "chi-go-evaluation-entry-v1", "provider_profile_id": "opencode-go-deepseek-v4.1-flash-v1",
           "policy_mode": "record_only", "hard_cap_usd": None, "chi_max_requests": 50,
           "chi_max_output_tokens": 8192, "confirmation_max_requests": 2,
           "confirmation_max_output_tokens": 32768, "coding_b_max_requests": 6,
-          "coding_b_max_output_tokens": 1024, "automatic_retries": 0}
+          "coding_b_max_output_tokens": 1024, "automatic_retries": 0, "time_policy": TIME_POLICY}
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -171,7 +172,7 @@ def _handbook_digest(root: Path) -> str:
 
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("preflight", "coding-b", "live", "audit-history", "rebind-history"))
+    parser.add_argument("mode", choices=("preflight", "coding-b", "live", "audit-history", "rebind-history", "inspect-history"))
     parser.add_argument("--bundle-sha256", required=True)
     parser.add_argument("--evaluation-id")
     parser.add_argument("--task-id")
@@ -184,6 +185,8 @@ def _parser():
     parser.add_argument("--expected-old-identity")
     parser.add_argument("--expected-accounting-sha256")
     parser.add_argument("--migration-reason")
+    parser.add_argument("--provider-record", type=Path)
+    parser.add_argument("--provider-record-sha256")
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
     parser.add_argument("--mcp-url")
@@ -227,16 +230,27 @@ def main(argv=None):
             print(json.dumps({"status": "identity_verified", "identity_sha256": identity,
                               "identity": identity_detail, "official_reward": None}, sort_keys=True))
             return 0
-        if args.mode in {"audit-history", "rebind-history"}:
-            from go_chi_journal import audit_or_rebind
+        if args.mode in {"audit-history", "rebind-history", "inspect-history"}:
+            from go_chi_journal import audit_or_rebind, inspect_history
             if args.history_mode != "local" or args.local_q_root is None or args.output_root is None:
                 raise GoFailure("chi_local_history_required")
             qroot = _path(args.local_q_root, exists=True)
             root = _path(args.output_root, exists=True)
             if root != qroot / "chi-evaluation": raise GoFailure("chi_local_history_path_invalid")
             q = acquire_existing_history(qroot)
-            result = audit_or_rebind(root, args.expected_old_identity, args.expected_accounting_sha256,
-                                     identity if args.mode == "rebind-history" else None, args.migration_reason)
+            if args.mode == 'inspect-history':
+                result = inspect_history(root, args.expected_old_identity, args.expected_accounting_sha256)
+                if (args.provider_record is None) != (args.provider_record_sha256 is None):
+                    raise GoFailure('chi_provider_record_invalid')
+                if args.provider_record is not None:
+                    from go_chi_inspect import inspect_provider
+                    result['provider_record'] = inspect_provider(args.provider_record, args.provider_record_sha256,
+                                                                result.get('pending_request'))
+            else:
+                if args.provider_record is not None or args.provider_record_sha256 is not None:
+                    raise GoFailure('chi_provider_record_invalid')
+                result = audit_or_rebind(root, args.expected_old_identity, args.expected_accounting_sha256,
+                                         identity if args.mode == "rebind-history" else None, args.migration_reason)
             print(json.dumps({**result, "official_reward": None}, sort_keys=True))
             return 0
         if not all((args.evaluation_id, args.task_id, args.attempt_id, args.run_id, args.output_root,

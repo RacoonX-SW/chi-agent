@@ -144,9 +144,11 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             handbook, workspace = root / "handbook", root / "workspace"; handbook.mkdir(); workspace.mkdir()
             server = PatientServer("unused")
             calls = []
+            timeouts = []
             async def wire(request):
                 body = json.loads(request.content)
                 calls.append(body)
+                timeouts.append(dict(request.extensions['timeout']))
                 index = len(calls)
                 if "response_format" in body:
                     verdict = {"status": "unique_match", "selected_patient_id": "P1", "matches": ["P1"], "mismatches": [], "unknown": [],
@@ -170,6 +172,8 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                     server_factory=lambda _url: server)
                 self.assertEqual(len(calls), 5)
                 self.assertEqual(calls[3]["max_tokens"], 32768)
+                self.assertEqual([t['read'] for t in timeouts], [60, 60, 60, 360, 60])
+                self.assertTrue(all(t['connect'] == 10 and t['write'] == 60 and t['pool'] == 60 for t in timeouts))
                 self.assertIn("Already sent before this request: 4", calls[4]["messages"][0]["content"])
                 self.assertEqual([item["purpose"] for item in journal.run["requests"]], ["main", "main", "main", "confirmation", "main"])
                 self.assertTrue(any(e["event"] == "confirmation_result" for e in journal.run["patient_binding_events"]))

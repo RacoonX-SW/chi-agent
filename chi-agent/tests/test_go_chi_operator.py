@@ -50,6 +50,25 @@ class Client:
 
 @unittest.skipIf(operator is None, 'Docker SDK is provided by the controller image')
 class OperatorTests(unittest.TestCase):
+    def test_wait_bounds_rejected_before_resource_or_key(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            base = {'kind': 'b', 'run_id': 'run', 'evaluation_id': 'e', 'task_id': 'synthetic-coding-b', 'attempt_id': 'a',
+                'bundle_relative': 'bundle', 'bundle_sha256': 'd' * 64, 'runtime_identity': 'e' * 64,
+                'runner_image_id': 'sha256:' + 'a' * 64, 'world_image_id': 'sha256:' + 'b' * 64,
+                'resource_relative': None, 'resource_manifest_sha256': None, 'resource_identity_relative': None,
+                'resource_identity_sha256': None, 'output_relative': 'output/run', 'timeout_seconds': 359}
+            for kind, timeout in [('b', 359), ('b', 3601), ('c', 1379), ('c', 3601)]:
+                c = dict(base, kind=kind, timeout_seconds=timeout)
+                if kind == 'c':
+                    c.update(task_id='t', resource_relative='resource', resource_manifest_sha256='a'*64,
+                             resource_identity_relative='id', resource_identity_sha256='b'*64)
+                path = root / 'config.json'; path.write_text(json.dumps(c))
+                with patch.object(operator, '_docker') as docker, patch.object(operator, '_inside') as resource:
+                    with self.assertRaisesRegex(ValueError, 'timeout'):
+                        operator.main(['--config', str(path), '--config-sha256', hashlib.sha256(path.read_bytes()).hexdigest()])
+                    docker.assert_not_called(); resource.assert_not_called()
+
     def test_failed_preflight_creates_no_world_or_output(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -59,7 +78,7 @@ class OperatorTests(unittest.TestCase):
                 'bundle_relative': 'bundle', 'bundle_sha256': 'd' * 64, 'runtime_identity': 'e' * 64,
                 'runner_image_id': 'sha256:' + 'a' * 64, 'world_image_id': 'sha256:' + 'b' * 64,
                 'resource_relative': None, 'resource_manifest_sha256': None, 'resource_identity_relative': None,
-                'resource_identity_sha256': None, 'output_relative': 'output/run', 'timeout_seconds': 30}
+                'resource_identity_sha256': None, 'output_relative': 'output/run', 'timeout_seconds': 360}
             path = root / 'config.json'; path.write_text(json.dumps(config))
             client = Client(config['runtime_identity'])
             with patch.object(operator, 'ROOT', root), patch.object(operator, '_docker', return_value=client), \
@@ -86,7 +105,7 @@ class OperatorTests(unittest.TestCase):
                 'runner_image_id': 'sha256:' + 'a' * 64, 'world_image_id': 'sha256:' + 'b' * 64,
                 'resource_relative': 'resource', 'resource_manifest_sha256': hashlib.sha256(manifest.read_bytes()).hexdigest(),
                 'resource_identity_relative': 'identity.json', 'resource_identity_sha256': hashlib.sha256(resource_identity.read_bytes()).hexdigest(),
-                'output_relative': 'output/run', 'timeout_seconds': 30}
+                'output_relative': 'output/run', 'timeout_seconds': 1380}
             config_path = root / 'config.json'; config_path.write_text(json.dumps(config))
             config_hash = hashlib.sha256(config_path.read_bytes()).hexdigest()
             client = Client(config['runtime_identity']); phases = []

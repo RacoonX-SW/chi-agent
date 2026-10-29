@@ -96,6 +96,7 @@
 | 工作分支、push、PR 与 main 合并 | 已按任务分支/PR 方式交付，保留旧学习改动；具体分支、PR 和已审身份只查 REVIEW_STATE | 用户能解释 push 与 main 合并区别，并已操作合并 PR；不扩大为已掌握完整 Git 协作 |
 | 独立 Go CHI 包、固定实验与失败归因 | 已核对从外部输入、身份预检、SDK/Guard、MCP 到证据/结算的真实接线；本地调度与最终 Harbor 配送分别说明，证据见 [R 报告](../reviews/chi-go-evaluation-entry-review.md) | 已讲解一次运行可同时证明技术接线可用和业务未完成；用户参与用途/范围取舍，尚无新增源码复述或亲自运行证据 |
 | 混批恢复、账源迁移与全局终态证据 | 按 [S 规格](../openspec/changes/go-chi-batch-recovery/design.md)实现有效混批整体拒绝、显式账源接续和前后全局快照；又用真实 B 暴露的可选字段缺口说明协议兼容与业务决策的区别；证据见 [S 报告](../reviews/go-chi-batch-recovery-review.md) | 用户批准有界实验与必要兼容修复，已讲解选题冻结、目标过滤盲点和本地调度/独立包/最终配送的区别；没有新增用户独立复述或操作证据，不记为掌握 |
+| 客户端超时、服务端完成与对账证据 | 按[T规格](../openspec/changes/go-chi-timeout-recovery/design.md)修复用途等待与在途收尾，并检查官方Console导出；已讲解服务端完成、客户端收到决策、用量和各项费用完整性分别取证 | 用户提供官方JSON参与定位；未亲自改代码/运行或复述超时/对账链路，不据提供文件升级为掌握 |
 
 相关材料：
 
@@ -111,7 +112,7 @@
 
 ## 下一次从哪里继续
 
-先从 [S 混批恢复规格](../openspec/changes/go-chi-batch-recovery/design.md) 和 [S 报告](../reviews/go-chi-batch-recovery-review.md)接续：结合确认超时，区分账目结构完整、用量完整与业务完成，理解为何可信对账是恢复实验的前置；再看完整批校验、逐 ID 拒绝、下一轮观察与预算反馈的关系，来源迁移怎样保留旧失败/费用/收据并要求新 B，以及 success/failure 都应获得的原世界终态及全局业务快照。固定同一候选的重复观察和预先冻结新题提供不同证据，不能拿一次通过推断通用收益。
+先从[T确认超时设计](../openspec/changes/go-chi-timeout-recovery/design.md)和[T报告](../reviews/go-chi-timeout-recovery-review.md)接续：将HTTP读取间隔、单请求总时限、运行新请求准入窗口和控制器收尾时间串起来；结合官方导出解释为什么服务端完成不等于客户端收到决策、Console cost不等于三项响应费用齐全。再回读[S规格](../openspec/changes/go-chi-batch-recovery/design.md)和[S报告](../reviews/go-chi-batch-recovery-review.md)中的混批反馈、来源迁移与完整世界证据。固定同一候选重复观察和预先冻结新题提供不同证据，不能拿一次通过推断通用收益。
 
 基础调用链仍可沿 [R 正式接线规格](../openspec/changes/chi-go-evaluation-entry/design.md) 和 [R 报告](../reviews/chi-go-evaluation-entry-review.md)回读：区分本地 K 调度器、可独立导出并接受外部输入的参赛 runner，以及 F.5 最终官方配送。沿 `go_chi_entry.main()` / `_identity()` → `ChiJournal` → `run_chi()` / `BudgetModel` → `ChiGuard.handle_async_request()` → `ToolContract` / `MCPBridge` / `local_tools()` → wire/tool evidence 与 seal 跟踪一次输入到结算。预检在 Key 读取前，实际发送数来自账本而非模型估计；coding B 与任务的上限分别固定。结合 R 混批中止和操作者漏捕原终态，区分模型调用错误、工程捕获故障与无法证明的业务结果；t012 已成为开发材料。
 

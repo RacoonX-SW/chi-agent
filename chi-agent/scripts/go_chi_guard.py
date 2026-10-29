@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 import time
@@ -13,6 +14,7 @@ from opencode_go_provider import (GoFailure, _contains_secret, _unique,
                                   SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
                                   SCHEMAS as B_SCHEMAS, DESCRIPTIONS as B_DESCRIPTIONS)
 from b_provider_transport import GuardedTransport
+from go_chi_policy import TIME_POLICY
 
 
 class ChiGuard(httpx.AsyncBaseTransport):
@@ -23,7 +25,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
     confirmation context only after verifying patient selection evidence.
     """
     def __init__(self, journal, secret, session, lower, *, tools, system, instruction,
-                 claimed, confirmation, before_batch=None, observed_request=None):
+                 claimed, confirmation, before_batch=None, observed_request=None, run_started=None):
         if (type(secret) is not str or not secret.strip() or type(session) is not str
                 or not re.fullmatch(r"chi-[0-9a-f]{32}", session)
                 or type(system) is not str or type(instruction) is not str
@@ -40,6 +42,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self.before_batch = before_batch
         self.observed_request = observed_request
         self.error = None
+        self.run_started = time.monotonic() if run_started is None else run_started
         if journal.run["kind"] == "coding_b":
             expected = [{"type": "function", "function": {"name": name, "description": B_DESCRIPTIONS[name],
                         "parameters": B_SCHEMAS[name], "strict": False}} for name in ("inspect_code", "verify_patch")]
@@ -155,15 +158,25 @@ class ChiGuard(httpx.AsyncBaseTransport):
         try:
             raw = request.content
             purpose = self._validate(request, raw)
-            self.journal.reserve(raw, purpose, secrets=(self.secret, self.session))
+            limit = TIME_POLICY['b_admission_seconds' if self.journal.run['kind'] == 'coding_b' else 'chi_admission_seconds']
+            if time.monotonic() - self.run_started >= limit:
+                raise GoFailure('chi_run_time_limit')
+            dispatch = {'version': 'chi-go-dispatch-v1', 'purpose': purpose,
+                        'session_sha256': hashlib.sha256(self.session.encode()).hexdigest(),
+                        'started_utc_ms': time.time_ns() // 1000000, 'body_bytes': len(raw)}
+            self.journal.reserve(raw, purpose, secrets=(self.secret, self.session), dispatch=dispatch)
         except Exception as exc:
             self.error = exc.code if isinstance(exc, GoFailure) else "chi_persistence_failed"
             raise GoFailure(self.error) from None
         start = time.monotonic()
         persistence_failed = False
         try:
-            response = await self.lower.handle_async_request(request)
-            raw_response = await response.aread()
+            request.extensions['timeout'] = {'connect': TIME_POLICY['connect_seconds'],
+                'read': TIME_POLICY['confirmation_read_seconds' if purpose == 'confirmation' else 'main_read_seconds'],
+                'write': TIME_POLICY['write_seconds'], 'pool': TIME_POLICY['pool_seconds']}
+            async with asyncio.timeout(TIME_POLICY['confirmation_io_seconds' if purpose == 'confirmation' else 'main_io_seconds']):
+                response = await self.lower.handle_async_request(request)
+                raw_response = await response.aread()
             payload = None
             if len(raw_response) <= 4 * 1024 * 1024:
                 try:
@@ -217,7 +230,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
         except BaseException as exc:
             self.error = ("chi_cancelled" if isinstance(exc, asyncio.CancelledError) else
                           exc.code if isinstance(exc, GoFailure) else
-                          "chi_timeout" if isinstance(exc, httpx.TimeoutException) else
+                          "chi_timeout" if isinstance(exc, (httpx.TimeoutException, TimeoutError)) else
                           "chi_transport_error" if isinstance(exc, httpx.RequestError) else "chi_transport_unknown")
             if not persistence_failed:
                 try:
