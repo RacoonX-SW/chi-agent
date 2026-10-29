@@ -1,6 +1,6 @@
-# T：Go 确认超时与未结算证据检查
+# T：Go 确认超时、费用记录与有界恢复
 
-日期：2026-10-30（Asia/Shanghai）。按[有界规格](../openspec/changes/go-chi-timeout-recovery/design.md)完成独立离线修复验收；旧未知未核销，未恢复真实调用。
+日期：2026-10-30（Asia/Shanghai）。按[有界规格](../openspec/changes/go-chi-timeout-recovery/design.md)保留初始离线修复事实，并在 PR #24 中接续用户授权的费用反馈与独立恢复。原超时始终未结算，不改写旧失败；本报告按实际先后分别记录两部分。
 
 ## 基线与证据
 
@@ -43,13 +43,13 @@ GitHub核对PR #23 closed/merged，merge/latest origin/main=`25336ed774be934af1d
 
 最终主代理审计首命令漏挂现有SDK卷，入口import因缺httpx失败，尚未读取账；补回只读SDK/PDF后继续同一候选核验，原日志保留。浏览器的未派发读取/空剪贴板解析和下载事件超时见前文；真实模型/业务工具均未因这些尝试调用或重试。
 
-## 用量、交付与限制
+## 初始离线部分的用量、交付与限制
 
-本轮 **真实模型请求0、业务工具调用0、Claude0**；新增余额实扣/价目价值/套餐消耗均为0 USD。旧Q/R/S仍为26发起、25已结算、1未结算；已知费用及历史CNY沿用S原账，不与Console观察cost合并、不把未知尾项改0。开发/审核Codex自身token账单未核实，不并入Go运行账。
+初始离线部分 **真实模型请求0、业务工具调用0、Claude0**；新增余额实扣/价目价值/套餐消耗均为0 USD。旧Q/R/S当时为26发起、25已结算、1未结算；已知费用及历史CNY沿用S原账，不与Console观察cost合并、不把未知尾项改0。开发/审核Codex自身token账单未核实，不并入Go运行账。后续反馈授权及新增真实运行见下一节。
 
 独立归档 `runs/go-chi-timeout-recovery-root/exports/chi-go-entry-c587b44-bundle.tar.gz`，**125888 bytes**，SHA-256 **`e05f4736977b27ad8260ae12cc87ea245c7c1fb94f23e576c76f566ada25d4ef`**，含31文件+manifest和必要空目录；不含provider原JSON、任务、手册、vendor、Key、控制器或轨迹。外部依赖/公开输入/角色MCP仍由调用方提供，完整Harbor/F.5与官方评分没有验证。
 
-代码在上述离线/故障/只读证据范围通过，尚无新来源的真实B/C，也未验证真实88秒确认在新配置下的结果、硬取消/daemon故障或完整计费恢复。旧主账identity不改为T；pending阻断来源迁移和模型调用。要恢复须取得可核验、可关联的完整费用来源，再制定独立结算/恢复方案；本轮没有实现或暗中启用人工回填/自动核销。
+c587b44当时仅在上述离线/故障/只读证据范围通过，尚无新来源的真实B/C，也未验证真实长确认在新配置下的结果、硬取消/daemon故障或完整计费恢复。初始部分不改旧主账identity，pending继续阻断迁移和调用，没有人工回填或自动核销。之后用户另行批准的留档继续方案及新候选结果见下节，不能据后续成功改写这段历史。
 
 最终Docker核对旧 **49230文件/30链接** 全部原字节不变，旧范围无新增/删除路径；Q/CHI全部归档/wire/工具/seal/receipt完整，主账仍SHA `0832f113ccb8dd5342f06e6ae211af3eaf87e9e9d8032d65d1c85d705e0aa55b`，pending仍为S第9请求。33冻结源文件和归档身份不变；两种原Key存在、没有准备运行Key文件；342个新文件/18086444 bytes扫描无配置秘密，原JSON原字节不变。完整输出为忽略的`evidence/final-audit.json`，最终上传另按显式源码/文档清单和patch扫描，不上传该JSON或原始轨迹。
 
@@ -60,3 +60,68 @@ GitHub核对PR #23 closed/merged，merge/latest origin/main=`25336ed774be934af1d
 用户明确要求充分利用Go订阅推进开发/实验，不因金额或费用精度缺项反复暂停。PR #24实际核对仍open/unmerged，在原分支继续反馈修订；原c587b44离线通过与当时零真实调用事实保留。主代理将新版费用策略与旧严格策略分开，保持旧Q/native源码/账、Extra Usage关闭和零自动重试。
 
 另因用户最初要求未知用量全局阻断，主代理只就“已有官方后台tokens但未完整响应的这次旧超时能否留档继续”澄清，用户明确选择**允许留档后继续新试次**。规格据此只授权一次精确目标的未结算留档：不settle、不改旧失败/wire/seal/费用、不重发旧请求；后续采用新候选、新B、fresh world，固定最多1B+1次t012+原冻结t014/t017各一次，总请求上限156。实际实施/独立复验及运行结果在本节接续，不预填通过。
+
+### 反馈候选、费用策略和独立审核
+
+唯一Terra/high实现者复用原SDK/guard/journal，完成后停写；主代理按差异审核，要求补强留档前快照的v1字段、原pending集合与既有留档前缀一致性，以及warning仅按新attempt策略计算。实现者修正后固定 **`721b14e17e37917d27f333d7aac6aaedfa99b9ad`**，原Q/native源码及旧attempt契约保持原样。
+
+新 `FEE_POLICY=go-chi-record-incomplete-fees-v1` 同时绑定profile/包配置和每个新attempt的launch。`ChiJournal.settle()`先验证tokens，再由`_fee_decision()`保留原billing_error并单独决定是否停止。缺金额/source留null及不完整warning；明确非Go来源或余额实扣仍停止，非法数值/类型/token冲突仍拒绝。费用缺项与结果/token未知分别处理，不自动回退或重试。
+
+实现者Docker自测：首轮28 passed/17 subtests，随后31/20、33/28；全量专项两次均110 passed/3 skipped/44 subtests，控制器4项，主审反馈修复后36 passed/32 subtests（0.42秒）。这些是开发检查，不替代下列主代理独立复验。
+
+主代理从候选Git archive提取独立源码，在无凭据、禁网、只读源码/SDK/PDF/vendor和隔离data/runs的Python3.12 Docker内验证：**440 passed、3 skipped、191 subtests（19.24秒）**，另controller 4项（0.004秒）。完整真实旧历史只读挂载，在临时副本上验证5条链：精确旧事件留档后所有旧attempt/文件不变、重复留档拒绝、跨来源不能复用旧B、真实SDK合成B的3次缺费用响应仍完成并保留null、随后新的带dispatch未知仍阻断。副本测试真实模型调用0，不能作业务能力证据。
+
+新包31文件，manifest **`09fdf7008949b9babf90b9848e5d11c0d90d59466958a81d5a9daa375a037c62`**，运行身份 **`0cd78f67750c313aa96ed45e6f6f986561d47e2b7ca2817ce56a46e080cd5f46`**；SDK/PDF/vendor身份全部与初始T相同。33个运行/操作者源hash、4个配置及序列固定在`financial-feedback/evidence/frozen-candidate.json`。归档`chi-go-entry-721b14e-bundle.tar.gz`为129,227 bytes，SHA **`c54adc01f6d18e9b3c9fb6c39600a4e7c6ca50afac6a6c242a6f9d08d00263a5`**，实际解包并在原源码不可见的挂载下通过独立预检；不是完整Harbor/F.5配送验收。
+
+### 实际留档、迁移与调用前检查
+
+费用反馈前基线49,545文件/30链接。对唯一旧`s-go-v2-c-t012-1-20261029-001`第9请求执行一次`acknowledge-unsettled`；事件hash为`aa598c488c24fccb8b43157eb958c0f4124ca6503ed408643a4ec1c56f1bcdce`。原主账`0832f113ccb8dd5342f06e6ae211af3eaf87e9e9d8032d65d1c85d705e0aa55b`按原字节归档，用户原JSON旁证保留原字节，原5个attempt及失败/seal/wire不变。留档后的primary为`ea23d9a6dbff9f8f50f931a2d81f761e790a55a0969417875ee7b3c3c08e0ed7`，pending/halt=null；独立逐字节验证其余49,544文件/30链接不变。账目中旧请求仍pending未结算，汇总仍有1个历史未知，未作唯一提供方关联或费用回填。
+
+然后用上述留档后hash执行一次显式`rebind-history`，原来源`91f0f382ce79235b1174c7322e8d1f3804d629d23816566f471f4f2ed6cf2eeb`迁至新身份，新增第3次来源归档。调用前检查首次Docker命令漏挂SDK卷，导入httpx失败，真实请求0；保留`prepaid-no-sdk.log`，补挂既有只读卷后检查通过，没有安装或修改依赖。Key只检查Go/native均存在，临时0600文件仅含Go Key，未输出值。此为操作者启动命令错误，不是模型业务决策错误。
+
+所有本节本地证据根为忽略的`runs/go-chi-timeout-recovery-root/financial-feedback/`；`operator-audit/`保存操作者脚本/固定配置，`evidence/candidate-1/`保存独立验证及运行审计，`actual/`保存原始终态和日志。不上传原JSON、真实轨迹、隐藏检查或受限包。
+
+### 固定条件下的全部真实试次
+
+模型固定`deepseek-v4.1-flash`，SDK base URL为`https://opencode.ai/inference/go/openai/v1`，无`[1m]`；thinking/high、固定SDK/PDF/vendor/镜像和公开提示不变。B为6次/1024，C主/确认共享50次、确认最多2次、主输出8192/确认32768，零自动重试及回退。资源继续使用S提前固定的dataset revision与三个task/hash；t012是已见开发回归，t014/t017在S按兼容元数据选定后未运行，本次各只运行一次，未因结果换题或改候选。四份新配置在所有真实请求前冻结，依次新attempt/fresh world执行，不恢复旧S配置。
+
+run前缀均为`t-go-fee-`，后缀均为`-20261030-001`：
+
+| run中段 | 结果 | 模型请求（主/确认） | 工具开始/返回/拒绝 | 控制器耗时秒 | 适用开发检查 |
+| --- | --- | --- | --- | --- | --- |
+| b | complete，当前来源B收据有效 | 3（3/0） | 2/2/0 | 6.574 | inspect_code → verify_patch → final |
+| c-t012 | complete，claim_done=true | 23（22/1） | 46/45/1 | 452.138 | 8/8通过，1项不适用 |
+| c-t014 | complete，claim_done=true | 28（26/2） | 41/38/3 | 624.888 | 8/8通过，1项不适用 |
+| c-t017 | complete，claim_done=true | 29（28/1） | 34/32/2 | 379.695 | 9/9通过 |
+
+合计**83次真实OpenCode模型请求，全部已结算tokens，无新增未知；123次工具开始、117返回、6拒绝、0 failed/returned_error**。四次控制器耗时合计1463.295秒（约24分23秒，含各自准备/捕获/清理，不是全部开发时间）。本次无失败B/C、无重跑、未挪用剩余额度；各请求usage/费用/诊断与响应耗时保存在`actual-<label>.json`，不是按整数百分比估计用量。
+
+工具开始次数完整汇总：`auth.check_status=5`、`auth.finalize_provider_determination=1`、`auth.submit_authorization=3`、`cases.create_from_order=3`、`cases.get_case=2`、`cases.list_cases=3`、`chart.get_patient_chart_by_patient=21`、`chart.list_candidate_orders=1`、`chart.search_patients=5`、`docs.create_submission_bundle=3`、`docs.list_case_documents=3`、`docs.upload_evidence=3`、`forms.list_required_forms=2`、`forms.save_form_response=3`、`inbox.list_messages=5`、`people.list_ordering_providers=3`；本地`claim_done=3`、`confirm-patient=9`、`fs-edit=1`、`fs-list=13`、`fs-read=25`、`fs-write=3`、`read-patient-observation=1`；B的`inspect_code=1`、`verify_patch=1`。逐run分布和原结果hash保留在独立audit JSON/工具证据，模型并未收到操作者隐藏检查。
+
+拒绝全部保留：t012一次、t014三次、t017一次患者确认返回`selection_evidence_unverified`；t017另一次公开观察工具返回`observation_unavailable`。5次选择依据拒绝未发确认provider请求，模型继续读取公开材料后自行选择下一动作；没有人工代选、删除拒绝或HTTP自动重试。9次确认工具调用只有4次实际确认请求，四次响应耗时依序为**80.479、70.457、76.758、55.537秒**。前三次均超过原60秒read并在新界限内返回，是实际长等待恢复证据，不能推断所有未来请求必然成功。
+
+三题原世界初始provider均2202条/payer0条；结束后t012为2227/2、t014为2224/2、t017为2228/2。独立对全部两侧资源逐条语义比对，变化分别27、24、28条，均能关联目标患者，无非目标、归属不明或混合变更；workspace内容与审计轨迹另由工具证据保留，不把资源计数单独当作充分证明。三题target_case均`submitted`，payer intake均`in_progress`，提交包/字段/服务地点等适用程序检查通过。所有初末捕获/manifest/resource hash、runner静止、容器和网络清理均独立核对，无capture/cleanup/primary error。
+
+### 逐试次用量、费用与历史保留
+
+下表是Go响应给出的三种独立USD口径，不能相加；余额实扣为这批已收到响应的字段值，不是完整账户对账。订阅固定费另计。
+
+| 试次 | 输入tokens累计 | 输出tokens累计 | 余额实扣 USD | 价目价值 USD | 套餐消耗 USD |
+| --- | --- | --- | --- | --- | --- |
+| B | 1,360 | 106 | 0 | 0.00015470 | 0.00011603 |
+| t012 | 6,646,790 | 23,974 | 0 | 1.00989762 | 0.75742325 |
+| t014 | 7,818,635 | 35,236 | 0 | 1.18889414 | 0.89167062 |
+| t017 | 6,273,269 | 28,572 | 0 | 0.93976913 | 0.70482687 |
+| 本次合计 | **20,740,054** | **87,888** | **0** | **3.13871559** | **2.35403677** |
+
+这批真实响应费用字段均齐全，warning=0；缺金额仍可继续已由真实SDK的合成3请求B验证，未冒充本次真实服务发生过缺项。累计输入是多次上下文重复发送之和，三个C的单请求最大输入分别431,634、497,241、363,719 tokens；**没有百万token上下文实测**。
+
+Q/R/S/T全部保留后累计109发起、108已结算、1旧未结算；已知输入21,788,027/output93,970，已知余额实扣0、价目价值3.29880808、套餐消耗2.47410616 USD，**三项完整性均false**，未知尾项仍在，不填零或把Console cost并入。旧native CNY历史全部原字节不变，不与USD相加。
+
+最终实际主账SHA **`3814a9452869ef36e5be93c3fdc051348be6909741be4125c02e4181630bb362`**：9个attempt、3个来源转换，active pending/halt=null，唯一旧S第9请求仍未结算且有显式留档链。最终逐字节核对其余49,544旧文件/30链接无变化，原5个attempt及旧封存/证据/账归档不变；没有清零或另建历史根。33冻结源hash、4配置、独立包及解包预检身份不变；全部owned容器/网络已清理，临时单Go Key文件已删除，两种原Key仍存在。833个新文件/143,100,226 bytes扫描无配置秘密，完整证据为`evidence/final-audit.json`及`retention-final.json`。
+
+### 当前验收结论与交付边界
+
+**721b14e在本轮工程修复、新B及三次provider开发任务的适用检查范围通过**；原失败、拒绝、claim、费用及旧未知均保留。两次固定未见题提供有限迁移样本，尚无重复性统计或全赛道泛化结论。三题`submitted/in_progress`与部分程序检查不等于临床批准或官方评分；Claude和Go付费临床评审未调用，official_reward=null。
+
+独立包可在原源码目录不可见时预检/启动，正式角色输入已由实际C执行验证；本地操作者不是官方提交包的一部分。原stock harness不会自动选择自有适配器，完整Harbor类型/配送、F.5最终冻结继续暂停。Go非编码用途及十一月隐私支持仍未获官方明确确认，用户已知悉并授权当前开发使用；不能写成官方用途或十一月ZDR已确认。t013不重跑、t019例行付费复测不恢复，没有程序日历门禁、后台等待/唤醒或Antigravity操作。

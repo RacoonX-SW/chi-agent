@@ -112,7 +112,7 @@
 
 ## 下一次从哪里继续
 
-先从[T确认超时设计](../openspec/changes/go-chi-timeout-recovery/design.md)和[T报告](../reviews/go-chi-timeout-recovery-review.md)接续：将HTTP读取间隔、单请求总时限、运行新请求准入窗口和控制器收尾时间串起来；结合官方导出解释为什么服务端完成不等于客户端收到决策、Console cost不等于三项响应费用齐全。再回读[S规格](../openspec/changes/go-chi-batch-recovery/design.md)和[S报告](../reviews/go-chi-batch-recovery-review.md)中的混批反馈、来源迁移与完整世界证据。固定同一候选重复观察和预先冻结新题提供不同证据，不能拿一次通过推断通用收益。
+先从[T设计](../openspec/changes/go-chi-timeout-recovery/design.md)和[T报告](../reviews/go-chi-timeout-recovery-review.md#pr费用反馈修订2026-10-30)接续：沿`go_chi_entry.main()` → `_identity()`/Q→CHI锁 → 留档或来源迁移/新B → `run_chi()`/`ChiGuard` → `ChiJournal.settle()`讲清生命周期。将HTTP读取间隔、单请求总时限、运行准入与控制器收尾串起来，再看费用warning和旧未知留档为何不等于结算成功。结合固定回归/未见题及全量资源核对，解释工程恢复、业务提交和临床/官方评分各自证明什么。下一步区分本地操作者与外部runner包、stock harness选择及完整配送；开发范围只按唯一审核状态接续。S混批/终态证据按需回读，固定一次未见题成功不升级为统计泛化。
 
 基础调用链仍可沿 [R 正式接线规格](../openspec/changes/chi-go-evaluation-entry/design.md) 和 [R 报告](../reviews/chi-go-evaluation-entry-review.md)回读：区分本地 K 调度器、可独立导出并接受外部输入的参赛 runner，以及 F.5 最终官方配送。沿 `go_chi_entry.main()` / `_identity()` → `ChiJournal` → `run_chi()` / `BudgetModel` → `ChiGuard.handle_async_request()` → `ToolContract` / `MCPBridge` / `local_tools()` → wire/tool evidence 与 seal 跟踪一次输入到结算。预检在 Key 读取前，实际发送数来自账本而非模型估计；coding B 与任务的上限分别固定。结合 R 混批中止和操作者漏捕原终态，区分模型调用错误、工程捕获故障与无法证明的业务结果；t012 已成为开发材料。
 
@@ -616,6 +616,9 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 查账链：包`_identity()` → 本地Q锁 → `inspect_history()`的CHI锁/历史hash/全证据审计 → `inspect_provider()`的单条导出检查。legacy有原文时可核对bytes，无会话元数据时不事后补写；新dispatch存会话hash而非原值。hash保护文件完整性，不等于提供方认证或唯一请求证明。CLI检查完成、费用齐全、允许执行要分别判断。
 - 审核取舍：独立审核补出了标识一致性、legacy尺寸、halt缺项提示和reserve范围的一致性边界；合成SDK与完整历史副本只验证工程行为，真实旧历史/导出只读检查也不能替代新候选的真实B/C。详细结果只在[T报告](../reviews/go-chi-timeout-recovery-review.md)，用户无新增源码复述/亲自运行证据，继续记已讲解、不默认测验。
 - 用户最新取舍：Go订阅优先服务开发和实验，金额及精确费用缺项不作为反复停工的门槛；用户又明确选择对当前有后台旁证的旧超时保留失败/未结算并显式留档后，允许新独立试次继续。这改变了后续准入政策，不等于原请求变成功或旧费用可填零。后续仍按固定任务/候选/请求上限验证，旧证据和未结算完整性要如实展示；用户作了范围取舍，尚无新增代码/运行实践证据。
+- 费用与准入分开：新包的`FEE_POLICY`写进profile和attempt.launch，`settle()`先验证tokens，再由`_fee_decision()`同时返回原费用缺项信息和是否停止。缺精确金额可以留下null继续，旧attempt仍重放旧策略；明确非Go扣费或异常数据仍停止。这样版本化的是以后怎样执行，不是事后把旧失败改成新策略下的成功。
+- 留档与结算分开：`acknowledge-unsettled`持Q→CHI锁，核对旧主账和精确请求hash，保存原账/提供方原文件/事件链，再解除该事件的全局准入占位。旧attempt中的请求仍pending未结算；每次完整审计都检查留档前缀、seal、wire及来源转换。新来源必须迁移并重新取得B，新请求未知仍停。副本合成验证的是这些工程边界，真实B/C才检验候选能否在官方任务世界运行。
+- 固定实验条件：恢复前固定候选、资源、模型、共享请求限额及一次性的任务顺序；同一候选在开发回归和此前冻结未见题上留下成功或失败，才能讨论可迁移性。确定性部分检查与临床裁决/官方得分继续分开，不在trial内把隐藏检查反馈给Agent。实际结果与耗时只在T报告维护，不把代理完成运行升级为用户实践证据。
 
 ## 新对话的交接提示
 

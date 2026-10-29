@@ -455,9 +455,13 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 固定时间策略随包验证：普通/B请求 HTTP read60秒、确认read360秒，单请求I/O总时限分别120/420秒；connect10、write/pool60秒。新请求准入窗口为B180秒、C900秒，窗口内发出的请求可有界完成；调度配置的runner等待必须为B360–3600秒、C1380–3600秒。时间按进程单调时钟计算，与提供方避峰的日历规则无关。
 
-本地继续开发使用 `--history-mode local --local-q-root /prior-go --output-root /prior-go/chi-evaluation`，审计并持锁既有 Go 历史，新的 CHI 状态固定在子目录。外部独立 evaluation 使用显式 `external` 模式；这不代表账户此前消费为零。record_only/null cap、三项 USD 分列、未知阻断和零自动重试保持；旧 CNY 不与 USD 相加。源码变更后先离线审核、导出新包，再使用包内 `audit-history` / `rebind-history` 明确传入旧身份与旧主账 SHA-256；旧账原字节归档，旧 attempt/失败/费用/证据/收据保留，必须为新候选取得自己的 B。中断标记、缺件或未知用量会阻断，不能另建账根绕过。精确命令见 runbook。
+本地继续开发使用 `--history-mode local --local-q-root /prior-go --output-root /prior-go/chi-evaluation`，审计并持锁既有 Go 历史，新的 CHI 状态固定在子目录。外部独立 evaluation 使用显式 `external` 模式；这不代表账户此前消费为零。record_only/null cap、三项 USD 分列和零自动重试保持；旧 CNY 不与 USD 相加。新 CHI attempt 固定 `fee_policy=go-chi-record-incomplete-fees-v1`：可信 tokens 齐全而费用缺项时，保留 null、完整性标记及 warning，继续运行；异常数据、明确非 Go 来源或余额实扣仍停止。旧 Q/native 及旧 attempt 按原契约审计，不改写为新策略。
+
+源码变更后先离线审核、导出新包，再使用包内 `audit-history` / `rebind-history` 明确传入旧身份与旧主账 SHA-256；旧账原字节归档，旧 attempt/失败/费用/证据/收据保留，必须为新候选取得自己的 B。中断标记、证据缺件或新的结果/token 未知仍阻断，不能另建账根绕过。精确命令见 runbook。
 
 遇到未结算历史，使用包内 `inspect-history` 并传同样的历史模式、路径、预期旧identity/主账SHA；它完整核验合法pending/halt并报告缺件，不读Key。可加 `--provider-record /provider-source/request.json --provider-record-sha256 <SHA>` 检查官方Console单请求导出，文件只读挂到操作者容器；精确命令见runbook。exit=0只代表检查完成，输出不会授予运行权限。Console `cost` 单独显示；它不能代替响应中的三项USD、补写旧关联信息或清除占位。新请求的dispatch只存会话hash、时间和原文长度，不保存会话原值。
+
+对用户单独批准留档继续的 legacy 终止超时，操作者可使用 `acknowledge-unsettled`，精确传入原 identity/主账 hash、run/round/request hash、提供方原文件/hash 和处置原因。事务保留原账原字节、旁证和事件 hash；原失败请求仍未结算，只有该事件的全局准入阻断解除。重复处置、篡改、事务中断或新请求未知仍拒绝。此入口不自动确认其他未知请求，不恢复原业务结果；使用前须有明确授权及新的有界试次计划。
 
 开发调度使用包外 `scripts/go_chi_operator.py --config <受审JSON> --config-sha256 <SHA-256>`，在已有 controller 镜像和 SDK/PDF 卷内执行，一次只运行一个指定 B/C。固定配置绑定独立包、运行身份、镜像与任务资源；创建世界和读取 Key 前执行无凭据预检。C 在 runner 前后保留完整业务资源快照，并在 runner 静止、世界清理前捕获权威终态，运行不调用模型的部分确定性检查；主错误、捕获错误和清理错误分别保存。控制器及其捕获材料不放进参赛包，具体调用数和任务清单以当轮 OpenSpec/审核授权为准。
 

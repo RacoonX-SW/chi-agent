@@ -4,23 +4,23 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | PR #24仍开放，按[费用反馈修订](../openspec/changes/go-chi-timeout-recovery/design.md#pr-24反馈费用记录优先不因缺少精确金额停止)实现新来源金额缺项warning。用户已明确允许对当前旧超时保留失败/未结算并显式留档后继续新独立试次；先代码/副本独立审核，尚未实际留档/迁移/恢复模型 |
+| 当前任务 | PR #24费用反馈修订完成：独立审核、唯一旧超时留档/迁移、新B、一次t012回归及两次原冻结未见题均在本轮适用范围通过。清单已收束，不追加付费或重跑；精确结果只见[T报告](go-chi-timeout-recovery-review.md#pr费用反馈修订2026-10-30)，交用户审核合并 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
-| 上次独立审核候选 | T `c587b446a54833393c1feb7deaeb3ac6fca47bfb`；用途超时、准入/收尾、dispatch和未结算历史/导出检查独立离线通过；范围/身份/证据只见[T报告](go-chi-timeout-recovery-review.md)，没有真实B/C或费用核销 |
-| 上次通过的实现提交 | T同上SHA仅限离线工程范围；S通过范围保留在[S报告](go-chi-batch-recovery-review.md)。P t013已收束，Q/R/S失败/claim/费用保留；official_reward=null |
+| 上次独立审核候选 | T反馈 `721b14e17e37917d27f333d7aac6aaedfa99b9ad`；超时、费用缺项warning、留档事务/跨来源审计、完整真实历史副本及独立包验证通过。初始c587b44离线证据保留；范围/身份只见T报告 |
+| 上次通过的实现提交 | T反馈同上SHA：独立离线、归档包、新B和三次provider任务的适用开发检查通过，非全赛道/官方成绩；S原证据保留在[S报告](go-chi-batch-recovery-review.md)。P t013已收束，Q/R/S失败/claim/费用保留；official_reward=null |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
 | 当前分支与接手改动 | PR #23已实际核对合并；从最新origin/main干净建立 `codex/go-chi-timeout-recovery`，基线/身份只见T报告；主代理规格/独立审核/Git，唯一Terra/high写实现 |
-| 环境目标与实际 | T复用Python3.12和既有镜像/锁定SDK/PDF/固定vendor，无安装/改锁/重建/G/H重做；无真实world/runner。独立归档解压预检通过；S原世界证据保留，不补作R缺失终态 |
-| 本地开发预算 | record_only/null cap、旧 Go/CHI 固定账根与全程持旧 Q 锁不变。CHI 当前 pending 指向 `s-go-v2-c-t012-1-20261029-001` 第9请求，halt=null；结构/证据完整性通过但用量不完整，调用和迁移均阻断。Q/native pending=null；不得删占位/新账根/静默回退，零自动重试 |
-| 后续费用规划 | native 规划维持 P 后口径；Go 三项 USD 分列且包含未知尾项，订阅固定费另计，不混 CNY 或清零。累计及本轮金额只见 [S 报告](go-chi-batch-recovery-review.md#逐请求与费用)，账户其他消费/余量未核清；不自动恢复 t019/Claude/F.5 |
+| 环境目标与实际 | T复用Python3.12和既有镜像/锁定SDK/PDF/固定vendor，无安装/改锁/重建/G/H重做；真实B/C使用隔离runner及fresh world。独立归档解压预检通过；S原世界证据保留，不补作R缺失终态 |
+| 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；当前active pending/halt=null。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
+| 后续费用规划 | Go优先推进有界开发/实验，不因金额或费用精度缺项停工；三项USD分列并保留旧未知，订阅固定费另计，不混CNY。当前累计/本轮只见T报告，账户其他消费/余量不冒充已核清；native沿P后规划，不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
-| 付费验证范围 | T修复与只读核验新增真实模型/业务工具调用为零；旧未知未核销，当前禁止继续参赛/评审API调用。须完整可信对账及独立恢复计划后迁移并取得新候选B，不能直接跑S未运行配置。t013/t019、Claude/Go付费临床评审仍暂停 |
+| 付费验证范围 | T反馈冻结的1个新B、一次t012回归和原冻结t014/t017各一次已完成并收束，没有新增运行清单。后续另定有界规格；t013不重跑，t019、Claude/Go付费临床评审仍暂停，不挪用S未运行配置 |
 | 正式提交前置 | F.2–F.4、G/H 历史离线范围保留；R 可独立导出并从外部输入运行，原 stock harness 不自动选用。完整 Harbor 类型/配送及 F.5 最终冻结仍未验证 |
-| 本轮验证 | T固定候选独立全量/专项/SDK边界与实际包/归档通过；原旧历史/用户JSON只读核对缺项正确，所有旧文件/账内容原字节不变。详细数值/尝试/身份/限制只见T报告 |
+| 本轮验证 | T反馈固定候选独立全量/专项、真实历史副本、SDK缺费用B/新未知拒绝及包/归档通过；实际旧主账原字节归档，旧attempt及其余旧文件不变。详细数值/尝试/身份/限制只见T报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #23](https://github.com/xsw932187210-cell/chi-agent/pull/23)已核对合并；T已推送并创建base=main的[PR #24](https://github.com/xsw932187210-cell/chi-agent/pull/24)，交用户审核，未merge/auto-merge。当前JSON缺完整response费用和legacy关联证据，不据此核销；后续先取得充分来源再定结算/恢复方案，十一月隐私仍人工复核 |
-| 未验证项 | 当前未知请求的可信结算/恢复、真实混批恢复与 t014/t017 未见迁移；Go 非编码 CHI/临床评审支持、十一月 ZDR、1M、精确上游模型快照/账单/长期缓存；P/O 稳定因果收益、最终批准/临床裁决/官方得分；完整 Harbor/F.5、OpenSpec CLI、真实硬取消/daemon 故障 |
-| 真实运行 | S 首 B 失败保留，修复候选新 B 成功；首次 t012 在确认子请求超时，三 C 未运行，无人工代选/自动重试。Go 付费开发评审尚未切换。Q/native 历史保留，Claude 调用为零，official_reward=null |
+| PR 与下一步 | [PR #23](https://github.com/xsw932187210-cell/chi-agent/pull/23)已核对合并；反馈继续更新仍开放、base=main的[PR #24](https://github.com/xsw932187210-cell/chi-agent/pull/24)，交用户审核，未merge/auto-merge。用户合并后先核对远端，再从最新origin/main开下一独立任务；十一月隐私条件仍须人工复核 |
+| 未验证项 | 旧未知请求可信结算、Go非编码用途/付费临床评审的官方支持、十一月ZDR、1M、精确上游快照/账单/长期缓存；跨任务统计稳定性/其他角色业务、P/O单项因果收益、最终批准/临床裁决/官方得分；完整Harbor/F.5、OpenSpec CLI、真实硬取消/daemon故障 |
+| 真实运行 | T新B与一次已见回归/两次冻结未见provider任务完成，均submitted/in_progress、适用检查通过、全量业务变更仅关联目标，终态/清理完整；不宣称官方成绩。旧Q/R/S失败及一个未结算完整保留，无人工代选/自动重试。Go付费开发评审尚未切换，Claude=0，official_reward=null |
 
 接续材料：
 
@@ -76,5 +76,6 @@
 | 2026-10-29 | R Go CHI 外部入口与独立包 | `d5fa0508618ced14aae012dbf6f47143090d041e` | `5b60b3122bf8c689b47750c5681a7a5a188d8443` | 离线技术与新 B 通过；唯一 t012 C 模型混批失败且缺原终态，业务验收未通过；不追加付费，官方分数 null | [R 审核](chi-go-evaluation-entry-review.md) |
 | 2026-10-30 | S Go CHI 混批恢复与完整终态 | `575b6d1ae5d1f7944166e92a22ce33d3f9e46fc9` | `32c24b79c4234954030a3f65c35f2d2d198fadf8` | 技术/独立包/新 B 通过；首次 t012 确认超时且用量未知，业务未完成，三 C 阻断未运行；旧证据保留，官方分数 null | [S 审核](go-chi-batch-recovery-review.md) |
 | 2026-10-30 | T Go确认超时与未结算检查 | `25336ed774be934af1d7fc4765884d837e62ff15` | `c587b446a54833393c1feb7deaeb3ac6fca47bfb` | 用途等待/准入收尾/元数据/只读历史与导出检查离线通过；真实调用0，旧未知未核销，未新增B/C | [T审核](go-chi-timeout-recovery-review.md) |
+| 2026-10-30 | T反馈费用记录与留档恢复 | `ce2aa1e29fcac4545a4af0846efee1ee64378305` | `721b14e17e37917d27f333d7aac6aaedfa99b9ad` | 独立审核/包/新B及一次回归、两次原冻结未见题的适用检查通过；旧未知留档未结算、历史不清零，官方分数null | [同一T报告](go-chi-timeout-recovery-review.md#pr费用反馈修订2026-10-30) |
 
 历史未通过候选及原始合成证据保留；原始日志在忽略目录，不上传 GitHub。沿用一份 D0 交付报告，区分子代理自测与主代理独立证据。历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 仍不是已通过候选。

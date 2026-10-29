@@ -4,7 +4,7 @@
 
 PR #23 已通过 GitHub 核对 closed/merged，fetch 后最新 origin/main 为 `25336ed774be934af1d7fc4765884d837e62ff15`，工作区干净，从该点建立 `codex/go-chi-timeout-recovery`。S 的失败、费用、原世界捕获、封存和三次未运行保留。主代理维护规格/README/学习/唯一状态/一份 T 报告及 GitHub；唯一 `gpt-6.1-terra` / high 实现者修改自有运行代码/测试/runbook，停写后主代理固定候选独立审核。
 
-已有 Go 模型 `deepseek-v4.1-flash`、端点、thinking/high、请求/历史/schema/患者及角色门禁、SDK turns50、主/确认共享50请求、确认最多2次、输出8192/32768、B6/1024均不改。record_only/null cap、三项USD分列、未知阻断、零自动重试/回退、Extra Usage关闭继续。Claude、Go付费临床评审、t013/t019、完整Harbor/F.5不恢复。本轮无真实模型请求计划；旧 pending 未有充分结算依据前不能取得新B或迁移来源，更不能另建账根。需要恢复时另行固定计划，不把旧未运行配额自动挪到新来源。
+已有 Go 模型 `deepseek-v4.1-flash`、端点、thinking/high、请求/历史/schema/患者及角色门禁、SDK turns50、主/确认共享50请求、确认最多2次、输出8192/32768、B6/1024均不改。record_only/null cap、三项USD分列、零自动重试/回退、Extra Usage关闭继续。Claude、Go付费临床评审、t013/t019、完整Harbor/F.5不恢复。T初始离线部分没有真实模型请求计划，保留旧pending；之后用户反馈授权的费用策略、旧事件留档及独立恢复计划见下方PR #24反馈，不把旧未运行配额自动挪到新来源，也不另建账根。
 
 ## 按请求用途限定等待
 
