@@ -95,6 +95,7 @@
 | 实现分工与独立审核 | 历史 Luna 记录保留；现默认一个 GPT-6.1 Terra / high 实现、主代理独立审核，第二个按明确并行收益启用 | 用户能解释共享文件串行写入可避免覆盖，并明确指定新模型；任务拆分、工具调度与完整交付仍待实践，不推断已掌握或更省 token |
 | 工作分支、push、PR 与 main 合并 | 已按任务分支/PR 方式交付，保留旧学习改动；具体分支、PR 和已审身份只查 REVIEW_STATE | 用户能解释 push 与 main 合并区别，并已操作合并 PR；不扩大为已掌握完整 Git 协作 |
 | 独立 Go CHI 包、固定实验与失败归因 | 已核对从外部输入、身份预检、SDK/Guard、MCP 到证据/结算的真实接线；本地调度与最终 Harbor 配送分别说明，证据见 [R 报告](../reviews/chi-go-evaluation-entry-review.md) | 已讲解一次运行可同时证明技术接线可用和业务未完成；用户参与用途/范围取舍，尚无新增源码复述或亲自运行证据 |
+| 混批恢复、账源迁移与全局终态证据 | 按 [S 规格](../openspec/changes/go-chi-batch-recovery/design.md)将有效混批整体拒绝后反馈模型自主改正，显式延续历史账源，并补前后业务资源快照；开发与独立验证仍在推进 | 用户批准有界回归和预先固定新题，已讲解选题冻结与目标过滤的证据盲点；没有新增用户独立复述或操作证据，不记为掌握 |
 
 相关材料：
 
@@ -110,7 +111,9 @@
 
 ## 下一次从哪里继续
 
-先从 [R 正式接线规格](../openspec/changes/chi-go-evaluation-entry/design.md) 和 [R 报告](../reviews/chi-go-evaluation-entry-review.md)接续：区分本地 K 调度器、可独立导出并接受外部输入的参赛 runner，以及 F.5 最终官方配送。沿 `go_chi_entry.main()` / `_identity()` → `ChiJournal` → `run_chi()` / `BudgetModel` → `ChiGuard.handle_async_request()` → `ToolContract` / `MCPBridge` / `local_tools()` → wire/tool evidence 与 seal 跟踪一次输入到结算。预检在 Key 读取前，实际发送数来自账本而非模型估计；coding B 与任务的上限分别固定。结合混批整体拒绝和操作者漏捕原终态，区分模型调用错误、工程捕获故障与无法证明的业务结果。后续若研究恢复行为，先定通用机制与验证条件，不直接靠第二次运行刷通过；t012 已成为开发材料。
+先从 [S 混批恢复规格](../openspec/changes/go-chi-batch-recovery/design.md) 和 [S 报告](../reviews/go-chi-batch-recovery-review.md)接续：先看完整批校验、逐 ID 拒绝、下一轮观察与预算反馈的关系，再看来源迁移怎样保留旧失败/费用/收据并要求新 B，最后核对 success/failure 都应获得原世界终态及全局业务快照。固定同一候选的重复观察和预先冻结新题提供不同证据，不能拿一次通过推断通用收益。
+
+基础调用链仍可沿 [R 正式接线规格](../openspec/changes/chi-go-evaluation-entry/design.md) 和 [R 报告](../reviews/chi-go-evaluation-entry-review.md)回读：区分本地 K 调度器、可独立导出并接受外部输入的参赛 runner，以及 F.5 最终官方配送。沿 `go_chi_entry.main()` / `_identity()` → `ChiJournal` → `run_chi()` / `BudgetModel` → `ChiGuard.handle_async_request()` → `ToolContract` / `MCPBridge` / `local_tools()` → wire/tool evidence 与 seal 跟踪一次输入到结算。预检在 Key 读取前，实际发送数来自账本而非模型估计；coding B 与任务的上限分别固定。结合 R 混批中止和操作者漏捕原终态，区分模型调用错误、工程捕获故障与无法证明的业务结果；t012 已成为开发材料。
 
 接续阶段、授权和未决项先查 [审核状态](../reviews/REVIEW_STATE.md)。C 的完整流程已讲过，下一学习入口转到 M：固定实验条件、从新任务发现问题、区分工程故障与决策错误，以及怎样验证一项通用改进。先看 [冻结任务与条件](../openspec/changes/provider-two-task-baseline/design.md)，再沿 `provider_task_resources.verify()` → `c-run --task-id` / `_k_run()` → `_orchestrate()` → worker claim/journal → 终态与 `_input()` 串起身份。结合 M 报告的实际终态、工具/失败和局部检查解释结论边界；不重复讲整轮 C，也不默认小测。
 

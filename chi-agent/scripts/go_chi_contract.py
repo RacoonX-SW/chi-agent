@@ -68,6 +68,7 @@ class ToolContract:
         self.seen: set[str] = set()
         self.records: list[dict] = []
         self.batches: list[dict] = []
+        self.refusals: dict[str, str] = {}
         try:
             if not isinstance(definitions, list) or not definitions:
                 raise ValueError

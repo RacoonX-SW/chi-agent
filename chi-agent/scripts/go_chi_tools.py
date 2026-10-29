@@ -177,8 +177,9 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                 if not pending:
                     raise GoFailure("chi_local_dispatch_unvalidated")
                 selected = pending[0]
-                reason = (binding.batch_refusals.get(selected["id"])
-                          if binding is not None and name in {"local-fs-write", "local-fs-edit"} else None)
+                reason = guard.contract.refusals.get(selected["id"])
+                if reason is None and binding is not None and name in {"local-fs-write", "local-fs-edit"}:
+                    reason = binding.batch_refusals.get(selected["id"])
                 if reason is not None:
                     output = "REFUSED: " + reason
                     journal.refuse_tool(selected["id"], name, args, output, secrets=(guard.secret, guard.session))

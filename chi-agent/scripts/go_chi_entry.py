@@ -171,7 +171,7 @@ def _handbook_digest(root: Path) -> str:
 
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("preflight", "coding-b", "live"))
+    parser.add_argument("mode", choices=("preflight", "coding-b", "live", "audit-history", "rebind-history"))
     parser.add_argument("--bundle-sha256", required=True)
     parser.add_argument("--evaluation-id")
     parser.add_argument("--task-id")
@@ -181,6 +181,9 @@ def _parser():
     parser.add_argument("--logs-dir", type=Path)
     parser.add_argument("--history-mode", choices=("local", "external"))
     parser.add_argument("--local-q-root", type=Path)
+    parser.add_argument("--expected-old-identity")
+    parser.add_argument("--expected-accounting-sha256")
+    parser.add_argument("--migration-reason")
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
     parser.add_argument("--mcp-url")
@@ -223,6 +226,18 @@ def main(argv=None):
         if args.mode == "preflight":
             print(json.dumps({"status": "identity_verified", "identity_sha256": identity,
                               "identity": identity_detail, "official_reward": None}, sort_keys=True))
+            return 0
+        if args.mode in {"audit-history", "rebind-history"}:
+            from go_chi_journal import audit_or_rebind
+            if args.history_mode != "local" or args.local_q_root is None or args.output_root is None:
+                raise GoFailure("chi_local_history_required")
+            qroot = _path(args.local_q_root, exists=True)
+            root = _path(args.output_root, exists=True)
+            if root != qroot / "chi-evaluation": raise GoFailure("chi_local_history_path_invalid")
+            q = acquire_existing_history(qroot)
+            result = audit_or_rebind(root, args.expected_old_identity, args.expected_accounting_sha256,
+                                     identity if args.mode == "rebind-history" else None, args.migration_reason)
+            print(json.dumps({**result, "official_reward": None}, sort_keys=True))
             return 0
         if not all((args.evaluation_id, args.task_id, args.attempt_id, args.run_id, args.output_root,
                     args.logs_dir, args.history_mode)):

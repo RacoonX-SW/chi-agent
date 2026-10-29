@@ -114,6 +114,13 @@ class MCPBridge:
                 raise GoFailure("chi_mcp_call_unvalidated")
             selected = pending[0]
             raw, canonical = self.raw_names[model_name]
+            reason = self.guard.contract.refusals.get(selected["id"])
+            if reason is not None:
+                result = "REFUSED: " + reason
+                self.guard.journal.refuse_tool(selected["id"], canonical, args, result,
+                                               secrets=(self.guard.secret, self.guard.session))
+                self.guard.contract.record_result(selected["id"], result)
+                return result
             if self.binding is not None:
                 from patient_identity_binding import Refusal
                 reason = self.binding.batch_refusals.get(selected["id"])

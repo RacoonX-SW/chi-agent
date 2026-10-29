@@ -130,7 +130,9 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
 
             def before_batch(calls):
                 if any(call["name"] == "local-confirm-patient" for call in calls) and len(calls) != 1:
-                    raise GoFailure("chi_confirmation_batch_invalid")
+                    for call in calls:
+                        holder["guard"].contract.refusals[call["id"]] = "confirmation_must_be_called_alone"
+                    return
                 bridge.batch(calls)
                 if binding is not None:
                     for call in calls:
