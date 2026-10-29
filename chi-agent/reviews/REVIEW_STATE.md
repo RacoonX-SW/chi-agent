@@ -1,26 +1,26 @@
 # 审核接续状态
 
-更新：2026-10-29。只保存接续所需状态；实现通过范围以对应报告为准，存储提交不能代替验收。
+更新：2026-10-30。只保存接续所需状态；实现通过范围以对应报告为准，存储提交不能代替验收。
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | S 首候选独立离线/旧账迁移/真世界无 Key 捕获已通过，新 B 首个已结算响应因工具阶段缺可选 reasoning 被过严契约拒绝；四 C 未启动。正在按[兼容修订](../openspec/changes/go-chi-batch-recovery/design.md)离线修复、重固定/审核；全部尝试见 [S 报告](go-chi-batch-recovery-review.md)，R 原失败/终态缺口不改 |
+| 当前任务 | S 工程与独立包/新 B 技术范围通过；首次 t012 的确认子请求超时、用量未知，业务未完成；余下一次 t012 与 t014/t017 受门禁阻断、未运行。全部尝试/用量/证据见 [S 报告](go-chi-batch-recovery-review.md)，R 原失败/终态缺口不改 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
-| 上次独立审核候选 | R `5b60b3122bf8c689b47750c5681a7a5a188d8443`；关闭首候选 R1–R4，独立离线技术检查与新 B 通过，C 业务未通过。包/运行身份及证据只见 [R 审核](chi-go-evaluation-entry-review.md#返工候选的独立通过范围) |
-| 上次通过的实现提交 | R 同上 SHA 仅限技术接线/离线与 B，不代表 CHI 成功。P t013 当前开发检查已收束，Q coding 历史保留；official_reward=null，旧失败/claim/费用不变 |
+| 上次独立审核候选 | S `32c24b79c4234954030a3f65c35f2d2d198fadf8`；混批整体拒绝、来源迁移、失败终态/全局快照、可选 reasoning 兼容、独立包和新 B 在 [S 审核](go-chi-batch-recovery-review.md#审核结论与接续)所述技术范围通过，C 业务未通过 |
+| 上次通过的实现提交 | S 同上 SHA 仅限所述技术/离线与 B，不代表完整阶段或 CHI 成功。P t013 当前开发检查已收束，Q/R 及旧失败/claim/费用保留；official_reward=null |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
 | 当前分支与接手改动 | PR #22 已实际核对合并，fetch 后最新 `origin/main` 为 `575b6d1ae5d1f7944166e92a22ce33d3f9e46fc9`，从该点干净建立 `codex/go-chi-batch-recovery`；主代理规格/独立审核/Git，唯一 Terra/high 写实现 |
-| 环境目标与实际 | R 复用 Python 3.12、既有镜像/SDK/PDF 卷，无安装/改锁/重建/G/H 重做。t012 原世界与捕获修正检查的新初始世界均已清理；后者没有 Agent/模型请求，不补作原终态 |
-| 本地开发预算 | record_only/null cap 不变。R 本地 CHI 固定在旧 Go 账根的 chi-evaluation 子目录，运行全程审计/持旧 Q 锁；旧账原字节保留。最终已完整审计 CHI/Q 证据且 pending/halt=null，native K/review pending=null；未知用量阻断、零自动重试 |
-| 后续费用规划 | native 规划维持 P 后口径；Go 余额实扣、价目价值、套餐消耗分列 USD，订阅固定费另计，不混 CNY 或清零。累计及本轮金额仅见 [R 报告](chi-go-evaluation-entry-review.md#环境包与用量口径)，账户其他消费/余量未核清；不自动恢复 t019/Claude/F.5 |
+| 环境目标与实际 | S 复用 Python 3.12、既有镜像/SDK/PDF 卷，无安装/改锁/重建/G/H 重做。全部本轮 runner/world/network 已确认清理；首次 C 的原终态/两侧快照完整保留，不补作 R 缺失终态 |
+| 本地开发预算 | record_only/null cap、旧 Go/CHI 固定账根与全程持旧 Q 锁不变。CHI 当前 pending 指向 `s-go-v2-c-t012-1-20261029-001` 第9请求，halt=null；结构/证据完整性通过但用量不完整，调用和迁移均阻断。Q/native pending=null；不得删占位/新账根/静默回退，零自动重试 |
+| 后续费用规划 | native 规划维持 P 后口径；Go 三项 USD 分列且包含未知尾项，订阅固定费另计，不混 CNY 或清零。累计及本轮金额只见 [S 报告](go-chi-batch-recovery-review.md#逐请求与费用)，账户其他消费/余量未核清；不自动恢复 t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
-| 付费验证范围 | S 原 1B+四C 规格的首 B 已用 1 请求失败；按必要兼容修订另限修复候选一次 B≤6，仍仅两次 t012 和 t014/t017 各一次 C≤50，全轮≤207，第二 B 再失败则收束。先新候选独立审核/显式迁移，不自动重试。Go 用途未确认用户知悉；t013/t019、Claude/付费临床评审暂停 |
+| 付费验证范围 | S 有限修订范围已停止执行：首 B 兼容失败保留，修复候选最后一次新 B 成功，首次 C 超时后依未知门禁阻断其余三次。当前禁止继续模型调用；须先可信对账及单独受审恢复计划，不能直接跑未运行配置。Go 用途未确认用户知悉；t013/t019、Claude/付费临床评审暂停 |
 | 正式提交前置 | F.2–F.4、G/H 历史离线范围保留；R 可独立导出并从外部输入运行，原 stock harness 不自动选用。完整 Harbor 类型/配送及 F.5 最终冻结仍未验证 |
-| 本轮验证 | S 首候选 `1f44ef564a5b4d8795b6f4fdd981cc78c5a68e01` 独立离线技术检查通过；一次 B 协议兼容失败、用量已知且完整审计 pending/halt=null，不代表业务通过。修复候选未定，尚无其 B/C。详细数值/身份只见 S 报告 |
+| 本轮验证 | S 两候选独立离线审查、两次显式迁移、真世界无 Key 捕获及最终包解压预检通过；新 B 成功。真实 C 失败但原终态完整，无业务资源变化；详细测试/身份/成功与失败/费用只见 S 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)与 [PR #22](https://github.com/xsw932187210-cell/chi-agent/pull/22)均已核对合并。S 完成后推送新分支并建 base=main PR，由用户审核合并；主代理不 merge/auto-merge。十一月隐私人工复核，未声称官方支持非编码 CHI |
-| 未验证项 | Go 非编码 CHI/临床评审支持、十一月 ZDR、1M 上下文和精确上游快照/账单/长期缓存；P/O 稳定因果收益、未见迁移、最终批准/临床裁决/官方得分；完整 Harbor/F.5、CHI 源码身份迁移、OpenSpec CLI、真实硬取消/daemon 故障 |
-| 真实运行 | R 新 B 成功；唯一 CHI C 运行到读取工具后因确认混批中止，无人工代选、无重跑。Go 开发评审尚未切换。Q/native 历史保留，Claude 调用为零，official_reward=null |
+| PR 与下一步 | [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)与 [PR #22](https://github.com/xsw932187210-cell/chi-agent/pull/22)均已核对合并。本分支准备推送/base=main PR 交用户审核，创建后补链接；主代理不 merge/auto-merge。随后先解决未知请求可信对账，不直接复跑；十一月隐私仍人工复核 |
+| 未验证项 | 当前未知请求的可信结算/恢复、真实混批恢复与 t014/t017 未见迁移；Go 非编码 CHI/临床评审支持、十一月 ZDR、1M、精确上游模型快照/账单/长期缓存；P/O 稳定因果收益、最终批准/临床裁决/官方得分；完整 Harbor/F.5、OpenSpec CLI、真实硬取消/daemon 故障 |
+| 真实运行 | S 首 B 失败保留，修复候选新 B 成功；首次 t012 在确认子请求超时，三 C 未运行，无人工代选/自动重试。Go 付费开发评审尚未切换。Q/native 历史保留，Claude 调用为零，official_reward=null |
 
 接续材料：
 
@@ -73,5 +73,6 @@
 | 2026-10-28 | P 通用字段依据工具提示 | `a1aa625c3b9fbc36df2fd6bf57e67787b5f2e526` | `ed15c2bcfae7076f1165c92b6bf52b3fa16caa65` | 独立离线/新B通过，允许时段一次t013正常结束、仅影响目标，当前开发检查通过；费用上升，不推断稳定收益/泛化，官方分数null | [P审核](referral-field-guidance-review.md) |
 | 2026-10-28 | Q Go/V4.1 Flash coding接入 | `dac0f2459718231aa7d1c67666ae85874d1227c6` | `5ea044dcefe1bad88fecb69c078078d22df06182` | 独立离线、真实响应回放和源码接续通过；保留首个本地协议失败，第二个真实coding闭环完成，CHI/1M/正式包不在通过范围 | [Q审核](opencode-go-provider-review.md) |
 | 2026-10-29 | R Go CHI 外部入口与独立包 | `d5fa0508618ced14aae012dbf6f47143090d041e` | `5b60b3122bf8c689b47750c5681a7a5a188d8443` | 离线技术与新 B 通过；唯一 t012 C 模型混批失败且缺原终态，业务验收未通过；不追加付费，官方分数 null | [R 审核](chi-go-evaluation-entry-review.md) |
+| 2026-10-30 | S Go CHI 混批恢复与完整终态 | `575b6d1ae5d1f7944166e92a22ce33d3f9e46fc9` | `32c24b79c4234954030a3f65c35f2d2d198fadf8` | 技术/独立包/新 B 通过；首次 t012 确认超时且用量未知，业务未完成，三 C 阻断未运行；旧证据保留，官方分数 null | [S 审核](go-chi-batch-recovery-review.md) |
 
 历史未通过候选及原始合成证据保留；原始日志在忽略目录，不上传 GitHub。沿用一份 D0 交付报告，区分子代理自测与主代理独立证据。历史 `9a347195fc786c69db5ecddd4c1b2d50615eb682` 仍不是已通过候选。

@@ -457,6 +457,8 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 开发调度使用包外 `scripts/go_chi_operator.py --config <受审JSON> --config-sha256 <SHA-256>`，在已有 controller 镜像和 SDK/PDF 卷内执行，一次只运行一个指定 B/C。固定配置绑定独立包、运行身份、镜像与任务资源；创建世界和读取 Key 前执行无凭据预检。C 在 runner 前后保留完整业务资源快照，并在 runner 静止、世界清理前捕获权威终态，运行不调用模型的部分确定性检查；主错误、捕获错误和清理错误分别保存。控制器及其捕获材料不放进参赛包，具体调用数和任务清单以当轮 OpenSpec/审核授权为准。
 
+调度产物中，`orchestration.json` 保存退出、捕获/清理及操作者耗时，`runner-logs/result/` 保存参赛日志，`initial-capture/`、`capture/` 和 `resource-snapshots/` 是操作者证据，不挂给参赛 runner。`run_result.json` 的 `usage` 是当前 CHI 账累计；单次用量应按 `chi-accounting.json` 中对应 run 的 `requests` 汇总，旧 Q coding 账另行累计。余额实扣、价目价值、套餐消耗是三种不同 USD 口径，不能相加，也不能根据界面整数百分比推断请求数或精确余量。
+
 用户已知悉 Go 非编码用途尚未获得官方确认并决定继续使用，十一月隐私条件仍需运行前人工复核；不伪装请求，不增加时钟门禁。完整 Harbor 配送与 F.5、原版 Claude 判分分别按审核状态管理。
 
 ## DeepSeek 本地开发评审
