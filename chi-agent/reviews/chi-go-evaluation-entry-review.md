@@ -124,4 +124,4 @@ Docker 结束审计逐一复核开始时 **48,347** 份旧 data/runs 文件，�
 
 本地交付归档为 `runs/chi-go-entry-root/exports/chi-go-entry-5b60b31-bundle.tar.gz`，**119,594 bytes**，SHA-256 `133c8adb48ee84d72ffdd08fc679b4dade8b0483508d5871d820e07ead9e531a`。它包含 29 份允许文件、manifest 和必要空挂载目录，Docker 解包后 manifest 校验通过，与真实 B/C 的包身份相同。首次归档遗漏空 `vendor/chi-bench` 挂载目录，解包树校验失败；保留该首个未交付归档 `chi-go-entry-5b60b31.tar.gz`，随后只修正操作者归档过程，未改源码/包身份/候选或重跑 B/C。交付归档不含 vendor 内容、数据、手册、凭据、账目或原始轨迹；外部依赖/资源仍须按 runbook 挂载，不能当完整 F.5 自包含镜像。
 
-操作者审计脚本与两次实际命令在忽略的 `operator-audit/` 保留；没有另建交接文件。仅显式暂存自有代码/测试/规格/runbook/README/学习账本及唯一状态与本报告，`git diff --check` 通过。推送前再次 fetch，`origin/main` 仍为本轮基线；存储提交不替代受审实现或改变包身份。PR 创建结果只维护在 REVIEW_STATE，用户决定合并。
+操作者审计脚本与两次实际命令在忽略的 `operator-audit/` 保留；没有另建交接文件。仅显式暂存自有代码/测试/规格/runbook/README/学习账本及唯一状态与本报告，最终 **34** 份待上传文件的路径允许范围、UTF-8 与配置秘密缺席检查通过，`git diff --check` 通过。推送前再次 fetch，`origin/main` 仍为本轮基线；存储提交不替代受审实现或改变包身份。PR 创建结果只维护在 REVIEW_STATE，用户决定合并。

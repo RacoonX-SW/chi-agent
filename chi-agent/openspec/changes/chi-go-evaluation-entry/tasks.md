@@ -8,4 +8,4 @@
 - [x] 在同一受审接点上完成必要的新 B；不能复用旧 receipt 或将另一个 coding 接点冒作 CHI 验证。
 - [x] 冻结一个未用于调参的兼容任务及条件，再做至多一个自主 C；保留用途支持未确认的限制，不刷题。已完成唯一尝试，混批中止且缺原终态，业务验收未通过；详情见唯一阶段报告。
 - [x] README/包 runbook 写运行方法；学习账本记调用链及实验取舍；唯一状态摘要与一份 `reviews/chi-go-evaluation-entry-review.md` 记候选、检查、全部尝试、用量/耗时/费用与限制。
-- [ ] 核对上传边界，显式提交/推送并创建 base=main PR，交用户审核；不 merge/auto-merge。
+- [x] 核对上传边界，显式提交/推送并创建 base=main PR，交用户审核；不 merge/auto-merge。

@@ -18,7 +18,7 @@
 | 正式提交前置 | F.2–F.4、G/H 历史离线范围保留；R 可独立导出并从外部输入运行，原 stock harness 不自动选用。完整 Harbor 类型/配送及 F.5 最终冻结仍未验证 |
 | 本轮验证 | 固定差异/调用链独立审核、禁网全量与故障边界、独立包、旧真实响应回放、新 B 及唯一 C 均已留证；C 缺原终态，确定性业务/完整非目标检查未执行。完整原始证据在忽略目录 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)已核对合并；R 收束上传检查后推送本分支并创建 base=main PR 交用户审核，不 merge/auto-merge。后续改进先另定界；十一月隐私人工复核，未声称官方支持非编码 CHI |
+| PR 与下一步 | [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)已核对合并；R 已推送并创建 [PR #22](https://github.com/xsw932187210-cell/chi-agent/pull/22)，base=main，待用户审核决定合并；未 merge/auto-merge。后续改进先另定界；十一月隐私人工复核，未声称官方支持非编码 CHI |
 | 未验证项 | Go 非编码 CHI/临床评审支持、十一月 ZDR、1M 上下文和精确上游快照/账单/长期缓存；P/O 稳定因果收益、未见迁移、最终批准/临床裁决/官方得分；完整 Harbor/F.5、CHI 源码身份迁移、OpenSpec CLI、真实硬取消/daemon 故障 |
 | 真实运行 | R 新 B 成功；唯一 CHI C 运行到读取工具后因确认混批中止，无人工代选、无重跑。Go 开发评审尚未切换。Q/native 历史保留，Claude 调用为零，official_reward=null |
 
