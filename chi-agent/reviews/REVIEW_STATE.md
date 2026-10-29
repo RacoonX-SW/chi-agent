@@ -18,7 +18,7 @@
 | 正式提交前置 | F.2–F.4、G/H 历史离线范围保留；R 可独立导出并从外部输入运行，原 stock harness 不自动选用。完整 Harbor 类型/配送及 F.5 最终冻结仍未验证 |
 | 本轮验证 | S 两候选独立离线审查、两次显式迁移、真世界无 Key 捕获及最终包解压预检通过；新 B 成功。真实 C 失败但原终态完整，无业务资源变化；详细测试/身份/成功与失败/费用只见 S 报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)与 [PR #22](https://github.com/xsw932187210-cell/chi-agent/pull/22)均已核对合并。本分支准备推送/base=main PR 交用户审核，创建后补链接；主代理不 merge/auto-merge。随后先解决未知请求可信对账，不直接复跑；十一月隐私仍人工复核 |
+| PR 与下一步 | [PR #21](https://github.com/xsw932187210-cell/chi-agent/pull/21)与 [PR #22](https://github.com/xsw932187210-cell/chi-agent/pull/22)均已核对合并。本轮已推送并创建 base=main 的 [PR #23](https://github.com/xsw932187210-cell/chi-agent/pull/23)，交用户审核合并；主代理未 merge/auto-merge。随后先解决未知请求可信对账，不直接复跑；十一月隐私仍人工复核 |
 | 未验证项 | 当前未知请求的可信结算/恢复、真实混批恢复与 t014/t017 未见迁移；Go 非编码 CHI/临床评审支持、十一月 ZDR、1M、精确上游模型快照/账单/长期缓存；P/O 稳定因果收益、最终批准/临床裁决/官方得分；完整 Harbor/F.5、OpenSpec CLI、真实硬取消/daemon 故障 |
 | 真实运行 | S 首 B 失败保留，修复候选新 B 成功；首次 t012 在确认子请求超时，三 C 未运行，无人工代选/自动重试。Go 付费开发评审尚未切换。Q/native 历史保留，Claude 调用为零，official_reward=null |
 
