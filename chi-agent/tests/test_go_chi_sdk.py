@@ -17,6 +17,83 @@ from request_budget import feedback
 
 
 class SDKTests(unittest.IsolatedAsyncioTestCase):
+    async def test_coding_tool_reasoning_variants_through_sdk(self):
+        import json
+        from opencode_go_provider import SYSTEM, INSTRUCTION
+        from go_chi_runtime import coding_tools, run_coding_b
+        for variant in ('absent', 'null', 'empty', 'text'):
+            with self.subTest(variant=variant), tempfile.TemporaryDirectory() as directory:
+                journal = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='synthetic', attempt='a', run='b', kind='coding_b')
+                holder, requests, responses = {}, [], []
+                tools = coding_tools(lambda: holder['guard'])
+                async def answer(request):
+                    requests.append(json.loads(request.content))
+                    n = len(requests)
+                    message = ({'role': 'assistant', 'content': '', 'tool_calls': [{'id': 'inspect-1', 'type': 'function',
+                        'function': {'name': 'inspect_code', 'arguments': '{}'}}]} if n == 1 else
+                        {'role': 'assistant', 'content': None, 'tool_calls': [{'id': 'verify-1', 'type': 'function',
+                        'function': {'name': 'verify_patch', 'arguments': json.dumps({'code': 'def add(a, b):\n    return a + b\n'})}}]} if n == 2 else
+                        {'role': 'assistant', 'content': 'done'})
+                    if n < 3 and variant != 'absent':
+                        message['reasoning_content'] = {'null': None, 'empty': '', 'text': 'synthetic reasoning'}[variant]
+                    payload = {'id': 'synthetic', 'object': 'chat.completion', 'created': 0, 'model': 'deepseek-v4.1-flash',
+                        'choices': [{'index': 0, 'message': message, 'finish_reason': 'tool_calls' if n < 3 else 'stop'}],
+                        'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5, 'cost': 0,
+                                  'opencode': {'billing_source': 'go', 'list_cost': 0.1, 'allowance': 0.1}}}
+                    responses.append(payload)
+                    return httpx.Response(200, request=request, json=payload)
+                guard = ChiGuard(journal, 'synthetic-secret', 'chi-' + 'a' * 32, httpx.MockTransport(answer),
+                    tools=[Converter.tool_to_openai(t) for t in tools], system=SYSTEM, instruction=INSTRUCTION,
+                    claimed=lambda: False, confirmation=lambda: None)
+                holder['guard'] = guard
+                client = AsyncOpenAI(api_key='synthetic-secret', base_url='https://opencode.ai/inference/go/openai/v1',
+                    default_headers={'User-Agent': 'chi-agent', 'X-OpenCode-Session': 'chi-' + 'a' * 32},
+                    http_client=httpx.AsyncClient(transport=guard), max_retries=0)
+                try:
+                    self.assertEqual(await run_coding_b(client, guard, tools), 'done')
+                    self.assertEqual(len(requests), 3)
+                    history = requests[1]['messages'][2]
+                    self.assertEqual(history['content'], '')
+                    if variant in ('absent', 'null'):
+                        self.assertNotIn('reasoning_content', history)
+                    else:
+                        self.assertEqual(history['reasoning_content'], '' if variant == 'empty' else 'synthetic reasoning')
+                    evidence = json.loads((Path(directory) / 'wire-evidence/b/001-response.json').read_text())
+                    self.assertEqual(json.loads(evidence['body_utf8']), responses[0])
+                    journal.finish('complete')
+                finally:
+                    await client.close(); journal.close()
+
+    async def test_b_sdk_preserves_guard_error_for_bad_reasoning(self):
+        from opencode_go_provider import SYSTEM, INSTRUCTION, GoFailure
+        from go_chi_runtime import coding_tools, run_coding_b
+        with tempfile.TemporaryDirectory() as directory:
+            journal = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='synthetic', attempt='a', run='b', kind='coding_b')
+            holder = {}; tools = coding_tools(lambda: holder['guard'])
+            async def answer(request):
+                return httpx.Response(200, request=request, json={'id': 'synthetic', 'object': 'chat.completion', 'created': 0,
+                    'model': 'deepseek-v4.1-flash', 'choices': [{'index': 0, 'finish_reason': 'tool_calls', 'message': {
+                        'role': 'assistant', 'content': '', 'reasoning_content': 17, 'tool_calls': [{'id': 'call', 'type': 'function',
+                        'function': {'name': 'inspect_code', 'arguments': '{}'}}]}}],
+                    'usage': {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5, 'cost': 0,
+                              'opencode': {'billing_source': 'go', 'list_cost': 0.1, 'allowance': 0.1}}})
+            guard = ChiGuard(journal, 'synthetic-secret', 'chi-' + 'a' * 32, httpx.MockTransport(answer),
+                tools=[Converter.tool_to_openai(t) for t in tools], system=SYSTEM, instruction=INSTRUCTION,
+                claimed=lambda: False, confirmation=lambda: None)
+            holder['guard'] = guard
+            client = AsyncOpenAI(api_key='synthetic-secret', base_url='https://opencode.ai/inference/go/openai/v1',
+                default_headers={'User-Agent': 'chi-agent', 'X-OpenCode-Session': 'chi-' + 'a' * 32},
+                http_client=httpx.AsyncClient(transport=guard), max_retries=0)
+            try:
+                with self.assertRaisesRegex(GoFailure, 'chi_tool_batch_invalid'):
+                    await run_coding_b(client, guard, tools)
+                self.assertEqual(guard.error, 'chi_tool_batch_invalid')
+                self.assertEqual(journal.run['requests'][0]['status'], 'settled')
+                self.assertEqual(journal.run['tool_events'], [])
+                journal.finish('failed', guard.error)
+            finally:
+                await client.close(); journal.close()
+
     async def test_synthetic_sdk_tool_exchange(self):
         with tempfile.TemporaryDirectory() as directory:
             previous_trace_state = get_trace_provider()._manual_disabled

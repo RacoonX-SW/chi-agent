@@ -19,6 +19,24 @@ def message(calls):
 
 
 class ContractTests(unittest.TestCase):
+    def test_reasoning_presence_and_content_are_history_bound(self):
+        import copy
+        for reasoning in (None, '', 'reason'):
+            with self.subTest(reasoning=reasoning):
+                contract = ToolContract(definition())
+                batch = message([call('a', '{"id":1}')])
+                if reasoning is None: del batch['reasoning_content']
+                else: batch['reasoning_content'] = reasoning
+                contract.accept_batch(batch); contract.record_result('a', 'observed')
+                history = [{'role': 'system', 'content': 'system' + feedback(1, False)[0]},
+                           {'role': 'user', 'content': 'instruction'}, copy.deepcopy(batch),
+                           {'role': 'tool', 'tool_call_id': 'a', 'content': 'observed'}]
+                contract.validate_history(history, system='system', instruction='instruction', used=1, claimed=False)
+                if reasoning is None: history[2]['reasoning_content'] = ''
+                else: del history[2]['reasoning_content']
+                with self.assertRaises(ContractFailure):
+                    contract.validate_history(history, system='system', instruction='instruction', used=1, claimed=False)
+
     def test_invalid_second_call_does_not_commit_first(self):
         contract = ToolContract(definition())
         with self.assertRaises(ContractFailure):

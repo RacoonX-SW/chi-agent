@@ -11,8 +11,8 @@
 | 环境、Python 版本目标与容器边界 | [Docker 工作流](docs/docker-workflow.md) |
 | 分支、PR 与上传范围 | [GitHub 工作流](docs/github-workflow.md) |
 | 教学方式、理解进度与下一学习点 | [学习约定](docs/learning-agreement.md) |
-| 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[Go CHI 入口与独立包](openspec/changes/chi-go-evaluation-entry/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
-| 验收契约与实现任务 | [Go CHI 接线设计](openspec/changes/chi-go-evaluation-entry/design.md)、[本轮任务](openspec/changes/chi-go-evaluation-entry/tasks.md)、[历史验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md) |
+| 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[Go CHI 混批恢复](openspec/changes/go-chi-batch-recovery/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
+| 验收契约与实现任务 | [Go CHI 接线设计](openspec/changes/chi-go-evaluation-entry/design.md)、[本轮设计](openspec/changes/go-chi-batch-recovery/design.md)与[任务](openspec/changes/go-chi-batch-recovery/tasks.md)、[历史验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md) |
 
 本页只维护运行方法与入口；阶段结果和详细证据集中到状态页及其链接的阶段报告。命令示例中的模型名称不表示已经可用或获准调用。
 
@@ -453,7 +453,11 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 新 CHI 任务沿用主请求/患者确认合计 50 次、主输出 8192、确认最多两次/32768 及每次主请求的可信剩余反馈；B 另为 6 次/1024，不把探针配置当正式任务配置。provider 使用患者和实体绑定门禁及通用字段提示；payer/CM 只使用所选角色工具与角色/shared 文件范围，不能把协议演练写成三赛道业务通过。
 
-本地继续开发使用 `--history-mode local --local-q-root /prior-go --output-root /prior-go/chi-evaluation`，审计并持锁既有 Go 历史，新的 CHI 状态固定在子目录。外部独立 evaluation 使用显式 `external` 模式；这不代表账户此前消费为零。record_only/null cap、三项 USD 分列、未知阻断和零自动重试保持；旧 CNY 不与 USD 相加。新源码身份当前保守拒绝旧 CHI 状态，不提供自动迁移或清账重跑。
+本地继续开发使用 `--history-mode local --local-q-root /prior-go --output-root /prior-go/chi-evaluation`，审计并持锁既有 Go 历史，新的 CHI 状态固定在子目录。外部独立 evaluation 使用显式 `external` 模式；这不代表账户此前消费为零。record_only/null cap、三项 USD 分列、未知阻断和零自动重试保持；旧 CNY 不与 USD 相加。源码变更后先离线审核、导出新包，再使用包内 `audit-history` / `rebind-history` 明确传入旧身份与旧主账 SHA-256；旧账原字节归档，旧 attempt/失败/费用/证据/收据保留，必须为新候选取得自己的 B。中断标记、缺件或未知用量会阻断，不能另建账根绕过。精确命令见 runbook。
+
+开发调度使用包外 `scripts/go_chi_operator.py --config <受审JSON> --config-sha256 <SHA-256>`，在已有 controller 镜像和 SDK/PDF 卷内执行，一次只运行一个指定 B/C。固定配置绑定独立包、运行身份、镜像与任务资源；创建世界和读取 Key 前执行无凭据预检。C 在 runner 前后保留完整业务资源快照，并在 runner 静止、世界清理前捕获权威终态，运行不调用模型的部分确定性检查；主错误、捕获错误和清理错误分别保存。控制器及其捕获材料不放进参赛包，具体调用数和任务清单以当轮 OpenSpec/审核授权为准。
+
+调度产物中，`orchestration.json` 保存退出、捕获/清理及操作者耗时，`runner-logs/result/` 保存参赛日志，`initial-capture/`、`capture/` 和 `resource-snapshots/` 是操作者证据，不挂给参赛 runner。`run_result.json` 的 `usage` 是当前 CHI 账累计；单次用量应按 `chi-accounting.json` 中对应 run 的 `requests` 汇总，旧 Q coding 账另行累计。余额实扣、价目价值、套餐消耗是三种不同 USD 口径，不能相加，也不能根据界面整数百分比推断请求数或精确余量。
 
 用户已知悉 Go 非编码用途尚未获得官方确认并决定继续使用，十一月隐私条件仍需运行前人工复核；不伪装请求，不增加时钟门禁。完整 Harbor 配送与 F.5、原版 Claude 判分分别按审核状态管理。
 

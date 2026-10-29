@@ -16,6 +16,8 @@ Agent 可见资源只包括公开 instruction/工具参考、已授权的 manage
 
 自主任务的 SDK turns 和共享 provider 请求上限均为 50；患者确认最多两次，也消耗这 50 次。主请求输出上限 8192，确认 32768。可信剩余次数由程序根据已发送数生成，确认后刷新；工具调用次数不等于模型请求数。coding B 是独立固定探针合约，最多 6 次/1024 输出，不显示 50 次任务反馈，不作为临床业务成功证据。
 
+工具响应的 `reasoning_content` 缺失或为 null 时，按 SDK 实际历史表示不附加该字段；字符串（包括空串）按原值回放，其他类型仍拒绝。原始 HTTP 响应证据保持不变，后续历史仍须与已验证结果严格一致。
+
 默认 evaluation 策略是 `record_only`、金额 cap=null；不继承本机开发期人民币限额。每 evaluation/task/attempt/run 有独占身份，失败也保留；不能换 run-id 绕过同一 attempt 或删除 pending/旧账重跑。未知用量、账源异常、持久化不明都阻止后续请求；已知用量先结算，再判断模型响应/业务是否有效。包/源码变化不能自动冒用旧 B 收据或覆盖旧记录。
 
 美元账目分别列 Go 余额实扣、模型价目价值、套餐消耗；三者不可相加，也不与旧 CNY 相加。独立 evaluation 目录表示隔离运行状态，不表示本项目或账户历史清零。订阅固定费另计，余额扣费为零仍会消耗套餐额度。Extra Usage 已由用户确认关闭；程序不自动开启或回退到 balance/native。
@@ -85,6 +87,16 @@ python /package/scripts/go_chi_entry.py live \
 ```
 
 独立外部 evaluation 使用 `--history-mode external`，它声明该 evaluation 与本机开发账目分离，不证明账户此前消费为零。在本项目本地继续 Go 开发时，改用 `--history-mode local --local-q-root /prior-go --output-root /prior-go/chi-evaluation`，只将已核对的既有 Go 账目挂到 `/prior-go`；本地 CHI 状态固定在该子目录，不能另选目录。程序审计并持锁，不允许借新的 evaluation 目录绕过旧 pending/halt。Q 原有文件保持原字节，新增 CHI 子目录另行核算；两个模式都不改写 native CNY 历史。
+
+## 显式本地账目接续
+
+候选包预检取得新运行身份后，在已审核旧账副本上先使用 `audit-history`，再用 `rebind-history`。两者都需要 `--bundle-sha256`、`--history-mode local`、`--local-q-root /prior-go`、`--output-root /prior-go/chi-evaluation`、`--expected-old-identity` 和 `--expected-accounting-sha256`；迁移另需 `--migration-reason`。新身份只能由所选包预检计算，不能作为任意 CLI 值传入。两者不读取 Key、不发模型请求；按 Q 再 CHI 顺序锁定并检查证据。迁移归档旧账原字节，保留旧 seal、receipt 和其他证据的原路径；中断标记或缺件需要人工调查，不应删除标记绕过。旧 B 收据不授权新身份，须取得该候选自己的 B。
+
+## 操作者单次调度
+
+`scripts/go_chi_operator.py` 位于项目源码侧，**不在参赛包内**。它接收一份受审 JSON 配置及其 SHA-256：`--config /audit/config.json --config-sha256 <hash>`。配置字段为 `kind`（`b` 或 `c`）、`run_id`、`evaluation_id`、`task_id`、`attempt_id`、`bundle_relative`、`bundle_sha256`、`runtime_identity`、`runner_image_id`、`world_image_id`、`resource_relative`、`resource_manifest_sha256`、`resource_identity_relative`、`resource_identity_sha256`、`output_relative` 和 `timeout_seconds`。相对路径从控制容器 `/workspace` 起；B 的四个 resource 字段为 null。C 的资源路径指资源根，支持 R 单题和 S 多题清单；单独的只含身份及哈希的 resource identity 必须提供 `task_id`、`world_id`、`world_sha256` 和所选任务完整 `files`。输出目录必须不存在，一次配置只执行一个 B 或 C。
+
+控制器使用 `/opt/a-venv`，只读挂载 SDK、PDF、固定官方源码和候选包；候选先在独立禁网、无凭据容器中预检身份。C 在 world ready 后先捕获并核验初始世界，再保存 provider/payer 的只读资源快照，成功后才读取 Go Key 并启动 runner。runner 静止后再捕获终态和后快照，运行无语义模型的确定性检查，最后清理本次资源。结果分开记录主错误、捕获错误、清理错误和容器 ID；捕获缺失不表示业务无变化。前后 `*-resources.json` 只保存在操作者侧，需要另行逐资源比对并关联患者/案件，不能仅凭目标过滤的 export 判断非目标未变化。official_reward 保持 null。
 
 payer/UM 与 CM 分别使用 `--role payer` / `--role cm` 和相应角色 MCP；文件工具只允许该角色/shared workspace，provider 的患者确认门禁不误套到其他角色。三角色协议测试与三赛道真实业务验证分别记录。
 

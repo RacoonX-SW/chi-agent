@@ -27,6 +27,59 @@ def settle(j, usage):
 
 
 class JournalTests(unittest.TestCase):
+    def test_rebind_preserves_old_identity_and_blocks_tampering(self):
+        import hashlib
+        from go_chi_journal import audit_or_rebind
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            j = journal(root); j.finish("failed"); j.close()
+            state = root / "chi-accounting.json"
+            original = state.read_bytes()
+            seal = (root / "run-seals" / "r.json").read_bytes()
+            digest = hashlib.sha256(original).hexdigest()
+            audit_or_rebind(root, IDENTITY, digest, "b" * 64, "synthetic migration")
+            self.assertEqual((root / "source-archives" / ("0001-" + digest + ".json")).read_bytes(), original)
+            self.assertEqual((root / "run-seals" / "r.json").read_bytes(), seal)
+            j = journal(root, attempt="b", run="s", identity="b" * 64); j.finish("failed"); j.close()
+            digest2 = hashlib.sha256(state.read_bytes()).hexdigest()
+            audit_or_rebind(root, "b" * 64, digest2, "c" * 64, "second migration")
+            j = journal(root, attempt="c", run="t", identity="c" * 64); j.finish("failed"); j.close()
+            (root / "source-archives" / ("0001-" + digest + ".json")).write_text("tampered")
+            with self.assertRaisesRegex(GoFailure, "chi_history_invalid"):
+                journal(root, attempt="d", run="u", identity="c" * 64)
+
+    def test_rebind_interruption_is_durable(self):
+        import hashlib
+        from go_chi_journal import audit_or_rebind
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            j = journal(root); j.finish("failed"); j.close()
+            digest = hashlib.sha256((root / "chi-accounting.json").read_bytes()).hexdigest()
+            with patch("go_chi_journal._atomic", side_effect=OSError("synthetic failure")):
+                with self.assertRaises(OSError): audit_or_rebind(root, IDENTITY, digest, "b" * 64, "test")
+            with self.assertRaisesRegex(GoFailure, "chi_history_invalid"):
+                journal(root, attempt="b", run="s")
+
+    def test_old_b_receipt_does_not_authorize_new_identity(self):
+        import copy
+        import hashlib
+        from go_chi_journal import audit_or_rebind
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            b = ChiJournal(root, identity=IDENTITY, evaluation="e", task="synthetic-coding-b", attempt="b", run="b", kind="coding_b", launch={"kind": "coding_b"})
+            for n in range(3):
+                b.reserve(str(n).encode(), "main"); settle(b, USAGE)
+            b.start_tool("one", "inspect_code", {}); b.record_tool("one", "inspect_code", "def add(a, b):\n    return a - b\n")
+            b.start_tool("two", "verify_patch", {}); b.record_tool("two", "verify_patch", "verification:pass")
+            b.finish("complete"); saved = copy.deepcopy(b.run); b.close()
+            publish_b_receipt(root, IDENTITY, saved)
+            digest = hashlib.sha256((root / "chi-accounting.json").read_bytes()).hexdigest()
+            audit_or_rebind(root, IDENTITY, digest, "b" * 64, "migration")
+            with self.assertRaisesRegex(GoFailure, "chi_b_receipt_missing"):
+                ChiJournal(root, identity="b" * 64, evaluation="e", task="clinical", attempt="c", run="c", require_b=True)
+            with self.assertRaisesRegex(GoFailure, "chi_attempt_or_run_exists"):
+                ChiJournal(root, identity="b" * 64, evaluation="e", task="synthetic-coding-b", attempt="b", run="new", kind="coding_b")
+
     def test_failed_b_receipt_publication_blocks_future_attempts(self):
         import copy
         with tempfile.TemporaryDirectory() as directory:
@@ -112,13 +165,13 @@ class JournalTests(unittest.TestCase):
             b.start_tool("two", "verify_patch", {"code": "synthetic"})
             b.record_tool("two", "verify_patch", "verification:pass")
             b.finish("complete"); saved = copy.deepcopy(b.run); b.close()
-            with self.assertRaisesRegex(GoFailure, "chi_b_receipt_missing"):
+            with self.assertRaisesRegex(GoFailure, "chi_history_invalid"):
                 ChiJournal(root, identity=IDENTITY, evaluation="e", task="clinical", attempt="c", run="c", require_b=True)
             publish_b_receipt(root, IDENTITY, saved)
             c = ChiJournal(root, identity=IDENTITY, evaluation="e", task="clinical", attempt="c", run="c", require_b=True)
             c.finish("complete"); c.close()
             (root / "b-receipts" / "b.json").write_text("{}")
-            with self.assertRaisesRegex(GoFailure, "chi_b_receipt_missing"):
+            with self.assertRaisesRegex(GoFailure, "chi_history_invalid"):
                 ChiJournal(root, identity=IDENTITY, evaluation="e", task="other", attempt="d", run="d", require_b=True)
 
     def test_live_attempt_requires_completed_matching_b(self):
@@ -140,7 +193,7 @@ class JournalTests(unittest.TestCase):
                 settle(j, USAGE)
             with self.assertRaisesRegex(GoFailure, "chi_request_limit"):
                 j.reserve(b"seventh", "main")
-            j.finish("complete"); j.close()
+            j.finish("failed"); j.close()
             j = journal(root, attempt="c", run="c")
             self.assertEqual(j.usage_totals()["input_tokens_known"], 18)
             j.finish("complete"); j.close()

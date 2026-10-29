@@ -7,6 +7,7 @@ This module does not itself establish that external prerequisite.
 from __future__ import annotations
 
 import fcntl
+import copy
 import hashlib
 import json
 import os
@@ -69,6 +70,55 @@ def publish_b_receipt(root: Path, identity: str, run: dict) -> None:
     if pending.exists():
         pending.unlink()
         _fsync_dir(pending.parent)
+
+
+def audit_or_rebind(root: Path, expected_identity: str, expected_sha256: str,
+                    new_identity: str | None = None, reason: str | None = None) -> dict:
+    """Audit under the CHI lock; caller must hold the already-audited Q lock."""
+    root = Path(root)
+    if (any(type(x) is not str or not DIGEST.fullmatch(x) for x in (expected_identity, expected_sha256))
+            or (new_identity is not None and (type(new_identity) is not str or not DIGEST.fullmatch(new_identity)
+                or new_identity == expected_identity or type(reason) is not str or not reason.strip() or len(reason) > 256))):
+        raise GoFailure("chi_migration_invalid")
+    _reject_symlink_ancestors(root, "chi_path_invalid")
+    if not root.is_dir(): raise GoFailure("chi_history_missing")
+    lock = os.open(root / ".lock", os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        path = root / "chi-accounting.json"
+        raw = _read_regular_bounded(path, MAX_STATE_BYTES, "chi_history_invalid")
+        if hashlib.sha256(raw).hexdigest() != expected_sha256: raise GoFailure("chi_migration_hash_mismatch")
+        auditor = object.__new__(ChiJournal)
+        auditor.root, auditor.path, auditor.state = root, path, _state_object(path)
+        auditor._validate(expected_identity)
+        state = auditor.state
+        if (state["pending"] is not None or state["halted"] is not None
+                or any(a["status"] not in {"complete", "failed"} for a in state["attempts"])):
+            raise GoFailure("chi_migration_history_unsettled")
+        if new_identity is None:
+            return {"status": "audited", "identity": expected_identity, "accounting_sha256": expected_sha256,
+                    "attempts": len(state["attempts"])}
+        marker = root / "migration.pending"
+        _write_exclusive(marker, b"migration in progress\n")
+        _fsync_dir(root)
+        archives = root / "source-archives"
+        archives.mkdir(mode=0o700, exist_ok=True)
+        _reject_symlink_ancestors(archives, "chi_path_invalid")
+        transitions = state.get("source_transitions", [])
+        archive = archives / f"{len(transitions) + 1:04d}-{expected_sha256}.json"
+        _write_exclusive(archive, raw)
+        _fsync_dir(archives)
+        updated = copy.deepcopy(state)
+        updated["identity"] = new_identity
+        updated["source_transitions"] = transitions + [{"old_identity": expected_identity,
+            "new_identity": new_identity, "accounting_sha256": expected_sha256, "reason": reason.strip()}]
+        _atomic(path, updated)
+        marker.unlink()
+        _fsync_dir(root)
+        return {"status": "rebound", "old_identity": expected_identity, "new_identity": new_identity,
+                "archived_sha256": expected_sha256, "attempts": len(state["attempts"])}
+    finally:
+        os.close(lock)
 
 
 class ChiJournal:
@@ -146,6 +196,42 @@ class ChiJournal:
     def _validate(self, identity: str) -> None:
         try:
             s = self.state
+            if (self.root / "migration.pending").exists() or (self.root / "migration.pending").is_symlink():
+                raise ValueError
+            transitions = s.get("source_transitions", [])
+            if type(transitions) is not list: raise ValueError
+            archive = self.root / "source-archives"
+            if archive.is_symlink(): raise ValueError
+            expected_archives, run_identities, previous, previous_attempts = set(), {}, None, []
+            for index, transition in enumerate(transitions):
+                if (type(transition) is not dict or set(transition) != {"old_identity", "new_identity", "accounting_sha256", "reason"}
+                        or any(type(transition[k]) is not str or not DIGEST.fullmatch(transition[k])
+                               for k in ("old_identity", "new_identity", "accounting_sha256"))
+                        or transition["old_identity"] == transition["new_identity"]
+                        or type(transition["reason"]) is not str or not transition["reason"].strip()
+                        or len(transition["reason"]) > 256
+                        or (previous is not None and previous != transition["old_identity"])):
+                    raise ValueError
+                name = f"{index + 1:04d}-{transition['accounting_sha256']}.json"
+                path = archive / name
+                raw = _read_regular_bounded(path, MAX_STATE_BYTES, "chi_history_invalid")
+                if hashlib.sha256(raw).hexdigest() != transition["accounting_sha256"]: raise ValueError
+                snapshot = _state_object(path)
+                attempts = snapshot.get("attempts")
+                if (snapshot.get("identity") != transition["old_identity"]
+                        or snapshot.get("source_transitions", []) != transitions[:index]
+                        or snapshot.get("pending") is not None or snapshot.get("halted") is not None
+                        or type(attempts) is not list or attempts[:len(previous_attempts)] != previous_attempts
+                        or s["attempts"][:len(attempts)] != attempts
+                        or any(a.get("status") not in {"complete", "failed"} for a in attempts)):
+                    raise ValueError
+                for attempt in attempts[len(previous_attempts):]:
+                    run_identities[attempt["run"]] = transition["old_identity"]
+                previous_attempts, previous = attempts, transition["new_identity"]
+                expected_archives.add(name)
+            if transitions and previous != identity: raise ValueError
+            if archive.exists() and {p.name for p in archive.iterdir()} != expected_archives: raise ValueError
+            if expected_archives and not archive.is_dir(): raise ValueError
             inflight = self.root / "tool-inflight"
             if inflight.is_symlink(): raise ValueError
             if inflight.exists():
@@ -159,7 +245,8 @@ class ChiJournal:
                     for path in directory.iterdir():
                         if (path.is_symlink() or not path.is_file()
                                 or (directory.name, path.name) != allowed_pending): raise ValueError
-            if (type(s) is not dict or set(s) != {"schema", "identity", "account_prior_history", "attempts", "pending", "halted"}
+            keys = {"schema", "identity", "account_prior_history", "attempts", "pending", "halted"}
+            if (type(s) is not dict or set(s) not in (keys, keys | {"source_transitions"})
                     or s["schema"] != "chi-go-evaluation-usd-v1" or s["identity"] != identity
                     or s["account_prior_history"] != "unknown" or type(s["attempts"]) is not list
                     or s["halted"] not in (None, "billing_details_unknown", "billing_source_unexpected")):
@@ -169,6 +256,7 @@ class ChiJournal:
             expected_evidence = set()
             expected_tool_evidence = set()
             expected_seals = set()
+            expected_receipts = set()
             for a in s["attempts"]:
                 if (type(a) is not dict or set(a) != {"evaluation", "task", "attempt", "run", "kind", "status", "requests", "patient_binding_events", "claim_done", "tool_events", "safe_error_code", "launch"}
                         or any(type(a[k]) is not str or not ID.fullmatch(a[k]) for k in ("evaluation", "task", "attempt", "run"))
@@ -195,8 +283,14 @@ class ChiJournal:
                 if a["status"] in {"complete", "failed"}:
                     seal_path = self.root / "run-seals" / (a["run"] + ".json")
                     _reject_symlink_ancestors(seal_path.parent, "chi_path_invalid")
-                    if _object(seal_path) != _seal(a, identity): raise ValueError
+                    run_identity = run_identities.get(a["run"], identity)
+                    if _object(seal_path) != _seal(a, run_identity): raise ValueError
                     expected_seals.add(seal_path.name)
+                    if a["kind"] == "coding_b" and a["status"] == "complete":
+                        receipt = self.root / "b-receipts" / (a["run"] + ".json")
+                        _reject_symlink_ancestors(receipt.parent, "chi_path_invalid")
+                        if _object(receipt) != _receipt(a, run_identity): raise ValueError
+                        expected_receipts.add(receipt.name)
                 started, finished = {}, set()
                 for event in a["tool_events"]:
                     if (type(event.get("call_id")) is not str or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event["call_id"])
@@ -347,6 +441,11 @@ class ChiJournal:
                     if path.is_symlink() or not path.is_file(): raise ValueError
                     actual_seals.add(path.name)
             if actual_seals != expected_seals: raise ValueError
+            receipts = self.root / "b-receipts"
+            if receipts.is_symlink(): raise ValueError
+            if receipts.exists() and ({p.name for p in receipts.iterdir()} != expected_receipts
+                                      or any(p.is_symlink() or not p.is_file() for p in receipts.iterdir())): raise ValueError
+            if expected_receipts and not receipts.is_dir(): raise ValueError
         except Exception:
             raise GoFailure("chi_history_invalid") from None
 

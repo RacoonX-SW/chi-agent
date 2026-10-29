@@ -1,6 +1,6 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前按 [Go CHI 入口与独立包](changes/chi-go-evaluation-entry/proposal.md) 接续截止前的可运行包工作，固定契约、外部输入、角色工具和一次未用于调参的兼容任务；原版 Claude 与 F.5 最终配送仍暂停。先前 [两个新任务的固定条件基线](changes/provider-two-task-baseline/proposal.md) 保留为开发证据；旧尝试/账目、record_only/null cap 继续保留。实现分工按 [当前工作流](../docs/subagent-workflow.md)，不操作 Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前按 [Go CHI 混批恢复与终态验证](changes/go-chi-batch-recovery/proposal.md) 接续截止前的可运行包工作；R 的 [外部入口与独立包](changes/chi-go-evaluation-entry/proposal.md) 为接线基础，S 补完整拒绝反馈、旧账迁移和原世界捕获，先固定兼容新题和条件再验证。原版 Claude 与 F.5 最终配送仍暂停。先前 [两个新任务的固定条件基线](changes/provider-two-task-baseline/proposal.md) 保留为开发证据；旧尝试/账目、record_only/null cap 继续保留。实现分工按 [当前工作流](../docs/subagent-workflow.md)，不操作 Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 

@@ -33,6 +33,50 @@ class Server:
 
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_confirmation_mixed_batch_refuses_all_then_model_continues(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            journal = ChiJournal(root / "state", identity="a" * 64, evaluation="eval", task="t", attempt="a", run="run")
+            instruction = root / "instruction.md"; instruction.write_text("Synthetic instruction")
+            handbook, workspace = root / "handbook", root / "workspace"
+            handbook.mkdir(); workspace.mkdir()
+            server = Server("people.list_contacts")
+            observed = []
+            batch = [("local-fs-read", {"path": str(instruction)}), ("people__list_contacts", {}),
+                     ("local-claim_done", {}), ("local-confirm-patient", {"patient_id": "p", "instruction_quote": "x", "chart_quote": "x"}),
+                     ("people__list_contacts", {})]
+            async def wire(request):
+                body = json.loads(request.content); observed.append(body)
+                if len(observed) == 1:
+                    message = {"role": "assistant", "content": None, "reasoning_content": "reason", "tool_calls": [
+                        {"id": f"call_{i}", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}
+                        for i, (name, args) in enumerate(batch)]}
+                    finish = "tool_calls"
+                else:
+                    message, finish = {"role": "assistant", "content": "done"}, "stop"
+                return httpx.Response(200, request=request, json={"id": "synthetic", "object": "chat.completion", "created": 0,
+                    "model": "deepseek-v4.1-flash", "choices": [{"index": 0, "message": message, "finish_reason": finish}],
+                    "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5, "cost": 0,
+                              "opencode": {"billing_source": "go", "list_cost": 0.1, "allowance": 0.1}}})
+            try:
+                result = await run_chi(journal, "synthetic-secret", role="provider", instruction="Synthetic instruction",
+                    mcp_url="http://synthetic.invalid/mcp", instruction_path=instruction, logs_dir=root / "logs",
+                    workspace_root=workspace, handbook_root=handbook, tool_references=[], lower=httpx.MockTransport(wire),
+                    server_factory=lambda _url: server)
+                self.assertEqual(result, "done")
+                self.assertEqual(server.calls, [])
+                self.assertFalse(journal.run["claim_done"])
+                self.assertEqual(len(observed), 2)
+                results = [m for m in observed[1]["messages"] if m["role"] == "tool"]
+                self.assertEqual({m["tool_call_id"] for m in results}, {f"call_{i}" for i in range(len(batch))})
+                self.assertTrue(all("REFUSED: confirmation_must_be_called_alone" in str(m["content"]) for m in results))
+                self.assertEqual([e["event"] for e in journal.run["tool_events"]], ["refused"] * len(batch))
+                self.assertFalse(journal.run["patient_binding_events"])
+                journal.finish("complete")
+            finally:
+                journal.close()
+
     async def test_three_role_sdk_tool_exchanges(self):
         for role, raw_name in (("provider", "people.list_contacts"), ("payer", "triage.get"), ("cm", "cm_chart.get_chart_data")):
             with self.subTest(role=role), tempfile.TemporaryDirectory() as d:
