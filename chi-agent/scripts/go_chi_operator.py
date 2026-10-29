@@ -15,6 +15,7 @@ from b_provider_transport import _reject_symlink_ancestors
 from development_review import _checks
 from evaluation_bundle import _check_components, _read_regular_bounded
 from go_chi_operator_snapshot import capture_resources
+from go_chi_policy import TIME_POLICY
 from live_development import _capture_review_input
 from docker.types import Mount
 from chi_bench.verifier.task_runtime import collect_all_verifier_checks  # preflight the delayed verifier import
@@ -50,7 +51,8 @@ def _load_config(path, expected):
     if c['kind'] == 'c' and (any(type(c[k]) is not str or not c[k] for k in resource_fields)
             or any(not SHA.fullmatch(c[k]) for k in ('resource_manifest_sha256', 'resource_identity_sha256'))): raise ValueError('resource')
     if any(type(c[k]) is not str or not re.fullmatch(r'sha256:[0-9a-f]{64}', c[k]) for k in ('runner_image_id', 'world_image_id')): raise ValueError('image')
-    if type(c['timeout_seconds']) is not int or not 1 <= c['timeout_seconds'] <= 3600: raise ValueError('timeout')
+    minimum = TIME_POLICY['b_operator_seconds' if c['kind'] == 'b' else 'chi_operator_seconds']
+    if type(c['timeout_seconds']) is not int or not minimum <= c['timeout_seconds'] <= TIME_POLICY['operator_max_seconds']: raise ValueError('timeout')
     if c['kind'] == 'b' and c['task_id'] != 'synthetic-coding-b': raise ValueError('task')
     return c
 

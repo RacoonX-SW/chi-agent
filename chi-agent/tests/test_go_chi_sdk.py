@@ -17,6 +17,38 @@ from request_budget import feedback
 
 
 class SDKTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sdk_b_continues_when_only_fee_details_missing(self):
+        import json
+        from opencode_go_provider import SYSTEM, INSTRUCTION, _offline_responder
+        from go_chi_policy import FEE_POLICY
+        from go_chi_runtime import coding_tools, run_coding_b
+        with tempfile.TemporaryDirectory() as directory:
+            journal = ChiJournal(Path(directory), identity='a'*64, evaluation='e', task='synthetic', attempt='a', run='b',
+                                 kind='coding_b', launch={'kind': 'coding_b', 'fee_policy': FEE_POLICY})
+            holder = {}; tools = coding_tools(lambda: holder['guard']); original = _offline_responder(); requests = []
+            def answer(request):
+                requests.append(request)
+                response = original(request); payload = json.loads(response.content)
+                payload['usage'].pop('opencode', None); payload['usage'].pop('cost', None)
+                return httpx.Response(200, request=request, json=payload)
+            guard = ChiGuard(journal, 'synthetic-secret', 'chi-'+'a'*32, httpx.MockTransport(answer),
+                tools=[Converter.tool_to_openai(t) for t in tools], system=SYSTEM, instruction=INSTRUCTION,
+                claimed=lambda: False, confirmation=lambda: None)
+            holder['guard'] = guard
+            client = AsyncOpenAI(api_key='synthetic-secret', base_url='https://opencode.ai/inference/go/openai/v1',
+                default_headers={'User-Agent': 'chi-agent', 'X-OpenCode-Session': 'chi-'+'a'*32},
+                http_client=httpx.AsyncClient(transport=guard), max_retries=0)
+            try:
+                self.assertTrue(await run_coding_b(client, guard, tools))
+                self.assertEqual(len(requests), 3); self.assertIsNone(journal.state['halted'])
+                self.assertEqual(journal.usage_totals()['billing_details_warnings'], 3)
+                self.assertFalse(journal.usage_totals()['billing_complete'])
+                journal.finish('failed'); journal.close()
+                again = ChiJournal(Path(directory), identity='a'*64, evaluation='e', task='other', attempt='b', run='next')
+                again.finish('failed'); again.close()
+            finally:
+                await client.close(); journal.close()
+
     async def test_coding_tool_reasoning_variants_through_sdk(self):
         import json
         from opencode_go_provider import SYSTEM, INSTRUCTION
@@ -195,7 +227,11 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
             journal = ChiJournal(Path(directory), identity="a" * 64, evaluation="e", task="synthetic", attempt="a", run="b", kind="coding_b")
             holder = {}
             tools = coding_tools(lambda: holder["guard"])
-            guard = ChiGuard(journal, "synthetic-secret", "chi-" + "a" * 32, httpx.MockTransport(_offline_responder()),
+            lower = _offline_responder(); timeouts = []
+            def answer(request):
+                timeouts.append(dict(request.extensions['timeout']))
+                return lower(request)
+            guard = ChiGuard(journal, "synthetic-secret", "chi-" + "a" * 32, httpx.MockTransport(answer),
                              tools=[Converter.tool_to_openai(t) for t in tools], system=SYSTEM, instruction=INSTRUCTION,
                              claimed=lambda: False, confirmation=lambda: None)
             holder["guard"] = guard
@@ -205,6 +241,7 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
             try:
                 self.assertTrue(await run_coding_b(client, guard, tools))
                 self.assertEqual(len(journal.run["requests"]), 3)
+                self.assertEqual(timeouts, [{'connect': 10, 'read': 60, 'write': 60, 'pool': 60}] * 3)
                 journal.finish("complete")
             finally:
                 await client.close()

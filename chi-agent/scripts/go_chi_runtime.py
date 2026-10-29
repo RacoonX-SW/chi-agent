@@ -166,7 +166,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             session = "chi-" + uuid.uuid4().hex
             guard = ChiGuard(journal, secret, session, lower, tools=definitions, system=official.SYSTEM_PROMPT,
                              instruction=instruction, claimed=lambda: journal.run["claim_done"],
-                             confirmation=context.get, before_batch=before_batch, observed_request=observed_request)
+                             confirmation=context.get, before_batch=before_batch, observed_request=observed_request,
+                             run_started=run_started)
             holder["guard"] = guard
             bridge.guard = guard
             client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",

@@ -35,6 +35,116 @@ def request(data):
 
 
 class GuardTests(unittest.IsolatedAsyncioTestCase):
+    async def test_purpose_timeouts_and_dispatch_evidence(self):
+        for confirmation in (False, True):
+            with self.subTest(confirmation=confirmation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                j = ChiJournal(root, identity='a' * 64, evaluation='e', task='t', attempt='a', run='r')
+                seen = []
+                async def answer(req):
+                    seen.append(req.extensions['timeout'])
+                    return httpx.Response(200, request=req, json={'usage': USAGE, 'model': 'deepseek-v4.1-flash',
+                        'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': 'done'}}]})
+                guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                    system='system', instruction='instruction', claimed=lambda: False,
+                    confirmation=lambda: ('prompt', 'evidence') if confirmation else None)
+                data = body()
+                if confirmation:
+                    data.update(messages=[{'role': 'system', 'content': 'prompt'}, {'role': 'user', 'content': 'evidence'}],
+                                max_tokens=32768, response_format={'type': 'json_object'})
+                    del data['tools']
+                await guard.handle_async_request(request(data))
+                self.assertEqual(seen, [{'connect': 10, 'read': 360 if confirmation else 60, 'write': 60, 'pool': 60}])
+                doc = json.loads((root / 'wire-evidence/r/001-request.json').read_text())
+                self.assertEqual(doc['dispatch']['purpose'], 'confirmation' if confirmation else 'main')
+                self.assertEqual(doc['dispatch']['session_sha256'], hashlib.sha256(SESSION.encode()).hexdigest())
+                self.assertEqual(doc['dispatch']['body_bytes'], len(doc['body_utf8'].encode()))
+                self.assertNotIn(SESSION, json.dumps(doc))
+                j.finish('failed'); j.close()
+                next_j = ChiJournal(root, identity='a' * 64, evaluation='e', task='t', attempt='b', run='s')
+                next_j.finish('failed'); next_j.close()
+
+    async def test_wall_timeout_and_admission_are_distinct(self):
+        from go_chi_policy import TIME_POLICY
+        with tempfile.TemporaryDirectory() as directory:
+            j = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r')
+            calls = []
+            async def answer(req):
+                calls.append(req)
+                await asyncio.sleep(0.1)
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                system='system', instruction='instruction', claimed=lambda: False, confirmation=lambda: None)
+            with patch.dict(TIME_POLICY, {'main_io_seconds': 0.01}):
+                with self.assertRaisesRegex(GoFailure, 'chi_timeout'):
+                    await guard.handle_async_request(request(body()))
+            self.assertEqual(len(calls), 1)
+            self.assertIsNotNone(j.state['pending'])
+            j.finish('failed', guard.error); j.close()
+
+    async def test_confirmation_wall_timeout_preserves_pending(self):
+        from go_chi_policy import TIME_POLICY
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            j = ChiJournal(root, identity='a' * 64, evaluation='e', task='t', attempt='a', run='r')
+            async def answer(_req): await asyncio.sleep(0.1)
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                system='system', instruction='instruction', claimed=lambda: False, confirmation=lambda: ('prompt', 'evidence'))
+            data = body(); del data['tools']
+            data.update(messages=[{'role': 'system', 'content': 'prompt'}, {'role': 'user', 'content': 'evidence'}],
+                        max_tokens=32768, response_format={'type': 'json_object'})
+            with patch.dict(TIME_POLICY, {'confirmation_io_seconds': 0.01}):
+                with self.assertRaisesRegex(GoFailure, 'chi_timeout'):
+                    await guard.handle_async_request(request(data))
+            diagnostic = json.loads((root / 'wire-evidence/r/001-diagnostic.json').read_text())
+            self.assertEqual(diagnostic['code'], 'chi_timeout')
+            self.assertEqual(j.state['pending'], {'run': 'r', 'round': 1})
+            j.finish('failed', guard.error); j.close()
+
+    async def test_admitted_request_can_finish_after_window(self):
+        with tempfile.TemporaryDirectory() as directory:
+            j = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r')
+            async def answer(req):
+                guard.run_started -= 10000
+                return httpx.Response(200, request=req, json={'usage': USAGE, 'model': 'deepseek-v4.1-flash',
+                    'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': 'done'}}]})
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                system='system', instruction='instruction', claimed=lambda: False, confirmation=lambda: None)
+            await guard.handle_async_request(request(body()))
+            self.assertEqual(j.run['requests'][0]['status'], 'settled')
+            self.assertIsNone(j.state['pending'])
+            j.finish('failed'); j.close()
+
+    async def test_expired_admission_does_not_reserve(self):
+        async def answer(_req):
+            raise AssertionError('must not send')
+        with tempfile.TemporaryDirectory() as directory:
+            j = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r')
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                system='system', instruction='instruction', claimed=lambda: False, confirmation=lambda: None, run_started=-10000)
+            with self.assertRaisesRegex(GoFailure, 'chi_run_time_limit'):
+                await guard.handle_async_request(request(body()))
+            self.assertEqual(j.run['requests'], [])
+            self.assertIsNone(j.state['pending'])
+            j.finish('failed', guard.error); j.close()
+
+    async def test_b_expired_admission_does_not_reserve(self):
+        from go_chi_policy import TIME_POLICY
+        with tempfile.TemporaryDirectory() as directory:
+            j = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r', kind='coding_b')
+            defs = [{'type': 'function', 'function': {'name': name, 'description': DESCRIPTIONS[name],
+                'parameters': SCHEMAS[name], 'strict': False}} for name in ('inspect_code', 'verify_patch')]
+            async def answer(_req): raise AssertionError('must not send')
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=defs,
+                system=SYSTEM, instruction=INSTRUCTION, claimed=lambda: False, confirmation=lambda: None)
+            bbody = {'model': 'deepseek-v4.1-flash', 'messages': [{'role': 'system', 'content': SYSTEM},
+                     {'role': 'user', 'content': INSTRUCTION}], 'tools': defs, 'max_tokens': 1024,
+                     'thinking': {'type': 'enabled'}, 'reasoning_effort': 'high'}
+            guard.run_started -= TIME_POLICY['b_admission_seconds']
+            with self.assertRaisesRegex(GoFailure, 'chi_run_time_limit'):
+                await guard.handle_async_request(request(bbody))
+            self.assertEqual(j.run['requests'], []); self.assertIsNone(j.state['pending'])
+            j.finish('failed', guard.error); j.close()
+
     async def test_main_truncation_settles_and_stops(self):
         with tempfile.TemporaryDirectory() as directory:
             j = ChiJournal(Path(directory), identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")

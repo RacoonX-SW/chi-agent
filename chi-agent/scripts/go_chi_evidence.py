@@ -24,9 +24,12 @@ def _safe_usage(value, secrets):
     return value
 
 
-def envelope(raw: bytes, *, kind: str, secrets: tuple[str, ...], status=None, elapsed_ms=None) -> dict:
+def envelope(raw: bytes, *, kind: str, secrets: tuple[str, ...], status=None, elapsed_ms=None, dispatch=None) -> dict:
     result = {"schema": "chi-go-wire-evidence-v1", "kind": kind, "raw_sha256": hashlib.sha256(raw).hexdigest(),
               "body_utf8": None, "redaction": None, "usage": None, "http_status": status, "elapsed_ms": elapsed_ms}
+    if dispatch is not None:
+        if kind != 'request': raise ValueError('dispatch_invalid')
+        result['dispatch'] = dispatch
     if kind == "response" and len(raw) > 4 * 1024 * 1024:
         result["redaction"] = "body_too_large"
         return result
