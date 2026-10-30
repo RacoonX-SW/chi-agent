@@ -15,6 +15,7 @@ from development_review import _checks
 from evaluation_bundle import _check_components, _read_regular_bounded
 from go_chi_operator_snapshot import capture_resources
 from live_development import _capture_review_input
+from role_cm_capture import capture_cm_review_input
 from role_resource_preflight import validate
 
 ROOT = Path('/workspace')
@@ -88,6 +89,14 @@ def main(argv=None):
     world = None
     resource_identity = {'world_id': Path(manifest['world']['path']).stem, 'world_sha256': manifest['world']['sha256'],
         'files': {'fixtures/expectations.json': next(x for x in manifest['files'] if x['path'] == manifest['task_path'] + '/fixtures/expectations.json')}}
+    if manifest['role'] == 'cm':
+        resource_identity['files']['fixtures/manifest.json'] = next(x for x in manifest['files'] if x['path'] == manifest['task_path'] + '/fixtures/manifest.json')
+    def capture(root):
+        if manifest['role'] == 'cm':
+            return capture_cm_review_input(world, root, config['run_id'], task_id=manifest['task_id'],
+                                           role='cm', resource_identity=resource_identity)
+        return _capture_review_input(world, root, config['run_id'], {}, task_id=manifest['task_id'],
+                                     resource_identity=resource_identity)
     try:
         volumes = {host(dataset / manifest['task_path']): {'bind': f"/opt/chi-bench/tasks/{manifest['task_id']}", 'mode': 'ro'},
                    host(artifacts): {'bind': '/logs/artifacts', 'mode': 'rw'}}
@@ -107,8 +116,7 @@ def main(argv=None):
             labels={'org.chi-agent.v-owner': config['run_id']})
         record['world_id'] = world.id
         world.start(); record['readiness_seconds'] = round(wait_world(world), 3)
-        record['capture']['initial'] = _capture_review_input(world, output / 'initial-capture', config['run_id'], {},
-            task_id=manifest['task_id'], resource_identity=resource_identity)
+        record['capture']['initial'] = capture(output / 'initial-capture')
         record['capture']['before_resources'] = capture_resources(world, output / 'resource-snapshots', 'before')
         if (record['capture']['initial'].get('status') != 'ready'
                 or any(item.get('status') != 'ready' for item in record['capture']['before_resources'].values())):
@@ -129,8 +137,7 @@ def main(argv=None):
         record['mcp'] = {'tools_count': probe['tools_count'], 'tool': probe['tool'], 'response_file': 'mcp-response.json',
                          'response_sha256': hashlib.sha256(data).hexdigest()}
         record['capture']['after_resources'] = capture_resources(world, output / 'resource-snapshots', 'after')
-        record['capture']['final'] = _capture_review_input(world, output / 'final-capture', config['run_id'], {},
-            task_id=manifest['task_id'], resource_identity=resource_identity)
+        record['capture']['final'] = capture(output / 'final-capture')
         if (record['capture']['final'].get('status') != 'ready'
                 or any(item.get('status') != 'ready' for item in record['capture']['after_resources'].values())):
             raise RuntimeError('final_capture_unavailable')
@@ -163,8 +170,7 @@ def main(argv=None):
                 try:
                     if 'after_resources' not in record['capture']:
                         record['capture']['after_resources'] = capture_resources(world, output / 'resource-snapshots', 'after')
-                    record['capture']['final'] = _capture_review_input(world, output / 'final-capture', config['run_id'], {},
-                        task_id=manifest['task_id'], resource_identity=resource_identity)
+                    record['capture']['final'] = capture(output / 'final-capture')
                 except Exception:
                     record['capture']['final'] = {'status': 'unavailable'}
             try:
