@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | U真实Harbor组件启动预演与三题评分覆盖独立审核完成，范围见[U报告](harbor-launch-coverage-review.md)。真实类型/Trial/官方环境配合合成模型，三题仅复用原终态，无新增真实模型/业务/判分；待PR交用户合并 |
+| 当前任务 | U真实Harbor组件启动预演与三题评分覆盖独立审核完成，范围见[U报告](harbor-launch-coverage-review.md)。真实类型/Trial/官方环境配合合成模型，三题仅复用原终态，无新增真实模型/业务/判分；PR #25交用户审核合并 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 上次独立审核候选 | U `2c31a931f26ba70581ef4470fb83755037e0855c`；首审日志/异常/ATIF漏算问题由原Terra修复，固定候选独立复验通过。详细身份、全部失败和通过层只见U报告 |
 | 上次通过的实现提交 | U同上SHA仅在真实组件/合成启动及只读覆盖范围通过；最后真实Go任务证据仍属T反馈 `721b14e17e37917d27f333d7aac6aaedfa99b9ad`。旧失败/费用/未知全部保留，official_reward=null |
@@ -18,7 +18,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | U固定候选独立全量/controller、三场真实Trial预演及包/原历史只读审计通过；三题程序检查重现，内容rubric均未评审，空证据列表/旧helper兼容缺口已列明。详细数值/范围/身份只见U报告 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #24](https://github.com/xsw932187210-cell/chi-agent/pull/24)已实际核对合并；U待创建base=main PR交用户合并，不merge/auto-merge。之后按已认可顺序冻结三类代表题，再验证稳定性/交付首稿；内容评审仍暂停，十一月隐私条件按实际日期人工复核 |
+| PR 与下一步 | [PR #24](https://github.com/xsw932187210-cell/chi-agent/pull/24)已实际核对合并；U已推送并创建base=main的[PR #25](https://github.com/xsw932187210-cell/chi-agent/pull/25)，交用户审核，未merge/auto-merge。之后按已认可顺序冻结三类代表题，再验证稳定性/交付首稿；内容评审仍暂停，十一月隐私条件按实际日期人工复核 |
 | 未验证项 | 旧未知请求可信结算、Go非编码用途/付费临床评审的官方支持、十一月ZDR、1M、精确上游快照/账单/长期缓存；跨任务统计稳定性/其他角色业务、临床内容verdict/最终批准/官方得分；Harbor官方CLI/真实Go端到端/完整配送/F.5、OpenSpec CLI、在途硬取消/daemon故障 |
 | 真实运行 | T新B与一次已见回归/两次冻结未见provider任务完成，均submitted/in_progress、适用检查通过、全量业务变更仅关联目标，终态/清理完整；不宣称官方成绩。旧Q/R/S失败及一个未结算完整保留，无人工代选/自动重试。Go付费开发评审尚未切换，Claude=0，official_reward=null |
 
