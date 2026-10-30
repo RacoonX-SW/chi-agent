@@ -110,6 +110,14 @@ payer/UM 与 CM 分别使用 `--role payer` / `--role cm` 和相应角色 MCP；
 
 ## 官方 harness 适配
 
-`scripts/go_chi_harness.py` 是包内薄适配器，接收官方 Harbor 的 instruction 和 MCP 配置，再启动本 runner。它不修改 vendor registry，也不会被原 stock `openai-agents` 自动选用；接入方须明确提供自有 harness import path、包路径、固定身份及外部状态/日志/资源挂载。完整 Harbor 安装/类型和最终配送仍需 F.5 验证；现有离线适配检查不能替代该步骤。
+`scripts/go_chi_harness.py` 接收 Harbor 的 instruction 和 MCP 配置，再启动本 runner。控制侧把包内 `scripts/`、固定官方源码和控制侧依赖放入 Python 模块路径，显式指定 `go_chi_harness:GoChiHarness`。它不修改 vendor registry，也不会被原 stock `openai-agents` 自动选用。真实组件预演、真实模型任务与最终配送分别验收；最终 F.5 和官方判分仍按项目审核状态管理。
 
-适配器读取 `OPENCODE_API_KEY` 和以下调用方配置：`CHI_GO_BUNDLE_ROOT`、`CHI_GO_STATE_ROOT`、`CHI_GO_ROLE`、`CHI_GO_EVALUATION_ID`、`CHI_GO_TASK_ID`、`CHI_GO_ATTEMPT_ID`、`CHI_GO_RUN_ID`、`CHI_GO_BUNDLE_SHA256`、`CHI_GO_HISTORY_MODE`；local 模式另需 `CHI_GO_Q_ROOT`。它只将必要 Go Key 注入新的 runner 进程，并要求 runner 的非零退出向上报错；包、固定依赖和资源须由接入方预先提供，`install()` 不自动联网安装。
+适配器读取 `OPENCODE_API_KEY` 和以下调用方配置：`CHI_GO_BUNDLE_ROOT`、`CHI_GO_STATE_ROOT`、`CHI_GO_ROLE`、`CHI_GO_EVALUATION_ID`、`CHI_GO_TASK_ID`、`CHI_GO_ATTEMPT_ID`、`CHI_GO_RUN_ID`、`CHI_GO_BUNDLE_SHA256`、`CHI_GO_HISTORY_MODE`；local 模式另需 `CHI_GO_Q_ROOT`。metadata可通过Harbor的 `AgentConfig.env` 提供；Key仅在控制器运行时环境安全注入，**不要放进AgentConfig、extra_env、`--ae KEY=value`或其他持久配置**。Harbor会保存TrialConfig，运行时注入用于避免配置落盘。适配器无凭据执行同一解释器的包预检，之后才读取Go Key并逐次注入runner。
+
+调用方需提供已供应包/固定SDK/PDF/vendor的世界镜像；`install()` 不自动联网安装。官方Docker环境显式使用 `host_env={}`，环境的持久/作用域执行env保持空，避免在runner启动前注入其他提供方凭据。适配器暴露给Trial的执行overlay为空；内部metadata不随之进入进程。角色MCP端点为provider 8020、payer 8100、cm 8200的单一 `/mcp`，与 `CHI_GO_ROLE` 一致。
+
+公开资源也由调用方供应：在允许的 `/input/tool_reference.md` 提供普通文件。固定官方entrypoint可能把 `/opt/*-task-assets/tool_reference.md` 改成链接；runner仍拒绝链接，适配器只选择存在的普通候选。应按所选公开资源身份供应文件，不能盲目跟随任意链接或复制fixtures/评分材料。instruction由Harbor原样提供，适配器独占写入临时文件。
+
+适配器保留无Key预检摘要和安全执行摘要，原stdout/stderr只保留字节数/hash及受限安全诊断，不进入Harbor父类的原输出debug日志；实际执行仍由真实环境的exec完成。非零/缺返回码、损坏结果或trace向上报错，超时/取消继续交给Harbor清理，无自动重试。下载日志后核验结果/输出/trace并填充context与trajectory；总tokens取完整已结算请求的run_result，缓存/费用未知保留null，不从部分step用量推断零缓存或金额。
+
+`CHI_GO_STATE_ROOT` 内的账、wire、工具证据及seal需要调用方在删除世界前持久保存，单靠 `run_result.json` 不足以保全历史。仓库测试使用真实Trial hooks采集；开发操作者与官方配送侧各自负责资源供应、证据导出与清理。测试专用解释器/合成HTTP shim不在本包内，不能拿它代替真实模型运行；三角色只读协议也不证明三赛道业务能力。仓库README维护预演命令，详细通过层与限制只见阶段报告。
