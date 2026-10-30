@@ -469,6 +469,57 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 
 用户已知悉 Go 非编码用途尚未获得官方确认并决定继续使用，十一月隐私条件仍需运行前人工复核；不伪装请求，不增加时钟门禁。完整 Harbor 配送与 F.5、原版 Claude 判分分别按审核状态管理。
 
+### 真实 Harbor 组件的合成启动预演
+
+从项目目录执行以下预演。它使用真实Harbor类型/工厂/SingleStepTrial、固定官方Docker环境和真实角色MCP；仅模型HTTP与两条故障注入为测试专用。控制侧最小组件overlay固定于 `requirements-harbor.lock`，复用原SDK/PDF，不是安装完整Harbor可选服务/CLI栈。当前复现范围为Python3.12/Linux arm64；依赖与Docker客户端身份见[规格](openspec/changes/harbor-launch-coverage/design.md#harbor-最小新增与隔离复现)。
+
+先在新的目录安装本轮控制侧overlay，再准备本地测试镜像和自然生成的合成B。下面的shell仅调度Docker；包导出、资源复制、安装、模型/工具循环都在Docker内。目录与ID每次换新，原运行不覆盖。
+
+```sh
+harbor_probe_root="$PWD/runs/harbor-launch-coverage-root/replay-001"
+harbor_docker_socket="$(docker context inspect --format '{{.Endpoints.docker.Host}}')"
+harbor_docker_socket="${harbor_docker_socket#unix://}"
+mkdir -p "$harbor_probe_root"
+docker run --rm --pull=never \
+  -v "$PWD/requirements-harbor.lock:/requirements.lock:ro" \
+  -v "$harbor_probe_root:/out" chi-agent-py312-review:dev \
+  /usr/local/bin/python -m pip install --no-deps --require-hashes \
+  --target /out/overlay -r /requirements.lock
+sh tests/harbor_rehearsal_prepare.sh "$harbor_probe_root/prepared" replay-001
+```
+
+官方Docker环境需要Linux docker客户端。在Docker内取得规格固定的官方归档并核对SHA256，仅解出客户端；可复用已经核对的本轮CLI，不必重复下载。
+
+```sh
+docker run --rm --pull=never -v "$harbor_probe_root:/out" \
+  chi-agent-py312-review:dev sh -c '
+  curl -fsSL https://download.docker.com/linux/static/stable/aarch64/docker-28.5.2.tgz -o /out/docker-cli.tgz &&
+  echo "9e4f82996ab790724094475ebed33a736434bfe5d45231b676fef22ffb80044d  /out/docker-cli.tgz" | sha256sum -c - &&
+  mkdir /out/cli && tar -xzf /out/docker-cli.tgz -C /out/cli docker/docker'
+```
+
+三个场景串行执行：正常只读闭环、非零退出、损坏trace。无需`.env`或真实Key，脚本只用测试专用合成值；verifier禁用，无真实模型或业务任务。含原受限资源的测试镜像仅留本地，不上传。
+
+```sh
+for harbor_scenario in success runner-nonzero corrupt-trace; do
+  docker run --rm --pull=never --network none \
+    -v "$harbor_docker_socket:/var/run/docker.sock" \
+    -v "$harbor_probe_root/cli/docker/docker:/usr/local/bin/docker:ro" \
+    -v "$harbor_probe_root/prepared/build/bundle:/bundle:ro" \
+    -v "$harbor_probe_root/overlay:/overlay:ro" -v "$harbor_probe_root:/out" \
+    -v "$PWD/vendor/chi-bench/src:/vendor:ro" \
+    -v "$PWD/tests/harbor_trial_rehearsal.py:/trial.py:ro" \
+    -v "$PWD/tests/harbor_mcp_probe.py:/mcp_probe.py:ro" \
+    -v chi-h-root-model-deps-20261027-v1:/deps:ro \
+    -e PYTHONPATH=/bundle/scripts:/vendor:/overlay:/deps \
+    -e PYTHONDONTWRITEBYTECODE=1 chi-agent-py312-review:dev python /trial.py \
+    --out "/out/trial-$harbor_scenario" --bundle /bundle \
+    --image chi-agent-harbor-synthetic:replay-001-seed --scenario "$harbor_scenario"
+done
+```
+
+`trial-*/trials/`保存原Harbor配置/结果/异常/下载日志，`state/`为删除世界前采集的独立合成账与wire/seal，MCP与公开参考供应证据在各场景目录；测试生成的USD/tokens仅为合成数据，不能并入真实历史。预演使用调用方hooks供应普通公开参考并采证，不更改官方评分器，也不声称stock入口自动选择本适配器。现有三题评分覆盖与实际通过边界见[唯一U报告](reviews/harbor-launch-coverage-review.md)；后续真实调用仍先固定有界规格/身份并满足自己的B门禁。
+
 ## DeepSeek 本地开发评审
 
 `scripts/development_review.py` 用固定 PA 规则和完整证据做本地诊断，报告名为 `development-review.json`，official reward 为 null。原版 Claude 评分与正式交付仍按 [审核状态](reviews/REVIEW_STATE.md) 的范围处理。
