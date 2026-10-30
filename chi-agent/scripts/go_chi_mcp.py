@@ -22,15 +22,22 @@ CM_NAMES = {
 }
 
 
-def selected_server(url: str):
+def selected_server(url: str, *, auxiliary=False):
     """Explicitly disable SDK retries for MCP reads and mutations alike."""
     import httpx
     from agents.mcp import MCPServerStreamableHttp
     def http_client(headers=None, timeout=None, auth=None):
+        if auxiliary:
+            timeout = httpx.Timeout(450, connect=10)
         return httpx.AsyncClient(headers=headers, timeout=timeout, auth=auth, trust_env=False,
                                  follow_redirects=False, transport=httpx.AsyncHTTPTransport(retries=0))
-    return MCPServerStreamableHttp(name="chi_bench", params={"url": url, "httpx_client_factory": http_client}, cache_tools_list=True,
-                                   max_retry_attempts=0)
+    params = {"url": url, "httpx_client_factory": http_client}
+    options = {}
+    if auxiliary:
+        params.update(timeout=450, sse_read_timeout=450)
+        options['client_session_timeout_seconds'] = 450
+    return MCPServerStreamableHttp(name="chi_bench", params=params, cache_tools_list=True,
+                                   max_retry_attempts=0, **options)
 
 
 def role_allowlists():
@@ -40,7 +47,7 @@ def role_allowlists():
 
 
 class MCPBridge:
-    def __init__(self, server, role, raw_tools, *, binding=None):
+    def __init__(self, server, role, raw_tools, *, binding=None, auxiliary=None):
         from agents.tool import FunctionTool
         if role not in {"provider", "payer", "cm"} or (role == "provider" and binding is None):
             raise GoFailure("chi_mcp_role_invalid")
@@ -48,6 +55,7 @@ class MCPBridge:
         self.raw_names = {}
         self.tools = []
         self.guard = None
+        self.auxiliary = auxiliary
         self.lock = asyncio.Lock()
         allowed = role_allowlists()
         names = set()
@@ -137,7 +145,14 @@ class MCPBridge:
                     return result
             self.guard.journal.start_tool(selected["id"], canonical, args)
             try:
-                response = await self.server.call_tool(raw, args)
+                if self.auxiliary is not None and canonical == 'cm_outreach.send_message':
+                    self.auxiliary.begin(selected['id'], canonical, args)
+                    try:
+                        response = await self.server.call_tool(raw, args)
+                    finally:
+                        self.auxiliary.end(selected['id'])
+                else:
+                    response = await self.server.call_tool(raw, args)
                 is_error = getattr(response, "isError", False)
                 if type(is_error) is not bool:
                     raise GoFailure("chi_mcp_result_invalid")
