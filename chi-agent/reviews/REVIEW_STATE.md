@@ -18,7 +18,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | V最终独立全量/controller、真实三角色只读世界/公开PDF/来源捕获与清理、完整旧历史副本及辅助失败传播通过；新B和自造患者真实Go往返通过。旧失败/费用/旧未知保留，不将组件/探针写成CM临床或官方通过 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR #25](https://github.com/xsw932187210-cell/chi-agent/pull/25)已合并。V已完成有界验收及教学材料，收尾提交/推送base=main PR交用户合并；后续先准备统一角色操作者和CM broker/world生命周期，再另固定三题各一次清单。内容评审仍暂停，十一月隐私条件按实际日期人工复核 |
+| PR 与下一步 | [PR #25](https://github.com/xsw932187210-cell/chi-agent/pull/25)已合并。V已推送并创建base=main的[PR #26](https://github.com/xsw932187210-cell/chi-agent/pull/26)，交用户审核合并，未merge/auto-merge；后续先准备统一角色操作者和CM broker/world生命周期，再另固定三题各一次清单。内容评审仍暂停，十一月隐私条件按实际日期人工复核 |
 | 未验证项 | 完整CM真实业务跨容器编排、统一三角色付费操作者、其他角色业务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go端到端/完整配送/F.5、OpenSpec CLI、在途硬取消/daemon故障 |
 | 真实运行 | V新B与自造预约患者probe成功，只有开发接点含义；最近三题临床任务仍是T submitted/in_progress的原证据，未重跑。零新增未知/自动重试/回退，原Q/R/S失败和唯一未结算完整保留，Claude/临床评审0，official_reward=null |
 
