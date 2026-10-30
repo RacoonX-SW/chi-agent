@@ -97,6 +97,7 @@
 | 独立 Go CHI 包、固定实验与失败归因 | 已核对从外部输入、身份预检、SDK/Guard、MCP 到证据/结算的真实接线；本地调度与最终 Harbor 配送分别说明，证据见 [R 报告](../reviews/chi-go-evaluation-entry-review.md) | 已讲解一次运行可同时证明技术接线可用和业务未完成；用户参与用途/范围取舍，尚无新增源码复述或亲自运行证据 |
 | 混批恢复、账源迁移与全局终态证据 | 按 [S 规格](../openspec/changes/go-chi-batch-recovery/design.md)实现有效混批整体拒绝、显式账源接续和前后全局快照；又用真实 B 暴露的可选字段缺口说明协议兼容与业务决策的区别；证据见 [S 报告](../reviews/go-chi-batch-recovery-review.md) | 用户批准有界实验与必要兼容修复，已讲解选题冻结、目标过滤盲点和本地调度/独立包/最终配送的区别；没有新增用户独立复述或操作证据，不记为掌握 |
 | 客户端超时、服务端完成与对账证据 | 按[T规格](../openspec/changes/go-chi-timeout-recovery/design.md)修复用途等待与在途收尾，并检查官方Console导出；已讲解服务端完成、客户端收到决策、用量和各项费用完整性分别取证 | 用户提供官方JSON参与定位；未亲自改代码/运行或复述超时/对账链路，不据提供文件升级为掌握 |
+| 官方启动组件与评分覆盖分层 | 按[U规格](../openspec/changes/harbor-launch-coverage/design.md)核对真实Harbor生命周期及独立runner接点；复用既有终态对应程序检查、内容rubric和任务不适用分支，证据见[U报告](../reviews/harbor-launch-coverage-review.md) | 已解释本地调度器、runner、官方启动器与判分器的职责，以及空证据rubric列表不能证明临床完整性；用户授权范围和顺序，没有新增独立复述/实践证据，不升级为掌握 |
 
 相关材料：
 
@@ -111,6 +112,8 @@
 - [共同协作约定](../../COLLABORATION.md)
 
 ## 下一次从哪里继续
+
+当前先从[U设计](../openspec/changes/harbor-launch-coverage/design.md)和[U报告](../reviews/harbor-launch-coverage-review.md)接续：跟踪Harbor真实工厂/Trial接收外部instruction、角色MCP和非秘密配置，适配器无Key预检后启动独立runner，再看下载日志后的context钩子、异常结果与清理。把真实组件加合成模型的启动证据，与真实模型解题和官方judge分开。评分侧沿 `collect_all_verifier_checks(include_semantic_judge=False)` → 适用stage checks → `PaUmJudgeAdapter` rubrics → 未执行的 `WorkspaceJudge` / scorecard，解释程序字段合法、材料可读、临床内容正确分别还需要什么证据。下一阶段按审核状态先冻结代表流程与角色，内容评审/官方判分仍须保持各自授权边界；不因讲过而记录用户掌握。
 
 先从[T设计](../openspec/changes/go-chi-timeout-recovery/design.md)和[T报告](../reviews/go-chi-timeout-recovery-review.md#pr费用反馈修订2026-10-30)接续：沿`go_chi_entry.main()` → `_identity()`/Q→CHI锁 → 留档或来源迁移/新B → `run_chi()`/`ChiGuard` → `ChiJournal.settle()`讲清生命周期。将HTTP读取间隔、单请求总时限、运行准入与控制器收尾串起来，再看费用warning和旧未知留档为何不等于结算成功。结合固定回归/未见题及全量资源核对，解释工程恢复、业务提交和临床/官方评分各自证明什么。下一步区分本地操作者与外部runner包、stock harness选择及完整配送；开发范围只按唯一审核状态接续。S混批/终态证据按需回读，固定一次未见题成功不升级为统计泛化。
 
@@ -619,6 +622,14 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 费用与准入分开：新包的`FEE_POLICY`写进profile和attempt.launch，`settle()`先验证tokens，再由`_fee_decision()`同时返回原费用缺项信息和是否停止。缺精确金额可以留下null继续，旧attempt仍重放旧策略；明确非Go扣费或异常数据仍停止。这样版本化的是以后怎样执行，不是事后把旧失败改成新策略下的成功。
 - 留档与结算分开：`acknowledge-unsettled`持Q→CHI锁，核对旧主账和精确请求hash，保存原账/提供方原文件/事件链，再解除该事件的全局准入占位。旧attempt中的请求仍pending未结算；每次完整审计都检查留档前缀、seal、wire及来源转换。新来源必须迁移并重新取得B，新请求未知仍停。副本合成验证的是这些工程边界，真实B/C才检验候选能否在官方任务世界运行。
 - 固定实验条件：恢复前固定候选、资源、模型、共享请求限额及一次性的任务顺序；同一候选在开发回归和此前冻结未见题上留下成功或失败，才能讨论可迁移性。确定性部分检查与临床裁决/官方得分继续分开，不在trial内把隐藏检查反馈给Agent。实际结果与耗时只在T报告维护，不把代理完成运行升级为用户实践证据。
+
+### U：启动者、执行者与评判者的证据
+
+- 本地操作者负责开发世界/捕获/清理；独立runner负责模型规划、工具契约与请求账；Harbor负责真实类型加载、环境与生命周期；verifier在运行结束后检查业务状态和材料内容。适配器存在或FakeHarness通过不能证明真实Trial能加载它。
+- 真实组件检查暴露了环境作用域提前合并、工具参考路径存在性和日志钩子容忍损坏等差异；讲解应沿真实入口及本阶段最终差异复核，不照抄自测总结。调用方凭据不能作为持久Trial配置保存，运行时注入与非秘密元数据分开。
+- 原终态可同时用于核验字段/流程、额外资源归属和准备内容评审输入；同一份材料被读取不等于其中的临床主张已获verdict。固定数据有空证据列表时，要说明评分覆盖不足及旧helper前置兼容缺口，不能自行制造评分项或把缺项记通过。
+- 本阶段无新增用户操作或复述证据。详细尝试与通过边界只在U报告保存，后续顺序和付费范围只查唯一REVIEW_STATE。
+- 用户问“容器每次都清空还是复用更好”：已讲解复用固定镜像、依赖卷和缓存，同时让独立trial从新世界/runner开始；同次任务可连续执行与排错，账/轨迹/终态先导出再删容器。提问不是已掌握隔离与复现的证据，不安排默认测验。
 
 ## 新对话的交接提示
 
