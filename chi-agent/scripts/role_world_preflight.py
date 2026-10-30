@@ -79,7 +79,9 @@ def main(argv=None):
     else: raise ValueError('resource_exists')
     output.mkdir(mode=0o700)
     artifacts = output / 'world-artifacts'; artifacts.mkdir(); (artifacts / 'workspaces').mkdir()
+    started = time.monotonic()
     record = {'schema': 'chi-role-world-preflight-result-v1', 'run_id': config['run_id'], 'role': manifest['role'],
+              'started_unix_ms': time.time_ns() // 1000000,
               'status': 'started', 'official_reward': None, 'model_requests': 0, 'capture': {}, 'cleanup': 'not_created'}
     def save(): (output / 'result.json').write_text(json.dumps(record, sort_keys=True, indent=2) + '\n')
     save()
@@ -101,7 +103,7 @@ def main(argv=None):
             volumes[host(reference)] = {'bind': '/opt/chi-bench-task-assets/tool_reference.md', 'mode': 'ro'}
         environment = _task_environment(); environment['CHI_BENCH_TASK_ID'] = manifest['task_id']
         world = client.containers.create(image=image.id, name=container_name, command=['sleep', 'infinity'],
-            environment=environment, volumes=volumes, network_disabled=True, detach=True,
+            environment=environment, volumes=volumes, network_mode='none', detach=True,
             labels={'org.chi-agent.v-owner': config['run_id']})
         record['world_id'] = world.id
         world.start(); record['readiness_seconds'] = round(wait_world(world), 3)
@@ -112,9 +114,13 @@ def main(argv=None):
                 or any(item.get('status') != 'ready' for item in record['capture']['before_resources'].values())):
             raise RuntimeError('initial_capture_unavailable')
         deadline = time.monotonic() + 60
-        with _api_timeout(world.client, deadline):
-            code, streams = world.exec_run(['python', '-c', MCP_PROGRAM, f"http://127.0.0.1:{PORTS[manifest['role']]}/mcp",
-                                     PROBES[manifest['role']]], demux=True)
+        mcp_started = time.monotonic()
+        try:
+            with _api_timeout(world.client, deadline):
+                code, streams = world.exec_run(['python', '-c', MCP_PROGRAM, f"http://127.0.0.1:{PORTS[manifest['role']]}/mcp",
+                                         PROBES[manifest['role']]], demux=True)
+        finally:
+            record['mcp_elapsed_ms'] = max(0, int((time.monotonic() - mcp_started) * 1000))
         data = streams[0] if isinstance(streams, tuple) else None
         if code != 0 or not isinstance(data, bytes) or len(data) > 16 * 1024 * 1024: raise RuntimeError('mcp_probe_unavailable')
         probe = json.loads(data)
@@ -130,6 +136,7 @@ def main(argv=None):
             raise RuntimeError('final_capture_unavailable')
         record['resources_unchanged'] = all(record['capture']['before_resources'][side]['sha256'] ==
             record['capture']['after_resources'][side]['sha256'] for side in ('provider', 'payer'))
+        if not record['resources_unchanged']: raise RuntimeError('resources_changed')
         cap = output / 'final-capture' / config['run_id']
         try:
             checks = _checks(json.loads((cap / 'exported_state.json').read_bytes()), json.loads((cap / 'expectations.json').read_bytes()))
@@ -140,7 +147,7 @@ def main(argv=None):
     except Exception as exc:
         record['status'] = 'failed'
         code = str(exc)
-        safe_codes = {'reference_copy_invalid', 'initial_capture_unavailable', 'mcp_probe_unavailable', 'final_capture_unavailable'}
+        safe_codes = {'reference_copy_invalid', 'initial_capture_unavailable', 'mcp_probe_unavailable', 'final_capture_unavailable', 'resources_changed'}
         record['safe_error_code'] = code if code in safe_codes else 'world_preflight_failed'
     finally:
         if world is not None:
@@ -166,6 +173,8 @@ def main(argv=None):
                 world.remove(force=False); record['cleanup'] = 'removed'
             except Exception:
                 record['cleanup'] = 'failed'; record['status'] = 'incomplete'
+        record['finished_unix_ms'] = time.time_ns() // 1000000
+        record['elapsed_ms'] = max(0, int((time.monotonic() - started) * 1000))
         save()
     return 0 if record['status'] == 'complete' else 1
 

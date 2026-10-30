@@ -8,8 +8,8 @@ import pytest
 import role_world_preflight as operator
 
 
-@pytest.mark.parametrize('fail', [False, True])
-def test_owned_world_capture_and_cleanup(tmp_path, monkeypatch, fail):
+@pytest.mark.parametrize('mode', ['success', 'mcp_failure', 'resources_changed'])
+def test_owned_world_capture_and_cleanup(tmp_path, monkeypatch, mode):
     monkeypatch.setattr(operator, 'ROOT', tmp_path)
     monkeypatch.setenv('HOST_PROJECT_ROOT', '/host/project')
     dataset = tmp_path / 'dataset'; dataset.mkdir()
@@ -33,7 +33,7 @@ def test_owned_world_capture_and_cleanup(tmp_path, monkeypatch, fail):
         (target / 'expectations.json').write_text('{}')
         return {'status': 'ready'}
     monkeypatch.setattr(operator, '_capture_review_input', capture)
-    monkeypatch.setattr(operator, 'capture_resources', lambda w, o, p: {s: {'status': 'ready', 'sha256': 'a' * 64} for s in ('provider', 'payer')})
+    monkeypatch.setattr(operator, 'capture_resources', lambda w, o, p: {s: {'status': 'ready', 'sha256': ('b' if mode == 'resources_changed' and p == 'after' and s == 'payer' else 'a') * 64} for s in ('provider', 'payer')})
     monkeypatch.setattr(operator, '_checks', lambda *a: {'synthetic': True})
     class NotFound(Exception): status_code = 404
     class World:
@@ -47,12 +47,13 @@ def test_owned_world_capture_and_cleanup(tmp_path, monkeypatch, fail):
         def remove(self, **kw): self.removed = True
         def logs(self, **kw): return b'synthetic log'
         def exec_run(self, *args, **kw):
-            return (1, (b'', b'error')) if fail else (0, (b'{"tools_count":1,"tool":"cm_intake.list_referral_queue","response":{}}', b''))
+            return (1, (b'', b'error')) if mode == 'mcp_failure' else (0, (b'{"tools_count":1,"tool":"cm_intake.list_referral_queue","response":{}}', b''))
     world = World()
     class Containers:
         def get(self, name): raise NotFound()
         def create(self, **kwargs):
-            assert kwargs['network_disabled'] is True and 'OPENCODE_API_KEY' not in kwargs['environment']
+            assert kwargs['network_mode'] == 'none' and 'network_disabled' not in kwargs
+            assert 'OPENCODE_API_KEY' not in kwargs['environment']
             return world
     client = SimpleNamespace(images=SimpleNamespace(get=lambda name: SimpleNamespace(id='sha256:' + '1' * 64)), containers=Containers())
     monkeypatch.setattr(operator, '_docker', lambda: client)
@@ -62,8 +63,12 @@ def test_owned_world_capture_and_cleanup(tmp_path, monkeypatch, fail):
     raw = json.dumps(config).encode(); path = tmp_path / 'config.json'; path.write_bytes(raw)
     result = operator.main(['--config', str(path), '--config-sha256', hashlib.sha256(raw).hexdigest()])
     record = json.loads((tmp_path / 'output/run/result.json').read_text())
-    assert result == (1 if fail else 0) and record['cleanup'] == 'removed' and world.removed
+    assert result == (0 if mode == 'success' else 1) and record['cleanup'] == 'removed' and world.removed
     assert calls == ['initial-capture', 'final-capture']
     assert (tmp_path / 'output/run/world-container.log').read_bytes() == b'synthetic log'
-    if not fail: assert (tmp_path / 'output/run/mcp-response.json').is_file()
+    if mode != 'mcp_failure': assert (tmp_path / 'output/run/mcp-response.json').is_file()
+    if mode == 'resources_changed':
+        assert record['resources_unchanged'] is False and record['safe_error_code'] == 'resources_changed'
+    assert record['finished_unix_ms'] >= record['started_unix_ms']
+    assert record['elapsed_ms'] >= 0 and record['mcp_elapsed_ms'] >= 0
     assert record['model_requests'] == 0 and record['official_reward'] is None
