@@ -11,8 +11,8 @@
 | 环境、Python 版本目标与容器边界 | [Docker 工作流](docs/docker-workflow.md) |
 | 分支、PR 与上传范围 | [GitHub 工作流](docs/github-workflow.md) |
 | 教学方式、理解进度与下一学习点 | [学习约定](docs/learning-agreement.md) |
-| 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[Go 确认超时修复](openspec/changes/go-chi-timeout-recovery/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
-| 验收契约与实现任务 | [Go CHI 接线设计](openspec/changes/chi-go-evaluation-entry/design.md)、[本轮设计](openspec/changes/go-chi-timeout-recovery/design.md)与[任务](openspec/changes/go-chi-timeout-recovery/tasks.md)、[历史验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md) |
+| 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[代表角色与开发患者模拟](openspec/changes/representative-role-baseline/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
+| 验收契约与实现任务 | [Go CHI 接线设计](openspec/changes/chi-go-evaluation-entry/design.md)、[本轮设计](openspec/changes/representative-role-baseline/design.md)与[任务](openspec/changes/representative-role-baseline/tasks.md)、[历史验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md) |
 
 本页只维护运行方法与入口；阶段结果和详细证据集中到状态页及其链接的阶段报告。命令示例中的模型名称不表示已经可用或获准调用。
 
@@ -519,6 +519,56 @@ done
 ```
 
 `trial-*/trials/`保存原Harbor配置/结果/异常/下载日志，`state/`为删除世界前采集的独立合成账与wire/seal，MCP与公开参考供应证据在各场景目录；测试生成的USD/tokens仅为合成数据，不能并入真实历史。预演使用调用方hooks供应普通公开参考并采证，不更改官方评分器，也不声称stock入口自动选择本适配器。现有三题评分覆盖与实际通过边界见[唯一U报告](reviews/harbor-launch-coverage-review.md)；后续真实调用仍先固定有界规格/身份并满足自己的B门禁。
+
+### 三角色资源与无模型世界预检
+
+包外入口 `scripts/role_world_preflight.py` 接受固定配置和SHA256，先用 `role_resource_preflight.validate()` 核对资源，再启动一个无Key、无外网的新世界；只调用所选角色的一次只读MCP，并在清理前保存初末导出和provider/payer完整resources。初始化状态的纯检查不是任务分数。范围及准备资源的固定版本见[V设计](openspec/changes/representative-role-baseline/design.md)，实际验收见[审核状态](reviews/REVIEW_STATE.md)。
+
+| family | task actor → runtime role | MCP端口 |
+| --- | --- | --- |
+| prior_auth_provider | provider → provider | 8020 |
+| prior_auth_um | payer → payer | 8100 |
+| care_management | care_manager → cm | 8200 |
+
+资源manifest采用`chi-role-resources-v1`：绑定revision/task/family/actor/role、相对dataset的task/instruction/tool-reference路径、world来源/path/hash，以及每个文件的path/size/hash/public或world_only可见性。当前有界验证器只接受规格中的必要文件闭包和payer的4份公开PDF；其他题的文件条件需先扩展规格，不能随意增加judge/solution/tests。CM显式使用所声明的共享world/ref，PA绑定双world。原始fixtures只给世界，payer公开PDF由官方初始化复制到自己的incoming_request工作目录。
+
+预检配置为`chi-role-world-preflight-v1`，字段是`schema`、新`run_id`、`dataset_relative`、`manifest_relative`、`manifest_sha256`、`output_relative`、`world_image_id`。路径相对项目根；输出父目录须存在，已有输出或资源身份拒绝。准备好已授权数据与固定镜像后，从本项目目录运行，替换受审配置路径和hash：
+
+```bash
+docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
+  -v "$PWD:/workspace:ro" -v "$PWD/runs:/workspace/runs:rw" \
+  -v "${DOCKER_HOST_SOCKET:-/Users/asaki/.docker/run/docker.sock}:/var/run/docker.sock" \
+  -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+  -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro \
+  -e HOST_PROJECT_ROOT="$PWD" -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/model-deps:/pdf-deps:/workspace/vendor/chi-bench/src \
+  --entrypoint /opt/a-venv/bin/python chi-agent-py312-review:controller \
+  /workspace/scripts/role_world_preflight.py \
+  --config /workspace/runs/<受审配置>.json --config-sha256 <配置SHA256>
+```
+
+产物含`result.json`、`mcp-response.json`、`world-container.log`、`world-artifacts/`、初末capture和`resource-snapshots/`；保留失败编号，不覆盖重跑。CM走独立来源捕获，原始export没有world_id，身份从实际挂载的fixture manifest与world文件核验；不向原导出补字段或改变PA契约。none网络保留localhost供原entrypoint健康检查，不能换成旧式network_disabled参数。
+
+### 本地Go患者模拟与官方默认
+
+本地开发模拟与内容评审是两个入口；启用患者模拟不恢复下节临床评审。官方world仍默认Anthropic，参赛bundle不含`dev_patient_*`、资源预检和操作者；通用`run_chi()`的auxiliary参数默认关闭，正式CLI和存在Go Key都不会自动启用开发模拟器。
+
+开发接点由两端组成：计费所有者构造`PatientBroker`，与已审`ChiJournal`及主guard共享billing锁，启动能力token保护的内部HTTP服务，再显式调用`run_chi(..., auxiliary=broker)`；CHI launch须声明`role=cm`、`aux_contract=patient-simulator-v1`及现行fee_policy，并满足原历史审计/当前B。世界只接收本轮能力文件、run ID和内部broker地址，不接收Go/Anthropic Key，也不接外网。该接口供受审开发操作者接线，现有`go_chi_operator.py`的业务C仍限provider，不能只改角色常量当作完整CM编排。
+
+在独立开发world中，将可执行的`scripts/dev_patient_cb`只读bind到`/workspace/.venv/bin/cb`，将bootstrap/adapter所在目录只读挂载并加入该world的PYTHONPATH，显式提供以下环境项；镜像及官方默认启动文件不改：
+
+```text
+CHI_DEV_PATIENT_SIMULATOR=go-v1
+CHI_DEV_CAPABILITY_FILE=/run/chi-dev/capability
+CHI_DEV_RUN_ID=<本轮唯一ID>
+CHI_DEV_BROKER_URL=http://<内部计费所有者>:<端口>/patient
+```
+
+能力文件须为本轮普通只读文件、32–128个字符的字母数字/下划线/连字符token，且不在Agent可读workspace内。原entrypoint激活venv会重新前置venv/bin，所以单纯前置PATH不能保证使用开发cb。wrapper只接受原serve命令形状，在同一进程安装适配类后启动原CLI；没有显式开发挂载时仍是官方Anthropic路径。完整跨容器CM业务试次还需另固定操作者、生命周期与任务清单。
+
+独立自造患者探针使用包外`scripts/dev_patient_probe.py --config /input/config.json --config-sha256 <SHA256>`。它会调用真实Go；先查审核状态，不因这里列命令自动授权重跑。运行容器需有只读`/package`及固定vendor/原SDK/PDF、只读开发probe/adapter、原账`/prior-go`和新的可写`/probe-logs`，只安全注入OPENCODE_API_KEY，不挂整个.env或其他Key。配置schema为`chi-synthetic-patient-probe-v1`，字段为`schema`、`bundle`、`bundle_sha256`、`runtime_identity`、`q_root`、`run`、`evaluation`、`attempt`、`output`、`probe_sha256`、`adapter_sha256`；典型路径分别为`/package`、`/prior-go`、`/probe-logs/result`，身份/hash由受审导出和实际源码计算。
+
+probe固定自造预约persona及两句问题，最多2响应，STOP即结束；不加载基准患者或评分材料。`result.json`保存观察到的会话，`completion.json`只在账目封存后出现，失败用`failure.json`，所有wire/usage/seal在原CHI账中追加。患者辅助请求单列purpose/费用，主+确认共享50/确认2不变；预算及超时只见V规格。模型更换会改变患者行为，探针完成、CM业务结束、临床评价与官方reward分别判断。
 
 ## DeepSeek 本地开发评审
 

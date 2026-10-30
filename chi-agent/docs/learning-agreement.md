@@ -1,6 +1,6 @@
 # CHI-Bench：边参赛边学习 Agent 开发
 
-建立：2026-10-21；更新：2026-10-30（Asia/Shanghai）。这是用户明确要求长期延续的学习约定和进度入口。新对话先读教学方式、当前进度和下一次入口，追加历史按本轮需要查阅；不能只按代码任务列表推进而忽略教学。
+建立：2026-10-21；更新：2026-10-31（Asia/Shanghai）。这是用户明确要求长期延续的学习约定和进度入口。新对话先读教学方式、当前进度和下一次入口，追加历史按本轮需要查阅；不能只按代码任务列表推进而忽略教学。
 
 ## 用户希望得到什么
 
@@ -17,7 +17,7 @@
 
 ## 教学方式
 
-**默认按一个阶段或一条完整运行流程讲清楚开发过程，以 B/C 的源码讲解为样板。** 先给项目全貌，再逐步进入关键实现；阶段内容较多时按有头有尾的流程分段，保持前后联系。重要设计、实现和验收节点主动补充讲解，用户要求“像 B/C 一样讲”时直接完整展开，不只给概念、文件清单或完成汇报。
+**新功能或较大bug修复验收后，集中完成一次完整开发教学，以 B/C 的源码讲解为样板。** 不以零散进度汇报代替教学；围绕一个阶段或一条完整运行流程，先给项目全貌，再逐步进入关键实现，内容较多时按有头有尾的流程分段。模型更换、常规测评和小bug修复不单独展开教学，用户主动追问时再解释；不把每次调整都扩成一课。用户要求“像 B/C 一样讲”时直接完整展开，不只给概念、文件清单或完成汇报。
 
 讲解按以下顺序组织，可随实际阶段调整深度：
 
@@ -98,6 +98,7 @@
 | 混批恢复、账源迁移与全局终态证据 | 按 [S 规格](../openspec/changes/go-chi-batch-recovery/design.md)实现有效混批整体拒绝、显式账源接续和前后全局快照；又用真实 B 暴露的可选字段缺口说明协议兼容与业务决策的区别；证据见 [S 报告](../reviews/go-chi-batch-recovery-review.md) | 用户批准有界实验与必要兼容修复，已讲解选题冻结、目标过滤盲点和本地调度/独立包/最终配送的区别；没有新增用户独立复述或操作证据，不记为掌握 |
 | 客户端超时、服务端完成与对账证据 | 按[T规格](../openspec/changes/go-chi-timeout-recovery/design.md)修复用途等待与在途收尾，并检查官方Console导出；已讲解服务端完成、客户端收到决策、用量和各项费用完整性分别取证 | 用户提供官方JSON参与定位；未亲自改代码/运行或复述超时/对账链路，不据提供文件升级为掌握 |
 | 官方启动组件与评分覆盖分层 | 按[U规格](../openspec/changes/harbor-launch-coverage/design.md)核对真实Harbor生命周期及独立runner接点；复用既有终态对应程序检查、内容rubric和任务不适用分支，证据见[U报告](../reviews/harbor-launch-coverage-review.md) | 已解释本地调度器、runner、官方启动器与判分器的职责，以及空证据rubric列表不能证明临床完整性；用户授权范围和顺序，没有新增独立复述/实践证据，不升级为掌握 |
+| 本地患者模拟与角色接线 | [V规格](../openspec/changes/representative-role-baseline/design.md)与[V报告](../reviews/representative-role-baseline-review.md)：原CM状态机、开发适配/broker、嵌套请求账与真实角色导出 | 围绕新功能集中讲解模型职责、消息翻转、锁与未知传播、实际接口和验收层级；用户提出Go替代及官方兼容取舍，尚无新增独立源码复述或运行实践，不升级为掌握 |
 
 相关材料：
 
@@ -113,7 +114,9 @@
 
 ## 下一次从哪里继续
 
-当前先从[U设计](../openspec/changes/harbor-launch-coverage/design.md)和[U报告](../reviews/harbor-launch-coverage-review.md)接续：跟踪Harbor真实工厂/Trial接收外部instruction、角色MCP和非秘密配置，适配器无Key预检后启动独立runner，再看下载日志后的context钩子、异常结果与清理。把真实组件加合成模型的启动证据，与真实模型解题和官方judge分开。评分侧沿 `collect_all_verifier_checks(include_semantic_judge=False)` → 适用stage checks → `PaUmJudgeAdapter` rubrics → 未执行的 `WorkspaceJudge` / scorecard，解释程序字段合法、材料可读、临床内容正确分别还需要什么证据。下一阶段按审核状态先冻结代表流程与角色，内容评审/官方判分仍须保持各自授权边界；不因讲过而记录用户掌握。
+本轮从[V设计](../openspec/changes/representative-role-baseline/design.md)和[V报告](../reviews/representative-role-baseline-review.md)继续：围绕真实开发讲清参赛Agent模型、环境患者模拟器与评分模型的职责；本地显式启用Go患者模拟，官方默认Anthropic与judge保持各自路径。新功能/较大修复完成后集中串起入口、消息role翻转、原CM状态机、嵌套MCP与同一记账所有者的正常/失败路径，模型调整或常规测评不单独开课。当前按开发证据讲解，不因用户提出需求或代理完成测试而记录为掌握。
+
+上一阶段可从[U设计](../openspec/changes/harbor-launch-coverage/design.md)和[U报告](../reviews/harbor-launch-coverage-review.md)回读：跟踪Harbor真实工厂/Trial接收外部instruction、角色MCP和非秘密配置，适配器无Key预检后启动独立runner，再看下载日志后的context钩子、异常结果与清理。把真实组件加合成模型的启动证据，与真实模型解题和官方judge分开。评分侧沿 `collect_all_verifier_checks(include_semantic_judge=False)` → 适用stage checks → `PaUmJudgeAdapter` rubrics → 未执行的 `WorkspaceJudge` / scorecard，解释程序字段合法、材料可读、临床内容正确分别还需要什么证据。下一阶段按审核状态先冻结代表流程与角色，内容评审/官方判分仍须保持各自授权边界；不因讲过而记录用户掌握。
 
 先从[T设计](../openspec/changes/go-chi-timeout-recovery/design.md)和[T报告](../reviews/go-chi-timeout-recovery-review.md#pr费用反馈修订2026-10-30)接续：沿`go_chi_entry.main()` → `_identity()`/Q→CHI锁 → 留档或来源迁移/新B → `run_chi()`/`ChiGuard` → `ChiJournal.settle()`讲清生命周期。将HTTP读取间隔、单请求总时限、运行准入与控制器收尾串起来，再看费用warning和旧未知留档为何不等于结算成功。结合固定回归/未见题及全量资源核对，解释工程恢复、业务提交和临床/官方评分各自证明什么。下一步区分本地操作者与外部runner包、stock harness选择及完整配送；开发范围只按唯一审核状态接续。S混批/终态证据按需回读，固定一次未见题成功不升级为统计泛化。
 
@@ -631,10 +634,26 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 本阶段无新增用户操作或复述证据。详细尝试与通过边界只在U报告保存，后续顺序和付费范围只查唯一REVIEW_STATE。
 - 用户问“容器每次都清空还是复用更好”：已讲解复用固定镜像、依赖卷和缓存，同时让独立trial从新世界/runner开始；同次任务可连续执行与排错，账/轨迹/终态先导出再删容器。提问不是已掌握隔离与复现的证据，不安排默认测验。
 
+### 2026-10-31：交接入口与教学触发条件
+
+- 用户再次要求将教学作为文档中的持续约定：新功能或较大bug修复验收后集中展开，模型变更、常规测评和小修不单独讲；已落实到本文件的教学方式与下一入口，不能只在对话里答应。
+- 接续由AGENTS指向协作约定、学习约定和唯一REVIEW_STATE，再按链接读一份阶段报告与相关规格/源码。每轮按职责人工维护；不是Git自动生成，也不另建重复交接文件。新对话的Prompt提醒读取这些入口即可，不搬运整段历史。
+- 用户决定本地CM患者模拟优先使用Go/DeepSeek，官方Anthropic默认保留；参赛Agent、患者模拟器、评分模型是三种职责，开发模拟条件变化不自动形成官方分数或临床评审授权。需求确定时尚未验收，最终实现与边界只按V报告和固定源码讲解。
+- 用户提出了需求和取舍，尚无新增源码复述或运行实践证据；不记为已掌握。
+
+### V：从患者对话接线理解环境与Agent
+
+- 这一功能接住了已有SDK/工具循环，让开发环境可以用Go扮演患者。Agent模型决定照护管理师如何问，患者模型按环境persona如何答，评分模型在结束后评材料和对话；它们可以使用同一模型服务，职责和证据仍分开。官方默认Anthropic没有随本地选型更换。
+- 正常链为`run_chi()` → `MCPBridge.invoke()` → 原`CMOutreachService.send_message()` → 显式开发PatientSimulator → `PatientBroker` → `AuxiliaryTransport`/同一个`ChiJournal` → 原service保存患者回复。适配复用`build_system_prompt()`，把care_manager消息当user、患者消息当assistant，使同一对话从患者视角生成；STOP后仍由官方状态机处理终止，不能由Agent或操作者补写患者答案。
+- 取舍是一个计费所有者、两种锁：主HTTP只持billing；MCP持派发锁等待world时，world回调只取billing，避免重复取MCP锁死锁。辅助另计purpose和次数，但在同一账中预留/结算；未知时父工具与aux wire可同时在途，能审计却继续阻断。环境把异常变成普通工具错误也不允许下一主HTTP绕过fatal。
+- 三个工程故障展示了为何要检查整链：底层HTTP延长而外层MCP仍默认5秒；Docker两种禁网参数对localhost解析不同；CM导出没有PA的world_id。分别用真实延迟/容器和严格来源捕获验证，保留原失败，不能通过删检查或补造字段变成成功。超时与读取策略属于自有客户端/SDK策略，不冒充竞赛限时。
+- 验证分层：合成模型配真实SDK/MCP/service验证预算、回滚和失败；真实world只读验证资源、角色、导出/清理；自造患者真实Go往返验证接口。它们共同不等于完整CM解题或官方内容评分。后续应沿统一角色操作者、broker/world生命周期再做单次业务试验，保留全部失败和不确定性，不在trial内人工代选或修结果。
+- 教学与复述：可按“哪个模型负责什么→消息如何往返→谁持状态和账→在哪些失败必须停止→各层测试证明什么”复述。用户目前参与需求和方向选择，实际实现/运行由代理执行；没有新增亲自实践或独立复述证据，不安排默认测验。
+
 ## 新对话的交接提示
 
 分工见 [实现与独立审核](subagent-workflow.md)，当前阶段以 REVIEW_STATE 为准；[D0 历史 Prompt](d0-handoff-prompts.md) 仅供回查，旧双代理人数和开发版本不覆盖现行约定。历史审核与学习记录保留，不因更换协作方式推断用户已掌握完整工具链。
 
 可以在新对话中使用：
 
-> 请先读取 AGENTS.md 指定的当前协作、学习和审核摘要，接续 CHI-Bench 已授权范围。代码实现默认一个 gpt-6.1-terra / high 子代理，你负责规格、协调、独立审核、教学和 GitHub；第二个代理仅在有明确独立并行收益时说明职责后启用，纯文档由你处理。先核对 Git 并建立 codex 工作分支，推送后创建 PR 交我审核合并；安装、下载、测试和调试都在 Docker。学习按 B/C 的方式完整讲解项目开发：串起整体目标、阶段衔接、设计取舍、真实代码流程与验证，默认不安排小题或测验，实践按我的意愿进行。按职责维护文档，避免复制状态与验收证据；阶段、授权和未决项以 REVIEW_STATE 为准，实际 API/多次 C 运行按其中已确认的新授权推进，不自动启用官方判分。
+> 请先读取 AGENTS.md 指定的当前协作、学习和审核摘要，接续 CHI-Bench 已授权范围。代码实现默认一个 gpt-6.1-terra / high 子代理，你负责规格、协调、独立审核、教学和 GitHub；第二个代理仅在有明确独立并行收益时说明职责后启用，纯文档由你处理。先核对 Git；新独立任务从最新 origin/main 建 codex 工作分支，推送后创建 PR 交我审核合并；安装、下载、测试和调试都在 Docker。新功能或较大bug修复验收后，按 B/C 的方式完整讲解目标、取舍、真实调用链、失败路径与验证；模型调整、常规测评和小修不单独开课，默认不安排测验，实践按我的意愿进行。按职责维护文档，避免复制状态与验收证据；阶段、授权和未决项以 REVIEW_STATE 为准，实际 API/多次 C 运行按其中已确认的新授权推进，不自动启用官方判分。

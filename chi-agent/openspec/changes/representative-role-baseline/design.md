@@ -43,6 +43,8 @@ payer的request PDF虽然在源数据fixtures/request下，固定官方 `Service
 3. 若公开payer输入依赖本地PDF而现有allowlist不可读，最小扩展显式公共输入manifest/只读路径，预检绑定role/task/files/hash，禁止链接、越界、重复/任意目录、fixtures/judge/hidden或非预期文件。复用锁定PDF读取器；旧无新参数入口保持旧边界。工具应能按公开输入清单发现/读取自己的文件，不因此看见评分材料或其他角色workspace。先用合成资料测边界，不能按实际题文改策略。
 4. 角色纯检查调用固定官方入口且显式禁用semantic judge；若cm_v4独立branch/导出不支持则如实“未验证”，不能调用默认verify_task/WorkspaceJudge/Claude来填空。无模型初始世界检查不是任务完成成绩，不输出reward=1或0。
 
+本轮仅接受所冻结的shared world；per-task world输入显式拒绝，不用共享world静默回退。后续需要per-task来源时另冻结其路径/初始化和导出契约。CM导出按固定`WorldService._export_cm_state()`的原始形状处理，世界身份来自实际挂载的fixture manifest与world文件，不能给export补造world_id；PA原捕获契约不放宽。
+
 优先新增包外小模块/命令而非改写旧provider操作者；确需扩展共有入口则保持旧config/资源兼容并给明确类型。保留原evaluation_entry live拒绝，既有Go SDK/工具循环、50共享请求/最多2确认、8192/32768、B6/1024、患者门禁、record_only/null cap、费用缺项null/warning、零自动重试/回退均不变。不得给agent硬编码期望终态、病种答案或隐藏rubric。
 
 ## 用户新增：本地Go患者模拟、官方Anthropic默认保留
@@ -85,7 +87,9 @@ Go固定 `deepseek-v4.1-flash`、`https://opencode.ai/inference/go/openai/v1/cha
 
 ## 历史、失败与验收
 
-原T唯一旧超时留档链已解除有效global占位，旧请求仍未结算；不得重复ack/settle/删占位或重发。原Q/CHI/native账不改、新未知不自动留档。无模型环境与合成账分开，所有成功/失败、资源身份、工具调用/耗时/hash、初末捕获与清理保留忽略目录。Go实际provider用途/十一月条件仍是既有边界，本轮无付费请求。
+2026-10-31执行冻结：独立审核候选 `410a5b4f31444afd85f2850986a17d547a90f015`，包manifest `5600fd738481264781cd011b625731bee2b66e9eb64178121ca64d7607bd0af4`，runtime identity `b29d6ecfdb7503fd0caecfd413aa06b8dd09cc6b0d4d71581b5951b33c5b3e60`。固定最小清单 `runs/representative-role-baseline-root/evidence/live-plan-frozen.json` SHA256为 `1d76bb6a8b38b976a9745d11c320cd43be181f2c5838771afa9a6b5bb8b87ea5`，B配置 `5e8b403394a6ca5a8b6c84a284a08e3a64125b14e27803c8004235154335fceb`，patient配置 `41534d59f2394b64f22d60c92877a9972953ae0764d1a0aa19021eb1b7660dad`。第一轮自造请求的canonical JSON hash为 `390285f349ff27d4c4e95f40088dbf9c505e33fd0f27a8f5e2c0b2a36fe74a2a`；第二轮先冻结自造问题和追加已验证患者回复的规则，完整请求含首轮模型输出，只能在运行时留实际hash。仍最多B1（6/1024）+patient probe1（2/8192），不用完不转移用途，不是三题C或内容评审。
+
+原T唯一旧超时留档链已解除有效global占位，旧请求仍未结算；不得重复ack/settle/删占位或重发。原Q/native账不改，CHI只有在候选/旧账hash核对后按原显式来源迁移追加，不改旧attempt，新未知不自动留档。无模型环境与合成账分开，所有成功/失败、资源身份、工具调用/耗时/hash、初末捕获与清理保留忽略目录。Go实际provider用途/十一月条件仍是既有边界；实际调用与结果只见阶段报告，不在规格预填通过。
 
 一个Terra/high自测后停写，主代理固定候选、看diff/调用代码、独立Docker复验：三类资源身份/错误role/world/path/hash、缺资源/坏输入、公共PDF合法/非法边界、实际固定bootstrap/只读MCP与导出、正常/失败/清理、无Key和无评分材料进入Agent。不要编写复述文档的测试，已通过G/H不重复安装。
 
