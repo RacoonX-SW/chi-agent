@@ -334,11 +334,17 @@ class ChiJournal:
                  attempt: str, run: str, kind: str = "chi", require_b: bool = False,
                  launch: dict | None = None):
         if (type(identity) is not str or not DIGEST.fullmatch(identity)
-                or kind not in {"chi", "coding_b"}
+                or kind not in {"chi", "coding_b", "patient_probe"}
                 or (launch is not None and type(launch) is not dict)
                 or any(type(x) is not str or not ID.fullmatch(x)
                        for x in (evaluation, task, attempt, run))):
             raise GoFailure("chi_identity_invalid")
+        if launch is not None and 'aux_contract' in launch:
+            if (launch['aux_contract'] != 'patient-simulator-v1' or kind not in {'chi', 'patient_probe'}
+                    or (kind == 'chi' and launch.get('role') != 'cm')):
+                raise GoFailure('chi_identity_invalid')
+        if kind == 'patient_probe' and (launch is None or launch.get('aux_contract') != 'patient-simulator-v1'):
+            raise GoFailure('chi_identity_invalid')
         self.root = Path(root)
         self.run_id = run
         self.lock = None
@@ -379,7 +385,7 @@ class ChiJournal:
                         return _object(path) == _receipt(item, identity)
                     except Exception:
                         return False
-                if kind != "chi" or not any(valid_b(item) for item in self.state["attempts"]):
+                if kind not in {"chi", "patient_probe"} or not any(valid_b(item) for item in self.state["attempts"]):
                     raise GoFailure("chi_b_receipt_missing")
             if any(a["run"] == run or (a["evaluation"], a["task"], a["attempt"]) == (evaluation, task, attempt)
                    for a in self.state["attempts"]):
@@ -449,11 +455,19 @@ class ChiJournal:
                 if (type(pending_claim) is dict and type(pending_claim.get("run")) is str
                         and type(pending_claim.get("round")) is int):
                     allowed_pending = (pending_claim["run"], f"__wire_{pending_claim['round']:03d}.pending")
+                allowed_parent = None
+                if allowed_pending:
+                    attempts = [a for a in s.get('attempts', []) if a.get('run') == pending_claim['run']]
+                    if len(attempts) == 1 and 0 < pending_claim['round'] <= len(attempts[0].get('requests', [])):
+                        req = attempts[0]['requests'][pending_claim['round'] - 1]
+                        parent = req.get('parent_call_id')
+                        if req.get('purpose') == 'patient_simulator' and isinstance(parent, str):
+                            allowed_parent = (pending_claim['run'], parent + '.pending')
                 for directory in inflight.iterdir():
                     if directory.is_symlink() or not directory.is_dir(): raise ValueError
                     for path in directory.iterdir():
                         if (path.is_symlink() or not path.is_file()
-                                or (directory.name, path.name) != allowed_pending): raise ValueError
+                                or (directory.name, path.name) not in (allowed_pending, allowed_parent)): raise ValueError
             keys = {"schema", "identity", "account_prior_history", "attempts", "pending", "halted"}
             if (type(s) is not dict or not keys <= set(s) or set(s) - keys - {'source_transitions', 'acknowledgements'}
                     or s["schema"] != "chi-go-evaluation-usd-v1" or s["identity"] != identity
@@ -469,7 +483,7 @@ class ChiJournal:
             for a in s["attempts"]:
                 if (type(a) is not dict or set(a) != {"evaluation", "task", "attempt", "run", "kind", "status", "requests", "patient_binding_events", "claim_done", "tool_events", "safe_error_code", "launch"}
                         or any(type(a[k]) is not str or not ID.fullmatch(a[k]) for k in ("evaluation", "task", "attempt", "run"))
-                        or a["kind"] not in {"chi", "coding_b"}
+                        or a["kind"] not in {"chi", "coding_b", "patient_probe"}
                         or type(a["patient_binding_events"]) is not list
                         or type(a["claim_done"]) is not bool
                         or type(a["launch"]) is not dict
@@ -479,8 +493,15 @@ class ChiJournal:
                             or not re.fullmatch(r"[a-z0-9_]{1,64}", a["safe_error_code"])))
                         or any(type(event) is not dict or type(event.get("event")) is not str for event in a["patient_binding_events"])
                         or a["status"] not in {"started", "complete", "failed"} or type(a["requests"]) is not list
-                        or len(a["requests"]) > (6 if a["kind"] == "coding_b" else 50)):
+                        or len(a["requests"]) > (6 if a["kind"] == "coding_b" else 2 if a['kind'] == 'patient_probe' else 60 if a['launch'].get('aux_contract') == 'patient-simulator-v1' else 50)):
                     raise ValueError
+                aux_enabled = a['launch'].get('aux_contract') == 'patient-simulator-v1'
+                if 'aux_contract' in a['launch'] and not aux_enabled: raise ValueError
+                if aux_enabled and (a['kind'] not in {'chi', 'patient_probe'}
+                        or (a['kind'] == 'chi' and a['launch'].get('role') != 'cm')): raise ValueError
+                if a['kind'] == 'patient_probe' and not aux_enabled: raise ValueError
+                if sum(r.get('purpose') in {'main', 'confirmation'} for r in a['requests']) > (6 if a['kind'] == 'coding_b' else 50): raise ValueError
+                if sum(r.get('purpose') == 'patient_simulator' for r in a['requests']) > (2 if a['kind'] == 'patient_probe' else 10 if aux_enabled else 0): raise ValueError
                 fee_policy = a['launch'].get('fee_policy')
                 if fee_policy not in (None, FEE_POLICY): raise ValueError
                 if a["safe_error_code"] in {"chi_evidence_persistence_failed", "chi_persistence_failed",
@@ -541,19 +562,33 @@ class ChiJournal:
                         if evidence.get("body_utf8") is not None and hashlib.sha256(evidence["body_utf8"].encode()).hexdigest() != event["result_sha256"]:
                             raise ValueError
                         expected_tool_evidence.add((a["run"], call_id + ".json"))
-                if set(started) != finished:
-                    raise ValueError
+                unfinished = set(started) - finished
+                if unfinished:
+                    claim = s.get('pending')
+                    if (type(claim) is not dict or claim.get('run') != a['run']
+                            or type(claim.get('round')) is not int or not 0 < claim['round'] <= len(a['requests'])): raise ValueError
+                    pending_request = a['requests'][claim['round'] - 1]
+                    if (pending_request.get('purpose') != 'patient_simulator'
+                            or unfinished != {pending_request.get('parent_call_id')}
+                            or not (self.root / 'tool-inflight' / a['run'] / (pending_request['parent_call_id'] + '.pending')).is_file()): raise ValueError
                 confirms = 0
                 for index, item in enumerate(a["requests"], 1):
                     effective_fee_stop = None
                     if (type(item) is not dict or item.get("round") != index
-                            or item.get("purpose") not in {"main", "confirmation"}
+                            or item.get("purpose") not in ({"main", "confirmation", "patient_simulator"} if aux_enabled else {"main", "confirmation"})
                             or (a["kind"] == "coding_b" and item.get("purpose") != "main")
-                            or item.get("max_tokens") != (1024 if a["kind"] == "coding_b" else 8192 if item.get("purpose") == "main" else 32768)
+                            or (a['kind'] == 'patient_probe' and item.get('purpose') != 'patient_simulator')
+                            or item.get("max_tokens") != (1024 if a["kind"] == "coding_b" else 32768 if item.get("purpose") == "confirmation" else 8192)
                             or type(item.get("request_sha256")) is not str or not DIGEST.fullmatch(item["request_sha256"])):
                         raise ValueError
                     required = {"round", "purpose", "max_tokens", "request_sha256", "status",
                                 "request_evidence_sha256", "response_evidence_sha256", "diagnostic_evidence_sha256"}
+                    if item['purpose'] == 'patient_simulator':
+                        required.add('parent_call_id')
+                        parent = item.get('parent_call_id')
+                        if a['kind'] == 'patient_probe':
+                            if parent is not None: raise ValueError
+                        elif not isinstance(parent, str) or started.get(parent) != 'cm_outreach.send_message': raise ValueError
                     if 'dispatch_version' in item:
                         required.add('dispatch_version')
                         if item['dispatch_version'] != 'chi-go-dispatch-v1': raise ValueError
@@ -753,15 +788,24 @@ class ChiJournal:
         except Exception:
             raise GoFailure("chi_evidence_persistence_failed") from None
 
-    def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None) -> None:
+    def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None, parent_call_id=None) -> None:
         if self.state["pending"] is not None or self.state["halted"] is not None:
             raise GoFailure("chi_usage_unknown")
-        if purpose not in {"main", "confirmation"} or type(raw) is not bytes:
+        aux = self.run['launch'].get('aux_contract') == 'patient-simulator-v1'
+        if purpose not in ({"main", "confirmation", "patient_simulator"} if aux else {"main", "confirmation"}) or type(raw) is not bytes:
             raise GoFailure("chi_reservation_invalid")
         if self.run["kind"] == "coding_b" and purpose != "main":
             raise GoFailure("chi_reservation_invalid")
-        if len(self.run["requests"]) >= (6 if self.run["kind"] == "coding_b" else 50):
+        if purpose != 'patient_simulator' and sum(x['purpose'] != 'patient_simulator' for x in self.run['requests']) >= (6 if self.run['kind'] == 'coding_b' else 50):
             raise GoFailure("chi_request_limit")
+        if purpose == 'patient_simulator':
+            if sum(x['purpose'] == purpose for x in self.run['requests']) >= (2 if self.run['kind'] == 'patient_probe' else 10): raise GoFailure('chi_aux_request_limit')
+            if self.run['kind'] == 'patient_probe':
+                if parent_call_id is not None: raise GoFailure('chi_aux_parent_invalid')
+            else:
+                active = [e for e in self.run['tool_events'] if e.get('call_id') == parent_call_id]
+                if len(active) != 1 or active[0].get('event') != 'started' or active[0].get('tool') != 'cm_outreach.send_message': raise GoFailure('chi_aux_parent_invalid')
+        elif parent_call_id is not None or self.run['kind'] == 'patient_probe': raise GoFailure('chi_reservation_invalid')
         if purpose == "confirmation" and sum(x["purpose"] == "confirmation" for x in self.run["requests"]) >= 2:
             raise GoFailure("chi_confirmation_limit")
         if dispatch is not None and (type(dispatch) is not dict or set(dispatch) != {'version', 'purpose', 'session_sha256', 'started_utc_ms', 'body_bytes'}
@@ -773,10 +817,11 @@ class ChiJournal:
             raise GoFailure('chi_reservation_invalid')
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
         entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
-                 "max_tokens": 1024 if self.run["kind"] == "coding_b" else 8192 if purpose == "main" else 32768,
+                 "max_tokens": 1024 if self.run["kind"] == "coding_b" else 32768 if purpose == "confirmation" else 8192,
                  "request_sha256": hashlib.sha256(raw).hexdigest(), "status": "pending",
                  "request_evidence_sha256": None, "response_evidence_sha256": None,
                  "diagnostic_evidence_sha256": None}
+        if purpose == 'patient_simulator': entry['parent_call_id'] = parent_call_id
         if dispatch is not None: entry['dispatch_version'] = 'chi-go-dispatch-v1'
         request_doc = envelope(raw, kind="request", secrets=secrets, dispatch=dispatch)
         entry["request_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "request", request_doc)

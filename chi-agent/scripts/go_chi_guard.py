@@ -25,7 +25,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
     confirmation context only after verifying patient selection evidence.
     """
     def __init__(self, journal, secret, session, lower, *, tools, system, instruction,
-                 claimed, confirmation, before_batch=None, observed_request=None, run_started=None):
+                 claimed, confirmation, before_batch=None, observed_request=None, run_started=None,
+                 billing_lock=None, fatal_getter=None):
         if (type(secret) is not str or not secret.strip() or type(session) is not str
                 or not re.fullmatch(r"chi-[0-9a-f]{32}", session)
                 or type(system) is not str or type(instruction) is not str
@@ -42,6 +43,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self.before_batch = before_batch
         self.observed_request = observed_request
         self.error = None
+        self.billing_lock = billing_lock or asyncio.Lock()
+        self.fatal_getter = fatal_getter or (lambda: None)
         self.run_started = time.monotonic() if run_started is None else run_started
         if journal.run["kind"] == "coding_b":
             expected = [{"type": "function", "function": {"name": name, "description": B_DESCRIPTIONS[name],
@@ -50,6 +53,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 raise GoFailure("chi_b_contract_invalid")
 
     def _validate(self, request, raw):
+        if self.fatal_getter():
+            raise GoFailure(self.fatal_getter())
         if self.error is not None:
             raise GoFailure(self.error)
         url = request.url
@@ -61,7 +66,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 or request.headers.get_list("user-agent") != ["chi-agent"]
                 or request.headers.get_list("x-opencode-session") != [self.session]):
             raise GoFailure("chi_headers_invalid")
-        if len(self.journal.run["requests"]) >= (6 if self.journal.run["kind"] == "coding_b" else 50):
+        used = sum(item['purpose'] != 'patient_simulator' for item in self.journal.run['requests'])
+        if used >= (6 if self.journal.run["kind"] == "coding_b" else 50):
             raise GoFailure("chi_request_limit")
         try:
             body = json.loads(raw, object_pairs_hook=_unique,
@@ -88,10 +94,10 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 if not self.contract.definitions_match(body["tools"]):
                     raise ValueError
                 self.contract.validate_history(body["messages"], system=self.system, instruction=self.instruction,
-                                               used=len(self.journal.run["requests"]), claimed=self.claimed(),
+                                               used=used, claimed=self.claimed(),
                                                coding_probe=coding_b)
                 if self.observed_request is not None:
-                    self.observed_request(body["messages"], len(self.journal.run["requests"]))
+                    self.observed_request(body["messages"], used)
             return purpose
         except Exception:
             raise GoFailure("chi_request_invalid") from None
@@ -155,6 +161,10 @@ class ChiGuard(httpx.AsyncBaseTransport):
             raise GoFailure("chi_response_invalid")
 
     async def handle_async_request(self, request):
+        async with self.billing_lock:
+            return await self._handle_serialized(request)
+
+    async def _handle_serialized(self, request):
         try:
             raw = request.content
             purpose = self._validate(request, raw)

@@ -78,7 +78,7 @@ async def run_coding_b(client, guard, tools):
 
 async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_path,
                   logs_dir, workspace_root, handbook_root, tool_references, lower,
-                  server_factory=None):
+                  server_factory=None, auxiliary=None):
     """Run one role using a previously preflighted journal and injected transport.
 
     No authorization or bundle/source verification is performed here. The
@@ -103,6 +103,9 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
 
     if journal.run["kind"] != "chi" or role not in {"provider", "payer", "cm"}:
         raise GoFailure("chi_run_contract_invalid")
+    if auxiliary is not None and (role != 'cm' or auxiliary.journal is not journal
+            or journal.run['launch'].get('aux_contract') != 'patient-simulator-v1'):
+        raise GoFailure('chi_run_contract_invalid')
     if not isinstance(secret, str) or not secret.strip() or not isinstance(instruction, str) or not instruction.strip():
         raise GoFailure("chi_run_input_invalid")
     if lower is None:
@@ -113,7 +116,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     context = contextvars.ContextVar("chi_confirmation", default=None)
     holder, exchanges = {}, []
     binding = PatientBinding(instruction, journal) if role == "provider" else None
-    factory = server_factory or selected_server
+    factory = server_factory or (lambda url: selected_server(url, auxiliary=auxiliary is not None))
     prior_trace = get_trace_provider()._manual_disabled
     set_tracing_disabled(True)
     old = _patch_empty_history_compatibility(Converter, "https://opencode.ai/inference/go/openai", "deepseek-v4.1-flash")
@@ -122,7 +125,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     try:
         async with factory(mcp_url) as server:
             raw_tools = await server.list_tools()
-            bridge = MCPBridge(server, role, raw_tools, binding=binding)
+            bridge = MCPBridge(server, role, raw_tools, binding=binding, auxiliary=auxiliary)
             local = local_tools(role=role, workspace_root=workspace_root, instruction_path=instruction_path,
                                 tool_references=tool_references, handbook_root=handbook_root,
                                 journal=journal, binding=binding, guard_getter=lambda: holder.get("guard"),
@@ -167,7 +170,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             guard = ChiGuard(journal, secret, session, lower, tools=definitions, system=official.SYSTEM_PROMPT,
                              instruction=instruction, claimed=lambda: journal.run["claim_done"],
                              confirmation=context.get, before_batch=before_batch, observed_request=observed_request,
-                             run_started=run_started)
+                             run_started=run_started, billing_lock=auxiliary.billing_lock if auxiliary else None,
+                             fatal_getter=(lambda: auxiliary.fatal) if auxiliary else None)
             holder["guard"] = guard
             bridge.guard = guard
             client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",
@@ -180,7 +184,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                     if system_instructions != official.SYSTEM_PROMPT:
                         raise GoFailure("chi_system_prompt_invalid")
                     try:
-                        suffix = feedback(len(journal.run["requests"]), journal.run["claim_done"])[0]
+                        suffix = feedback(sum(item['purpose'] != 'patient_simulator' for item in journal.run['requests']), journal.run["claim_done"])[0]
                     except ValueError:
                         raise GoFailure("chi_request_limit") from None
                     return await super().get_response(system_instructions + suffix, *args, **kwargs)
@@ -191,10 +195,10 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                               extra_body={"thinking": {"type": "enabled"}}, extra_headers={"User-Agent": "chi-agent"},
                               retry=ModelRetrySettings(max_retries=0)))
             run_result = await Runner.run(agent, input=instruction, max_turns=50)
-            if guard.error is not None or not isinstance(run_result.final_output, str) or not run_result.final_output.strip():
-                raise GoFailure(guard.error or "chi_final_missing")
+            if guard.error is not None or (auxiliary and auxiliary.fatal) or not isinstance(run_result.final_output, str) or not run_result.final_output.strip():
+                raise GoFailure(guard.error or (auxiliary.fatal if auxiliary else None) or "chi_final_missing")
     except BaseException as exc:
-        failure = getattr(locals().get("guard"), "error", None) or (exc.code if isinstance(exc, GoFailure) else "chi_runner_failed")
+        failure = getattr(locals().get("guard"), "error", None) or (auxiliary.fatal if auxiliary else None) or (exc.code if isinstance(exc, GoFailure) else "chi_runner_failed")
         if isinstance(exc, __import__("asyncio").CancelledError):
             raise
     finally:
@@ -206,13 +210,14 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             except Exception:
                 failure = failure or "chi_cleanup_failed"
         try:
-            settled = [item for item in journal.run["requests"] if item["status"] == "settled"]
+            agent_requests = [item for item in journal.run['requests'] if item['purpose'] != 'patient_simulator']
+            settled = [item for item in agent_requests if item["status"] == "settled"]
             input_tokens = sum(item["usage"]["input_tokens"] for item in settled)
             output_tokens = sum(item["usage"]["output_tokens"] for item in settled)
             output = run_result.final_output if run_result is not None and failure is None else None
             official.write_result(logs_dir=logs_dir, input_tokens=input_tokens,
                                   output_tokens=output_tokens, cached_tokens=None, cost_usd=None,
-                                  turns=len(journal.run["requests"]), final_output=output,
+                                  turns=len(agent_requests), final_output=output,
                                   model="deepseek-v4.1-flash", error=failure)
             if output:
                 (logs_dir / "run_output.txt").write_text(output, encoding="utf-8")
@@ -224,9 +229,14 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             failure = failure or "chi_log_persistence_failed"
         try:
             summary = {"status": "incomplete" if failure else "complete", "safe_error_code": failure,
-                       "provider_requests": len(journal.run["requests"]),
+                       "provider_requests": len(agent_requests),
                        "tool_events": len(journal.run["tool_events"]),
                        "elapsed_ms": int((time.monotonic() - run_started) * 1000), "official_reward": None}
+            if auxiliary is not None:
+                aux = [item for item in journal.run['requests'] if item['purpose'] == 'patient_simulator']
+                summary['patient_simulator_requests'] = len(aux)
+                summary['patient_simulator_input_tokens_known'] = sum(item['usage']['input_tokens'] for item in aux if item['status'] == 'settled')
+                summary['patient_simulator_output_tokens_known'] = sum(item['usage']['output_tokens'] for item in aux if item['status'] == 'settled')
             (logs_dir / "run_log.txt").write_text(json.dumps(summary, sort_keys=True), encoding="utf-8")
         except Exception:
             failure = failure or "chi_log_persistence_failed"
