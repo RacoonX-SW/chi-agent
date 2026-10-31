@@ -189,6 +189,33 @@ class StateTests(unittest.TestCase):
         self.assertTrue(allowed, reason)
         self.assertEqual(state.record_claim()["status"], "recorded")
 
+    def test_completion_report_grades_claim_and_effect(self):
+        state = self.state()
+        read_call(state)
+        state.propose({"target": {"case_id": "CASE-A"}})
+        report = state.completion_report()
+        self.assertEqual(report["verification"], "not_applicable")
+        self.assertEqual(report["business_effect"], "not_observed")
+        write_call(state)
+        report = state.completion_report()
+        self.assertEqual(report["verification"], "blocked")
+        self.assertEqual(report["business_effect"], "not_verified")
+        read_call(state, "call_2")
+        state.propose({"latest_business_status": {"text": "accepted", "source_call_id": "call_2"}})
+        report = state.completion_report()
+        self.assertEqual(report["verification"], "mechanical_pass")
+        self.assertEqual(report["business_effect"], "observed")
+        self.assertEqual(report["last_mutation_call_id"], "call_w1")
+        self.assertIn("not a clinical", report["note"])
+
+    def test_completion_report_marks_unknown_and_violation(self):
+        state = self.state()
+        write_call(state, event="failed")
+        report = state.completion_report()
+        self.assertEqual(report["verification"], "blocked")
+        self.assertEqual(report["business_effect"], "unknown")
+        self.assertEqual(report["open_unknowns"], ["u1"])
+
     def test_limits_and_size_are_enforced(self):
         state = self.state()
         read_call(state)

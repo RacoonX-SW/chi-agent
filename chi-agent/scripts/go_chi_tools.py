@@ -281,6 +281,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             return "REFUSED: " + exc.code
         return json.dumps(result, ensure_ascii=False, sort_keys=True, allow_nan=False)
 
+    async def completion_check(_args):
+        require_state()
+        return json.dumps(state.completion_report(), ensure_ascii=False, sort_keys=True, allow_nan=False)
+
     async def role_guidance_tool(args):
         if type(args) is not dict or args:
             return "REFUSED: chi_guidance_arguments_invalid"
@@ -382,6 +386,9 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             ("local-state-update",
              "Submit a sourced task-state update. Facts and latest business status must cite a call_id already observed in this run. The program fills source versions and rejects stale, wrong-case, unobserved or binding-changing updates. It cannot mark an unknown write as success or failure.",
              state_update_schema, state_update),
+            ("local-completion-check",
+             "Report mechanical completion evidence: target, latest business status, last mutation, open unknowns, claim and whether a later readback is missing. It does not claim, approve, or produce a clinical/official verdict.",
+             empty, completion_check),
             ("local-role-guidance",
              "Return the versioned role stage guide with legal branches, preconditions, readbacks and stop conditions. It contains no task answers or expected outcomes; decide from public observations.",
              empty, role_guidance_tool),
@@ -429,15 +436,25 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                     guard.contract.record_result(selected["id"], output)
                     return output
                 if state is not None:
-                    blocked = state.block_mutation(name, "local")
+                    stagnant = state.stagnation_block_reason(name, "local", args)
+                    if stagnant is not None:
+                        output = "REFUSED: " + stagnant
+                        journal.refuse_tool(selected["id"], name, args, output, secrets=(guard.secret, guard.session))
+                        guard.contract.record_result(selected["id"], output)
+                        return output
+                    blocked = state.block_mutation(name, "local", args)
                     if blocked is not None:
                         output = "REFUSED: " + blocked
                         journal.refuse_tool(selected["id"], name, args, output, secrets=(guard.secret, guard.session))
                         guard.contract.record_result(selected["id"], output)
                         return output
+                warning = (state.stagnation_warning(name, "local", args)
+                           if state is not None else None)
                 journal.start_tool(selected["id"], name, args)
                 try:
                     output = await callback(args)
+                    if warning:
+                        output = output + "\n" + warning
                     guard.contract.record_result(selected["id"], output)
                     journal.record_tool(selected["id"], name, output,
                                         event="refused" if output.startswith("REFUSED:") else "returned",

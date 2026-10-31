@@ -75,6 +75,11 @@ def _text(value: object, *, field: str) -> str:
     return value
 
 
+def _fingerprint(tool: str, kind: str, arguments) -> str:
+    return _sha({"tool": tool, "kind": kind,
+                 "arguments": arguments if arguments is not None else {}})
+
+
 def effect_for(tool: str, kind: str) -> str:
     """Classify a tool as read/mutation/neutral; unknown tools default to mutation."""
     if type(tool) is not str or not tool:
@@ -150,6 +155,8 @@ class TaskState:
             "next_candidates": [],
             "claim": None,
             "claim_violation": False,
+            "repeat": {"fingerprint": None, "count": 0, "tool": None, "effect": None},
+            "stagnation": None,
             "updated_at_utc_ms": 0,
         }
         self._persist(snapshot=False)
@@ -199,6 +206,17 @@ class TaskState:
             "event": event,
             "round": round_number if type(round_number) is int and round_number >= 0 else 0,
         }
+        fingerprint = _fingerprint(tool, kind, arguments)
+        repeat = self.data.get("repeat") or {}
+        if repeat.get("fingerprint") == fingerprint:
+            count = int(repeat.get("count", 0)) + 1
+        else:
+            count = 1
+        self.data["repeat"] = {"fingerprint": fingerprint, "count": count,
+                               "tool": tool, "effect": effect}
+        if count >= 3:
+            self.data["stagnation"] = {"tool": tool, "count": count,
+                                       "call_id": call_id, "effect": effect}
         self.data["observations"].append(observation)
         if effect == "mutation":
             # A write after a completion claim invalidates that claim. Dispatch
@@ -425,13 +443,47 @@ class TaskState:
             return "task_already_claimed_mutation_forbidden"
         return None
 
-    def block_mutation(self, tool: str, kind: str) -> str | None:
-        """Refuse and mark the run inconsistent; do not rewrite journal claims."""
+    def stagnation_warning(self, tool: str, kind: str, arguments) -> str | None:
+        """Warn before a third identical read; do not block yet."""
+        if effect_for(tool, kind) != "read":
+            return None
+        repeat = self.data.get("repeat") or {}
+        if (repeat.get("fingerprint") == _fingerprint(tool, kind, arguments)
+                and int(repeat.get("count", 0)) >= 2):
+            return ("STAGNATION: repeated identical read; change approach or stop "
+                    "instead of repeating the same call")
+        return None
+
+    def stagnation_block_reason(self, tool: str, kind: str, arguments) -> str | None:
+        if effect_for(tool, kind) != "read":
+            return None
+        repeat = self.data.get("repeat") or {}
+        if (repeat.get("fingerprint") == _fingerprint(tool, kind, arguments)
+                and int(repeat.get("count", 0)) >= 4):
+            return "stagnation_detected"
+        return None
+
+    def block_mutation(self, tool: str, kind: str, arguments=None) -> str | None:
+        """Refuse an unsafe write; do not rewrite journal claims."""
         reason = self.mutation_block_reason(tool, kind)
-        if reason is not None and not self.data.get("claim_violation"):
-            self.data["claim_violation"] = True
-            self._persist()
-        return reason
+        if reason is not None:
+            if not self.data.get("claim_violation"):
+                self.data["claim_violation"] = True
+                self._persist()
+            return reason
+        open_unknown = next((item for item in self.data["unknowns"]
+                             if item["status"] == "open"), None)
+        if open_unknown is not None and effect_for(tool, kind) == "mutation":
+            return "unknown_write_effect_pending:" + open_unknown["id"]
+        if effect_for(tool, kind) == "mutation" and arguments is not None:
+            repeat = self.data.get("repeat") or {}
+            if (repeat.get("fingerprint") == _fingerprint(tool, kind, arguments)
+                    and int(repeat.get("count", 0)) >= 1):
+                self.data["stagnation"] = {"tool": tool, "count": int(repeat["count"]) + 1,
+                                           "call_id": None, "effect": "mutation"}
+                self._persist()
+                return "repeated_write_forbidden"
+        return None
 
     def can_claim(self) -> tuple[bool, str | None]:
         open_unknowns = [item for item in self.data["unknowns"] if item["status"] == "open"]
@@ -444,6 +496,38 @@ class TaskState:
             if status is None or status["source_seq"] < last["seq"]:
                 return False, "completion_readback_required:" + last["call_id"]
         return True, None
+
+    def completion_report(self) -> dict:
+        """Mechanical completion evidence, not a business or official verdict."""
+        allowed, reason = self.can_claim()
+        status = self.data["latest_business_status"]
+        mutations = [item for item in self.data["observations"] if item["effect"] == "mutation"]
+        last = mutations[-1] if mutations else None
+        open_unknowns = [item["id"] for item in self.data["unknowns"] if item["status"] == "open"]
+        if self.data.get("claim_violation"):
+            verification, effect = "blocked", "violation"
+        elif open_unknowns:
+            verification, effect = "blocked", "unknown"
+        elif not allowed:
+            verification, effect = "blocked", "not_verified"
+        elif status is None:
+            verification, effect = "not_applicable", "not_observed"
+        else:
+            verification, effect = "mechanical_pass", "observed"
+        return {
+            "schema": "chi-completion-v1",
+            "verification": verification,
+            "business_effect": effect,
+            "reason": reason,
+            "target": dict(self.data["target"]),
+            "claim": self.data["claim"],
+            "latest_business_status": status,
+            "last_mutation_call_id": last["call_id"] if last else None,
+            "open_unknowns": open_unknowns,
+            "claim_violation": bool(self.data.get("claim_violation")),
+            "stagnation": self.data.get("stagnation"),
+            "note": "mechanical/source check only; not a clinical or official verdict",
+        }
 
     def record_claim(self) -> dict:
         allowed, reason = self.can_claim()
@@ -477,6 +561,7 @@ class TaskState:
             "next_candidates": list(data["next_candidates"]),
             "claim": data["claim"],
             "claim_violation": data.get("claim_violation", False),
+            "stagnation": data.get("stagnation"),
             "observations": [
                 {key: item[key] for key in ("seq", "call_id", "tool", "effect", "scope", "event")}
                 for item in observations
