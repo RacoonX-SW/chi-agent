@@ -101,7 +101,7 @@
 | 本地患者模拟与角色接线 | [V规格](../openspec/changes/representative-role-baseline/design.md)与[V报告](../reviews/representative-role-baseline-review.md)：原CM状态机、开发适配/broker、嵌套请求账与真实角色导出 | 围绕新功能集中讲解模型职责、消息翻转、锁与未知传播、实际接口和验收层级；用户提出Go替代及官方兼容取舍，尚无新增独立源码复述或运行实践，不升级为掌握 |
 | 统一角色操作者与失败终态 | [W规格](../openspec/changes/unified-role-cm-lifecycle/design.md)与[W报告](../reviews/unified-role-cm-lifecycle-review.md)：实际跨容器同账链、在途跟踪、停止/捕获/清理与三角色开发结果 | 串起单一所有者、独立辅助预算、同批fatal门禁、模型失败与世界静止；payer工程收口但终态不符，CM本地闭环不等于临床/官方通过。用户确定边界，代理执行，无新增用户独立复述/操作证据 |
 | payer失败的离线诊断 | [X规格](../openspec/changes/payer-offline-diagnosis/design.md)与[X报告](../reviews/payer-offline-diagnosis-review.md)：从实际观察、规则依据、不可修改动作和检查适用性解释证据边界 | 区分看见缺项、规则要求、主张越界与终态不符；工具汇总不是独立核验，诊断样本不是盲测。仅分析/规格，未实现新机制，无新增用户实践/掌握证据 |
-| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | DeepSeek交付后Codex独立审核发现文件归属、更新失效与失败状态问题；DeepSeek已按R1–R3返工，新候选待复审。自测全绿不等于契约覆盖完整，开发代理与参赛模型职责分开，无新增用户源码实践，不记掌握 |
+| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | 返工独立复审关闭R1/R3，但发现来源容量达到上限后R2失效逻辑被跳过；整体未通过。普通场景通过与边界交互分别取证，开发代理与参赛模型职责分开，无新增用户源码实践，不记掌握 |
 
 相关材料：
 
@@ -117,7 +117,7 @@
 
 ## 下一次从哪里继续
 
-下一入口转到[Y返工交付](../reviews/payer-evidence-prototype-review.md#deepseek返工交付r1r3待codex复审)及[Y执行契约](../openspec/changes/payer-evidence-prototype/design.md)：先沿文件路径如何变成来源作用域、同资源更新如何失效、失败验证何时提交状态，理解为什么原自测全绿仍未通过验收，以及返工如何在不改业务拦截的前提下补齐。返工候选仍待Codex复审；通过后才集中讲完整正常/失败调用链，不把待复审判成已完成收益。无新增用户复述或实践证据，默认不安排小测。
+下一入口转到[Y返工独立复审](../reviews/payer-evidence-prototype-review.md#codex返工独立复审2026-10-31)及[Y执行契约](../openspec/changes/payer-evidence-prototype/design.md)：R1来源作用域和R3失败不提交状态已在限定范围关闭；接下来理解为什么“不能继续储存新来源”仍必须处理“已知道旧来源失效”。R2普通更新通过，但满容量提前return导致旧引用继续valid，不能只看原反例转绿。后续返工由用户决定，完整功能验收后再集中讲正常/失败链；无新增用户复述或实践证据，默认不安排小测。
 
 诊断依据从[X设计](../openspec/changes/payer-offline-diagnosis/design.md)和[X报告](../reviews/payer-offline-diagnosis-review.md)回读：沿“原始公开文件→实际工具观察→下一请求→逐项主张→不可修改建议→终态→检查器”理解一次失败。重点是缺项是否属于必需条件、引用是否支持主张、程序计数是否只是重述模型判断，以及存在性检查与内容正确性的区别；不得按原检查结果补写规则或默认复测。
 
@@ -690,3 +690,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 原自测通过但契约未闭合的三个问题都属于程序可判定的边界：文件路径本身含case、同一路径内容变化是可证明的版本更新、invalid核对不应提交长期状态。它们不需要让程序理解临床语义，也不能靠“报告里写了限制”代替拒绝。
 - 返工做法：路径case来自既有workspace/handbook allowlist而不是正文关键词；公开手册/instruction是shared_public，无归属结果不能支持任意case；同一`local-fs-read`路径重读且内容变化时旧来源superseded、旧hash保留但不可作当前支持；case只在整份核对通过后原子绑定。
 - 仍未证明：模型能否稳定使用字符偏移、清单目标case是否等于任务真实case、同路径不同窗口的保守版本取舍、MCP混合列表带单一case_id时不可识别。返工自测不等于Codex复审或真实payer收益；下一入口是Codex按差异与独立反例复审。
+
+
+### Y容量返工：上限不能吞掉更新事实
+
+- 64来源限制本意是约束“当前可引用”的来源数量，不是允许程序在登记失败时假装没看见同一文件已经变化。容量检查若先于失效逻辑返回，旧source就会继续current，核对仍valid。
+- 修正把容量判定放到“是否已证明替换”之后：替换释放旧槽、旧记录保留但非当前；正文过大仍让旧来源失效；相同内容重读或真正的新资源在满额时可拒绝登记，旧来源保持有效。没有提高上限或删除历史。
+- 仍未验证：模型字符偏移可靠性、可信目标case、不同窗口的保守版本语义、MCP混合列表、真实payer收益/临床/官方分数；实现者自测不等于Codex复审。

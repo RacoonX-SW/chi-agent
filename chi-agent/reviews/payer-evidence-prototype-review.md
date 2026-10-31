@@ -1,8 +1,10 @@
 # Y：payer证据核对原型与开发shadow
 
-当前结论：**Codex独立审核返工，Y离线验收未通过**。独立证据与R1–R3见文末“Codex独立审核”；以下实现者原交付记录保留其当时的自测/待审含义，不能据此覆盖独立结论。
+当前结论：**Codex返工独立复审：R1、R3关闭，R2仍未关闭，Y整体离线验收未通过**。64条来源上限下仍可接受已被更新的旧引用，见文末“Codex返工独立复审”。此前实现者交付、首次独立审核及返工自测保留当时含义，不覆盖原结论与失败证据。
 
 2026-10-31：DeepSeek已按R1–R3返工并提交新候选，见文末“DeepSeek返工交付”；Codex原返工结论保留，**新候选待Codex复审**，不表示已通过。
+
+2026-10-31：Codex复审 R1、R3 关闭、R2因64来源容量交互未关闭；DeepSeek已补容量返工并提交 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`，见文末“R2容量返工交付”；原复审结论保留，**仍待Codex复审**。
 
 **DeepSeek实现者交付，待Codex独立审核。**
 
@@ -377,3 +379,155 @@ docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
 | 用户验收通过 | 否；由用户/Codex后续决定 |
 
 未验证：模型能否稳定使用字符索引；可信目标case仍来自核对表（无world/operator独立目标）；同一路径不同读取窗口的版本语义为保守近似；MCP混合列表若带单一`case_id`仍无法识别混合；真实payer行为/终态收益、临床正确性、官方评分均未验证。上次通过实现身份仍为W `ad2569937e0afe649807669c70f86da97c708e86`，本返工不改变它。
+
+## Codex返工独立复审（2026-10-31）
+
+**结论：R1、R3在本轮独立复验范围内关闭；R2普通更新场景已修复，但64来源上限仍违反失效契约，R2不关闭，返工整体未通过。** 不修改实现、不代替实现者自测背书，不推送/建PR/merge或另派实现者。
+
+### 候选、范围与证据隔离
+
+实际分支仍为`codex/payer-evidence-prototype`；旧候选`33d3e41283ac68d5dd0af283460a17bee11e8949`，返工实现`c1b123ad856a3e721263a9d1f9bb47510c949c0e`，最终HEAD为`0bf6c4419bebaac7294f5d1581f5e5c2607fa8e8`。fetch后origin/main仍为`0ac9f0fd9d4f5c4e5a41028727015768dbae8c07`，返工区间没有merge提交；最终文档提交相对实现只改报告/状态/学习账本。先读完整10文件差异，再读来源分类、注册/失效、核对/原子绑定及本地工具调用代码，核对原allowlist、dispatch/Guard/ToolContract未被绕开；本轮不改候选源码。
+
+原Codex独立审核节及失败证据保留；两份用户文档脏改动先保存diff，收尾比较。另建忽略目录`runs/payer-evidence-prototype-codex-rereview-20261031-01/`，不复用或覆盖旧产物；从精确HEAD和main分别git archive，Docker内解包并记录归档/逐文件hash（候选228、基线224文件）。原审核目录521文件在复验前另冻结hash，所有原脚本/日志只读挂载，旧`test_independent.py`未改写。
+
+实际镜像仍为`chi-agent-a-control:latest` / `sha256:24bef2e2c7e30bb972667b29afd0ed80d6fb79ae735210b8e3167ee5013b0bf3`，Python3.12.15；vendor为`4444a07fa68a4f1623f841a292a54e284fc8e7f7`且干净；原SDK/PDF卷只读，无安装/下载/升级。根文件系统禁写、网络none；快照/原审核脚本/固定vendor只读，只有本轮新证据目录可写。无Key、真实账、官方题世界或Docker socket挂载；未读取隐藏评分材料。没有重审真实Q/CHI账，也不据合成结果声明真实账准入、新B或业务成功。
+
+### 实际命令、退出码与结果
+
+以下为本次共用外壳（从`chi-agent/`执行，变量展开等价于实际绝对挂载）；`run_checks.py`为原Codex脚本，只读复用，容器内启动pytest并记录完整子命令、退出码、stdout/XML和耗时。
+
+```sh
+Y_REREVIEW_ROOT="$PWD/runs/payer-evidence-prototype-codex-rereview-20261031-01"
+Y_PRIOR_ROOT="$PWD/runs/payer-evidence-prototype-codex-review-20261031-01"
+docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/model-deps:/pdf-deps:/workspace/scripts:/workspace/vendor/chi-bench/src \
+  -v "$Y_REREVIEW_ROOT/candidate/chi-agent:/workspace:ro" \
+  -v "$PWD/vendor/chi-bench:/workspace/vendor/chi-bench:ro" \
+  -v "$Y_REREVIEW_ROOT/operator-audit:/audit:ro" \
+  -v "$Y_REREVIEW_ROOT/evidence:/out:rw" \
+  -v "$Y_PRIOR_ROOT:/prior-review:ro" \
+  -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+  -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro -w /workspace \
+  --entrypoint /opt/venv/bin/python chi-agent-a-control:latest \
+  /prior-review/run_checks.py payer tests/test_payer_evidence.py tests/test_payer_evidence_shadow.py
+```
+
+| 同一外壳实际执行程序/参数 | 退出码 | 结果（均为Codex本轮执行） |
+| --- | --- | --- |
+| `run_checks.py payer tests/test_payer_evidence.py tests/test_payer_evidence_shadow.py` | 0 | 41 passed，pytest 1.93秒；`evidence/payer.log/xml` |
+| `run_checks.py original-counterexamples /prior-review/test_independent.py` | 0 | 原文件9 passed，0.03秒；`original-counterexamples.log/xml` |
+| `run_checks.py go-regression go-regression`（容器内展开`tests/test_go_chi_*.py`） | 0 | 100 passed、8 skipped、48 subtests，2.79秒；`go-regression.log/xml` |
+| `run_checks.py additional-probes /audit/test_rereview_probes.py` | 1 | 新增10项中9 passed / 1 failed，1.30秒；失败是满64条后旧引用仍valid，未改断言放行 |
+| `run_checks.py capacity-runtime /audit/test_capacity_runtime.py` | 1 | 真SDK/原本地读写工具配合成传输再现同一缺陷，1 failed，1.54秒；`capacity-runtime.log/xml/json` |
+| `capture_runtime.py cross-case crosscase-runtime`（原Codex脚本） | 0 | CASE_B文件对CASE_A现为invalid/source_case_mismatch，3个合成请求；`crosscase-runtime.json` |
+| `capture_runtime.py off baseline-off` / `off candidate-off`（原脚本） | 各0 | 分别挂main基线/返工快照，各2个合成请求，均设置环境shadow但核心入口未隐式启用；完整body/返回/业务调用相同 |
+| `compare_and_wrapper.py`（原脚本） | 0 | off完整请求比较通过，包外开关5项通过；从本轮XML提取8个skip原因，未记通过；`comparison-and-wrapper.json` |
+| `bundle_audit.py`（原脚本） | 0 | 独立build/validate/33文件逐项hash/开发装配排除、`-I -S`隔离导入通过；0.388秒，`bundle-audit.json`/`bundle-import.log` |
+
+8个skip仍实际为5项Harbor overlay缺失和3项该venv无Docker SDK，不安装依赖补数字。新10项包含独立文件case及路径/参数冲突、无归属结果、真实allowlist下共享handbook正例、`<另一case>/shared`仍属该case、旧hash正确仍失效/历史文本保留、相同内容/不同路径不误失效、invalid→valid及valid→跨case、大小上限下的更新交互。纯模块测试与runtime新增断言由Codex编写；两份新runtime探针只复用候选测试中的合成传输装配，数据/动作/期望另构造，不据其原断言直接得结论。原CodexSDK驱动和原9项反例另独立执行。
+
+包manifest为`7a54698c49b0c4f85bf698a60089a412e1725da2ef1abe88ce67efcd2aa6cd1c`，entry config仍为`29423f878784d39c1764062939db28e3d6f72eed0daa71dfe6178889c342d3a8`。新模块在包内，role_runner/tests排除；隔离导入来源确为新包scripts而非工作区。只报告包身份变化，未签发/复用真实B或迁移真实账。
+
+### R1复审：关闭（限定来源机械归属）
+
+原跨case纯反例与原SDK文件驱动已通过；另用自造`CASE_OTHER_77/shared`文件证明“shared子目录”不会抹掉所属case，核对返回source_case_mismatch。新增参数与路径冲突返回source_case_conflict，无归属工具结果返回source_case_unverifiable；另一个实际handbook文件通过原本地读取/SDK循环，登记为shared_public且核对valid。分类沿既有workspace/handbook/固定公开输入allowlist，不读正文猜病例，未扩读取权限；invalid仍只影响核对结果，业务MCP/fatal/取消原回归通过。
+
+关闭的是机械归属缺陷，不证明任意MCP响应内容确实只含声明case、不证明模型填写的目标就是任务真实目标，也不作临床判断；这与原报告明确的限制一致。
+
+### R2复审：未关闭，新增容量边界阻断 [P2]
+
+普通路径已修复：同一文件old→new后旧来源current=false、superseded_by指新来源，正确旧hash不能绕过source_superseded；旧文本/旧hash保留，新来源可引用。相同文本重读、不同路径更新和非文件不建版本键均通过。
+
+但[来源登记的上限分支](../scripts/payer_evidence.py#L151)在`len(self._sources) >= 64`时先return，尚未计算新内容hash，也未执行后面的旧来源失效逻辑。新观察被记为未登记后，旧来源仍current=true、generation=0，核对仍valid。这不是未观察的新内容、不是旧hash错误或政策法定时效判断，而是程序已取得更新却因储存上限丢失了失效事实。
+
+独立最小反例：instruction + 旧文件 + 62条自造可归属结果填满64条，随后观察同一路径new文本；携正确旧hash引用旧source。预期invalid，实际valid，`additional-probes.log`保留断言失败。
+
+另用真SDK、原dispatch lock/ToolContract/journal、本地fs读写与fake MCP复现：首批读取旧文件并返回62条自造结果，来源索引确认64；写new并再次读取，下一主请求已携带new文本，随后核对旧source仍返回valid/current=true。整个测试仅6个MockTransport主请求、62次fake对象MCP调用，低于50主请求边界；没有真实Go或官方世界。`capacity-runtime.json`同时保存实际文件为new与核对仍引用old的结果。asyncio有0.238秒debug慢回调warning，但测试正常完成，失败原因是明确的valid/invalid断言，不是超时。
+
+**剩余返工要求**：来源储存达到上限时，仍须对已知资源的新观察执行失效/不可验证处理。可保留有界更新元数据，或对受影响引用返回明确invalid；不能因不能收录新正文，就把已知更新的旧引用继续当当前有效。保持64来源/文本大小边界，不通过放大上限、清空旧来源/失败、静默覆盖旧证据或改测试预期解决。相同内容重读的正例也须保留，避免用一律拒绝替代正确版本处理；不新增业务MCP拦截。
+
+### R3复审：关闭（限定原子绑定）
+
+代码把case赋值移至整份核对无错误之后；原失败→合法反例和新增invalid CASE_B→valid CASE_A→拒绝CASE_B均通过，先前invalid返回记录未被改写。结构、来源、版本与范围失败不提交case状态；没有通过清空journal/旧失败/来源重建来恢复。目标仍为首次全通过的模型填写case，非独立world/operator可信目标，这一已有边界未扩张。
+
+### 本轮结论与后续
+
+| 项 | 复审结论 |
+| --- | --- |
+| R1 | 在机械归属范围关闭 |
+| R2 | 普通场景修复；64来源容量交互仍阻断，不能关闭 |
+| R3 | 在原子绑定范围关闭 |
+| 实现完成 | 已交付返工候选，仍有明确缺陷 |
+| 离线验收通过 | 整体未通过；不批准继续shadow实验 |
+| 真实运行已验证 | 本轮否；全部使用自造材料/合成传输，真实B/C/患者/评审0 |
+| 用户验收通过 | 否；用户决定返工、PR及合并 |
+
+新增失败日志保留，不改成通过，不合并到原自测统计；原首次审核和DeepSeek两次交付均保留。所有合成usage/费用只在临时测试目录，不计真实账；本轮真实token未产生，新增三项USD均0，official_reward=null。未审真实账完整历史、不读Key/隐藏材料，不重跑官方题、启动患者broker业务或修改原账/旧runs。W通过身份`ad2569937e0afe649807669c70f86da97c708e86`保持原范围；Y不记整体通过。
+
+下一步仅建议由用户决定是否让实现者补齐R2容量边界，固定新候选后重跑本轮失败反例及受影响回归；本轮不代改实现、不另派代理、不推送/建PR。模型使用字符索引的可靠性、窗口重读的保守失效、独立可信目标、真实业务收益/临床正确性/官方分数仍未验证，不因局部关闭而升级结论。
+
+收尾`evidence/final-integrity.json`确认候选228/基线224文件及归档未变、工作区实现与测试仍逐项匹配固定候选；原审核目录521文件逐字不变，首次Codex审核节与DeepSeek返工交付节也与开工快照逐段比对保留。三份审核文档166个相对链接可解析，用户两份既有diff结束比对相同，git diff --check通过。HEAD仍为`0bf6c441…`，仅三份本地未提交审核文档发生本轮修改，未暂存/提交/推送。
+
+
+## R2容量返工交付（待Codex复审）
+
+**DeepSeek实现者补交，待Codex独立复审。** Codex两轮审核结论、R1/R3关闭判断和R2容量反例原样保留；本节只记录容量修复、自测和限制。新增真实B/C、患者、评审请求仍为0，未读Key、未调用项目模型API、未启动官方题世界；`official_reward=null`。
+
+### 身份与触发
+
+| 项 | 实际值 |
+| --- | --- |
+| 上一轮被审候选 | `0bf6c4419bebaac7294f5d1581f5e5c2607fa8e8` |
+| 容量返工实现 | `6ae9ee1c5072cc9f88af9236707e19afccf95f06` |
+| 报告/状态提交 | 紧随其后的本地提交；最终分支HEAD为准 |
+| 分支 | `codex/payer-evidence-prototype`（未rebase/merge main） |
+
+原触发：`_register` 在 `len(self._sources) >= 64` 时先返回，尚未计算内容hash或执行资源失效。instruction + 旧文件 + 62条自造结果填满64条后，再观察同一路径new文本，旧source仍 `current=true`，携正确旧hash引用仍valid；Codex用纯反例和真SDK/本地读写+合成传输均复现。
+
+### 修复
+
+`scripts/payer_evidence.py` 的容量判定改为按**当前可引用来源**计数，而不是历史记录总数：
+
+- 满64条时，若同一资源键的新观察内容hash已变化，仍执行失效：旧来源 `current=false`、`superseded_by=<新id>`，释放旧槽后登记新来源；
+- 若新正文过大或触发登记文本上限，仍执行旧来源失效，但新来源登记为不可引用；不因容量或正文大小丢失“已知更新”事实；
+- 相同内容重读在满额时拒绝登记，旧来源保持有效；
+- 真正的新资源在满额时拒绝登记，旧来源不受影响；
+- 64上限、单来源/总文本上限不变；旧文本/旧hash保留，不删除历史、不提高上限、不改测试预期。
+
+同一资源更新在未满额时的行为、非文件不建版本键、R1/R3语义不变。
+
+### 自测与证据
+
+复用 `chi-agent-a-control:latest`（ID `sha256:24bef2e2c7e30bb972667b29afd0ed80d6fb79ae735210b8e3167ee5013b0bf3`）、Python 3.12.15、vendor `4444a07f...`、原 SDK/PDF 卷；禁网、只读根、无Key/world/socket，未安装依赖。
+
+| 检查 | 退出码 | 结果 |
+| --- | --- | --- |
+| payer原型+shadow | 0 | **44 passed**（32纯原型 + 12 shadow） |
+| Codex上一轮10项复审反例 | 0 | **10 passed** |
+| Codex容量runtime探针 | 0 | **1 passed**；`capacity-runtime.json` 旧引用 `invalid/source_superseded`，文件实际已为new |
+| 合并运行以上 | 0 | **55 passed**（2.01秒） |
+| 原 `test_independent.py` | 0 | **9 passed**（0.03秒） |
+| Go CHI回归 | 0 | **100 passed、8 skipped、48 subtests**（2.42秒） |
+| 独立构包 | 0 | **33文件**，含`payer_evidence.py`，排除`role_runner`/tests；`manifest_sha256=a68443df1389fbf7632d7dd2c11bb77ebfb685ee48655bfb444d48890d7cf646` |
+
+8个skip仍为5项Harbor overlay未安装、3项controller venv缺Docker SDK，未记通过。新增容量回归：
+`test_replacement_at_source_cap_invalidates_old_and_frees_slot`、`test_same_content_at_source_cap_keeps_old_valid`、`test_oversized_replacement_at_source_cap_invalidates_old`。
+
+证据目录（忽略、不上传）：`chi-agent/runs/payer-evidence-prototype-r2cap-20261031-01/`，含 `payer-probes.log`、`original-independent.log`、`go-regression.log`、`bundle-build.log`、`capacity-runtime.json`、`bundle/`；Codex原复审目录未修改。
+
+### 失败、限制与结论
+
+- 修复前容量探针按预期失败：旧引用在64条后仍valid；修复后同一探针通过。原失败日志保留在Codex复审目录，未改写。
+- 容量语义是“当前可引用≤64”，历史superseded记录可以多于64条；listing可能随更新次数增长，但正文总量仍受1,048,576字符限制。这是为保留旧观察/hash所作的取舍。
+- 仍不判断医疗政策法定时效；同路径不同offset窗口仍按保守资源键处理；可信目标case仍来自核对表；MCP混合列表若带单一case_id不可识别。
+- 真实模型行为、payer终态收益、临床正确性、官方评分未验证；真实请求0。
+
+| 层级 | 本轮状态 |
+| --- | --- |
+| 实现完成 | 容量返工已实现并本地固定候选 |
+| 离线验收通过 | 仅实现者自测；**待Codex复审** |
+| 真实运行已验证 | 否 |
+| 用户验收通过 | 否 |
+
+上次通过实现身份仍为W `ad2569937e0afe649807669c70f86da97c708e86`。
