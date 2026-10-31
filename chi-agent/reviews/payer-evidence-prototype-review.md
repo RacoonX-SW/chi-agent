@@ -141,13 +141,30 @@ docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
 
 退出0：33文件；`manifest_sha256=e847a6ae346405c477020d911908a40e3413ec64b32e3e210c2a8bb24f58042e`，`entry_config_sha256=29423f878784d39c1764062939db28e3d6f72eed0daa71dfe6178889c342d3a8`；包含 `scripts/payer_evidence.py`，不含 `role_runner.py`/tests。新增allowlist文件使包身份相对W改变，**未签发或复用任何B**，也未迁移真实账根。
 
-本地产物（忽略目录，不上传）：`chi-agent/runs/payer-evidence-prototype-20261031-01/`，含 `payer-tests.log`、`go-chi-regression.log`、`environment.txt`、`counterexamples.py/.json`、`bundle/`、`failures.md`。
+候选快照复跑（从最终HEAD `git archive` 到 `candidate-tree/`，含固定vendor只读挂载）：
+
+```sh
+docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/model-deps:/pdf-deps:/candidate/scripts:/vendor \
+  -v "$PWD/runs/payer-evidence-prototype-20261031-01/candidate-tree:/candidate:ro" \
+  -v "$PWD/vendor/chi-bench/src:/vendor:ro" \
+  -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+  -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro -w /candidate \
+  chi-agent-a-control:latest /opt/venv/bin/python -m pytest -q \
+  tests/test_payer_evidence.py tests/test_payer_evidence_shadow.py
+```
+
+退出0：**31 passed**（约1.6–1.9秒，两次快照运行）。首次漏挂vendor时同一快照5 failed/26 passed，修正与两份日志见下。
+
+本地产物（忽略目录，不上传）：`chi-agent/runs/payer-evidence-prototype-20261031-01/`，含 `payer-tests.log`、`go-chi-regression.log`、`candidate-tests.log`、`candidate-tests-missing-vendor.log`、`environment.txt`、`counterexamples.py/.json`、`candidate-tree/`、`bundle/`、`failures.md`。
 
 ## 失败、修正与保留
 
 1. 首次shadow测试7通过/1失败：`test_cancellation_is_recorded_and_propagated` 原断言只期望 `failed`，实际为 `started`+`failed`。核对实现顺序（先`start_tool`再执行回调）后确认是测试断言错误，改为断言两者及 `safe_error_code=chi_tool_cancelled`。原失败日志未逐字保存，说明与修正后日志见`failures.md`/`payer-tests.log`。
 2. 契约反例不是程序故障：语义过度解释按设计仍 `valid`；报告明确保留这一“无法识别”结果，没有把它改写成成功。
 3. 只读根导致pytest cache warning；未通过安装或放宽只读规避。
+4. 候选快照首次复跑漏挂固定vendor：`run_chi` 导入 `chi_bench.experiment.agents` 时5个shadow runtime测试失败（26 passed/5 failed，`ModuleNotFoundError: chi_bench`）。这是检查环境缺项，不是候选代码失败；补只读 `/vendor` 与PYTHONPATH后同一快照31 passed。失败重放与修正后日志分别保存为 `candidate-tests-missing-vendor.log`、`candidate-tests.log`。
 无真实请求重试、未知放行、账目变化或原证据覆盖。
 
 ## 程序可证明与不可证明
