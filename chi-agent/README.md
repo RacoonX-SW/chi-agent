@@ -14,6 +14,7 @@
 | 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[代表角色与开发患者模拟](openspec/changes/representative-role-baseline/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |
 | 验收契约与实现任务 | [Go CHI 接线设计](openspec/changes/chi-go-evaluation-entry/design.md)、[代表角色设计](openspec/changes/representative-role-baseline/design.md)与[任务](openspec/changes/representative-role-baseline/tasks.md)、[历史验收场景](openspec/changes/bootstrap-baseline/specs/benchmark-readiness/spec.md) |
 | 近期五步离线开发与外部接手 | [payer证据核对计划](openspec/changes/payer-evidence-prototype/design.md)、[行为契约](openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)、[任务清单](openspec/changes/payer-evidence-prototype/tasks.md) |
+| 整个剩余项目的连续收尾 | [Z0–Z8执行设计](openspec/changes/project-completion/design.md)、[F0–F7能力建设](openspec/changes/project-completion/capabilities.md)、[完成契约](openspec/changes/project-completion/specs/project-closeout/spec.md)、[执行任务](openspec/changes/project-completion/tasks.md)；实际权限与状态仍查审核接续状态 |
 
 本页只维护运行方法与入口；阶段结果和详细证据集中到状态页及其链接的阶段报告。命令示例中的模型名称不表示已经可用或获准调用。
 
