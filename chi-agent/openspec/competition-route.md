@@ -1,5 +1,15 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
+## 当前收尾规划（2026-10-31）
+
+用户要求扩大为整个剩余项目的连续计划，目标11/6冻结候选、11/8完成内部验收及交付材料，详见[Z0–Z8设计](changes/project-completion/design.md)、[完成契约](changes/project-completion/specs/project-closeout/spec.md)与[任务](changes/project-completion/tasks.md)。覆盖规则/用途核对、正式配送、Y去留、三角色收口、有界真实开发、未见集、干净包复现、累计审核和材料/交付。日期为内部目标，不保证外部条件满足；不以阶段数量推算已完成1/3。
+
+本轮只写规划。用户启动整套有界范围后，DeepSeek/Gemini可以在依赖满足时连续推进，不逐包等GPT；实际授权、候选和状态只查REVIEW_STATE。此前Y限定离线通过保留，不自动恢复真实调用/官方判分。当前Rules正文未读到、概览索引与上次Rules解释的冲突，以及Go十一月条件须在Z0尽早关闭；不阻止无相应载荷的离线/材料工作。
+
+下文早期路线和10/28排期保留其历史含义；当前收尾窗口以本节所链计划为准。
+
+## 已有能力与历史接续
+
 阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。近期开发顺序为：[V角色/患者接点](changes/representative-role-baseline/proposal.md) → [W统一操作者与CM链路](changes/unified-role-cm-lifecycle/design.md) → [X payer离线诊断](changes/payer-offline-diagnosis/design.md) → [Y五步离线证据核对工作包](changes/payer-evidence-prototype/design.md)。Y先检验收益假设、纯原型和反例，仅go后做默认关闭的开发影子接线，再固定候选交Codex独立审核；它不自动恢复真实验证、临床/官方判分或最终配送。
 
 [Go确认超时/费用/留档](changes/go-chi-timeout-recovery/proposal.md)、[S混批恢复/终态捕获](changes/go-chi-batch-recovery/proposal.md)及R的[外部入口/独立包](changes/chi-go-evaluation-entry/proposal.md)保留为接线与证据基础。旧请求不核销或重发、新未知仍停止、record_only/null cap及原历史保留；不能借原型重建账根或刷新B。先前[两个新任务基线](changes/provider-two-task-baseline/proposal.md)保留为开发证据。默认实现分工按[工作流](../docs/subagent-workflow.md)，用户指定的本阶段DeepSeek接手例外只见Y规格与唯一状态，不改变运行时模型，不操作Antigravity。

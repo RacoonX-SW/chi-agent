@@ -2,6 +2,8 @@
 
 更新：2026-10-25。代理分工以 [协作约定](../../COLLABORATION.md) 为准；默认一个实现子代理，主代理独立审核，纯文档/Git 工作由主代理处理。本文只保存 Git 操作与上传规则，阶段状态见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。
 
+全项目收尾专项启动后，固定候选的独立检查可由有实际工具能力的 Gemini 按[收尾计划](../openspec/changes/project-completion/design.md)承担，用户可据其证据决定合并，不必等 GPT。DeepSeek 的本地提交/PR准备与 push/开PR权限分开；后两项仍由用户或已经获准的协调者执行，不因实现者交接自动扩权。分支、上传边界和用户合并规则保持。
+
 ## 仓库与权限
 
 - 私有仓库：[xsw932187210-cell/chi-agent](https://github.com/xsw932187210-cell/chi-agent)。Git 根为 `/Users/asaki/Documents/ChatGPT/Kaggle`，项目在 `chi-agent/`，不另建嵌套仓库。
