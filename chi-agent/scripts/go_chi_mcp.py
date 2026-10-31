@@ -47,11 +47,11 @@ def role_allowlists():
 
 
 class MCPBridge:
-    def __init__(self, server, role, raw_tools, *, binding=None, auxiliary=None):
+    def __init__(self, server, role, raw_tools, *, binding=None, auxiliary=None, state=None):
         from agents.tool import FunctionTool
         if role not in {"provider", "payer", "cm"} or (role == "provider" and binding is None):
             raise GoFailure("chi_mcp_role_invalid")
-        self.server, self.role, self.binding = server, role, binding
+        self.server, self.role, self.binding, self.state = server, role, binding, state
         self.raw_names = {}
         self.tools = []
         self.guard = None
@@ -183,6 +183,14 @@ class MCPBridge:
                 self.guard.journal.record_tool(selected["id"], canonical, result,
                                                event="returned_error" if is_error else "returned",
                                                secrets=(self.guard.secret, self.guard.session))
+                if self.state is not None:
+                    run_doc = getattr(self.guard.journal, "run", None)
+                    rounds = len(run_doc.get("requests", [])) if isinstance(run_doc, dict) else 0
+                    self.state.observe(call_id=selected["id"], tool=canonical, kind="mcp",
+                                       arguments=args, result=result,
+                                       event="returned_error" if is_error else "returned",
+                                       round_number=rounds,
+                                       scope=self.state.scope_for_arguments(args))
                 return result
             except BaseException as exc:
                 code = ("chi_tool_cancelled" if isinstance(exc, asyncio.CancelledError) else
@@ -192,6 +200,16 @@ class MCPBridge:
                                                    secrets=(self.guard.secret, self.guard.session))
                 except Exception:
                     pass
+                if self.state is not None:
+                    try:
+                        run_doc = getattr(self.guard.journal, "run", None)
+                        rounds = len(run_doc.get("requests", [])) if isinstance(run_doc, dict) else 0
+                        self.state.observe(call_id=selected["id"], tool=canonical, kind="mcp",
+                                           arguments=args, result=code, event="failed",
+                                           round_number=rounds,
+                                           scope=self.state.scope_for_arguments(args))
+                    except Exception:
+                        pass
                 if self.binding is not None:
                     self.binding.poisoned = True
                 raise

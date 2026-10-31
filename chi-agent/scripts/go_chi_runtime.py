@@ -7,6 +7,8 @@ from opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as 
                                   SCHEMAS as B_SCHEMAS, DESCRIPTIONS as B_DESCRIPTIONS,
                                   _matches_patch, _same_route_reasoning)
 from model_runner_adapter import _patch_empty_history_compatibility
+from go_chi_guidance import digest as guidance_digest
+from go_chi_state import TaskState
 
 
 def coding_tools(guard_getter):
@@ -78,7 +80,8 @@ async def run_coding_b(client, guard, tools):
 
 async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_path,
                   logs_dir, workspace_root, handbook_root, tool_references, lower,
-                  server_factory=None, auxiliary=None, evidence_shadow=None):
+                  server_factory=None, auxiliary=None, evidence_shadow=None,
+                  capabilities="f0-f3-v1"):
     """Run one role using a previously preflighted journal and injected transport.
 
     No authorization or bundle/source verification is performed here. The
@@ -116,12 +119,16 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         raise GoFailure("chi_evidence_shadow_role_invalid")
     if lower is None:
         raise GoFailure("chi_transport_missing")
+    if capabilities not in {None, "f0-f3-v1"}:
+        raise GoFailure("chi_capabilities_invalid")
     logs_dir = __import__("pathlib").Path(logs_dir)
     logs_dir.mkdir(mode=0o700, parents=False, exist_ok=False)
     run_started = time.monotonic()
     context = contextvars.ContextVar("chi_confirmation", default=None)
     holder, exchanges = {}, []
     binding = PatientBinding(instruction, journal) if role == "provider" else None
+    state = (TaskState(logs_dir / "task-state", run=journal.run["run"], role=role, binding=binding)
+             if capabilities == "f0-f3-v1" else None)
     factory = server_factory or (lambda url: selected_server(url, auxiliary=auxiliary is not None))
     prior_trace = get_trace_provider()._manual_disabled
     set_tracing_disabled(True)
@@ -131,13 +138,13 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     try:
         async with factory(mcp_url) as server:
             raw_tools = await server.list_tools()
-            bridge = MCPBridge(server, role, raw_tools, binding=binding, auxiliary=auxiliary)
+            bridge = MCPBridge(server, role, raw_tools, binding=binding, auxiliary=auxiliary, state=state)
             local = local_tools(role=role, workspace_root=workspace_root, instruction_path=instruction_path,
                                 tool_references=tool_references, handbook_root=handbook_root,
                                 journal=journal, binding=binding, guard_getter=lambda: holder.get("guard"),
                                 client_getter=lambda: holder.get("client"), confirmation_context=context,
                                 exchanges=exchanges, dispatch_lock=bridge.lock, instruction=instruction,
-                                evidence_shadow=evidence_shadow)
+                                evidence_shadow=evidence_shadow, state=state, capabilities=capabilities)
             tools = bridge.tools + local
             definitions = [Converter.tool_to_openai(tool) for tool in tools]
             if len({tool.name for tool in tools}) != len(tools):
@@ -239,6 +246,17 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                        "provider_requests": len(agent_requests),
                        "tool_events": len(journal.run["tool_events"]),
                        "elapsed_ms": int((time.monotonic() - run_started) * 1000), "official_reward": None}
+            if state is not None:
+                summary.update({
+                    "capabilities": capabilities,
+                    "guidance_version": "chi-role-guidance-v1",
+                    "guidance_sha256": guidance_digest(),
+                    "task_state_version": state.data["version"],
+                    "task_state_target": state.data["target"],
+                    "task_state_claim": state.data["claim"],
+                    "task_state_open_unknowns": [item["id"] for item in state.data["unknowns"]
+                                                 if item["status"] == "open"],
+                })
             if auxiliary is not None:
                 aux = [item for item in journal.run['requests'] if item['purpose'] == 'patient_simulator']
                 summary['patient_simulator_requests'] = len(aux)

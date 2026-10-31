@@ -1,0 +1,198 @@
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from opencode_go_provider import GoFailure
+from go_chi_state import (LIMITS, MAX_STATE_BYTES, StateRefusal, TaskState,
+                          effect_for)
+
+
+class Binding:
+    def __init__(self, bound=None):
+        self.bound = bound
+
+
+def read_call(state, call_id="call_1", case_id="CASE-A"):
+    return state.observe(call_id=call_id, tool="chart.get_patient_chart_by_patient", kind="mcp",
+                         arguments={"case_id": case_id}, result={"ok": True})
+
+
+def write_call(state, call_id="call_w1", case_id="CASE-A", event="returned"):
+    return state.observe(call_id=call_id, tool="auth.submit_authorization", kind="mcp",
+                         arguments={"case_id": case_id}, result={"ok": True}, event=event)
+
+
+class StateTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name) / "task-state"
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def state(self, role="payer", binding=None):
+        return TaskState(self.root, run="run_1", role=role, binding=binding)
+
+    def test_effect_classification(self):
+        self.assertEqual(effect_for("triage.get", "mcp"), "read")
+        self.assertEqual(effect_for("payer_intake_hub.list_documents", "mcp"), "read")
+        self.assertEqual(effect_for("auth.submit_authorization", "mcp"), "mutation")
+        self.assertEqual(effect_for("local-fs-search", "local"), "read")
+        self.assertEqual(effect_for("local-fs-write", "local"), "mutation")
+        self.assertEqual(effect_for("some_unknown_tool", "local"), "mutation")
+        self.assertEqual(effect_for("future.publish", "mcp"), "mutation")
+
+    def test_fact_and_status_require_observed_source(self):
+        state = self.state()
+        read_call(state)
+        result = state.propose({
+            "target": {"case_id": "CASE-A"},
+            "facts": [{"text": "chart observed", "source_call_id": "call_1"}],
+            "latest_business_status": {"text": "case open", "source_call_id": "call_1"},
+        })
+        self.assertEqual(result["status"], "updated")
+        self.assertEqual(state.data["target"]["case_id"], "CASE-A")
+        self.assertEqual(state.data["latest_business_status"]["source_seq"], 1)
+        self.assertTrue((self.root / "versions" / "000002.json").is_file())
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"facts": [{"text": "made up", "source_call_id": "call_9"}]})
+        self.assertEqual(caught.exception.code, "chi_state_source_unobserved")
+
+    def test_stale_status_cannot_overwrite_newer(self):
+        state = self.state()
+        read_call(state, "call_1")
+        read_call(state, "call_2")
+        state.propose({"target": {"case_id": "CASE-A"},
+                       "latest_business_status": {"text": "new", "source_call_id": "call_2"}})
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"latest_business_status": {"text": "old", "source_call_id": "call_1"}})
+        self.assertEqual(caught.exception.code, "chi_state_stale")
+        self.assertEqual(state.data["latest_business_status"]["source_call_id"], "call_2")
+
+    def test_wrong_case_and_conflict_sources_are_refused(self):
+        state = self.state()
+        read_call(state, "call_1", "CASE-A")
+        read_call(state, "call_2", "CASE-B")
+        state.propose({"target": {"case_id": "CASE-A"}})
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"facts": [{"text": "other case", "source_call_id": "call_2"}]})
+        self.assertEqual(caught.exception.code, "chi_state_case_mismatch")
+        state.observe(call_id="call_3", tool="local-fs-read", kind="local",
+                      arguments={"path": "/workspace/CASE-A/payer/a.txt"}, result="x",
+                      scope="conflict")
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"facts": [{"text": "conflict", "source_call_id": "call_3"}]})
+        self.assertEqual(caught.exception.code, "chi_state_source_conflict")
+
+    def test_provider_patient_must_be_bound_and_locked(self):
+        unbound = self.state(role="provider", binding=Binding())
+        read_call(unbound)
+        unbound.propose({"target": {"case_id": "CASE-A"}})
+        with self.assertRaises(StateRefusal) as caught:
+            unbound.propose({"target": {"patient_id": "P1"}})
+        self.assertEqual(caught.exception.code, "chi_state_patient_unbound")
+
+        close = tempfile.TemporaryDirectory()
+        self.addCleanup(close.cleanup)
+        bound = TaskState(Path(close.name) / "state", run="run_2", role="provider",
+                          binding=Binding("P1"))
+        read_call(bound)
+        bound.propose({"target": {"case_id": "CASE-A", "patient_id": "P1"}})
+        with self.assertRaises(StateRefusal) as caught:
+            bound.propose({"target": {"patient_id": "P2"}})
+        self.assertIn(caught.exception.code, {"chi_state_target_locked", "chi_state_case_mismatch"})
+        with self.assertRaises(StateRefusal) as caught:
+            bound.propose({"target": {"case_id": "CASE-B"}})
+        self.assertIn(caught.exception.code, {"chi_state_target_locked", "chi_state_case_mismatch"})
+
+    def test_unknown_write_blocks_claim_until_later_read_resolves(self):
+        state = self.state()
+        write_call(state, event="failed")
+        self.assertEqual(state.data["unknowns"][0]["status"], "open")
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_blocked_unknown:"))
+        read_call(state, "call_2")
+        with self.assertRaises(StateRefusal):
+            state.propose({"resolve_unknown": [{"unknown_id": "u9", "source_call_id": "call_2",
+                                                "note": "no such unknown"}]})
+        state.propose({"resolve_unknown": [{"unknown_id": "u1", "source_call_id": "call_2",
+                                            "note": "status observed after failure"}]})
+        # Resolving the unknown is not enough: the write still needs a readback.
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_readback_required:"))
+        read_call(state, "call_3")
+        state.propose({"latest_business_status": {"text": "submitted", "source_call_id": "call_3"}})
+        allowed, reason = state.can_claim()
+        self.assertTrue(allowed, reason)
+        self.assertEqual(state.record_claim()["status"], "recorded")
+        self.assertEqual(state.data["claim"]["kind"], "model_claim")
+
+    def test_mutation_requires_readback_before_claim(self):
+        state = self.state()
+        write_call(state)
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_readback_required:"))
+        read_call(state, "call_2")
+        state.propose({"latest_business_status": {"text": "accepted", "source_call_id": "call_2"}})
+        allowed, _ = state.can_claim()
+        self.assertTrue(allowed)
+
+    def test_no_mutation_keeps_original_claim_behavior(self):
+        state = self.state()
+        read_call(state)
+        allowed, reason = state.can_claim()
+        self.assertTrue(allowed, reason)
+        self.assertEqual(state.record_claim()["status"], "recorded")
+
+    def test_limits_and_size_are_enforced(self):
+        state = self.state()
+        read_call(state)
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"facts": [{"text": "x" * 801, "source_call_id": "call_1"}]})
+        self.assertEqual(caught.exception.code, "chi_state_update_invalid")
+        with self.assertRaises(StateRefusal):
+            state.propose({"plans": ["p"] * (LIMITS["plans"] + 1)})
+        with self.assertRaises(StateRefusal):
+            state.propose({"unknown": "field"})
+        self.assertEqual(state.data["version"], 1)
+
+    def test_persistence_failure_stops_without_advancing_version(self):
+        state = self.state()
+        read_call(state)
+        before = state.data["version"]
+        with mock.patch("go_chi_state._atomic_write", side_effect=OSError("disk")):
+            with self.assertRaises(GoFailure) as caught:
+                state.propose({"plans": ["next"]})
+        self.assertEqual(caught.exception.code, "chi_state_persistence_failed")
+        self.assertEqual(state.data["version"], before)
+        self.assertEqual(state.data["plans"], [])
+
+    def test_version_snapshots_are_kept(self):
+        state = self.state()
+        read_call(state)
+        state.propose({"plans": ["first"]})
+        state.propose({"plans": ["second"]})
+        versions = sorted((self.root / "versions").glob("*.json"))
+        self.assertGreaterEqual(len(versions), 3)
+        last = json.loads(versions[-1].read_text())
+        self.assertEqual(last["version"], state.data["version"])
+        self.assertEqual(last["plans"][-1]["text"], "second")
+
+    def test_summary_is_bounded_and_has_no_raw_results(self):
+        state = self.state()
+        read_call(state)
+        state.propose({"plans": ["first"]})
+        summary = state.summary()
+        self.assertEqual(summary["schema"], "chi-task-state-v1")
+        self.assertNotIn("result", summary["observations"][0])
+        self.assertLessEqual(len(summary["observations"]), LIMITS["observations_in_summary"])
+        self.assertLess(len(json.dumps(summary).encode()), MAX_STATE_BYTES)
+
+
+if __name__ == "__main__":
+    unittest.main()

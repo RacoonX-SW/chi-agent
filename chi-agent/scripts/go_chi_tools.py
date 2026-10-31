@@ -9,18 +9,29 @@ from pathlib import Path
 from opencode_go_provider import GoFailure
 from go_chi_resources import workspace_path
 from evaluation_bundle import _check_components, BundleFailure
+from go_chi_guidance import guidance as role_guidance
+from go_chi_search import SearchRefusal, search as bounded_search
+from go_chi_state import StateRefusal
 from payer_evidence import CASE_ID, EvidenceRegistry
 from pdf_resource_reader import read_allowed_file
 
 EVIDENCE_SHADOW_MODES = {None, "off", "shadow"}
+CAPABILITIES = {None, "f0-f3-v1"}
+OBSERVED_LOCAL = {"local-fs-read", "local-fs-list", "local-fs-search",
+                  "local-fs-write", "local-fs-edit", "local-read-patient-observation"}
 
 
 def local_tools(*, role, workspace_root, instruction_path, tool_references, handbook_root,
                 journal, binding, guard_getter, client_getter, confirmation_context,
-                exchanges, dispatch_lock, instruction=None, evidence_shadow=None):
+                exchanges, dispatch_lock, instruction=None, evidence_shadow=None,
+                state=None, capabilities=None):
     from agents.tool import FunctionTool
     if role not in {"provider", "payer", "cm"} or (role == "provider" and binding is None):
         raise GoFailure("chi_local_role_invalid")
+    if capabilities not in CAPABILITIES:
+        raise GoFailure("chi_capabilities_invalid")
+    if capabilities == "f0-f3-v1" and state is None:
+        raise GoFailure("chi_state_missing")
     if evidence_shadow not in EVIDENCE_SHADOW_MODES:
         raise GoFailure("chi_evidence_shadow_invalid")
     if evidence_shadow == "off":
@@ -46,15 +57,16 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         if type(declared) is not str or not CASE_ID.fullmatch(declared):
             declared = None
         scope = None
-        if tool == "local-fs-read" and type(args.get("path")) is str:
+        if tool in {"local-fs-read", "local-fs-list", "local-fs-search"} and type(args.get("path")) is str:
             value = args["path"]
-            path = workspace_path(workspace_root, value, role)
+            directory = tool != "local-fs-read"
+            path = workspace_path(workspace_root, value, role, directory=directory)
             if path is not None:
                 try:
                     relative = path.relative_to(workspace_root)
                 except ValueError:
                     relative = None
-                if relative is not None and len(relative.parts) >= 3:
+                if relative is not None and len(relative.parts) >= (2 if directory else 3):
                     scope = "case:" + relative.parts[0]
             else:
                 try:
@@ -154,6 +166,16 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         return await write_file({"path": str(path), "content": new})
 
     async def claim(_args):
+        guard = guard_getter()
+        if guard is not None:
+            pending = [record for record in guard.contract.records
+                       if record["result"] is None and record["name"] != "local-claim_done"]
+            if pending:
+                return "REFUSED: completion_batch_pending:" + pending[0]["id"]
+        if state is not None:
+            outcome = state.record_claim()
+            if outcome["status"] != "recorded":
+                return "REFUSED: " + outcome["reason"]
         journal.record_claim()
         return "task marked as done"
 
@@ -242,9 +264,93 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         except Exception:
             return shadow_error("checklist_malformed")
 
+    def require_state():
+        if state is None:
+            raise GoFailure("chi_state_missing")
+
+    async def task_state(_args):
+        require_state()
+        return json.dumps(state.summary(), ensure_ascii=False, sort_keys=True, allow_nan=False)
+
+    async def state_update(args):
+        require_state()
+        try:
+            result = state.propose(args)
+        except StateRefusal as exc:
+            return "REFUSED: " + exc.code
+        return json.dumps(result, ensure_ascii=False, sort_keys=True, allow_nan=False)
+
+    async def role_guidance_tool(args):
+        if type(args) is not dict or args:
+            return "REFUSED: chi_guidance_arguments_invalid"
+        try:
+            value = role_guidance(role, state.summary() if state is not None else None)
+        except ValueError:
+            raise GoFailure("chi_guidance_role_invalid") from None
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
+
+    def search_loader(path):
+        try:
+            with path.open("rb") as handle:
+                header = handle.read(5)
+        except OSError:
+            return None
+        if path.suffix.lower() == ".pdf" or header == b"%PDF-":
+            value = read_allowed_file(path, None, None, pdf_enabled=True)
+            return None if value.startswith("ERROR:") else value
+        try:
+            return path.read_text(encoding="utf-8")
+        except (UnicodeError, OSError):
+            return None
+
+    async def fs_search(args):
+        require_state()
+        if (type(args) is not dict or set(args) - {"path", "query", "max_results", "case_sensitive"}
+                or "path" not in args or "query" not in args):
+            return "REFUSED: search_arguments_invalid"
+        path = allowed_read(args["path"], directory=True) or allowed_read(args["path"])
+        if path is None or path.is_symlink() or not (path.is_file() or path.is_dir()):
+            return "REFUSED: search_path_outside_allowlist"
+        try:
+            value = bounded_search([path], args["query"],
+                                   max_results=args.get("max_results", 8),
+                                   case_sensitive=args.get("case_sensitive", False),
+                                   read_text=search_loader)
+        except SearchRefusal as exc:
+            return "REFUSED: " + exc.code
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
+
     empty = {"type": "object", "properties": {}, "additionalProperties": False}
     def schema(properties, required):
         return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
+    text_item = {"type": "object", "properties": {"text": {"type": "string"}},
+                 "required": ["text"], "additionalProperties": False}
+    source_item = {"type": "object",
+                   "properties": {"text": {"type": "string"}, "source_call_id": {"type": "string"}},
+                   "required": ["text", "source_call_id"], "additionalProperties": False}
+    state_update_schema = schema({
+        "facts": {"type": "array", "items": source_item},
+        "plans": {"type": "array", "items": {"type": "string"}},
+        "gaps": {"type": "array", "items": {"type": "object", "properties": {
+            "text": {"type": "string"}, "status": {"type": "string", "enum": ["open", "resolved"]},
+            "source_call_id": {"type": "string"}},
+            "required": ["text", "status"], "additionalProperties": False}},
+        "target": {"type": "object", "properties": {"case_id": {"type": "string"},
+                                                    "patient_id": {"type": "string"}},
+                   "additionalProperties": False},
+        "latest_business_status": source_item,
+        "next_candidates": {"type": "array", "items": {"type": "string"}},
+        "resolve_unknown": {"type": "array", "items": {"type": "object", "properties": {
+            "unknown_id": {"type": "string"}, "source_call_id": {"type": "string"},
+            "note": {"type": "string"}},
+            "required": ["unknown_id", "source_call_id", "note"], "additionalProperties": False}},
+    }, [])
+    search_schema = schema({
+        "path": {"type": "string"},
+        "query": {"type": "string", "minLength": 1, "maxLength": 200},
+        "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
+        "case_sensitive": {"type": "boolean"},
+    }, ["path", "query"])
     defs = [
         ("local-fs-read", "Read an allowlisted task, handbook or role workspace file.", schema({"path": {"type": "string"}, "offset": {"type": "integer", "minimum": 1}, "limit": {"type": "integer", "minimum": 1}}, ["path"]), read_file),
         ("local-fs-list", "List an allowlisted role workspace or handbook directory.", schema({"path": {"type": "string"}}, ["path"]), list_files),
@@ -257,6 +363,21 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         defs.extend([
             ("local-read-patient-observation", READ_DESCRIPTION, schema({"patient_id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}}, ["patient_id", "offset"]), observation),
             ("local-confirm-patient", CONFIRM_DESCRIPTION, schema({"patient_id": {"type": "string"}, "instruction_quote": {"type": "string", "minLength": 1}, "chart_quote": {"type": "string", "minLength": 1}}, ["patient_id", "instruction_quote", "chart_quote"]), confirm),
+        ])
+    if capabilities == "f0-f3-v1":
+        defs.extend([
+            ("local-task-state",
+             "Read this run's bounded task state: target, observed sources, facts, plans, gaps, open unknown writes, latest business status and next candidates. Read it before planning or after a surprising tool result.",
+             empty, task_state),
+            ("local-state-update",
+             "Submit a sourced task-state update. Facts and latest business status must cite a call_id already observed in this run. The program fills source versions and rejects stale, wrong-case, unobserved or binding-changing updates. It cannot mark an unknown write as success or failure.",
+             state_update_schema, state_update),
+            ("local-role-guidance",
+             "Return the versioned role stage guide with legal branches, preconditions, readbacks and stop conditions. It contains no task answers or expected outcomes; decide from public observations.",
+             empty, role_guidance_tool),
+            ("local-fs-search",
+             "Search an allowlisted public directory or fixed reference file for a literal string. Returns bounded line hits with path, line, byte offset, file hash and truncation flags. Re-read the original context with local-fs-read before citing it.",
+             search_schema, fs_search),
         ])
     if evidence_shadow == "shadow":
         defs.extend([
@@ -304,6 +425,16 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                     journal.record_tool(selected["id"], name, output,
                                         event="refused" if output.startswith("REFUSED:") else "returned",
                                         secrets=(guard.secret, guard.session))
+                    if state is not None and name in OBSERVED_LOCAL:
+                        event = ("refused" if output.startswith("REFUSED:") else
+                                 "returned_error" if output.startswith("ERROR:") else "returned")
+                        scope = (classify_source(name, json.dumps(args, ensure_ascii=False), output)
+                                 if name in {"local-fs-read", "local-fs-list", "local-fs-search"}
+                                 else state.scope_for_arguments(args))
+                        run_doc = getattr(journal, "run", None)
+                        rounds = len(run_doc.get("requests", [])) if isinstance(run_doc, dict) else 0
+                        state.observe(call_id=selected["id"], tool=name, kind="local", arguments=args,
+                                      result=output, event=event, round_number=rounds, scope=scope)
                     return output
                 except BaseException as exc:
                     code = ("chi_tool_cancelled" if isinstance(exc, __import__("asyncio").CancelledError) else
@@ -311,6 +442,15 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                     try: journal.record_tool(selected["id"], name, code, event="failed",
                                              secrets=(guard.secret, guard.session))
                     except Exception: pass
+                    if state is not None and name in OBSERVED_LOCAL:
+                        try:
+                            state.observe(call_id=selected["id"], tool=name, kind="local", arguments=args,
+                                          result=code, event="failed",
+                                          round_number=len(getattr(journal, "run", {}).get("requests", []))
+                                          if isinstance(getattr(journal, "run", None), dict) else 0,
+                                          scope=state.scope_for_arguments(args))
+                        except Exception:
+                            pass
                     if binding is not None and name in {"local-fs-write", "local-fs-edit", "local-confirm-patient"}:
                         binding.poisoned = True
                     raise
