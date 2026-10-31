@@ -1,6 +1,8 @@
 # 竞赛路线与 OpenSpec 变更顺序
 
-阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。当前按 [Go 确认超时、费用记录与有界恢复](changes/go-chi-timeout-recovery/proposal.md)处理运行等待、费用缺项及用户单独批准的旧终止超时留档；[S 混批恢复/终态捕获](changes/go-chi-batch-recovery/proposal.md)及R的[外部入口/独立包](changes/chi-go-evaluation-entry/proposal.md)保留为接线基础。旧请求不核销或重发，独立恢复必须固定新候选/新B/任务条件，新的结果或token未知仍停止。原版Claude与F.5最终配送仍暂停。先前[两个新任务固定条件基线](changes/provider-two-task-baseline/proposal.md)保留为开发证据；旧尝试/账目、record_only/null cap继续保留。实现分工按[当前工作流](../docs/subagent-workflow.md)，不操作Antigravity。
+阶段、授权、已通过身份及下一步统一见 [REVIEW_STATE](../reviews/REVIEW_STATE.md)。近期开发顺序为：[V角色/患者接点](changes/representative-role-baseline/proposal.md) → [W统一操作者与CM链路](changes/unified-role-cm-lifecycle/design.md) → [X payer离线诊断](changes/payer-offline-diagnosis/design.md) → [Y五步离线证据核对工作包](changes/payer-evidence-prototype/design.md)。Y先检验收益假设、纯原型和反例，仅go后做默认关闭的开发影子接线，再固定候选交Codex独立审核；它不自动恢复真实验证、临床/官方判分或最终配送。
+
+[Go确认超时/费用/留档](changes/go-chi-timeout-recovery/proposal.md)、[S混批恢复/终态捕获](changes/go-chi-batch-recovery/proposal.md)及R的[外部入口/独立包](changes/chi-go-evaluation-entry/proposal.md)保留为接线与证据基础。旧请求不核销或重发、新未知仍停止、record_only/null cap及原历史保留；不能借原型重建账根或刷新B。先前[两个新任务基线](changes/provider-two-task-baseline/proposal.md)保留为开发证据。默认实现分工按[工作流](../docs/subagent-workflow.md)，用户指定的本阶段DeepSeek接手例外只见Y规格与唯一状态，不改变运行时模型，不操作Antigravity。
 
 本文件用于协调变更顺序；具体行为契约写入各变更的 `specs/`，实现取舍写入 `design.md`。尚未决定的 Agent 改进策略不提前写成已冻结需求。
 
@@ -9,6 +11,8 @@
 2026-10-21 的 [开发讨论](../docs/development-discussion-2026-10-21.md) 补充了官方能力与自有实现的分工、已核对的工具调用示例及各阶段证据。它是规划说明，不代表模型、harness 或改进策略已经冻结，也未恢复实现。
 
 ## 截止前排期（2026-10-28提案）
+
+以下保留10/28时的排期提案及当时资料来源，不代表每项已完成或获新授权；近期实施顺序按上述变更与REVIEW_STATE接续，不按历史日期自动启动调用。
 
 已重新通过浏览器读取当前 Rules，官方日期与必交材料见[竞赛要求](../docs/competition-brief-2026-10-20.md#当前截止时间与费用)。建议把 **11 月 6 日设为内部可提交版本里程碑，11 月 13 日前完成实际交付**，其后留缓冲。下列为讨论中的排期，具体接入/冻结仍按有界变更执行；本次规划不解除正式入口、原版 Claude 判分或 F.5 的现有暂停，不自动开新付费阶段。
 

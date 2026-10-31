@@ -101,6 +101,7 @@
 | 本地患者模拟与角色接线 | [V规格](../openspec/changes/representative-role-baseline/design.md)与[V报告](../reviews/representative-role-baseline-review.md)：原CM状态机、开发适配/broker、嵌套请求账与真实角色导出 | 围绕新功能集中讲解模型职责、消息翻转、锁与未知传播、实际接口和验收层级；用户提出Go替代及官方兼容取舍，尚无新增独立源码复述或运行实践，不升级为掌握 |
 | 统一角色操作者与失败终态 | [W规格](../openspec/changes/unified-role-cm-lifecycle/design.md)与[W报告](../reviews/unified-role-cm-lifecycle-review.md)：实际跨容器同账链、在途跟踪、停止/捕获/清理与三角色开发结果 | 串起单一所有者、独立辅助预算、同批fatal门禁、模型失败与世界静止；payer工程收口但终态不符，CM本地闭环不等于临床/官方通过。用户确定边界，代理执行，无新增用户独立复述/操作证据 |
 | payer失败的离线诊断 | [X规格](../openspec/changes/payer-offline-diagnosis/design.md)与[X报告](../reviews/payer-offline-diagnosis-review.md)：从实际观察、规则依据、不可修改动作和检查适用性解释证据边界 | 区分看见缺项、规则要求、主张越界与终态不符；工具汇总不是独立核验，诊断样本不是盲测。仅分析/规格，未实现新机制，无新增用户实践/掌握证据 |
+| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | 用户指定DeepSeek先实现、Codex后独立审核。当前只有规划；开发代理与参赛模型职责分开，未实现/验收或新增用户源码实践，不记掌握 |
 
 相关材料：
 
@@ -116,7 +117,9 @@
 
 ## 下一次从哪里继续
 
-下一入口转到[X设计](../openspec/changes/payer-offline-diagnosis/design.md)和[X报告](../reviews/payer-offline-diagnosis-review.md)：沿“原始公开文件→实际工具观察→下一请求→逐项主张→不可修改建议→终态→检查器”理解一次失败。重点是缺项是否属于必需条件、引用是否支持主张、程序计数是否只是重述模型判断，以及存在性检查与内容正确性的区别。下一方案先用自造材料检验证据核对原型，尚未实现/授权，不默认复测或按旧答案补规则。
+下一入口转到[Y五步计划](../openspec/changes/payer-evidence-prototype/design.md)：先用自造材料检验可检测的来源问题与反例，再按go/no-go决定是否做默认关闭的影子接线，最后由DeepSeek固定候选交回Codex独立审核。重点理解“可信来源注册表→模型引用/解释→结构校验→语义未判→已有工具循环记录”各自能证明什么。新功能若验收，再集中讲正常/失败调用链及取舍；no-go则解释为什么不接入，不为填课时增加实现。当前仅规划，无新增复述或实践证据，默认不安排小测。
+
+诊断依据从[X设计](../openspec/changes/payer-offline-diagnosis/design.md)和[X报告](../reviews/payer-offline-diagnosis-review.md)回读：沿“原始公开文件→实际工具观察→下一请求→逐项主张→不可修改建议→终态→检查器”理解一次失败。重点是缺项是否属于必需条件、引用是否支持主张、程序计数是否只是重述模型判断，以及存在性检查与内容正确性的区别；不得按原检查结果补写规则或默认复测。
 
 W调用链可从[W设计](../openspec/changes/unified-role-cm-lifecycle/design.md)和[W报告](../reviews/unified-role-cm-lifecycle-review.md)回读：从统一角色操作者的资源/身份预检，沿包外runner进入原Go入口与工具循环，再跟踪CM世界如何回调同进程broker。重点理解单一计费所有者、MCP与billing锁、同批fatal停止、模型失败与世界静止的区别，以及终态/清理证据如何决定能否继续下一真实题。真实结果和费用只查W报告；不得把合成跨容器、真实模型业务和官方判分混为一层。
 
