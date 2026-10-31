@@ -4,7 +4,7 @@
 
 ## 输入、信任与输出
 
-可信来源注册表由程序维护：case、shared_public或unattributed作用域、实际观察序号、原工具call_id或instruction身份、实际文本及其hash、资源键/generation与当前状态。共享公开手册不伪装成case原件，其政策适用性仍未由程序判定；“过期”只按可证明的已观察版本/状态失效处理，不自动判断政策有效期。文件case必须从既有workspace allowlist的`<case>/<role|shared>/...`结构导出；公开handbook/instruction/tool reference标shared_public；无路径case且无结构`case_id`的临床结果/混合列表标unattributed，不得默认支持任意case。同一可证明资源（当前为同一`local-fs-read`路径）被重新观察且内容变化时，旧来源标superseded，旧文本与原hash保留但不再作为当前支持；相同内容重读不失效。只登记角色allowlist内公开内容；工具错误、仅列目录、另case/run、尚未携入模型请求的本批结果不作为已观察事实。片段边界明确采用字符索引或行号之一并文档化，不混字节/PDF页号。
+可信来源注册表由程序维护：case、shared_public或unattributed作用域、实际观察序号、原工具call_id或instruction身份、实际文本及其hash、资源键/generation与当前状态。共享公开手册不伪装成case原件，其政策适用性仍未由程序判定；“过期”只按可证明的已观察版本/状态失效处理，不自动判断政策有效期。文件case必须从既有workspace allowlist的`<case>/<role|shared>/...`结构导出；公开handbook/instruction/tool reference标shared_public；无路径case且无结构`case_id`的临床结果/混合列表标unattributed，不得默认支持任意case。同一可证明资源（当前为同一`local-fs-read`路径）被重新观察且内容变化时，旧来源标superseded，旧文本与原hash保留但不再作为当前支持；相同内容重读不失效。64来源上限只计当前可引用来源：满额时已证明的替换仍须执行失效并释放旧槽，不能因容量丢弃更新事实；真正的新资源或相同内容重读在满额时可拒绝登记，旧来源保持有效。只登记角色allowlist内公开内容；工具错误、仅列目录、另case/run、尚未携入模型请求的本批结果不作为已观察事实。片段边界明确采用字符索引或行号之一并文档化，不混字节/PDF页号。
 
 核对表包含：目标case、拟提交建议、带稳定ID的主张；每项主张的事实/推断/规则解释类别、来源ID和片段范围、模型对规则性质的解释、缺项/矛盾/未知。hash、观察序号和验证状态由程序计算；模型填写的规则性质不进入可信事实层。所有表有总字节、条目、引用和单片段上限，实际数值在第1步冻结并测试边界；具体值与片段索引语义见[第1步冻结](../../design.md#第1步冻结2026-10-31实现前核对)。
 

@@ -148,34 +148,42 @@ class EvidenceRegistry:
     def _register(self, *, kind: str, tool: str | None, call_id: str | None,
                   text: str, case_scope: str, observed_round: int,
                   key: str | None) -> str | None:
-        if len(self._sources) >= self.limits["sources"]:
-            self._not_registered += 1
-            if call_id is not None:
-                self._by_call[call_id] = None
-            return None
         source_id = "src-%04d" % (len(self._sources) + 1)
         digest = _sha256(text)
-        generation, current, superseded_by = 0, True, None
-        if key is not None and key in self._latest:
-            previous = self._sources[self._latest[key]]
-            generation = previous["generation"]
-            if previous["sha256"] != digest:
-                generation += 1
-                for item in self._sources:
-                    if item["resource_key"] == key and item["current"]:
-                        item["current"] = False
-                        item["superseded_by"] = source_id
+        previous = self._sources[self._latest[key]] if key is not None and key in self._latest else None
+        replaces = previous is not None and previous["sha256"] != digest
+        generation = previous["generation"] + 1 if replaces else (previous["generation"] if previous else 0)
         citable, reason = True, None
         if len(text) > self.limits["source_text_chars"]:
             citable, reason = False, "source_too_large"
         elif self._total_chars + len(text) > self.limits["registry_chars"]:
             citable, reason = False, "registry_limit"
+        # The 64-source limit is a limit on currently citable sources. A proven
+        # replacement frees its old slot, so it must be processed even at the
+        # cap; a same-content reread or a new resource at the cap is rejected.
+        if citable:
+            current_count = sum(1 for item in self._sources
+                                if item["citable"] and item["current"])
+            if replaces:
+                current_count -= sum(1 for item in self._sources
+                                     if item["citable"] and item["current"]
+                                     and item["resource_key"] == key)
+            if current_count >= self.limits["sources"]:
+                self._not_registered += 1
+                if call_id is not None:
+                    self._by_call[call_id] = None
+                return None
+        if replaces:
+            for item in self._sources:
+                if item["resource_key"] == key and item["current"]:
+                    item["current"] = False
+                    item["superseded_by"] = source_id
         record = {"source_id": source_id, "kind": kind, "tool": tool, "call_id": call_id,
                   "text": text if citable else None, "chars": len(text),
                   "sha256": digest, "case_scope": _scope(case_scope),
                   "observed_round": observed_round, "citable": citable, "reason": reason,
-                  "resource_key": key, "generation": generation, "current": current,
-                  "superseded_by": superseded_by}
+                  "resource_key": key, "generation": generation, "current": True,
+                  "superseded_by": None}
         self._sources.append(record)
         self._total_chars += len(text) if citable else 0
         if key is not None:

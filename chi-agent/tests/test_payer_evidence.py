@@ -391,6 +391,54 @@ class RegistryTests(unittest.TestCase):
         result = registry.validate(checklist([claim("src-0003", 0, 4)]))
         self.assertIn("source_uncitable", result["reasons"])
 
+    def _fill_to_source_cap(self):
+        registry = EvidenceRegistry(instruction=INSTRUCTION)
+        path = "/logs/artifacts/workspaces/case-synthetic-001/payer/record.txt"
+        registry.register_observations([observed(
+            "call_old", "old record", tool="local-fs-read",
+            arguments=json.dumps({"path": path}))])
+        registry.register_observations([
+            observed("call_fill_%d" % index, "filler-%04d" % index, round_number=2)
+            for index in range(LIMITS["sources"] - 2)])
+        self.assertEqual(len(registry.listing()["sources"]), LIMITS["sources"])
+        return registry, path
+
+    def test_replacement_at_source_cap_invalidates_old_and_frees_slot(self):
+        registry, path = self._fill_to_source_cap()
+        registry.register_observations([observed(
+            "call_new", "new record", tool="local-fs-read",
+            arguments=json.dumps({"path": path}), round_number=5)])
+        old = registry.validate(checklist([claim(
+            "src-0002", 0, 9, source_sha256=hashlib.sha256(b"old record").hexdigest())]))
+        self.assertEqual(old["reference_validation"], "invalid", old)
+        self.assertIn("source_superseded", old["reasons"])
+        self.assertFalse(old["claims"][0]["source_current"])
+        current = [item for item in registry.listing()["sources"]
+                   if item["citable"] and item["current"]]
+        self.assertEqual(len(current), LIMITS["sources"])
+        newest = max((item for item in registry.listing()["sources"] if item["current"]),
+                     key=lambda item: item["source_id"])
+        self.assertEqual(registry.validate(checklist([claim(
+            newest["source_id"], 0, 9, claim_id="c2")]))["reference_validation"], "valid")
+
+    def test_same_content_at_source_cap_keeps_old_valid(self):
+        registry, path = self._fill_to_source_cap()
+        registry.register_observations([observed(
+            "call_same", "old record", tool="local-fs-read",
+            arguments=json.dumps({"path": path}), round_number=5)])
+        self.assertEqual(registry.validate(checklist([claim("src-0002", 0, 9)]))
+                         ["reference_validation"], "valid")
+        self.assertEqual(len(registry.listing()["sources"]), LIMITS["sources"])
+
+    def test_oversized_replacement_at_source_cap_invalidates_old(self):
+        registry, path = self._fill_to_source_cap()
+        registry.register_observations([observed(
+            "call_large", "z" * (LIMITS["source_text_chars"] + 1), tool="local-fs-read",
+            arguments=json.dumps({"path": path}), round_number=5)])
+        old = registry.validate(checklist([claim("src-0002", 0, 9)]))
+        self.assertEqual(old["reference_validation"], "invalid", old)
+        self.assertIn("source_superseded", old["reasons"])
+
     def test_source_and_registry_limits_are_enforced(self):
         registry = EvidenceRegistry(instruction=INSTRUCTION)
         exchanges = [observed("call_%d" % index, "text-%04d" % index)
