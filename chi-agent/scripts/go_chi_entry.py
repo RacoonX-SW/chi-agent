@@ -345,7 +345,8 @@ def main(argv=None, *, development=None):
                 kwargs = dict(role=args.role, instruction=instruction, mcp_url=args.mcp_url,
                     instruction_path=instruction_path, logs_dir=logs_dir, workspace_root=args.workspace_root,
                     handbook_root=args.handbook_root, tool_references=args.tool_reference,
-                    lower=httpx.AsyncHTTPTransport(retries=0, verify=True))
+                    lower=httpx.AsyncHTTPTransport(retries=0, verify=True),
+                    capabilities="f0-f3-v1")
                 if development is None:
                     return await run_chi(journal, secret, **kwargs)
                 return await development(journal, secret, run_chi, kwargs)

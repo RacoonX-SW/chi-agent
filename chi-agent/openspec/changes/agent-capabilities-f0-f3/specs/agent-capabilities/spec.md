@@ -1,0 +1,103 @@
+# F0–F3 行为契约
+
+本契约定义可验收行为，不授予真实调用、官方判分或发布权限。接口细节见 [design](../../design.md)，实际权限见 [REVIEW_STATE](../../../../../reviews/REVIEW_STATE.md)。
+
+## 需求：任务支持范围必须可核对
+
+### 场景：矩阵覆盖与缺口
+
+给定公开任务索引、角色工具目录和公开 instruction，矩阵必须列出每个计划支持家族的必要能力、工具、外部依赖、完成证据、正常与失败分支，以及当前状态。只读公开字段；`fixtures/expectations.json`、verifier、solution 和 tests 不进入矩阵或运行时路由。
+
+### 场景：代表题不能代表整个角色
+
+单一代表题通过只能证明该题在当前条件下的限定行为。同角色其他家族没有证据时保持 `needs_implementation`/`unverified`，不能因为角色名相同而写成全部支持。
+
+## 需求：业务状态带来源、版本和目标校验
+
+### 场景：模型提交事实与计划
+
+模型提交事实/最新业务状态时，必须引用本次 run 已登记的工具观察 `call_id`。程序填写来源序号与 hash，区分程序观察、模型事实/计划、缺口和未知写效果；未引用来源的内容只能是计划或推断。
+
+### 场景：旧更新覆盖新结果
+
+较新的受理/状态观察已登记后，模型用更旧来源更新 `latest_business_status` 必须被拒绝，返回 `chi_state_stale`，不覆盖新事实。
+
+### 场景：错 case、未观察来源、未来结果
+
+引用其他 case 的观察、不存在的 call_id、尚未发生的观察或试图改绑 patient/case 时拒绝更新；已绑定患者不能被状态更新改变。target case 未设定时，case scope 的观察不能作为事实/状态来源，返回 `chi_state_target_required`。
+
+### 场景：未知写效果不能被改写
+
+写类工具结果不可确认时由程序登记 open unknown。模型只能在同目标、更晚的只读观察后提交 resolve；不能把 unknown 直接写成成功或失败，claim 也不能清除它。
+
+### 场景：状态超限或持久化失败
+
+超过大小/条数限制返回 `REFUSED` 并保留旧版本；原子写入/fsync 失败立即终止 run，不降级为仅内存状态，不删除旧版本或账目。
+
+## 需求：三角色存在合法不同分支
+
+### 场景：payer 不强制 MD
+
+payer 指导允许按公开规则选择批准、部分批准、拒绝、补件、转 MD 或 P2P；没有规则依据时不强制送 MD，不预设任何题的结局。
+
+### 场景：provider 可以不提交
+
+材料不足、规则冲突、身份/权限不明时，provider 可以补证、停止或如实未完成；指导不要求所有任务都提交。
+
+### 场景：CM 尊重停止条件
+
+患者 STOP、无法联系、预算将尽或工具失败时，CM 停止外呼并记录实际状态；不按固定话术或固定轮数强行结束。
+
+### 场景：指导不泄露答案
+
+指导只包含阶段、前置证据、动作候选、回读和停止条件；不包含 task ID 分支、期望结局、rubric 阈值或隐藏材料。
+
+## 需求：规则/证据定位可追溯且不越权
+
+### 场景：命中相关条款
+
+搜索返回路径、行号、字节偏移、文件 hash 和单行片段；模型用 `local-fs-read` 回读上下文后再引用。结果不足时明确说未找到，不编造条款。
+
+### 场景：越界、隐藏或跨 case
+
+workspace 根、其他 case、隐藏/verifier/judge/fixtures、符号链接、URL 或越界路径被拒绝；搜索不建立持久索引，不上传派生内容。
+
+### 场景：结果过大或提取失败
+
+超过文件/字节/结果限制时返回 `truncated` 和 `omitted`；损坏/不可读返回明确错误，不把失败当“无匹配”。
+
+## 需求：claim 与已核实效果分开
+
+### 场景：有未知写效果时结束
+
+`local-claim_done` 返回 `REFUSED: completion_blocked_unknown:<id>`，模型须在剩余预算内合法查证或如实未完成；不得自动重发写操作。
+
+### 场景：写后未回读
+
+最近 mutation 晚于最新业务状态回读时，claim 返回 `REFUSED: completion_readback_required:<call_id>`。模型完成同目标只读回读并更新状态后可再次 claim。
+
+### 场景：没有业务写操作
+
+没有 mutation 时保持原 claim 行为；claim 仍只是模型声明，不等于业务成功或官方 verdict。
+
+### 场景：claim 之后又尝试写
+
+claim 已记录后再次调度写类工具，必须拒绝执行并标记 claim_violation；该 run 不能以有效 claim 正常结束，而是以 `chi_claim_violation` 报 incomplete。journal 已有的 claim 记录保持单调，不通过回写历史把它改成 false。
+
+### 场景：跨 case 检索
+
+workspace 内的搜索路径必须属于当前 target case；搜索其他 case、或 target 尚未设定时搜索具体 case 目录，返回 `REFUSED: search_path_outside_allowlist`。
+
+### 场景：单个损坏文件检索
+
+检索目标是单个文件且读取/PDF 提取失败时返回 `ERROR: search_unreadable`，不能返回 `no_matches: true`。目录内个别文件失败时计入 unreadable/skipped，并保留目录级结果。
+
+## 需求：旧路径与账目不被新能力改写
+
+### 场景：关闭新能力
+
+`capabilities=None` 时工具集、claim 行为、系统提示、instruction、历史校验、预算反馈、账目和 B 收据语义与基线一致。
+
+### 场景：新能力进入真实候选
+
+新工具集改变请求契约/source identity 时，真实运行前必须 rebind 并取得新 B；不得用旧 B、旧包或旧账绕过。新状态文件不写入 `chi-accounting.json`。
