@@ -101,7 +101,7 @@
 | 本地患者模拟与角色接线 | [V规格](../openspec/changes/representative-role-baseline/design.md)与[V报告](../reviews/representative-role-baseline-review.md)：原CM状态机、开发适配/broker、嵌套请求账与真实角色导出 | 围绕新功能集中讲解模型职责、消息翻转、锁与未知传播、实际接口和验收层级；用户提出Go替代及官方兼容取舍，尚无新增独立源码复述或运行实践，不升级为掌握 |
 | 统一角色操作者与失败终态 | [W规格](../openspec/changes/unified-role-cm-lifecycle/design.md)与[W报告](../reviews/unified-role-cm-lifecycle-review.md)：实际跨容器同账链、在途跟踪、停止/捕获/清理与三角色开发结果 | 串起单一所有者、独立辅助预算、同批fatal门禁、模型失败与世界静止；payer工程收口但终态不符，CM本地闭环不等于临床/官方通过。用户确定边界，代理执行，无新增用户独立复述/操作证据 |
 | payer失败的离线诊断 | [X规格](../openspec/changes/payer-offline-diagnosis/design.md)与[X报告](../reviews/payer-offline-diagnosis-review.md)：从实际观察、规则依据、不可修改动作和检查适用性解释证据边界 | 区分看见缺项、规则要求、主张越界与终态不符；工具汇总不是独立核验，诊断样本不是盲测。仅分析/规格，未实现新机制，无新增用户实践/掌握证据 |
-| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | 返工独立复审关闭R1/R3，但发现来源容量达到上限后R2失效逻辑被跳过；整体未通过。普通场景通过与边界交互分别取证，开发代理与参赛模型职责分开，无新增用户源码实践，不记掌握 |
+| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | R1/R3保持关闭，R2容量补修经独立复验关闭，Y限定离线通过。关键取舍是当前槽位与历史证据分别管理；程序引用有效不等于临床正确或模型收益，无新增用户源码实践，不记掌握 |
 
 相关材料：
 
@@ -117,7 +117,7 @@
 
 ## 下一次从哪里继续
 
-下一入口转到[Y返工独立复审](../reviews/payer-evidence-prototype-review.md#codex返工独立复审2026-10-31)及[Y执行契约](../openspec/changes/payer-evidence-prototype/design.md)：R1来源作用域和R3失败不提交状态已在限定范围关闭；接下来理解为什么“不能继续储存新来源”仍必须处理“已知道旧来源失效”。R2普通更新通过，但满容量提前return导致旧引用继续valid，不能只看原反例转绿。后续返工由用户决定，完整功能验收后再集中讲正常/失败链；无新增用户复述或实践证据，默认不安排小测。
+下一入口转到[Y容量独立复审](../reviews/payer-evidence-prototype-review.md#codex容量独立复审2026-10-31)及[Y执行契约](../openspec/changes/payer-evidence-prototype/design.md)：沿“工具结果实际进入模型请求→来源登记与同资源比较→释放失效旧槽→保留历史并登记当前/不可引用新记录→核对拒绝旧引用”回读本次正常和满额/超大正文失败路径。64限制当前槽位，旧文本/hash不删除；不能把无法收录新正文当作忽略已知更新的理由。已通过范围仅是离线原型/默认关闭shadow，PR和真实验证由用户另决定；无新增用户复述或实践证据，默认不安排小测。
 
 诊断依据从[X设计](../openspec/changes/payer-offline-diagnosis/design.md)和[X报告](../reviews/payer-offline-diagnosis-review.md)回读：沿“原始公开文件→实际工具观察→下一请求→逐项主张→不可修改建议→终态→检查器”理解一次失败。重点是缺项是否属于必需条件、引用是否支持主张、程序计数是否只是重述模型判断，以及存在性检查与内容正确性的区别；不得按原检查结果补写规则或默认复测。
 

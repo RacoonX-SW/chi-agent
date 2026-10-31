@@ -531,3 +531,83 @@ docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
 | 用户验收通过 | 否 |
 
 上次通过实现身份仍为W `ad2569937e0afe649807669c70f86da97c708e86`。
+
+## Codex容量独立复审（2026-10-31）
+
+**最新结论：R2容量阻断关闭，本次返工通过；结合此前R1/R3关闭与本轮受影响回归，Y当前候选在既定纯原型/默认关闭开发shadow的限定离线范围验收通过，未发现本轮剩余阻断。** 上方各轮未通过、待审与实现者自测均为原候选历史记录，逐字保留；最新状态只在REVIEW_STATE及本节解释，不将局部工程证据升级为真实模型业务、临床或官方结论。
+
+### 候选与只读复审范围
+
+实际分支`codex/payer-evidence-prototype`，上一轮被审候选`0bf6c4419bebaac7294f5d1581f5e5c2607fa8e8`，容量实现`6ae9ee1c5072cc9f88af9236707e19afccf95f06`，本次最终HEAD为`283ea63216251734fdc3fba86908eeb76c0feb98`。fetch后origin/main仍为`0ac9f0fd9d4f5c4e5a41028727015768dbae8c07`；未rebase/merge main。先核对7文件完整diff与调用关系，再在Docker独立复验，不修改实现或原测试预期。
+
+新增忽略目录`runs/payer-evidence-prototype-codex-cap-review-20261031-01/`。精确HEAD与上一候选分别git archive，Docker内解包并冻结228/228个文件及归档hash；原首审目录、上轮复审目录各521文件在开工时冻结hash，全程只读挂载。工作区AGENTS.md/COLLABORATION.md两份用户改动先保留diff，收尾比对，不暂存/提交。报告本轮只追加本节，原审核和R2失败记录不改写。
+
+固定controller镜像最终核实为`chi-agent-a-control:latest` / `sha256:24bef2e2c7e30bb972667b29afd0ed80d6fb79ae735210b8e3167ee5013b0bf3`，实际Python3.12.15；vendor固定`4444a07fa68a4f1623f841a292a54e284fc8e7f7`且干净，原SDK/PDF卷只读。首次`docker image inspect`曾返回No such image，但同一命令中的`--pull=never`容器成功启动；随后镜像库存与独立`docker inspect --type=image`均确认上述固定ID，期间未拉取/安装/重建镜像。此元数据查询错误保留为检查过程事件，不归因于实现缺陷。
+
+### 独立执行记录
+
+全部禁网、只读根、无Key/官方世界/socket/真实账挂载，无依赖安装或升级。实际共用外壳如下（从`chi-agent/`执行；变量展开等价于本次绝对挂载）。原run_checks脚本只读复用，将实际pytest子命令、退出码、耗时、stdout及XML写本轮`evidence/`，没有覆盖旧日志。
+
+```sh
+Y_CAP_ROOT="$PWD/runs/payer-evidence-prototype-codex-cap-review-20261031-01"
+Y_ORIGINAL_ROOT="$PWD/runs/payer-evidence-prototype-codex-review-20261031-01"
+Y_PRIOR_ROOT="$PWD/runs/payer-evidence-prototype-codex-rereview-20261031-01"
+docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/model-deps:/pdf-deps:/workspace/scripts:/workspace/vendor/chi-bench/src \
+  -v "$Y_CAP_ROOT/candidate/chi-agent:/workspace:ro" \
+  -v "$PWD/vendor/chi-bench:/workspace/vendor/chi-bench:ro" \
+  -v "$Y_CAP_ROOT/operator-audit:/audit:ro" \
+  -v "$Y_CAP_ROOT/evidence:/out:rw" \
+  -v "$Y_ORIGINAL_ROOT:/original-review:ro" \
+  -v "$Y_PRIOR_ROOT:/prior-review:ro" \
+  -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+  -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro -w /workspace \
+  --entrypoint /opt/venv/bin/python chi-agent-a-control:latest \
+  /original-review/run_checks.py payer tests/test_payer_evidence.py tests/test_payer_evidence_shadow.py
+```
+
+| 同外壳实际执行程序/参数 | 退出码 | Codex独立结果与证据 |
+| --- | --- | --- |
+| `run_checks.py payer tests/test_payer_evidence.py tests/test_payer_evidence_shadow.py` | 0 | 44 passed，pytest 2.06秒；`payer.log/xml` |
+| `run_checks.py prior-probes /prior-review/operator-audit/test_rereview_probes.py /prior-review/operator-audit/test_capacity_runtime.py` | 0 | 原10项+原容量runtime共11 passed，1.99秒；原文件只读、断言未改，`prior-probes.log/xml`及本轮`capacity-runtime.json` |
+| `run_checks.py original-counterexamples /original-review/test_independent.py` | 0 | 原9项passed，0.03秒；`original-counterexamples.log/xml` |
+| `run_checks.py go-regression go-regression`（容器内展开`tests/test_go_chi_*.py`） | 0 | 100 passed、8 skipped、48 subtests，2.87秒；`go-regression.log/xml` |
+| `run_checks.py cap-contract /audit/test_cap_contract.py` | 0 | Codex新增7项容量契约反例/正例全部通过，0.02秒；`cap-contract.log/xml` |
+| `bundle_audit.py`（原Codex脚本） | 0 | 独立构包/validate/33文件集合与hash、开发装配排除、`-I -S`隔离导入通过，0.273秒；`bundle-audit.json`/`bundle-import.log` |
+| `check_scope_and_skips.py`（另只读挂上一快照为`/previous`） | 0 | AST证明只改`EvidenceRegistry._register`；固定LIMITS、R1/R3、工具/运行时/入口/锁/费用策略均未改；实际skip原因保存在`scope-and-skips.json` |
+
+8个skip仍为5项Harbor overlay未安装和3项该venv缺Docker SDK，不计通过，也未安装依赖补数字。本轮按用户要求只复审R2，不重复扩大R1/R3设计或真实世界验证；已有测试和原探针作为受影响回归实际重跑。
+
+独立包manifest为`a68443df1389fbf7632d7dd2c11bb77ebfb685ee48655bfb444d48890d7cf646`，与容量实现者报告一致；entry config仍为`29423f878784d39c1764062939db28e3d6f72eed0daa71dfe6178889c342d3a8`。33文件包含payer_evidence，排除role_runner/tests，隔离导入路径确为新包scripts。相比上轮`7a54698c…`包身份变化仅报告，不签发/复用真实B或操作真实账。
+
+### R2逐项验收
+
+| 容量行为 | 本次独立核验 |
+| --- | --- |
+| 64条后同路径old→new | 先扣除被证实替换的当前槽，再登记新来源；当前可引用数仍64、历史记录增为65；旧引用+正确旧hash返回invalid/source_superseded，新引用valid |
+| 64条后相同内容重读 | 拒绝新增登记，旧来源/版本/文本/hash不变，旧引用仍valid，未以一律拒绝代替版本逻辑 |
+| 64条后真正新资源 | 新资源未获得有效来源槽；旧来源列表逐项不变，旧引用valid、当前数仍64 |
+| 64条后超大正文替换 | 旧来源仍失效、旧文本/hash保留；新记录不可引用/source_too_large，正文不保留，当前数降至63；不因新正文不可存而继续放行旧引用 |
+| 同资源有两个同内容当前来源 | 替换使两旧槽均失效，保留两份历史记录，新版本占一个槽；随后新资源可填回64，没有重复计数或误提高配额 |
+| 连续替换 | 当前数始终64，历史和generation递增、superseded_by链保留；旧引用不复活 |
+| 总文本额度已满 | 记录文本累计仍不超过1,048,576字符；旧记录不删除/覆盖，新增不可存正文仍触发旧版本失效，明确registry_limit |
+
+原容量真SDK探针本轮确认：实际文件已更新，旧引用现为invalid/source_superseded，6个MockTransport主请求与62次fake MCP对象调用均只处理自造材料，没有真实API/官方世界。原先失败的纯模块探针同样转绿。新7项中对历史文本/hash逐项检查、对拒绝后的旧列表逐项比较，验证没有静默覆盖、删除旧观察或修改断言来规避。
+
+代码审查及AST比较证明固定上限仍为64 / 262,144 / 1,048,576；只把64的计数对象改成当前可引用记录，历史失效记录不占当前槽。R1分类、R3原子绑定以及go_chi_tools/runtime/role_runner/Guard/ToolContract/journal/费用策略字节未变；R1/R3既有关闭范围保留，原探针与受影响回归未发现破坏。
+
+### 结论层级与后续
+
+| 层级 | 本次可写结论 |
+| --- | --- |
+| 实现完成 | 容量返工已交付，相关实现与交付身份已核对 |
+| 离线验收通过 | **R2容量关闭；本次返工通过，Y当前候选在既定限定离线开发范围通过，无本轮发现的剩余阻断** |
+| 真实运行已验证 | 本轮否；真实B/C/患者/评审请求0，W既有结果不扩大 |
+| 用户验收通过 | 否；用户决定是否PR、合并及后续实验 |
+
+所有旧失败/未通过记录保留，新通过不回写旧日志。历史metadata/listing随替换增长、窗口重读的保守失效、目标case的独立可信来源、模型索引可用性及真实业务收益/临床正确性/官方评分仍非本轮证明；不据离线通过自动开启强制门禁、真实shadow、Go B/C或判分。未读取Key/隐藏期望/persona/solution/judge，未重跑官方题或操作真实账/旧留档；合成usage不入真账，新增真实token未产生、三项USD费用均0，official_reward=null。
+
+按用户要求，REVIEW_STATE的上次通过实现身份仍保留W `ad2569937e0afe649807669c70f86da97c708e86`；Y本候选的限定离线通过另记本轮结论，不冒充主线合并、真实模型准入或用户验收。本轮只追加审核文档，不改实现、不另派代理、不暂存/提交/推送/建PR/merge。下一步可由用户决定是否交付PR；任何真实验证须另固定范围并按实际日期核对前置条件。
+
+收尾`evidence/final-integrity.json`确认候选/上一候选各228文件及归档不变、工作实现/测试仍匹配固定HEAD；原首审与上轮复审目录各521文件逐字不变，当前报告以开工原报告完整字节为前缀，仅追加本节。三份审核文档166个相对链接可解析、两份用户既有diff比对一致，git diff --check通过。HEAD仍为`283ea632…`，仅三份本轮审核文档留本地未提交。
