@@ -61,3 +61,14 @@
 - [x] 不实现 F4 自动压缩、F5 完整证据分级、F6 停滞重规划（仅保留接口/门禁）。
 - [x] 不新增真实模型/判分调用、不提高额度、不改官方世界/提示/评分器。
 - [x] 不上传手册、数据、vendor、凭据、真实轨迹或派生索引。
+
+## 8. 外部 Gemini 返工（2026-11-01）
+
+- [x] claim 后跨轮写：拒绝执行、标记 claim_violation、run 以 `chi_claim_violation` incomplete；journal claim 不回写。
+- [x] workspace 检索必须匹配 target case；无 target 或跨 case 拒绝。
+- [x] 单文件/PDF 不可读返回 `ERROR: search_unreadable`；目录内失败计入 unreadable/skipped。
+- [x] target 未设定时 case scope 事实/状态返回 `chi_state_target_required`。
+- [x] 写失败 observation 解析 `case:<ID>` scope。
+- [x] run_log 增加 `task_state_sha256` 与 `task_state_claim_violation`。
+- [x] 定向 38 tests + 全量 424 tests（2 个既有环境错误、8 skipped）通过。
+- [ ] 外部 Gemini 复审返工候选 `5c1fa51`。

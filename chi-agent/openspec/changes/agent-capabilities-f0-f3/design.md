@@ -73,6 +73,7 @@
   "latest_business_status": {"text": "...", "source_call_id": "...", "source_seq": 1},
   "next_candidates": [{"text": "..."}],
   "claim": null,
+  "claim_violation": false,
   "updated_at_utc_ms": 0
 }
 ```

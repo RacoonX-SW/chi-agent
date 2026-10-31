@@ -75,3 +75,37 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 2. 按审查意见返工，再固定新候选。
 3. 继续 F4–F6（上下文预算、完整完成证据、停滞/未知处理），再进入 Z1/Z4 的离线准备。
 4. 任何真实运行仍需用户另行确认任务、候选、资源、用途、次数和停止条件。
+
+## 7. 外部 Gemini 返工（2026-11-01）
+
+外部 Gemini 对候选 `a6aac1c` / 文档 HEAD `7cb9cdb` 做了 Docker 离线独立复验，结论为“需修改（返工后复审）”：基线 414 tests 一致，F1 持久化/快照、F2 中立指导、兼容开关与 B 契约通过；反例攻击发现 3 项阻断与 3 项建议。
+
+### 7.1 阻断修复
+
+1. **claim 后跨轮写绕过**
+   - `TaskState.observe()` 现在对任何 mutation 清除已记录 claim（防御层）；`block_mutation()` 在写调度前拒绝并设置 `claim_violation`。
+   - `MCPBridge` 与本地工具调度层对 claim 后的写返回 `REFUSED: task_already_claimed_mutation_forbidden`，不执行服务器写。
+   - `run_chi()` 在 `claim_violation` 时以 `chi_claim_violation` 结束为 incomplete；若其他路径观察到 mutation 使 state claim 清空，也会因 journal claim 与 state 不一致拒绝完成（`chi_claim_invalidated`）。
+   - 有意**不**回写 `journal.run["claim_done"]`：journal 是单调证据，F1 契约要求不因新状态重写旧 claim；因此采用“拒绝写 + 标记违规 + run 失败”而不是把历史 claim 改成 false。
+   - 新增测试：跨轮 claim→mutation 返回拒绝且 run 为 `incomplete/chi_claim_violation`，mutation 未到达服务器；state claim 仍在但 `claim_violation=true`；直接 mutation observation 会清 claim；`block_mutation` 单测。
+2. **`local-fs-search` 其他 case 越权**
+   - workspace 内路径现在必须匹配 `state.target.case_id`；target 未设定时拒绝对具体 case 目录搜索；返回 `REFUSED: search_path_outside_allowlist`。
+   - 新增测试：target CASE-A 搜索 CASE-B 被拒；无 target 搜索 workspace case 被拒。
+3. **单文件损坏被伪装成无匹配**
+   - `search()` 增加 `single_file` 语义：单文件 stat/读取/PDF 提取失败抛 `search_unreadable`，工具层返回 `ERROR: search_unreadable`。
+   - 目录不可读同样报错；目录内个别文件失败计入 `unreadable_files` 与 `skipped_files`，不静默。
+   - 原 `test_unreadable_loader_is_reported_as_skipped` 改为严格断言单文件错误；新增目录计数测试、损坏 UTF-8 文件运行时测试、损坏 PDF 运行时测试。
+
+### 7.2 非阻断改进
+
+1. **target 未设定时的 case scope**：`_check_source_scope()` 对 case scope 来源返回 `chi_state_target_required`，避免多 case 事实混入无目标状态；新增单测。
+2. **写失败 scope**：`classify_source` 扩展到 `local-fs-write/edit`；失败 observation 也解析 path 得到 `case:<ID>`；新增 `test_failed_local_write_keeps_case_scope`。
+3. **状态终态 SHA-256**：`run_log.txt` 增加 `task_state_sha256`，并增加 `task_state_claim_violation`；运行时测试断言 digest 格式。
+
+### 7.3 返工后验证
+
+- 返工候选：`5c1fa51bdea3038d824da4e57603e39c0fddae97`。
+- 定向套件：`38 tests ... OK`（state/search/tools/capabilities runtime）。
+- 全量：`Ran 424 tests`，`FAILED (errors=2, skipped=8)`；2 个错误仍是既有环境缺 `anthropic`，无新增回归。
+- 新测试从 32 增至 42（+10）：claim 后写、跨 case 搜索、无 target 搜索、损坏 UTF-8、损坏 PDF、target-required、写失败 scope、SHA 字段等。
+- 仍未验证：真实模型是否遵守“claim 后不再写”、真实任务中检索/状态使用率、payer/CM 结束路径误伤、真实 handbook/PDF 命中质量、F0 payer/CM 逐题抽样、外部 Gemini 复审。
