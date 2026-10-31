@@ -34,7 +34,8 @@ def checklist(claims, case_id="case-synthetic-001", action="prepare_determinatio
             "unresolved": unresolved or []}
 
 
-def observed(call_id, text, *, tool="triage.get", arguments="{}", round_number=1):
+def observed(call_id, text, *, tool="triage.get",
+             arguments='{"case_id": "case-synthetic-001"}', round_number=1):
     return {"call_id": call_id, "tool": tool, "arguments": arguments, "result": text,
             "observed_at_request_round": round_number}
 
@@ -101,13 +102,14 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(result["reference_validation"], "invalid")
         self.assertIn("source_case_mismatch", result["reasons"])
 
-    def test_source_without_case_argument_is_run_scoped(self):
+    def test_source_without_case_argument_is_unattributed(self):
         registry = EvidenceRegistry(instruction=INSTRUCTION)
         registry.register_observations([
             observed("call_1", GAP_POLICY, arguments='{"note": "no case id"}')])
         start, end = span(GAP_POLICY, "recommended")
         result = registry.validate(checklist([claim("src-0002", start, end)]))
-        self.assertEqual(result["reference_validation"], "valid", result)
+        self.assertEqual(result["reference_validation"], "invalid", result)
+        self.assertIn("source_case_unverifiable", result["reasons"])
 
     def test_range_boundaries_and_span_limit(self):
         text = "x" * 5000
@@ -124,6 +126,86 @@ class RegistryTests(unittest.TestCase):
             checklist([claim("src-0001", 0, 5001)]))["reasons"])
         self.assertIn("range_invalid", registry.validate(
             checklist([claim("src-0001", True, 4)]))["reasons"])
+
+    def test_file_source_from_another_case_is_rejected(self):
+        registry = EvidenceRegistry(instruction=INSTRUCTION)
+        registry.register_observations([observed(
+            "call_1", "CASE_B-only synthetic finding", tool="local-fs-read",
+            arguments=json.dumps({"path": "/logs/artifacts/workspaces/CASE_B/payer/record.txt"}))])
+        result = registry.validate(checklist([claim("src-0002", 0, 6)]))
+        self.assertEqual(result["reference_validation"], "invalid", result)
+        self.assertIn("source_case_mismatch", result["reasons"])
+
+    def test_file_path_and_argument_case_conflict_is_rejected(self):
+        registry = EvidenceRegistry(instruction=INSTRUCTION)
+        registry.register_observations([observed(
+            "call_1", "CASE_B-only synthetic finding", tool="local-fs-read",
+            arguments=json.dumps({"path": "/logs/artifacts/workspaces/CASE_B/payer/record.txt",
+                                  "case_id": "case-synthetic-001"}))])
+        result = registry.validate(checklist([claim("src-0002", 0, 6)]))
+        self.assertEqual(result["reference_validation"], "invalid", result)
+        self.assertIn("source_case_conflict", result["reasons"])
+
+    def test_shared_public_source_is_allowed_for_target_case(self):
+        registry = EvidenceRegistry(instruction=INSTRUCTION,
+                                    classify=lambda _tool, _args, _result: "shared_public")
+        registry.register_observations([observed("call_1", GAP_POLICY)])
+        start, end = span(GAP_POLICY, "recommended")
+        result = registry.validate(checklist([claim("src-0002", start, end)]))
+        self.assertEqual(result["reference_validation"], "valid", result)
+
+    def test_replaced_resource_supersedes_old_source(self):
+        path = "/logs/artifacts/workspaces/case-synthetic-001/payer/record.txt"
+        registry = EvidenceRegistry(instruction=INSTRUCTION)
+        registry.register_observations([observed(
+            "call_1", "old record", tool="local-fs-read",
+            arguments=json.dumps({"path": path}), round_number=2)])
+        old_hash = hashlib.sha256(b"old record").hexdigest()
+        registry.register_observations([observed(
+            "call_2", "new record", tool="local-fs-read",
+            arguments=json.dumps({"path": path}), round_number=4)])
+        old = registry.validate(checklist([claim("src-0002", 0, 10,
+                                                 source_sha256=old_hash)]))
+        self.assertEqual(old["reference_validation"], "invalid", old)
+        self.assertIn("source_superseded", old["reasons"])
+        self.assertFalse(old["claims"][0]["source_current"])
+        self.assertEqual(old["claims"][0]["superseded_by"], "src-0003")
+        new = registry.validate(checklist([claim("src-0003", 0, 10, claim_id="c2")]))
+        self.assertEqual(new["reference_validation"], "valid", new)
+        old_source = next(item for item in registry.listing()["sources"]
+                          if item["source_id"] == "src-0002")
+        self.assertFalse(old_source["current"])
+        self.assertEqual(old_source["sha256"], old_hash)
+        self.assertEqual(registry.excerpt("src-0002", 0, 3)["error"], "source_superseded")
+
+    def test_identical_reread_does_not_supersede(self):
+        path = "/logs/artifacts/workspaces/case-synthetic-001/payer/record.txt"
+        registry = EvidenceRegistry(instruction=INSTRUCTION)
+        for index, call_id in ((2, "call_1"), (3, "call_2")):
+            registry.register_observations([observed(
+                call_id, "same record", tool="local-fs-read",
+                arguments=json.dumps({"path": path}), round_number=index)])
+        result = registry.validate(checklist([claim("src-0002", 0, 4)]))
+        self.assertEqual(result["reference_validation"], "valid", result)
+        self.assertTrue(all(item["current"] for item in registry.listing()["sources"]))
+
+    def test_non_file_results_are_not_given_version_keys(self):
+        registry = EvidenceRegistry(instruction=INSTRUCTION)
+        registry.register_observations([observed("call_1", "first synthetic result")])
+        registry.register_observations([observed("call_2", "second synthetic result")])
+        first = registry.validate(checklist([claim("src-0002", 0, 5)]))
+        second = registry.validate(checklist([claim("src-0003", 0, 6, claim_id="c2")]))
+        self.assertEqual(first["reference_validation"], "valid", first)
+        self.assertEqual(second["reference_validation"], "valid", second)
+
+    def test_invalid_checklist_does_not_bind_case(self):
+        registry = EvidenceRegistry(instruction=INSTRUCTION)
+        invalid = registry.validate(checklist([], case_id="case-synthetic-002",
+                                              action=""))
+        self.assertEqual(invalid["reference_validation"], "invalid")
+        valid = registry.validate(checklist([claim("src-0001", *span(INSTRUCTION,
+                                                                     "case-synthetic-001"))]))
+        self.assertEqual(valid["reference_validation"], "valid", valid)
 
     def test_source_hash_tampering_is_rejected(self):
         registry = EvidenceRegistry(instruction=GAP_POLICY)

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 import subprocess
@@ -86,7 +87,7 @@ def checklist(source_id="src-0001"):
 
 
 class ShadowRuntimeTests(unittest.IsolatedAsyncioTestCase):
-    async def _run(self, script, *, shadow=None, role="payer"):
+    async def _run(self, script, *, shadow=None, role="payer", prepare=None):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -98,6 +99,8 @@ class ShadowRuntimeTests(unittest.IsolatedAsyncioTestCase):
         handbook, workspace = root / "handbook", root / "workspace"
         handbook.mkdir()
         workspace.mkdir()
+        if prepare is not None:
+            prepare(root, workspace, handbook)
         server = PayerServer()
         bodies = []
 
@@ -208,6 +211,107 @@ class ShadowRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("checklist_malformed", payload["reasons"])
         self.assertEqual(run.server.calls, [("triage.get", {"case_id": "case-synthetic-001"})])
         self.assertEqual(run.output, "done")
+
+    async def test_runtime_file_from_other_case_is_rejected(self):
+        holder = {}
+
+        def prepare(_root, workspace, _handbook):
+            case = workspace / "CASE_B" / "payer"
+            case.mkdir(parents=True)
+            path = case / "record.txt"
+            path.write_text("CASE_B-only synthetic finding")
+            holder["path"] = str(path)
+
+        def script(body, index):
+            if index == 1:
+                return {"role": "assistant", "content": None, "reasoning_content": "r",
+                        "tool_calls": [call("call_1", "local-fs-read",
+                                            {"path": holder["path"]})]}, "tool_calls"
+            if index == 2:
+                value = checklist(source_id="src-0002")
+                value["claims"][0].update(start_char=0, end_char=6)
+                return {"role": "assistant", "content": None, "reasoning_content": "r",
+                        "tool_calls": [call("call_2", "local-evidence-check",
+                                            {"checklist": value})]}, "tool_calls"
+            return {"role": "assistant", "content": "done"}, "stop"
+
+        run = await self._run(script, shadow="shadow", prepare=prepare)
+        payload = json.loads(self._tool_message(run.bodies[2], "call_2")["content"])
+        self.assertEqual(payload["reference_validation"], "invalid", payload)
+        self.assertIn("source_case_mismatch", payload["reasons"])
+
+    async def test_runtime_shared_handbook_is_valid_support(self):
+        holder = {}
+
+        def prepare(_root, _workspace, handbook):
+            path = handbook / "policy.md"
+            path.write_text("Synthetic shared policy: nurses may approve when criteria are met.")
+            holder["path"] = str(path)
+
+        def script(body, index):
+            if index == 1:
+                return {"role": "assistant", "content": None, "reasoning_content": "r",
+                        "tool_calls": [call("call_1", "local-fs-read",
+                                            {"path": holder["path"]})]}, "tool_calls"
+            if index == 2:
+                value = checklist(source_id="src-0002")
+                value["claims"][0].update(start_char=0, end_char=8)
+                return {"role": "assistant", "content": None, "reasoning_content": "r",
+                        "tool_calls": [call("call_2", "local-evidence-check",
+                                            {"checklist": value})]}, "tool_calls"
+            return {"role": "assistant", "content": "done"}, "stop"
+
+        run = await self._run(script, shadow="shadow", prepare=prepare)
+        payload = json.loads(self._tool_message(run.bodies[2], "call_2")["content"])
+        self.assertEqual(payload["reference_validation"], "valid", payload)
+
+    async def test_runtime_resource_update_supersedes_old_file(self):
+        holder = {}
+
+        def prepare(_root, workspace, _handbook):
+            case = workspace / "case-synthetic-001" / "payer"
+            case.mkdir(parents=True)
+            path = case / "record.txt"
+            path.write_text("old record")
+            holder["path"] = str(path)
+
+        def script(body, index):
+            if index == 1:
+                return {"role": "assistant", "content": None, "reasoning_content": "r",
+                        "tool_calls": [call("call_1", "local-fs-read",
+                                            {"path": holder["path"]})]}, "tool_calls"
+            if index == 2:
+                return {"role": "assistant", "content": None, "reasoning_content": "r",
+                        "tool_calls": [call("call_2", "local-fs-write",
+                                            {"path": holder["path"],
+                                             "content": "new record"})]}, "tool_calls"
+            if index == 3:
+                return {"role": "assistant", "content": None, "reasoning_content": "r",
+                        "tool_calls": [call("call_3", "local-fs-read",
+                                            {"path": holder["path"]})]}, "tool_calls"
+            if index == 4:
+                value = checklist(source_id="src-0002")
+                value["claims"][0].update(start_char=0, end_char=10,
+                                          source_sha256=hashlib.sha256(b"old record").hexdigest())
+                value["claims"].append({
+                    "claim_id": "c2", "text": "Synthetic current claim.", "category": "fact",
+                    "source_id": "src-0004", "start_char": 0, "end_char": 10,
+                    "rule_nature": "unknown", "status": "unclear"})
+                return {"role": "assistant", "content": None, "reasoning_content": "r",
+                        "tool_calls": [call("call_4", "local-evidence-check",
+                                            {"checklist": value})]}, "tool_calls"
+            return {"role": "assistant", "content": "done"}, "stop"
+
+        run = await self._run(script, shadow="shadow", prepare=prepare)
+        payload = json.loads(self._tool_message(run.bodies[4], "call_4")["content"])
+        self.assertEqual(payload["reference_validation"], "invalid", payload)
+        self.assertIn("source_superseded", payload["reasons"])
+        old, new = payload["claims"]
+        self.assertFalse(old["source_current"])
+        self.assertEqual(old["superseded_by"], "src-0004")
+        self.assertEqual(new["reference"], "valid")
+        self.assertEqual((run.root / "workspace" / "case-synthetic-001" / "payer" /
+                          "record.txt").read_text(), "new record")
 
     async def test_shadow_is_payer_only(self):
         with tempfile.TemporaryDirectory() as d:

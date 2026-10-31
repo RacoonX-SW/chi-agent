@@ -9,7 +9,7 @@ from pathlib import Path
 from opencode_go_provider import GoFailure
 from go_chi_resources import workspace_path
 from evaluation_bundle import _check_components, BundleFailure
-from payer_evidence import EvidenceRegistry
+from payer_evidence import CASE_ID, EvidenceRegistry
 from pdf_resource_reader import read_allowed_file
 
 EVIDENCE_SHADOW_MODES = {None, "off", "shadow"}
@@ -29,11 +29,54 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         raise GoFailure("chi_evidence_shadow_role_invalid")
     if evidence_shadow == "shadow" and (type(instruction) is not str or not instruction):
         raise GoFailure("chi_evidence_shadow_input_invalid")
-    registry = EvidenceRegistry(instruction=instruction) if evidence_shadow == "shadow" else None
     workspace_root = Path(workspace_root)
     instruction_path = Path(instruction_path)
     handbook_root = Path(handbook_root)
     fixed = {str(instruction_path), *(str(Path(path)) for path in tool_references)}
+
+    def classify_source(tool, arguments, result):
+        """Derive case/shared scope from the existing path allowlist only."""
+        try:
+            args = json.loads(arguments) if type(arguments) is str else {}
+        except Exception:
+            args = {}
+        if type(args) is not dict:
+            args = {}
+        declared = args.get("case_id")
+        if type(declared) is not str or not CASE_ID.fullmatch(declared):
+            declared = None
+        scope = None
+        if tool == "local-fs-read" and type(args.get("path")) is str:
+            value = args["path"]
+            path = workspace_path(workspace_root, value, role)
+            if path is not None:
+                try:
+                    relative = path.relative_to(workspace_root)
+                except ValueError:
+                    relative = None
+                if relative is not None and len(relative.parts) >= 3:
+                    scope = "case:" + relative.parts[0]
+            else:
+                try:
+                    candidate = _check_components(Path(value), "chi_local_path_invalid",
+                                                  final_may_be_missing=False)
+                    handbook = _check_components(handbook_root, "chi_local_path_invalid",
+                                                 final_may_be_missing=False)
+                    if candidate == handbook or handbook in candidate.parents:
+                        scope = "shared_public"
+                    elif str(candidate) in fixed:
+                        scope = "shared_public"
+                except (BundleFailure, ValueError):
+                    scope = None
+        if declared is not None:
+            if scope is not None and scope != "shared_public" and scope != "case:" + declared:
+                return "conflict"
+            if scope in (None, "shared_public"):
+                scope = "case:" + declared
+        return scope or "unattributed"
+
+    registry = (EvidenceRegistry(instruction=instruction, classify=classify_source)
+                if evidence_shadow == "shadow" else None)
 
     def allowed_read(value, *, directory=False):
         if type(value) is not str:
