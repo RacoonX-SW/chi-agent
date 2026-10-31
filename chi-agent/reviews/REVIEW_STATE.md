@@ -18,7 +18,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | X禁网Docker原历史/wire/tool/seal与公开输入、逐轮观察对齐、原verifier源码/自造数据特征检查及结束字节保全完成，详见X报告。W实现和实际运行仍按W报告，未重跑全量或模型，不改原false/NA |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR27](https://github.com/xsw932187210-cell/chi-agent/pull/27)已由用户合并；X从新main分支交付base=main PR供用户审核，不merge/auto-merge。下一提案为[X规格](../openspec/changes/payer-offline-diagnosis/design.md)中的离线证据核对原型，尚未实现/授权；不能硬编码必挂起或自动复测，十一月真实调用前须按实际日期复核隐私 |
+| PR 与下一步 | [PR27](https://github.com/xsw932187210-cell/chi-agent/pull/27)已由用户合并；X已推送并创建base=main的[PR28](https://github.com/xsw932187210-cell/chi-agent/pull/28)，交用户审核，未merge/auto-merge。下一提案为[X规格](../openspec/changes/payer-offline-diagnosis/design.md)中的离线证据核对原型，尚未实现/授权；不能硬编码必挂起或自动复测，十一月真实调用前须按实际日期复核隐私 |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null |
 
