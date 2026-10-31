@@ -109,3 +109,13 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 - 全量：`Ran 424 tests`，`FAILED (errors=2, skipped=8)`；2 个错误仍是既有环境缺 `anthropic`，无新增回归。
 - 新测试从 32 增至 42（+10）：claim 后写、跨 case 搜索、无 target 搜索、损坏 UTF-8、损坏 PDF、target-required、写失败 scope、SHA 字段等。
 - 仍未验证：真实模型是否遵守“claim 后不再写”、真实任务中检索/状态使用率、payer/CM 结束路径误伤、真实 handbook/PDF 命中质量、F0 payer/CM 逐题抽样、外部 Gemini 复审。
+
+## 8. 外部 Gemini 复审结论（2026-11-01）
+
+- **结论**：通过（离线能力契约与实现复验通过）。
+- **审查对象**：PR32 返工候选（分支 `codex/f0-f3-agent-capabilities`，实现 `5c1fa51`，文档 HEAD `59b622e`）。复审方未在结论中另附命令日志；本条按用户转述记录。
+- **审查边界**：仅限离线静态代码审查、契约一致性核对，以及 Docker 容器内合成 MCP/HTTP 的自动化回归；未调用外部付费/模型 API，未执行官方判分或未见题目。
+- **不构成**：真实模型行为、真实业务效果、临床内容正确性或官方评分已通过。
+- **后续**：PR32 已具备离线合并条件，由用户按 GitHub 工作流审查/合并；未来线上运行须重新生成 bundle manifest，并走合规 B 凭据与配额校验。
+
+因此本报告此前列出的真实模型使用率、检索命中质量、payer/CM 结束路径误伤、F0 payer/CM 逐题抽样、F4–F7、Z1–Z8 等未验证项仍然有效，不因本次复审通过而关闭。

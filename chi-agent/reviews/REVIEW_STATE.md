@@ -4,8 +4,9 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | F0–F3离线实现候选已按外部Gemini返工：任务家族矩阵、带来源状态、三角色指导、有界检索、claim门禁。返工候选`5c1fa51bdea3038d824da4e57603e39c0fddae97`，424 tests（2个既有环境错误、8 skipped）；**仅合成SDK/MCP，未真实运行**。外部Gemini首轮发现3阻断+3建议，已修复待复审。证据见[F0–F3报告](f0-f3-agent-capabilities-review.md) |
+| 当前任务 | F0–F3离线候选经外部Gemini复审**通过**（限定离线静态/契约/Docker合成；无真实模型/判分/未见题）。候选`5c1fa51bdea3038d824da4e57603e39c0fddae97`，424 tests（2个既有环境错误、8 skipped）；PR32已具备离线合并条件，待用户审查/合并。F4–F7、Z1–Z8仍待做。证据见[F0–F3报告](f0-f3-agent-capabilities-review.md) |
 | 协作 | OpenCode内Gemini子代理实际启动失败（`Insufficient account funds`）；用户决定切外部订阅Gemini审阅，OpenCode只用DeepSeek，不再派Gemini子代理。F0–F3由DeepSeek实现/自测，外部Gemini**尚未审**；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
+| 最新独立审核 | F0–F3返工候选`5c1fa51`/文档`59b622e`经外部Gemini复审通过：限离线静态、契约一致性、Docker合成MCP/HTTP；未调用外部付费/模型API、未判分/未见题。不能扩大为真实模型/业务/官方评分通过 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
@@ -16,11 +17,11 @@
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本轮规划新增真实请求0，不读Key、不启动题世界；W/Y旧清单已收束。补齐功能计划后，额度提案修订为最多40次C、16次coding-B及2响应患者probe，含机制对照/九题未见集，**待审尚未生效**；独立摘要请求不包含。启动时一次性固定实际范围/用途/额度，包内不逐步等GPT。t019例行付费/Claude/付费临床评审等暂停保持，F.5待启动 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | Docker/Python3.12全量`424 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；新增42个F0–F3测试。外部Gemini首轮Docker复验发现claim后写、跨case检索、单文件损坏伪装无匹配3阻断及3建议；已返工并补测，待复审。未真实模型/任务/判分；详见[F0–F3报告](f0-f3-agent-capabilities-review.md) |
+| 本轮验证 | Docker/Python3.12全量`424 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；新增42个F0–F3测试。外部Gemini首轮发现claim后写、跨case检索、单文件损坏伪装无匹配3阻断及3建议；返工后复审通过（限离线/合成）。未真实模型/任务/判分；详见[F0–F3报告](f0-f3-agent-capabilities-review.md) |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR28–PR31均已合并；F0–F3分支更新[PR32](https://github.com/xsw932187210-cell/chi-agent/pull/32)（base=main，未合并）。下一步外部Gemini复审返工候选`5c1fa51`；通过后继续F4–F6离线实现。真实运行仍需用户一次性确认任务/候选/资源/次数 |
+| PR 与下一步 | PR28–PR31均已合并；[PR32](https://github.com/xsw932187210-cell/chi-agent/pull/32)（base=main，未合并）已通过外部Gemini离线复审，交用户审查/决定合并。合并后从最新main建F4–F6分支；未合并前的独立材料/清单工作另开base=main分支，不堆进PR32。真实运行仍需用户一次性确认任务/候选/资源/次数 |
 | 外部条件复核 | 本轮内置浏览未取得当前Kaggle Rules正文，概览索引与上次Rules解释冲突，强制材料/全量公开评测要求未重新确认；Go官方页面DeepSeek月度ZDR脚注仍只到2026-10-31，CHI非编码用途/十一月条件未确认。见[Z0来源与处置](../openspec/changes/project-completion/design.md#4-z0尽早解决会改变整个计划的外部条件)，不因额度较多自动放行对应载荷 |
-| 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为、外部Gemini返工复审 |
+| 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null。本轮F0–F3真实请求0、未启动题世界 |
 
 接续材料：

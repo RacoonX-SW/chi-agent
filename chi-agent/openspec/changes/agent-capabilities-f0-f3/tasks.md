@@ -7,7 +7,7 @@
 - [x] 刷新 `origin`，核对 PR31 已合并、main 位于 `443257c`，从最新 main 继续实现分支。
 - [x] 记录 Gemini 3.8 Flash 子代理启动失败（账户资金不足），停止 OpenCode 内 Gemini 派发，改用外部订阅 Gemini 审阅。
 - [x] Docker 基线：382 tests，2 个环境性 import 错误（缺 `anthropic`），8 skipped。
-- [ ] 外部 Gemini 审阅契约与实现候选，记录其实际能读的 repo/diff 与能否运行 Docker。
+- [x] 外部 Gemini 审阅契约与实现候选；首轮发现 3 阻断+3 建议，返工后复审通过（限离线静态/契约/Docker 合成）。
 
 ## 1. F0 任务家族矩阵
 
@@ -71,4 +71,4 @@
 - [x] 写失败 observation 解析 `case:<ID>` scope。
 - [x] run_log 增加 `task_state_sha256` 与 `task_state_claim_violation`。
 - [x] 定向 38 tests + 全量 424 tests（2 个既有环境错误、8 skipped）通过。
-- [ ] 外部 Gemini 复审返工候选 `5c1fa51`。
+- [x] 外部 Gemini 复审返工候选 `5c1fa51`：通过（限离线静态/契约/Docker 合成；无真实模型/判分/未见题）。
