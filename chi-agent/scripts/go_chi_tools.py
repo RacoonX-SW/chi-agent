@@ -172,6 +172,9 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             except Exception:
                 raise GoFailure("chi_local_arguments_invalid") from None
             async with dispatch_lock:
+                fatal = getattr(guard, 'fatal_getter', lambda: None)()
+                if fatal:
+                    raise GoFailure(fatal)
                 pending = [item for item in guard.contract.records
                            if item["name"] == name and item["arguments"] == args and item["result"] is None]
                 if not pending:

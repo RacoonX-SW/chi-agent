@@ -82,6 +82,8 @@ class PatientBroker:
 
     def app(self):
         async def post(request: Request):
+            supplied = request.headers.get('x-chi-capability')
+            authorized = isinstance(supplied, str) and hmac.compare_digest(supplied, self.capability)
             try:
                 if request.headers.get('content-type') != 'application/json': raise ValueError
                 length = request.headers.get('content-length')
@@ -90,8 +92,10 @@ class PatientBroker:
                 if len(raw) > 8 * 1024 * 1024: raise ValueError
                 obj = json.loads(raw)
                 if len(raw) != int(length) or type(obj) is not dict or set(obj) != {'run', 'session', 'messages'}: raise ValueError
-                result = await self.respond(request.headers.get('x-chi-capability'), obj['run'], obj['session'], obj['messages'])
+                result = await self.respond(supplied, obj['run'], obj['session'], obj['messages'])
                 return JSONResponse(result)
             except Exception:
+                if authorized:
+                    self.fatal = self.fatal or 'chi_aux_broker_invalid'
                 return JSONResponse({'error': 'patient_broker_unavailable'}, status_code=400)
         return Starlette(routes=[Route('/patient', post, methods=['POST'])])
