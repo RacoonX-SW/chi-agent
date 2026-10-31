@@ -1,6 +1,7 @@
 """SDK execution helpers for Go CHI; caller owns all preflight and resources."""
 from __future__ import annotations
 
+import hashlib
 import json
 
 from opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
@@ -211,6 +212,12 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             run_result = await Runner.run(agent, input=instruction, max_turns=50)
             if guard.error is not None or (auxiliary and auxiliary.fatal) or not isinstance(run_result.final_output, str) or not run_result.final_output.strip():
                 raise GoFailure(guard.error or (auxiliary.fatal if auxiliary else None) or "chi_final_missing")
+            if state is not None and state.data.get("claim_violation"):
+                raise GoFailure("chi_claim_violation")
+            if state is not None and journal.run["claim_done"] and state.data["claim"] is None:
+                # Defense in depth: a mutation observed after a claim invalidates
+                # it; do not let the run finish with only the journal claim.
+                raise GoFailure("chi_claim_invalidated")
     except BaseException as exc:
         failure = getattr(locals().get("guard"), "error", None) or (auxiliary.fatal if auxiliary else None) or (exc.code if isinstance(exc, GoFailure) else "chi_runner_failed")
         if isinstance(exc, __import__("asyncio").CancelledError):
@@ -254,9 +261,14 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                     "task_state_version": state.data["version"],
                     "task_state_target": state.data["target"],
                     "task_state_claim": state.data["claim"],
+                    "task_state_claim_violation": bool(state.data.get("claim_violation")),
                     "task_state_open_unknowns": [item["id"] for item in state.data["unknowns"]
                                                  if item["status"] == "open"],
                 })
+                try:
+                    summary["task_state_sha256"] = hashlib.sha256(state.path.read_bytes()).hexdigest()
+                except OSError:
+                    summary["task_state_sha256"] = None
             if auxiliary is not None:
                 aux = [item for item in journal.run['requests'] if item['purpose'] == 'patient_simulator']
                 summary['patient_simulator_requests'] = len(aux)

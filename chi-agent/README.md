@@ -447,7 +447,7 @@ with os.fdopen(fd, "w") as out:
 | `local-role-guidance` | 返回 `chi-role-guidance-v1` 阶段/分支/停止条件 | 不含 task ID、期望结局或隐藏答案 |
 | `local-fs-search` | 在已授权目录/固定文件中做有界文本检索 | 不建索引、不跟随符号链接；文件/字节/结果/片段均有限制 |
 
-状态写入 `logs/task-state/`（`task-state.json` 与 `versions/`），不写 `chi-accounting.json`。`local-claim_done` 在启用时额外检查：open unknown、写后未回读、同批后续工具；被拒绝时返回具体原因，模型可在剩余预算内查证后重试。`capabilities=None` 保留旧工具集和旧 claim 行为，仅用于离线基线/对照，不作为真实运行绕过开关。
+状态写入 `logs/task-state/`（`task-state.json` 与 `versions/`），不写 `chi-accounting.json`。`local-claim_done` 在启用时额外检查：open unknown、写后未回读、同批后续工具；被拒绝时返回具体原因，模型可在剩余预算内查证后重试。claim 之后再尝试写会被拒绝并标记 `claim_violation`，该 run 以 `chi_claim_violation` 结束为 incomplete；journal 的 claim 记录保持单调，不回写历史。`local-fs-search` 在 workspace 内只允许当前 target case；单个文件/PDF 不可读返回 `ERROR: search_unreadable`，不伪装成无匹配。`capabilities=None` 保留旧工具集和旧 claim 行为，仅用于离线基线/对照，不作为真实运行绕过开关。
 
 这只验证合成 SDK/MCP 边界；真实模型是否使用这些工具、真实任务收益、官方评分和正式配送仍未验证。契约见 [F0–F3 设计](openspec/changes/agent-capabilities-f0-f3/design.md)，实际候选/限制见 [阶段报告](reviews/f0-f3-agent-capabilities-review.md)。
 

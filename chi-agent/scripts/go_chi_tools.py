@@ -57,9 +57,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         if type(declared) is not str or not CASE_ID.fullmatch(declared):
             declared = None
         scope = None
-        if tool in {"local-fs-read", "local-fs-list", "local-fs-search"} and type(args.get("path")) is str:
+        if tool in {"local-fs-read", "local-fs-list", "local-fs-search",
+                    "local-fs-write", "local-fs-edit"} and type(args.get("path")) is str:
             value = args["path"]
-            directory = tool != "local-fs-read"
+            directory = tool in {"local-fs-list", "local-fs-search"}
             path = workspace_path(workspace_root, value, role, directory=directory)
             if path is not None:
                 try:
@@ -311,12 +312,21 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         path = allowed_read(args["path"], directory=True) or allowed_read(args["path"])
         if path is None or path.is_symlink() or not (path.is_file() or path.is_dir()):
             return "REFUSED: search_path_outside_allowlist"
+        workspace_target = (workspace_path(workspace_root, args["path"], role, directory=True)
+                            or workspace_path(workspace_root, args["path"], role))
+        if workspace_target is not None:
+            case_id = workspace_target.relative_to(workspace_root).parts[0]
+            target_case = state.data["target"]["case_id"]
+            if target_case is None or case_id != target_case:
+                return "REFUSED: search_path_outside_allowlist"
         try:
             value = bounded_search([path], args["query"],
                                    max_results=args.get("max_results", 8),
                                    case_sensitive=args.get("case_sensitive", False),
-                                   read_text=search_loader)
+                                   read_text=search_loader, single_file=path.is_file())
         except SearchRefusal as exc:
+            if exc.code == "search_unreadable":
+                return "ERROR: search_unreadable"
             return "REFUSED: " + exc.code
         return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
 
@@ -418,6 +428,13 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                     journal.refuse_tool(selected["id"], name, args, output, secrets=(guard.secret, guard.session))
                     guard.contract.record_result(selected["id"], output)
                     return output
+                if state is not None:
+                    blocked = state.block_mutation(name, "local")
+                    if blocked is not None:
+                        output = "REFUSED: " + blocked
+                        journal.refuse_tool(selected["id"], name, args, output, secrets=(guard.secret, guard.session))
+                        guard.contract.record_result(selected["id"], output)
+                        return output
                 journal.start_tool(selected["id"], name, args)
                 try:
                     output = await callback(args)
@@ -429,7 +446,8 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                         event = ("refused" if output.startswith("REFUSED:") else
                                  "returned_error" if output.startswith("ERROR:") else "returned")
                         scope = (classify_source(name, json.dumps(args, ensure_ascii=False), output)
-                                 if name in {"local-fs-read", "local-fs-list", "local-fs-search"}
+                                 if name in {"local-fs-read", "local-fs-list", "local-fs-search",
+                                             "local-fs-write", "local-fs-edit"}
                                  else state.scope_for_arguments(args))
                         run_doc = getattr(journal, "run", None)
                         rounds = len(run_doc.get("requests", [])) if isinstance(run_doc, dict) else 0
@@ -448,7 +466,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                                           result=code, event="failed",
                                           round_number=len(getattr(journal, "run", {}).get("requests", []))
                                           if isinstance(getattr(journal, "run", None), dict) else 0,
-                                          scope=state.scope_for_arguments(args))
+                                          scope=(classify_source(name, json.dumps(args, ensure_ascii=False), code)
+                                                 if name in {"local-fs-read", "local-fs-list", "local-fs-search",
+                                                             "local-fs-write", "local-fs-edit"}
+                                                 else state.scope_for_arguments(args)))
                         except Exception:
                             pass
                     if binding is not None and name in {"local-fs-write", "local-fs-edit", "local-confirm-patient"}:

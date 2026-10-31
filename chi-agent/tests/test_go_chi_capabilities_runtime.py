@@ -71,7 +71,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.temp.cleanup()
 
     async def exercise(self, responses, *, names=("triage.get",), role="payer", capabilities="f0-f3-v1",
-                       fail=None):
+                       fail=None, expect_failure=False):
         journal = ChiJournal(self.root / "state", identity="a" * 64, evaluation="eval",
                              task=role, attempt="a", run="run")
         server = Server(names, fail=fail)
@@ -80,12 +80,17 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
             observed.append(json.loads(request.content))
             return httpx.Response(200, request=request, json=responses[len(observed) - 1])
         try:
-            output = await run_chi(journal, "synthetic-secret", role=role,
-                instruction="Synthetic payer instruction", mcp_url="http://synthetic.invalid/mcp",
-                instruction_path=self.instruction, logs_dir=self.root / "logs",
-                workspace_root=self.workspace, handbook_root=self.handbook, tool_references=[],
-                lower=httpx.MockTransport(wire), server_factory=lambda _url: server,
-                capabilities=capabilities)
+            try:
+                output = await run_chi(journal, "synthetic-secret", role=role,
+                    instruction="Synthetic payer instruction", mcp_url="http://synthetic.invalid/mcp",
+                    instruction_path=self.instruction, logs_dir=self.root / "logs",
+                    workspace_root=self.workspace, handbook_root=self.handbook, tool_references=[],
+                    lower=httpx.MockTransport(wire), server_factory=lambda _url: server,
+                    capabilities=capabilities)
+            except GoFailure:
+                if not expect_failure:
+                    raise
+                return None, observed, server, journal
             journal.finish("complete")
             return output, observed, server, journal
         finally:
@@ -120,6 +125,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(log["capabilities"], "f0-f3-v1")
         self.assertEqual(log["task_state_version"], state["version"])
         self.assertRegex(log["guidance_sha256"], r"^[0-9a-f]{64}$")
+        self.assertRegex(log["task_state_sha256"], r"^[0-9a-f]{64}$")
         # The search tool returned a bounded hit from the public handbook.
         tool_messages = [message for request in observed for message in request["messages"]
                          if message.get("role") == "tool" and message.get("tool_call_id") == "call_2"]
@@ -131,6 +137,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
             completion([("call_2", "local-claim_done", {})]),
             completion([("call_3", "determination__get_summary", {"case_id": "CASE-A"})]),
             completion([("call_4", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
                 "latest_business_status": {"text": "determined", "source_call_id": "call_3"}})]),
             completion([("call_5", "local-claim_done", {})]),
             completion(),
@@ -150,6 +157,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
                         ("call_2", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
             completion([("call_3", "determination__get_summary", {"case_id": "CASE-A"})]),
             completion([("call_4", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
                 "latest_business_status": {"text": "determined", "source_call_id": "call_3"}})]),
             completion([("call_5", "local-claim_done", {})]),
             completion(),
@@ -162,6 +170,88 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
                    if message.get("role") == "tool"}
         self.assertIn("completion_batch_pending:call_2", results["call_1"])
         self.assertIn("task marked as done", results["call_5"])
+
+    async def test_post_claim_mutation_is_refused_across_turns(self):
+        responses = [
+            completion([("call_1", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("call_2", "local-claim_done", {})]),
+            completion([("call_3", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
+            completion(),
+        ]
+        output, observed, server, journal = await self.exercise(
+            responses, names=("triage.get", "payer_intake_hub.confirm_decisions"), expect_failure=True)
+        self.assertIsNone(output)
+        self.assertEqual(server.calls, [("triage.get", {"case_id": "CASE-A"})])
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("task_already_claimed_mutation_forbidden", results["call_3"])
+        self.assertTrue(journal.run["claim_done"])
+        state = json.loads((self.root / "logs" / "task-state" / "task-state.json").read_text())
+        self.assertIsNotNone(state["claim"])
+        self.assertTrue(state["claim_violation"])
+        log = json.loads((self.root / "logs" / "run_log.txt").read_text())
+        self.assertEqual(log["status"], "incomplete")
+        self.assertEqual(log["safe_error_code"], "chi_claim_violation")
+        self.assertTrue(log["task_state_claim_violation"])
+
+    async def test_search_other_case_is_refused(self):
+        (self.workspace / "CASE-B" / "payer").mkdir(parents=True)
+        (self.workspace / "CASE-B" / "payer" / "secret.md").write_text("secret policy\n", encoding="utf-8")
+        responses = [
+            completion([("call_1", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("call_2", "local-state-update", {"target": {"case_id": "CASE-A"}})]),
+            completion([("call_3", "local-fs-search",
+                         {"path": str(self.workspace / "CASE-B" / "payer"), "query": "secret"})]),
+            completion(),
+        ]
+        output, observed, _, _ = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("REFUSED: search_path_outside_allowlist", results["call_3"])
+
+    async def test_workspace_search_without_target_is_refused(self):
+        responses = [
+            completion([("call_1", "local-fs-search",
+                         {"path": str(self.workspace / "CASE-A" / "payer"), "query": "anything"})]),
+            completion(),
+        ]
+        output, observed, _, _ = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("REFUSED: search_path_outside_allowlist", results["call_1"])
+
+    async def test_corrupt_single_file_search_returns_unreadable_error(self):
+        (self.handbook / "bad.md").write_bytes(b"\xff\xfe\x00broken")
+        responses = [
+            completion([("call_1", "local-fs-search",
+                         {"path": str(self.handbook / "bad.md"), "query": "anything"})]),
+            completion(),
+        ]
+        output, observed, _, _ = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("ERROR: search_unreadable", results["call_1"])
+
+    async def test_damaged_pdf_search_returns_unreadable_error(self):
+        (self.handbook / "bad.pdf").write_bytes(b"%PDF-corrupt")
+        responses = [
+            completion([("call_1", "local-fs-search",
+                         {"path": str(self.handbook / "bad.pdf"), "query": "anything"})]),
+            completion(),
+        ]
+        output, observed, _, _ = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("ERROR: search_unreadable", results["call_1"])
 
     async def test_unknown_write_is_recorded_before_the_run_stops(self):
         responses = [completion([("call_1", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})])]

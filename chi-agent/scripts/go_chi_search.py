@@ -39,19 +39,22 @@ def _iter_files(root: Path):
         return
     if not root.is_dir():
         return
-    for directory, names, files in os.walk(root, followlinks=False):
-        names[:] = sorted(name for name in names
-                          if not name.startswith(".") and name.lower() not in BLOCKED
-                          and not (Path(directory) / name).is_symlink())
-        for name in sorted(files):
-            path = Path(directory) / name
-            if path.is_symlink() or _blocked(path.relative_to(root)):
-                continue
-            yield path
+    try:
+        for directory, names, files in os.walk(root, followlinks=False):
+            names[:] = sorted(name for name in names
+                              if not name.startswith(".") and name.lower() not in BLOCKED
+                              and not (Path(directory) / name).is_symlink())
+            for name in sorted(files):
+                path = Path(directory) / name
+                if path.is_symlink() or _blocked(path.relative_to(root)):
+                    continue
+                yield path
+    except OSError:
+        raise SearchRefusal("search_unreadable") from None
 
 
 def search(roots, query: str, *, max_results: int = 8, case_sensitive: bool = False,
-           read_text=None) -> dict:
+           read_text=None, single_file: bool = False) -> dict:
     if type(query) is not str or not query.strip() or len(query) > MAX_QUERY \
             or any(ord(char) < 32 for char in query):
         raise SearchRefusal("search_query_invalid")
@@ -60,10 +63,15 @@ def search(roots, query: str, *, max_results: int = 8, case_sensitive: bool = Fa
     if not isinstance(roots, (list, tuple)) or not roots:
         raise SearchRefusal("search_arguments_invalid")
     needle = query if case_sensitive else query.casefold()
-    results, files_scanned, bytes_scanned, skipped, omitted = [], 0, 0, 0, 0
+    results, files_scanned, bytes_scanned, skipped, unreadable, omitted = [], 0, 0, 0, 0, 0
     truncated = False
     for root in roots:
         root = Path(root)
+        if root.is_dir():
+            try:
+                next(root.iterdir(), None)
+            except OSError:
+                raise SearchRefusal("search_unreadable") from None
         for path in _iter_files(root):
             if files_scanned >= MAX_FILES:
                 truncated = True
@@ -71,7 +79,10 @@ def search(roots, query: str, *, max_results: int = 8, case_sensitive: bool = Fa
             try:
                 size = path.stat().st_size
             except OSError:
+                if single_file:
+                    raise SearchRefusal("search_unreadable") from None
                 skipped += 1
+                unreadable += 1
                 continue
             if size > MAX_FILE_BYTES:
                 skipped += 1
@@ -79,22 +90,29 @@ def search(roots, query: str, *, max_results: int = 8, case_sensitive: bool = Fa
             if bytes_scanned + size > MAX_TOTAL_BYTES:
                 truncated = True
                 break
+            failed = False
             if read_text is None:
                 try:
                     text = path.read_text(encoding="utf-8")
                 except (UnicodeError, OSError):
-                    skipped += 1
-                    continue
-                raw = text.encode("utf-8")
+                    text, failed = None, True
+                raw = text.encode("utf-8") if not failed else b""
             else:
                 try:
                     text = read_text(path)
                 except Exception:
                     text = None
                 if not isinstance(text, str):
-                    skipped += 1
-                    continue
-                raw = text.encode("utf-8")
+                    failed = True
+                    raw = b""
+                else:
+                    raw = text.encode("utf-8")
+            if failed:
+                if single_file:
+                    raise SearchRefusal("search_unreadable") from None
+                skipped += 1
+                unreadable += 1
+                continue
             files_scanned += 1
             bytes_scanned += len(raw)
             digest = hashlib.sha256(raw).hexdigest()
@@ -127,6 +145,7 @@ def search(roots, query: str, *, max_results: int = 8, case_sensitive: bool = Fa
         "files_scanned": files_scanned,
         "bytes_scanned": bytes_scanned,
         "skipped_files": skipped,
+        "unreadable_files": unreadable,
         "omitted": omitted,
         "truncated": truncated,
         "limits": {"files": MAX_FILES, "file_bytes": MAX_FILE_BYTES,

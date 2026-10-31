@@ -119,7 +119,8 @@ class StateTests(unittest.TestCase):
             state.propose({"resolve_unknown": [{"unknown_id": "u9", "source_call_id": "call_2",
                                                 "note": "no such unknown"}]})
         state.propose({"resolve_unknown": [{"unknown_id": "u1", "source_call_id": "call_2",
-                                            "note": "status observed after failure"}]})
+                                            "note": "status observed after failure"}],
+                       "target": {"case_id": "CASE-A"}})
         # Resolving the unknown is not enough: the write still needs a readback.
         allowed, reason = state.can_claim()
         self.assertFalse(allowed)
@@ -134,6 +135,7 @@ class StateTests(unittest.TestCase):
     def test_mutation_requires_readback_before_claim(self):
         state = self.state()
         write_call(state)
+        state.propose({"target": {"case_id": "CASE-A"}})
         allowed, reason = state.can_claim()
         self.assertFalse(allowed)
         self.assertTrue(reason.startswith("completion_readback_required:"))
@@ -141,6 +143,44 @@ class StateTests(unittest.TestCase):
         state.propose({"latest_business_status": {"text": "accepted", "source_call_id": "call_2"}})
         allowed, _ = state.can_claim()
         self.assertTrue(allowed)
+
+    def test_post_claim_mutation_invalidates_state_claim(self):
+        state = self.state()
+        read_call(state)
+        state.propose({"target": {"case_id": "CASE-A"}})
+        self.assertEqual(state.record_claim()["status"], "recorded")
+        self.assertTrue(state.claim_recorded())
+        write_call(state, "call_w2")
+        self.assertFalse(state.claim_recorded())
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_readback_required:"))
+        read_call(state, "call_3")
+        state.propose({"latest_business_status": {"text": "accepted", "source_call_id": "call_3"}})
+        self.assertEqual(state.record_claim()["status"], "recorded")
+
+    def test_mutation_block_reason_after_claim(self):
+        state = self.state()
+        read_call(state)
+        state.propose({"target": {"case_id": "CASE-A"}})
+        state.record_claim()
+        self.assertEqual(state.block_mutation("auth.submit_authorization", "mcp"),
+                         "task_already_claimed_mutation_forbidden")
+        self.assertTrue(state.data["claim_violation"])
+        self.assertIsNone(state.block_mutation("triage.get", "mcp"))
+        self.assertIsNone(state.block_mutation("local-claim_done", "local"))
+
+    def test_case_scoped_facts_require_a_target(self):
+        state = self.state()
+        read_call(state, "call_1", "CASE-A")
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"facts": [{"text": "x", "source_call_id": "call_1"}]})
+        self.assertEqual(caught.exception.code, "chi_state_target_required")
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"latest_business_status": {"text": "x", "source_call_id": "call_1"}})
+        self.assertEqual(caught.exception.code, "chi_state_target_required")
+        state.propose({"target": {"case_id": "CASE-A"}})
+        state.propose({"facts": [{"text": "x", "source_call_id": "call_1"}]})
 
     def test_no_mutation_keeps_original_claim_behavior(self):
         state = self.state()

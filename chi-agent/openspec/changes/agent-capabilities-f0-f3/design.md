@@ -84,6 +84,7 @@
 - **模型不得**：修改 observations/unknowns/version/run/role；把推断写成无来源事实；把 open unknown 直接标成成功/失败；改变已绑定的 patient/case；用旧观察覆盖较新 business status。
 - `source_seq` 由程序按登记顺序填写，模型不能提供。
 - provider 的 `target.patient_id` 必须在患者绑定完成后提出，且此后不可更改；payer/CM 的 `case_id` 必须与已观察 scope 一致。
+- `target.case_id` 未设定时，case scope 的 observation 不能作为事实/状态来源，返回 `chi_state_target_required`；避免把多个 case 的观察混成一份无目标状态。
 
 ### 3.4 工具
 
@@ -129,6 +130,7 @@
 1. 存在 open unknown → `REFUSED: completion_blocked_unknown:<id>`。
 2. 最近一次 mutation observation 晚于 `latest_business_status.source_seq` → `REFUSED: completion_readback_required:<call_id>`；模型须在剩余预算内做合法只读回读并更新状态。
 3. 否则记录 claim（state.claim 含 version、target、已核实来源），再调用 `journal.record_claim()`。
+4. claim 之后再尝试 mutation：调度层返回 `REFUSED: task_already_claimed_mutation_forbidden`，不执行写；同时 state 记录 `claim_violation=true`，该 run 最终以 `chi_claim_violation` 结束为 incomplete。`journal` 的 claim 保持单调、不改写历史字节；若通过其他路径观察到 mutation，state 也会清除 claim，并由最终一致性检查拒绝以旧 claim 完成。
 
 语义：claim 仍是模型声明；门禁只拦截“已知未知”和“写后未回读”，不声称业务成功。没有 mutation 时保持原 claim 行为。完整 F5 的证据分级与最终输出一致性在后续包实现。
 
@@ -181,9 +183,9 @@
 
 ### 6.3 失败语义
 
-- 路径越界/隐藏：`REFUSED: search_path_outside_allowlist`。
+- 路径越界/隐藏/其他 case：`REFUSED: search_path_outside_allowlist`。workspace 内的路径必须匹配当前 `target.case_id`；未设定 target 时拒绝对具体 case 目录搜索。
 - 查询空/超长/控制字符：`REFUSED: search_query_invalid`。
-- 目录不可读/文件损坏：`ERROR: search_unreadable`（不编造依据）。
+- 单文件不可读/损坏：`ERROR: search_unreadable`（不伪装成无匹配）；目录不可读同样报错。目录内个别文件失败时计入 `unreadable_files`/`skipped_files`，不静默当成“无此关键词”。
 - 无匹配：`{"results":[],"no_matches":true}`，不返回“可能相关”的猜测。
 
 ## 7. 接线点（实现时按此检查）
@@ -197,6 +199,8 @@
 | `go_chi_runtime.py` | 创建 state、传入 bridge/tools、run_log 汇总 | 不改 system/instruction/history/预算 |
 | `go_chi_mcp.py` | 可选 `state`，成功后登记 observation | 构造签名向后兼容；不吞工具异常 |
 | `role_runner.py` / `go_chi_entry.py` | 显式传 capabilities 与 state 目录 | 旧配置默认可关闭 |
+
+`run_log.txt` 记录 capabilities、guidance version/hash、state version/target/claim/claim_violation/open unknowns，以及最终 `task-state.json` 的 SHA-256，便于把运行摘要与状态证据对应起来。
 
 ## 8. 失败与反例检查清单
 

@@ -24,7 +24,7 @@
 
 ### 场景：错 case、未观察来源、未来结果
 
-引用其他 case 的观察、不存在的 call_id、尚未发生的观察或试图改绑 patient/case 时拒绝更新；已绑定患者不能被状态更新改变。
+引用其他 case 的观察、不存在的 call_id、尚未发生的观察或试图改绑 patient/case 时拒绝更新；已绑定患者不能被状态更新改变。target case 未设定时，case scope 的观察不能作为事实/状态来源，返回 `chi_state_target_required`。
 
 ### 场景：未知写效果不能被改写
 
@@ -79,6 +79,18 @@ workspace 根、其他 case、隐藏/verifier/judge/fixtures、符号链接、UR
 ### 场景：没有业务写操作
 
 没有 mutation 时保持原 claim 行为；claim 仍只是模型声明，不等于业务成功或官方 verdict。
+
+### 场景：claim 之后又尝试写
+
+claim 已记录后再次调度写类工具，必须拒绝执行并标记 claim_violation；该 run 不能以有效 claim 正常结束，而是以 `chi_claim_violation` 报 incomplete。journal 已有的 claim 记录保持单调，不通过回写历史把它改成 false。
+
+### 场景：跨 case 检索
+
+workspace 内的搜索路径必须属于当前 target case；搜索其他 case、或 target 尚未设定时搜索具体 case 目录，返回 `REFUSED: search_path_outside_allowlist`。
+
+### 场景：单个损坏文件检索
+
+检索目标是单个文件且读取/PDF 提取失败时返回 `ERROR: search_unreadable`，不能返回 `no_matches: true`。目录内个别文件失败时计入 unreadable/skipped，并保留目录级结果。
 
 ## 需求：旧路径与账目不被新能力改写
 

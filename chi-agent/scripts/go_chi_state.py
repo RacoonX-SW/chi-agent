@@ -149,6 +149,7 @@ class TaskState:
             "latest_business_status": None,
             "next_candidates": [],
             "claim": None,
+            "claim_violation": False,
             "updated_at_utc_ms": 0,
         }
         self._persist(snapshot=False)
@@ -199,6 +200,11 @@ class TaskState:
             "round": round_number if type(round_number) is int and round_number >= 0 else 0,
         }
         self.data["observations"].append(observation)
+        if effect == "mutation":
+            # A write after a completion claim invalidates that claim. Dispatch
+            # should normally refuse this (see mutation_block_reason); this is
+            # defense in depth for any other observation path.
+            self.data["claim"] = None
         if effect == "mutation" and event == "failed":
             self._register_unknown(observation)
         self.data["version"] += 1
@@ -236,6 +242,8 @@ class TaskState:
             raise StateRefusal("chi_state_source_conflict")
         case_id = self.data["target"]["case_id"]
         if case_id is None:
+            if observation["scope"].startswith("case:"):
+                raise StateRefusal("chi_state_target_required")
             return
         if observation["scope"] not in {"case:" + case_id, "shared_public"}:
             raise StateRefusal("chi_state_case_mismatch")
@@ -408,6 +416,23 @@ class TaskState:
             raise GoFailure("chi_state_persistence_failed") from None
 
     # -- completion ------------------------------------------------------
+    def claim_recorded(self) -> bool:
+        return self.data["claim"] is not None
+
+    def mutation_block_reason(self, tool: str, kind: str) -> str | None:
+        """Refuse a new write after completion; journal claims are monotonic."""
+        if self.data["claim"] is not None and effect_for(tool, kind) == "mutation":
+            return "task_already_claimed_mutation_forbidden"
+        return None
+
+    def block_mutation(self, tool: str, kind: str) -> str | None:
+        """Refuse and mark the run inconsistent; do not rewrite journal claims."""
+        reason = self.mutation_block_reason(tool, kind)
+        if reason is not None and not self.data.get("claim_violation"):
+            self.data["claim_violation"] = True
+            self._persist()
+        return reason
+
     def can_claim(self) -> tuple[bool, str | None]:
         open_unknowns = [item for item in self.data["unknowns"] if item["status"] == "open"]
         if open_unknowns:
@@ -451,6 +476,7 @@ class TaskState:
             "latest_business_status": data["latest_business_status"],
             "next_candidates": list(data["next_candidates"]),
             "claim": data["claim"],
+            "claim_violation": data.get("claim_violation", False),
             "observations": [
                 {key: item[key] for key in ("seq", "call_id", "tool", "effect", "scope", "event")}
                 for item in observations

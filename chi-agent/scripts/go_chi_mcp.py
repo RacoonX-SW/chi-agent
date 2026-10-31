@@ -146,6 +146,14 @@ class MCPBridge:
                                                    secrets=(self.guard.secret, self.guard.session))
                     self.guard.contract.record_result(selected["id"], result)
                     return result
+            if self.state is not None:
+                blocked = self.state.block_mutation(canonical, "mcp")
+                if blocked is not None:
+                    result = "REFUSED: " + blocked
+                    self.guard.journal.refuse_tool(selected["id"], canonical, args, result,
+                                                   secrets=(self.guard.secret, self.guard.session))
+                    self.guard.contract.record_result(selected["id"], result)
+                    return result
             self.guard.journal.start_tool(selected["id"], canonical, args)
             try:
                 if self.auxiliary is not None and canonical == 'cm_outreach.send_message':

@@ -91,11 +91,23 @@ class SearchTests(unittest.TestCase):
         self.assertEqual(len(value["results"]), 1)
         self.assertIn("coverage rule", value["results"][0]["excerpt"])
 
-    def test_unreadable_loader_is_reported_as_skipped(self):
+    def test_unreadable_single_file_raises_search_unreadable(self):
+        path = self.write("a.md", "covered\n")
+        with self.assertRaises(SearchRefusal) as caught:
+            search([path], "covered", read_text=lambda _path: None, single_file=True)
+        self.assertEqual(caught.exception.code, "search_unreadable")
+        with self.assertRaises(SearchRefusal) as caught:
+            search([path], "covered", read_text=lambda _path: (_ for _ in ()).throw(OSError()),
+                   single_file=True)
+        self.assertEqual(caught.exception.code, "search_unreadable")
+
+    def test_unreadable_file_inside_directory_is_counted_not_silent(self):
         self.write("a.md", "covered\n")
         value = search([self.root], "covered", read_text=lambda _path: None)
         self.assertEqual(value["results"], [])
         self.assertEqual(value["skipped_files"], 1)
+        self.assertEqual(value["unreadable_files"], 1)
+        self.assertTrue(value["no_matches"])
 
 
 if __name__ == "__main__":
