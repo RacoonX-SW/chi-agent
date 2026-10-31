@@ -101,7 +101,7 @@
 | 本地患者模拟与角色接线 | [V规格](../openspec/changes/representative-role-baseline/design.md)与[V报告](../reviews/representative-role-baseline-review.md)：原CM状态机、开发适配/broker、嵌套请求账与真实角色导出 | 围绕新功能集中讲解模型职责、消息翻转、锁与未知传播、实际接口和验收层级；用户提出Go替代及官方兼容取舍，尚无新增独立源码复述或运行实践，不升级为掌握 |
 | 统一角色操作者与失败终态 | [W规格](../openspec/changes/unified-role-cm-lifecycle/design.md)与[W报告](../reviews/unified-role-cm-lifecycle-review.md)：实际跨容器同账链、在途跟踪、停止/捕获/清理与三角色开发结果 | 串起单一所有者、独立辅助预算、同批fatal门禁、模型失败与世界静止；payer工程收口但终态不符，CM本地闭环不等于临床/官方通过。用户确定边界，代理执行，无新增用户独立复述/操作证据 |
 | payer失败的离线诊断 | [X规格](../openspec/changes/payer-offline-diagnosis/design.md)与[X报告](../reviews/payer-offline-diagnosis-review.md)：从实际观察、规则依据、不可修改动作和检查适用性解释证据边界 | 区分看见缺项、规则要求、主张越界与终态不符；工具汇总不是独立核验，诊断样本不是盲测。仅分析/规格，未实现新机制，无新增用户实践/掌握证据 |
-| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | 用户指定DeepSeek先实现、Codex后独立审核；纯原型、自造反例与默认关闭开发shadow已实现，待独立审核。开发代理与参赛模型职责分开，未验收或新增用户源码实践，不记掌握 |
+| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | DeepSeek交付后Codex独立审核发现文件归属、更新失效与失败状态问题；DeepSeek已按R1–R3返工，新候选待复审。自测全绿不等于契约覆盖完整，开发代理与参赛模型职责分开，无新增用户源码实践，不记掌握 |
 
 相关材料：
 
@@ -117,7 +117,7 @@
 
 ## 下一次从哪里继续
 
-下一入口转到[Y五步计划](../openspec/changes/payer-evidence-prototype/design.md)：先用自造材料检验可检测的来源问题与反例，再按go/no-go决定是否做默认关闭的影子接线，最后由DeepSeek固定候选交回Codex独立审核。重点理解“可信来源注册表→模型引用/解释→结构校验→语义未判→已有工具循环记录”各自能证明什么。新功能若验收，再集中讲正常/失败调用链及取舍；no-go则解释为什么不接入，不为填课时增加实现。当前仅规划，无新增复述或实践证据，默认不安排小测。
+下一入口转到[Y返工交付](../reviews/payer-evidence-prototype-review.md#deepseek返工交付r1r3待codex复审)及[Y执行契约](../openspec/changes/payer-evidence-prototype/design.md)：先沿文件路径如何变成来源作用域、同资源更新如何失效、失败验证何时提交状态，理解为什么原自测全绿仍未通过验收，以及返工如何在不改业务拦截的前提下补齐。返工候选仍待Codex复审；通过后才集中讲完整正常/失败调用链，不把待复审判成已完成收益。无新增用户复述或实践证据，默认不安排小测。
 
 诊断依据从[X设计](../openspec/changes/payer-offline-diagnosis/design.md)和[X报告](../reviews/payer-offline-diagnosis-review.md)回读：沿“原始公开文件→实际工具观察→下一请求→逐项主张→不可修改建议→终态→检查器”理解一次失败。重点是缺项是否属于必需条件、引用是否支持主张、程序计数是否只是重述模型判断，以及存在性检查与内容正确性的区别；不得按原检查结果补写规则或默认复测。
 
@@ -681,4 +681,12 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 关键取舍是“观察”以请求历史为准，而不是工具执行完成：`run_chi()` 已有的 `observed_request()`/`exchanges` 只在下一请求确实携带工具结果时登记；同批刚返回、目录列表、工具错误和shadow自身输出不登记。来源ID与hash由程序生成，模型只填case、claim类别、source_id/片段、规则性质和未解决项；`rule_nature` 永远只是模型自报，不是已证实规则。
 - 可机械检测的是引用不存在/未观察/本批新结果、参数可归属时的错case、hash不符、片段越界/倒序/过长、重复ID和坏结构；不能检测真实片段下的错误解释、建议/必需性、签署效力或政策时效。因此输出固定 `semantic_assessment=not_performed`，`valid` 不能读成批准或证据充分；建议性缺项也不会自动变成挂起。
 - 开发shadow只在payer且包外环境显式开启时暴露三个只读工具，复用原ToolContract、dispatch lock、fatal检查和journal。结构错误只拒绝该核对请求，业务MCP照原契约执行；off不增加工具、提示或请求。自造测试证明的是机械契约与合成接线，不是模型行为改善或t011终态收益。
-- 下一入口是Codex独立审核候选差异与实际Docker复验；通过后才按约定集中讲解正常/失败调用链与取舍。用户指定了实现分工和边界，实际实现/测试由代理完成，没有新增用户亲自运行或独立复述证据，不升级掌握，也不安排默认小测。
+- Codex独立审核新增反例说明：无case_id参数不等于共享材料，正确旧hash不等于版本仍当前，无效请求也不应先写入长期case状态。三项均属于程序能够明确界定的边界问题，不需要判临床答案；来源结构有效与语义正确仍分开。原病例/版本限制虽有文字披露，不能代替未满足的契约验收。
+- 本次未通过，先由用户决定返工；通过后再按约定集中讲解完整功能调用链。用户指定了实现分工和审核边界，实际实现/测试/反例由代理完成，没有新增用户亲自运行或独立复述证据，不升级掌握，也不安排默认小测。
+
+
+### Y返工：来源身份、版本与状态边界
+
+- 原自测通过但契约未闭合的三个问题都属于程序可判定的边界：文件路径本身含case、同一路径内容变化是可证明的版本更新、invalid核对不应提交长期状态。它们不需要让程序理解临床语义，也不能靠“报告里写了限制”代替拒绝。
+- 返工做法：路径case来自既有workspace/handbook allowlist而不是正文关键词；公开手册/instruction是shared_public，无归属结果不能支持任意case；同一`local-fs-read`路径重读且内容变化时旧来源superseded、旧hash保留但不可作当前支持；case只在整份核对通过后原子绑定。
+- 仍未证明：模型能否稳定使用字符偏移、清单目标case是否等于任务真实case、同路径不同窗口的保守版本取舍、MCP混合列表带单一case_id时不可识别。返工自测不等于Codex复审或真实payer收益；下一入口是Codex按差异与独立反例复审。
