@@ -72,3 +72,8 @@
 - 本矩阵是**支持范围声明**，不是新运行结果；`partial` 只继承历史报告的限定范围。
 - 矩阵不包含期望答案、rubric 分数或按题策略；任务选择仍以公开索引和用户批准的实验清单为准。
 - `official_dependency` 家族在取得官方环境证据前不得写 “已支持官方模拟器”。
+
+## 8. 公开资料抽样（2026-11-01）
+
+- provider：已读 `data/provider-baseline/.../pa_t013.../instruction.md` 与 `data/a-environment/build-context/data/care_management/shared/tool_reference.md`。前者确认 workspace 分为 provider/shared、只允许 provider 命名空间；后者确认 `auth.finalize_provider_determination.final_action` 的合法值为 `submit_pa` / `gather_more_evidence` / `do_not_submit`，支持本矩阵“provider 可以不提交/补证”的分支。
+- payer/CM：本地公开资源目录只有占位文件，未取得 payer/CM 的完整公开 instruction；矩阵的 payer/CM 家族依据公开索引与工具目录，未做逐题 instruction 抽样。该缺口保留，不以工具存在推断业务分支已验收。

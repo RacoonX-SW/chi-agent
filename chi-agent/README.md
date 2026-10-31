@@ -436,6 +436,31 @@ with os.fdopen(fd, "w") as out:
 
 模型标称 1M 上下文由 [OpenCode 模型信息](https://opencode.ai/data/deepseek/deepseek-v4-1-flash)及 [DeepSeek 规格](https://api-docs.deepseek.com/quick_start/pricing/)支持，本探针没有百万 token 实测。`deepseek-flash[1m]` 来自 [Claude Code 专用接入示例](https://api-docs.deepseek.com/quick_start/agent_integrations/claude_code/)，不追加到 Go 的正式模型 ID；单次输出上限与上下文容量分开设置。
 
+## F0–F3 开发能力：状态、角色指导与有界检索
+
+`run_chi()` 默认启用 `capabilities="f0-f3-v1"`，`go_chi_entry.py` 也显式传入。它不改变官方 `SYSTEM_PROMPT`、工具批次校验、预算反馈、零重试或账目 schema，只增加四个本地工具：
+
+| 工具 | 作用 | 主要边界 |
+| --- | --- | --- |
+| `local-task-state` | 读取本次 run 的目标、事实/计划/缺口、未知写、最新业务状态和下一步候选 | 只读摘要，不含原始工具正文 |
+| `local-state-update` | 模型提交带来源的更新 | 事实/状态必须引用已登记 call_id；拒绝旧来源、错 case、改绑患者、把 unknown 改成成功/失败 |
+| `local-role-guidance` | 返回 `chi-role-guidance-v1` 阶段/分支/停止条件 | 不含 task ID、期望结局或隐藏答案 |
+| `local-fs-search` | 在已授权目录/固定文件中做有界文本检索 | 不建索引、不跟随符号链接；文件/字节/结果/片段均有限制 |
+
+状态写入 `logs/task-state/`（`task-state.json` 与 `versions/`），不写 `chi-accounting.json`。`local-claim_done` 在启用时额外检查：open unknown、写后未回读、同批后续工具；被拒绝时返回具体原因，模型可在剩余预算内查证后重试。`capabilities=None` 保留旧工具集和旧 claim 行为，仅用于离线基线/对照，不作为真实运行绕过开关。
+
+这只验证合成 SDK/MCP 边界；真实模型是否使用这些工具、真实任务收益、官方评分和正式配送仍未验证。契约见 [F0–F3 设计](openspec/changes/agent-capabilities-f0-f3/design.md)，实际候选/限制见 [阶段报告](reviews/f0-f3-agent-capabilities-review.md)。
+
+```bash
+cd chi-agent
+docker run --rm --network none -v "$PWD:/workspace:rw" \
+  -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+  -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro \
+  -e PYTHONPATH=/model-deps:/pdf-deps:/workspace/vendor/chi-bench/src:/workspace/scripts \
+  -e PYTHONDONTWRITEBYTECODE=1 -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python -m unittest discover -s tests
+```
+
 ## Go CHI 独立包入口
 
 `scripts/go_chi_entry.py` 接收外部 instruction、一个角色 MCP、日志目录和 evaluation/task/attempt/run 身份；它只在经过 manifest 校验的导出包内运行。原 `opencode_go_provider.py` 继续是固定 coding 探针，原 `evaluation_entry.py` 的 live 拒绝保持。实际已验证范围、固定候选和限制只查 [审核状态](reviews/REVIEW_STATE.md)。

@@ -1,6 +1,6 @@
 # F0–F3 接口与行为冻结（待外部 Gemini 契约审查）
 
-状态：**契约候选，尚未实现**。本页冻结实现前的最小接口、权限边界、失败语义和检查项。审查通过后由 DeepSeek 实现并在 Docker 内自测；接口变更须回到本页并重新审查。
+状态：**已实现离线候选，待外部 Gemini 审查**。本页冻结最小接口、权限边界、失败语义和检查项；实现与自测证据见 [阶段报告](../../../reviews/f0-f3-agent-capabilities-review.md)，实现偏差见第 10 节。接口变更须回到本页并重新审查。
 
 ## 1. 基线、候选与不变项
 
@@ -213,3 +213,31 @@
 4. 通过工具而不是系统提示提供 F2 指导，是否足以让模型实际使用？是否需要把“先读指导/状态”写进 instruction 而不破坏官方提示契约？
 5. F3 是否应包含 `<case>/<role>` workspace？只搜 handbook 是否会漏掉 payer 的公开 PDF？
 6. `capabilities=None` 的兼容开关是否会被误用为绕过新身份/B 要求？是否需要禁止在真实入口关闭？
+
+## 10. 实现记录（2026-11-01）
+
+离线实现候选为 `a6aac1c80401ccbb815763b13bc46a9fbbf6d57f`，基于 PR31 合并后的 `443257c`。全量 Docker 套件 414 tests，2 个既有环境性错误（缺 `anthropic`），8 skipped；新增 32 个测试。
+
+与冻结契约的实现对应和补充：
+
+1. **状态位置**：`logs/task-state/task-state.json` + `versions/NNNNNN.json`；不写 `chi-accounting.json`，不改 journal schema。当前没有独立 seal；版本快照与 journal/hash 共同提供可追溯性。
+2. **unknown 记录**：除契约字段外增加内部 `seq`，用于校验“更晚的只读观察”；summary 会暴露该字段，不暴露原始工具结果。
+3. **事实来源更严格**：facts、gaps 来源、latest status、unknown resolve 都要求 observation `event=returned`；`returned_error/refused/failed` 不能作为已观察事实的依据。
+4. **claim 同批保护**：若同一批中 claim 之后仍有待执行工具（例如先 claim 再写），claim 返回 `completion_batch_pending:<id>`，避免“先声明完成再执行写”。
+5. **工具顺序**：F0–F3 工具插入在既有 payer evidence shadow 工具之前，保持 shadow 工具尾部和既有测试契约不变。
+6. **入口**：`run_chi()` 默认 `capabilities="f0-f3-v1"`，`go_chi_entry.py` 显式传入；`capabilities=None` 仅用于离线基线/对照，不提供给外部 CLI 作为真实运行绕过开关。
+7. **检索**：`local-fs-search` 接受一个已授权目录或固定文件；PDF 通过既有 `read_allowed_file` 提取文本，文本文件按 UTF-8 读取。结果不持久化索引。
+8. **指导**：以工具返回，不修改官方 `SYSTEM_PROMPT`；版本/hash 写入 `run_log.txt`，不新增系统消息。
+
+第 9 节问题的当前处理（仍待外部审查）：
+
+| 问题 | 当前实现 | 仍需验证 |
+| --- | --- | --- |
+| 状态位置/账目 | 日志目录，版本快照，不写账 | 是否需要独立 seal/导出校验 |
+| 写后回读 | 对所有角色启用 | 真实 payer/CM 结束路径的误伤率 |
+| read/mutation 分类 | 动词表；未知工具按 mutation | 官方工具新增/改名时的保守性 |
+| F2 工具化 | 不改系统提示 | 真实模型是否主动读取并使用 |
+| F3 范围 | 单路径，可含 workspace/PDF | 真实 handbook/PDF 命中质量与越权边界 |
+| `capabilities=None` | 仅离线基线；入口固定启用 | 防止真实运行误用 |
+
+未验证项与下一步见阶段报告；真实模型、真实任务、官方判分、F4–F7、Z1–Z8 均未开始。
