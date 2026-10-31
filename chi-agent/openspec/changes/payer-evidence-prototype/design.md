@@ -31,6 +31,39 @@ X已经证明公开PDF进入了模型请求，模型也看见了缺项；原汇�
 - 核对现有`run_chi()`、`MCPBridge.invoke()`、`local_tools()`、ToolContract与journal接口，补齐拟修改文件清单和小型数据流；不得仅根据此文虚构现成接口。把必要的细化写回本design/行为契约，不扩大授权范围。
 - 交付：单份阶段报告中的假设/非目标/来源清单和接口决策；自造场景表按[行为契约](specs/evidence-checkpoint/spec.md)固定。即使t011充分原因仍未知，也可检验独立的来源机制，不能为填满根因而编造条款。
 
+#### 第1步冻结（2026-10-31实现前核对）
+
+事实来源只包括本次运行实际送入主模型请求的两类公开文本：`run_chi(role="payer")` 的 instruction，以及成功返回并在下一请求历史中出现的工具结果。工具执行完成、同批刚返回、仅列出目录、工具错误/拒绝、证据工具自身输出、其他run/其他case均不登记为可引用来源。实现复用 `run_chi()` 内既有 `observed_request()` → `exchanges` 判定，事件状态从前工具循环的 `journal.run["tool_events"]` 取最终事件；不新建观察通道。来源作用域由程序按既有allowlist/结构元数据判定，不靠正文关键词猜病例。
+
+引用片段使用UTF-8解码文本的**0起始、结束不含字符索引**；不混字节、PDF页号或行号。程序从登记的完整文本派生 `sha256`；核对表可回传可选 `source_sha256` 用于发现篡改/错版本，但hash、观察序号、引用合法性和来源ID都由程序生成，模型不计算。`source_id` 为不透明 `src-0001` 形式，按登记顺序稳定。
+
+程序可机械检查：来源不存在/未观察/本批新结果、来源case与目标case不一致、来源无法归属、路径与参数case冲突、hash不符、可证明资源更新后的旧引用、片段越界/倒序/过长、claim_id重复、坏类型/额外字段/超限、同一run内目标case前后不一致。程序不能检查：真实片段下的临床解释、建议性/必需性是否适用、签署效力、政策时效（除本次可证明的资源重读/变更）、文本是否在语义上支持主张。`reference_validation=valid` 只表示边界校验通过，输出固定 `semantic_assessment=not_performed`，模型填写的 `rule_nature` 只是 `unverified_model_report`。
+
+#### R1–R3返工语义（2026-10-31）
+
+- **来源作用域**：instruction、公开handbook与tool reference标记为`shared_public`；`local-fs-read` 从既有workspace allowlist的 `<case>/<role|shared>/...` 结构取case，从handbook根或固定公开输入取`shared_public`；其他工具只有参数含字符串`case_id`时才绑定case。无路径case且无`case_id`的临床结果、混合列表标`unattributed`，不能作为任何目标case的有效支持；路径case与参数case不一致标`conflict`。两者分别返回`source_case_unverifiable`、`source_case_conflict`。该判定只做路径/参数结构核对，不打开新文件、不读正文、不扩大allowlist。
+- **资源更新**：仅对`local-fs-read`的同一规范化路径建立资源键。后一次观察若内容hash变化，generation加一并把所有旧来源标`current=false`/`superseded_by=<新id>`；旧文本与原hash保留在登记表中。引用非当前来源（即使回传旧hash正确）返回`source_superseded`；本轮不提供“历史引用仍可用于当前支持”的模式，`excerpt`同样拒绝。相同内容重读不使旧来源失效。该语义只处理可证明的同一路径内容变化，不判断医疗政策法定时效。
+- **容量边界**：64上限按“当前可引用来源”计算，而不是按历史记录总数。满64条后，若同一资源键的新观察内容已变化，仍必须执行失效：释放旧槽、登记新来源（正文过大时登记为不可引用但旧来源同样失效）；相同内容重读或真正的新资源在满额时拒绝登记，旧来源保持有效。不能因容量拒绝而丢失已知更新事实，也不能通过提高上限、删除旧记录或改写测试规避。
+- **目标case绑定**：只有整份核对表的结构、来源、版本、范围和claim全部通过后，才原子绑定首次合法case；任何invalid都不提交长期case状态，后续合法核对不被前一次错误输入污染。已绑定后另一case仍返回`case_scope_mismatch`，且不清空旧失败记录。
+
+冻结边界（越界明确拒绝，不静默截断为有效）：
+
+| 项 | 冻结值 |
+| --- | --- |
+| 核对表规范化JSON | ≤65,536字节 |
+| claims | 1–32项；claim_id 1–64字符且唯一 |
+| 单项claim文本 | ≤2,000字符；proposed_action ≤2,000字符；case_id ≤96字符 |
+| 单片段 | ≤4,000字符 |
+| unresolved | ≤16项，topic ≤500字符 |
+| 可引用来源 | 当前有效≤64个（已证实替换释放旧槽；旧记录保留但不计入）；单个工具文本 ≤262,144字符；登记文本合计 ≤1,048,576字符 |
+| 来源清单输出 | 不返回正文；excerpt单次 ≤2,000字符 |
+
+模型提供：目标case、拟提交建议、claim文本与类别、来源ID/片段、`rule_nature`/`status`、缺项/矛盾/未知。程序提供：来源ID、文本与片段hash、观察轮次、case可归属信息、`reference_validation`、确定性理由和定位。程序不读取文件内容、不发HTTP、不调用模型、不写world、不读凭据；路径判定只复用既有allowlist的路径/符号链接检查。
+
+最小改动清单：新增纯模块 `scripts/payer_evidence.py` 与纯测试；`scripts/go_chi_runtime.py` 增加默认 `None` 的 `evidence_shadow` 透传；`scripts/go_chi_tools.py` 仅在payer显式shadow时增加三个有界本地工具（index/excerpt/check），复用原dispatch lock、fatal检查和 `record_tool`；`scripts/role_runner.py` 增加默认关闭的包外开发环境开关；`scripts/go_chi_bundle.py` allowlist加入新模块；新增shadow合成测试、包导入检查；更新本变更文档、README、审核状态、学习账本与单份Y报告。不修改账、锁层次、计费、超时、MCP业务工具、评分器或模型提示。
+
+数据流：模型tool call → 原ToolContract整批校验 → 原tracked wrapper（dispatch lock/fatal/pending匹配）→ `payer_evidence` 用instruction与`exchanges`登记来源并核对 → JSON结果经 `contract.record_result`/`journal.record_tool` 保存 → 下一请求回传模型。off时三个工具、提示与调用均不存在。
+
 ### 2. 实现最小纯离线原型
 
 - 优先一个小模块，输入为自造公开观察、目标case及拟提交核对表，输出为结构验证结果、可定位的拒绝理由和未解决项。无文件系统任意读取、HTTP、模型、world写入或凭据依赖。

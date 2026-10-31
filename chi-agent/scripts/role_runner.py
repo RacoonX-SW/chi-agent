@@ -56,6 +56,13 @@ async def development(journal, secret, run_chi, kwargs):
     old_term = signal.getsignal(signal.SIGTERM)
     loop.add_signal_handler(signal.SIGTERM, task.cancel)
     try:
+        shadow = os.environ.get('CHI_DEV_EVIDENCE_SHADOW')
+        if shadow not in (None, '', 'off', 'shadow'):
+            raise RuntimeError('evidence_shadow_invalid')
+        if shadow == 'shadow':
+            if kwargs['role'] != 'payer':
+                raise RuntimeError('evidence_shadow_role_invalid')
+            kwargs['evidence_shadow'] = 'shadow'
         from go_chi_mcp import selected_server
         kwargs['server_factory'] = lambda url: TrackedServer(selected_server(url, auxiliary=kwargs['role'] == 'cm'), tracking)
         if kwargs['role'] == 'cm':

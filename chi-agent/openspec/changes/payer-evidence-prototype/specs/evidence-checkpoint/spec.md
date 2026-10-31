@@ -4,11 +4,11 @@
 
 ## 输入、信任与输出
 
-可信来源注册表由程序维护：run、case或shared_public作用域、实际观察序号、原工具call_id或instruction身份、实际文本及其hash、来源版本/范围。共享公开手册不伪装成case原件，其政策适用性仍未由程序判定；“过期”只按可证明的已观察版本/状态失效处理，不自动判断政策有效期。只登记角色allowlist内公开内容；工具错误、仅列目录、另case/run、尚未携入模型请求的本批结果不作为已观察事实。片段边界明确采用字符索引或行号之一并文档化，不混字节/PDF页号。
+可信来源注册表由程序维护：case、shared_public或unattributed作用域、实际观察序号、原工具call_id或instruction身份、实际文本及其hash、资源键/generation与当前状态。共享公开手册不伪装成case原件，其政策适用性仍未由程序判定；“过期”只按可证明的已观察版本/状态失效处理，不自动判断政策有效期。文件case必须从既有workspace allowlist的`<case>/<role|shared>/...`结构导出；公开handbook/instruction/tool reference标shared_public；无路径case且无结构`case_id`的临床结果/混合列表标unattributed，不得默认支持任意case。同一可证明资源（当前为同一`local-fs-read`路径）被重新观察且内容变化时，旧来源标superseded，旧文本与原hash保留但不再作为当前支持；相同内容重读不失效。64来源上限只计当前可引用来源：满额时已证明的替换仍须执行失效并释放旧槽，不能因容量丢弃更新事实；真正的新资源或相同内容重读在满额时可拒绝登记，旧来源保持有效。只登记角色allowlist内公开内容；工具错误、仅列目录、另case/run、尚未携入模型请求的本批结果不作为已观察事实。片段边界明确采用字符索引或行号之一并文档化，不混字节/PDF页号。
 
-核对表包含：目标case、拟提交建议、带稳定ID的主张；每项主张的事实/推断/规则解释类别、来源ID和片段范围、模型对规则性质的解释、缺项/矛盾/未知。hash、观察序号和验证状态由程序计算；模型填写的规则性质不进入可信事实层。所有表有总字节、条目、引用和单片段上限，实际数值在第1步冻结并测试边界。
+核对表包含：目标case、拟提交建议、带稳定ID的主张；每项主张的事实/推断/规则解释类别、来源ID和片段范围、模型对规则性质的解释、缺项/矛盾/未知。hash、观察序号和验证状态由程序计算；模型填写的规则性质不进入可信事实层。所有表有总字节、条目、引用和单片段上限，实际数值在第1步冻结并测试边界；具体值与片段索引语义见[第1步冻结](../../design.md#第1步冻结2026-10-31实现前核对)。
 
-结果分别输出`reference_validation`（valid/invalid）、确定性理由、每项引用定位与`semantic_assessment=not_performed`、模型原填的未解决项。`valid`仅指引用边界校验通过，不得命名成approved/evidence_sufficient/clinical_pass。畸形输入明确拒绝，不能静默截断、填默认来源或隐式接受其他case。
+结果分别输出`reference_validation`（valid/invalid）、确定性理由（含`source_case_mismatch`、`source_case_unverifiable`、`source_case_conflict`、`source_superseded`等）、每项引用定位与`semantic_assessment=not_performed`、模型原填的未解决项。`valid`仅指引用边界校验通过，不得命名成approved/evidence_sufficient/clinical_pass。畸形输入明确拒绝，不能静默截断、填默认来源或隐式接受其他case。目标case只在整份核对全部通过后原子绑定；失败核对不得提交长期case状态。
 
 shadow仅对本地核对调用记录/拒绝；业务MCP仍按原工具契约执行。缺核对表或semantic未决不构成新的业务拦截，现有fatal/未知/角色门禁保持优先。off下新增工具/提示/调用/预算反馈必须不存在；不新增模型API客户端、持久账根或自动确认。
 
@@ -23,6 +23,9 @@ shadow仅对本地核对调用记录/拒绝；业务MCP仍按原工具契约执�
 | 合法引用但语义过度解释 | reference可valid，但semantic始终not_performed；不能冒充已发现/纠正临床解释错误 |
 | 不存在/未来/自身结果/仅执行未观察的引用 | 明确invalid，不登记为有效支持；同批后排核对不得抢用前排刚返回但模型未观察的材料 |
 | 其他case/run、过期版本/篡改hash、越界片段 | 明确invalid并给准确理由；相同文本不能消除身份/版本约束 |
+| 文件路径case、参数case、归属未知与共享政策 | 路径/参数一致才归为目标case；冲突或无法归属明确invalid；公开handbook/instruction可shared_public引用 |
+| 可证明资源重读更新 | 同路径内容变化后旧source_id即使旧hash正确也invalid/source_superseded；旧观察与原hash保留，新版本可引用 |
+| 无效核对后的case状态 | 首份invalid不绑定case；随后合法目标case可通过；已绑定后跨case仍被拒绝 |
 | 非公开路径、符号链接、恶意源文本/提示注入 | 不扩allowlist、不把来源内容当开发指令、不打开任意文件或外发材料 |
 | 重复ID、坏类型/额外字段、超限与精确边界 | 严格、确定的结构结果；不静默截断；失败输入与版本保留 |
 | off等价及provider/cm隔离 | 合成wire的工具定义、提示、业务调用顺序/数与可信预算反馈维持原语义；新入口只payer显式shadow |

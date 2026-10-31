@@ -4,21 +4,21 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | Y五步离线计划与DeepSeek交接已制定，见[Y执行契约](../openspec/changes/payer-evidence-prototype/design.md)：假设/纯原型/反例go-no-go/可选默认关闭影子接线/固定候选交审；实现尚未开始、主代理未验收。X结论与未决原因保留在[X报告](payer-offline-diagnosis-review.md)，不声称修复payer |
-| 协作 | 用户本轮指定DeepSeek临时接手Y五步，实现完成后通知Codex独立审核；单写入者、不再派Terra或递归代理，接手者仅按Y规格建分支/本地固定候选、不push/PR/merge。长期默认Terra/high与历史不改写；现行稳定职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
-| 上次独立审核候选 | W `ad2569937e0afe649807669c70f86da97c708e86`；独立归档/差异、全量/controller、三角色真实组件配合成模型、完整历史副本及实际清单均已审核，细节只见W报告 |
-| 上次通过的实现提交 | W同上SHA仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
-| 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 已核对PR28 merged及最新origin/main，从其建立 `codex/deepseek-offline-roadmap`只写规划；两项既有用户文档改动保留、不纳入提交。规划PR由用户合并后，DeepSeek重新fetch并从最新main建新codex实现分支，不向已合并分支追加；尚无Y实现候选 |
+| 当前任务 | Codex已独立复审并关闭R2容量阻断；保留R1/R3此前关闭范围，受影响回归通过。**本次容量返工及Y当前候选的限定离线原型/默认关闭开发shadow验收通过，无本轮剩余阻断**；不等于真实模型业务或用户验收。旧失败/未通过记录原样保留，见[Y容量复审](payer-evidence-prototype-review.md#codex容量独立复审2026-10-31) |
+| 协作 | DeepSeek实现、Codex独立审核及两轮复审已完成；用户现授权Codex提交审核文档、推送并创建PR，合并及后续真实验证仍由用户决定。本次Git交付不改实现、不派代理，稳定分工见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
+| 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）本轮已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
+| 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
+| 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y本轮候选的限定离线通过单列，不冒充主线合并、真实模型准入或用户验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
+| 当前分支与接手改动 | 仍在 `codex/payer-evidence-prototype`；本次核对main仍 `0ac9f0fd9d4f5c4e5a41028727015768dbae8c07`，无rebase/merge。三份独立审核文档已提交推送；用户追加授权将原先保留的AGENTS.md/COLLABORATION.md既有改动原样纳入同一PR。存储HEAD不代替已审候选身份，原审核段落/复审目录/失败日志未改写 |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；当前active pending/halt=null。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | Y五步为离线工作包，新增真实B/C/患者/评审请求上限0，不读模型Key、不启动官方题世界；不得将DeepSeek开发接手理解为项目API调用授权。W三题清单已收束，旧题/Claude/付费临床评审/F.5等原暂停边界保留，新实验须另有界规格 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | 本轮仅规划文档差异/链接与职责、授权一致性检查，没有实现自测或新模型/世界/旧代码全量运行。X/W验证各见原报告；Y后续自测只能记实现者交付待审，不能替换上次通过身份或提前记主代理审核通过 |
+| 本轮验证 | Codex从固定归档禁网Docker独立复跑原容量探针、受影响测试/Go回归、独立新增容量契约、构包/隔离导入及范围核对，全部本轮要求项通过；skip原样不计通过。确认只改_register、未提高固定上限、旧记录保留，R1/R3逻辑未变。命令/退出码/耗时/manifest只见Y容量复审；真实请求0，无新B/真实账全审 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR28](https://github.com/xsw932187210-cell/chi-agent/pull/28)已由用户合并；本轮五步规划已推送并创建base=main的[PR29](https://github.com/xsw932187210-cell/chi-agent/pull/29)，交用户审核，未merge/auto-merge。规划合并后按Y五步交DeepSeek离线实现、完成停写固定候选，再由用户通知Codex审核；不硬编码必挂起、不自动真实复测 |
+| PR 与下一步 | [PR28](https://github.com/xsw932187210-cell/chi-agent/pull/28)与[PR29](https://github.com/xsw932187210-cell/chi-agent/pull/29)已合并；Y已推送并创建base=main的[PR30](https://github.com/xsw932187210-cell/chi-agent/pull/30)，交用户审核，未merge/auto-merge。真实验证仍须另固定范围、身份/B及实际日期条件，不自动恢复调用/判分 |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null |
 
@@ -47,6 +47,7 @@
 - [代表角色接线与本地Go患者模拟](representative-role-baseline-review.md)
 - [统一角色操作者与完整CM开发链路](unified-role-cm-lifecycle-review.md)
 - [payer离线诊断与后续规格](payer-offline-diagnosis-review.md)
+- [payer证据核对原型与开发shadow（实现者交付待审）](payer-evidence-prototype-review.md)
 - [DeepSeek 评审的数据来源与审批证据](../docs/docker-workflow.md#deepseek-开发评审的数据来源与审批证据)
 - [实现子代理与独立审核](../docs/subagent-workflow.md)
 - [D0 接续 Prompt](../docs/d0-handoff-prompts.md)

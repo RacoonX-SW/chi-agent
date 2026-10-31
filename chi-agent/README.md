@@ -583,6 +583,25 @@ world仅连接本轮internal网络；CM能力文件只读提供给world/runner�
 
 输出含 `orchestration.json`、runner/world容器日志、`runner-logs/lifecycle.json` 与原SDK结果/轨迹、`world-artifacts/`、初末capture及两侧完整 `resource-snapshots/`。CM保留原导出与实际初始化来源；payer先核对四份公开PDF投影。主错、捕获错、清理错分别保存，精确容器/网络ID删除后再次核验。程序检查显式关闭semantic judge，结果不构成临床内容verdict或官方reward。
 
+## Y：payer证据核对的纯原型与开发shadow
+
+`scripts/payer_evidence.py` 只核对引用边界：来源必须是本次payer运行实际送入主模型请求的公开instruction或已观察工具文本；片段用UTF-8文本的0起始、结束不含字符索引。文件来源从既有workspace allowlist的 `<case>/<role|shared>/...` 结构取case，公开handbook/instruction/tool reference标 `shared_public`；无路径case且无结构 `case_id` 的结果标不可归属，不能支持任意case。同一 `local-fs-read` 路径被重读且内容变化后，旧来源标 superseded，旧hash仍保留但不再作为当前支持。目标case只在整份核对通过后原子绑定，失败核对不污染后续。它不判断临床解释、必需性、签署效力或政策时效，`reference_validation=valid` 不是批准/证据充分。默认关闭，生产入口和正式包启动不会启用。
+
+纯测试与合成shadow测试复用固定controller镜像、原SDK/PDF卷和固定vendor，禁网、只读根、无Key、无world；不要为运行本节安装或升级依赖：
+
+```sh
+docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
+  -e PYTHONDONTWRITEBYTECODE=1 \
+  -e PYTHONPATH=/model-deps:/pdf-deps:/workspace/scripts:/workspace/vendor/chi-bench/src \
+  -v "$PWD:/workspace:ro" \
+  -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+  -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro -w /workspace \
+  chi-agent-a-control:latest /opt/venv/bin/python -m pytest -q \
+  tests/test_payer_evidence.py tests/test_payer_evidence_shadow.py
+```
+
+包外开发装配仅在payer且显式设置 `CHI_DEV_EVIDENCE_SHADOW=shadow` 时，向 `run_chi()` 传 `evidence_shadow="shadow"`，增加 `local-evidence-sources`、`local-evidence-excerpt`、`local-evidence-check` 三个有界只读工具；它们经原dispatch lock、fatal检查、ToolContract与journal记录，只返回核对结果，不拦截业务MCP、不替Agent选择动作、不新增模型或账根。`off` 不增加工具、提示或请求。实际范围、go/no-go与限制只见[Y报告](reviews/payer-evidence-prototype-review.md)；本轮真实B/C/患者/评审请求为0。
+
 ## DeepSeek 本地开发评审
 
 `scripts/development_review.py` 用固定 PA 规则和完整证据做本地诊断，报告名为 `development-review.json`，official reward 为 null。原版 Claude 评分与正式交付仍按 [审核状态](reviews/REVIEW_STATE.md) 的范围处理。

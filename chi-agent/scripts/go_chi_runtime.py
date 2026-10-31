@@ -78,7 +78,7 @@ async def run_coding_b(client, guard, tools):
 
 async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_path,
                   logs_dir, workspace_root, handbook_root, tool_references, lower,
-                  server_factory=None, auxiliary=None):
+                  server_factory=None, auxiliary=None, evidence_shadow=None):
     """Run one role using a previously preflighted journal and injected transport.
 
     No authorization or bundle/source verification is performed here. The
@@ -108,6 +108,12 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         raise GoFailure('chi_run_contract_invalid')
     if not isinstance(secret, str) or not secret.strip() or not isinstance(instruction, str) or not instruction.strip():
         raise GoFailure("chi_run_input_invalid")
+    if evidence_shadow not in {None, "off", "shadow"}:
+        raise GoFailure("chi_evidence_shadow_invalid")
+    if evidence_shadow == "off":
+        evidence_shadow = None
+    if evidence_shadow == "shadow" and role != "payer":
+        raise GoFailure("chi_evidence_shadow_role_invalid")
     if lower is None:
         raise GoFailure("chi_transport_missing")
     logs_dir = __import__("pathlib").Path(logs_dir)
@@ -130,7 +136,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                                 tool_references=tool_references, handbook_root=handbook_root,
                                 journal=journal, binding=binding, guard_getter=lambda: holder.get("guard"),
                                 client_getter=lambda: holder.get("client"), confirmation_context=context,
-                                exchanges=exchanges, dispatch_lock=bridge.lock)
+                                exchanges=exchanges, dispatch_lock=bridge.lock, instruction=instruction,
+                                evidence_shadow=evidence_shadow)
             tools = bridge.tools + local
             definitions = [Converter.tool_to_openai(tool) for tool in tools]
             if len({tool.name for tool in tools}) != len(tools):
