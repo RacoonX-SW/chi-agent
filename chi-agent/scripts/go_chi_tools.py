@@ -9,15 +9,27 @@ from pathlib import Path
 from opencode_go_provider import GoFailure
 from go_chi_resources import workspace_path
 from evaluation_bundle import _check_components, BundleFailure
+from payer_evidence import EvidenceRegistry
 from pdf_resource_reader import read_allowed_file
+
+EVIDENCE_SHADOW_MODES = {None, "off", "shadow"}
 
 
 def local_tools(*, role, workspace_root, instruction_path, tool_references, handbook_root,
                 journal, binding, guard_getter, client_getter, confirmation_context,
-                exchanges, dispatch_lock):
+                exchanges, dispatch_lock, instruction=None, evidence_shadow=None):
     from agents.tool import FunctionTool
     if role not in {"provider", "payer", "cm"} or (role == "provider" and binding is None):
         raise GoFailure("chi_local_role_invalid")
+    if evidence_shadow not in EVIDENCE_SHADOW_MODES:
+        raise GoFailure("chi_evidence_shadow_invalid")
+    if evidence_shadow == "off":
+        evidence_shadow = None
+    if evidence_shadow == "shadow" and role != "payer":
+        raise GoFailure("chi_evidence_shadow_role_invalid")
+    if evidence_shadow == "shadow" and (type(instruction) is not str or not instruction):
+        raise GoFailure("chi_evidence_shadow_input_invalid")
+    registry = EvidenceRegistry(instruction=instruction) if evidence_shadow == "shadow" else None
     workspace_root = Path(workspace_root)
     instruction_path = Path(instruction_path)
     handbook_root = Path(handbook_root)
@@ -145,6 +157,48 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         binding.event("confirmation_result", attempt=binding.confirmations, result=result)
         return json.dumps(result, ensure_ascii=False)
 
+    def tool_event(call_id):
+        final = None
+        for event in journal.run["tool_events"]:
+            if event.get("call_id") == call_id:
+                final = event.get("event")
+        return final
+
+    def shadow_error(code):
+        return json.dumps({"mode": "shadow", "error": code}, ensure_ascii=False, sort_keys=True)
+
+    def require_shadow():
+        if registry is None:
+            raise GoFailure("chi_evidence_shadow_invalid")
+
+    async def evidence_sources(args):
+        require_shadow()
+        if type(args) is not dict or args:
+            return shadow_error("arguments_invalid")
+        registry.register_observations(exchanges, tool_event)
+        return json.dumps(registry.listing(), ensure_ascii=False, sort_keys=True, allow_nan=False)
+
+    async def evidence_excerpt(args):
+        require_shadow()
+        if type(args) is not dict or set(args) != {"source_id", "start_char", "end_char"}:
+            return shadow_error("arguments_invalid")
+        registry.register_observations(exchanges, tool_event)
+        return json.dumps(registry.excerpt(args["source_id"], args["start_char"], args["end_char"]),
+                          ensure_ascii=False, sort_keys=True, allow_nan=False)
+
+    async def evidence_check(args):
+        require_shadow()
+        if type(args) is not dict or set(args) != {"checklist"}:
+            return shadow_error("checklist_malformed")
+        registry.register_observations(exchanges, tool_event)
+        try:
+            payload_bytes = len(json.dumps(args["checklist"], ensure_ascii=False, sort_keys=True,
+                                           separators=(",", ":"), allow_nan=False).encode("utf-8"))
+            result = registry.validate(args["checklist"], payload_bytes=payload_bytes)
+            return json.dumps(result, ensure_ascii=False, sort_keys=True, allow_nan=False)
+        except Exception:
+            return shadow_error("checklist_malformed")
+
     empty = {"type": "object", "properties": {}, "additionalProperties": False}
     def schema(properties, required):
         return {"type": "object", "properties": properties, "required": required, "additionalProperties": False}
@@ -160,6 +214,18 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         defs.extend([
             ("local-read-patient-observation", READ_DESCRIPTION, schema({"patient_id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}}, ["patient_id", "offset"]), observation),
             ("local-confirm-patient", CONFIRM_DESCRIPTION, schema({"patient_id": {"type": "string"}, "instruction_quote": {"type": "string", "minLength": 1}, "chart_quote": {"type": "string", "minLength": 1}}, ["patient_id", "instruction_quote", "chart_quote"]), confirm),
+        ])
+    if evidence_shadow == "shadow":
+        defs.extend([
+            ("local-evidence-sources",
+             "Shadow-only record for payer development. List opaque ids for public text this run actually sent to the main model; returns metadata, never text. It cannot approve, block, or choose an action.",
+             {"type": "object", "properties": {}, "additionalProperties": True}, evidence_sources),
+            ("local-evidence-excerpt",
+             "Shadow-only record for payer development. Read a bounded character window from a registered source. Indices are 0-based and end-exclusive. It cannot approve, block, or choose an action.",
+             {"type": "object", "properties": {"source_id": {"description": "Opaque id such as src-0001."}, "start_char": {"description": "0-based character index."}, "end_char": {"description": "Exclusive character index."}}, "additionalProperties": True}, evidence_excerpt),
+            ("local-evidence-check",
+             "Shadow-only record for payer development. Validate citation boundaries for a bounded checklist; returns reference_validation and semantic_assessment=not_performed. It does not judge clinical meaning and cannot approve, block, or choose an action.",
+             {"type": "object", "properties": {"checklist": {"description": "Object with case_id, proposed_action, claims, unresolved."}}, "additionalProperties": True}, evidence_check),
         ])
     result = []
     for name, description, params, callback in defs:

@@ -101,7 +101,7 @@
 | 本地患者模拟与角色接线 | [V规格](../openspec/changes/representative-role-baseline/design.md)与[V报告](../reviews/representative-role-baseline-review.md)：原CM状态机、开发适配/broker、嵌套请求账与真实角色导出 | 围绕新功能集中讲解模型职责、消息翻转、锁与未知传播、实际接口和验收层级；用户提出Go替代及官方兼容取舍，尚无新增独立源码复述或运行实践，不升级为掌握 |
 | 统一角色操作者与失败终态 | [W规格](../openspec/changes/unified-role-cm-lifecycle/design.md)与[W报告](../reviews/unified-role-cm-lifecycle-review.md)：实际跨容器同账链、在途跟踪、停止/捕获/清理与三角色开发结果 | 串起单一所有者、独立辅助预算、同批fatal门禁、模型失败与世界静止；payer工程收口但终态不符，CM本地闭环不等于临床/官方通过。用户确定边界，代理执行，无新增用户独立复述/操作证据 |
 | payer失败的离线诊断 | [X规格](../openspec/changes/payer-offline-diagnosis/design.md)与[X报告](../reviews/payer-offline-diagnosis-review.md)：从实际观察、规则依据、不可修改动作和检查适用性解释证据边界 | 区分看见缺项、规则要求、主张越界与终态不符；工具汇总不是独立核验，诊断样本不是盲测。仅分析/规格，未实现新机制，无新增用户实践/掌握证据 |
-| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | 用户指定DeepSeek先实现、Codex后独立审核。当前只有规划；开发代理与参赛模型职责分开，未实现/验收或新增用户源码实践，不记掌握 |
+| 证据核对的后续五步 | [Y执行计划](../openspec/changes/payer-evidence-prototype/design.md)与[行为契约](../openspec/changes/payer-evidence-prototype/specs/evidence-checkpoint/spec.md)：假设→纯原型→反例/go-no-go→可选影子接线→固定候选交审 | 用户指定DeepSeek先实现、Codex后独立审核；纯原型、自造反例与默认关闭开发shadow已实现，待独立审核。开发代理与参赛模型职责分开，未验收或新增用户源码实践，不记掌握 |
 
 相关材料：
 
@@ -674,3 +674,11 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 先找公开规则中的作用域与必需/建议性质，再谈动作。原终态不符不能倒推某个建议必然是硬条件；护士批准与MD存在性检查也不能合并成一条普遍规则。证据不足时保留未决比写进任务答案特判更有信息价值。
 - 模型将材料范围说得更充分是可定位的问题；后续工具的零缺项来自已填的met计数，不是第二个独立判断者。追到不可修改建议前，才能提出有针对性的证据核对方案；引用真实仍不保证临床解释正确，程序只宜校验其能证明的来源/结构边界。
 - 本轮只对已有失败作离线分析和规格，不是新功能验收教学或已修复证明。下一实现若另获授权并验收，再按约定串起完整新调用链；不默认安排小测。用户同意复盘方向，实际解析/源码核对由代理完成，无新增用户独立复述或操作证据。
+
+### Y：来源边界能证明什么，不能证明什么
+
+- 这一阶段接住X的“材料主张越界”，但只做一种通用机制：为本次payer运行实际送入主模型请求的instruction和已观察工具文本建立来源ID，核对claim引用的片段边界。它不新增规划器、RAG、审查模型或医疗规则引擎，也不改变账、锁、计费和最终选择动作的人。
+- 关键取舍是“观察”以请求历史为准，而不是工具执行完成：`run_chi()` 已有的 `observed_request()`/`exchanges` 只在下一请求确实携带工具结果时登记；同批刚返回、目录列表、工具错误和shadow自身输出不登记。来源ID与hash由程序生成，模型只填case、claim类别、source_id/片段、规则性质和未解决项；`rule_nature` 永远只是模型自报，不是已证实规则。
+- 可机械检测的是引用不存在/未观察/本批新结果、参数可归属时的错case、hash不符、片段越界/倒序/过长、重复ID和坏结构；不能检测真实片段下的错误解释、建议/必需性、签署效力或政策时效。因此输出固定 `semantic_assessment=not_performed`，`valid` 不能读成批准或证据充分；建议性缺项也不会自动变成挂起。
+- 开发shadow只在payer且包外环境显式开启时暴露三个只读工具，复用原ToolContract、dispatch lock、fatal检查和journal。结构错误只拒绝该核对请求，业务MCP照原契约执行；off不增加工具、提示或请求。自造测试证明的是机械契约与合成接线，不是模型行为改善或t011终态收益。
+- 下一入口是Codex独立审核候选差异与实际Docker复验；通过后才按约定集中讲解正常/失败调用链与取舍。用户指定了实现分工和边界，实际实现/测试由代理完成，没有新增用户亲自运行或独立复述证据，不升级掌握，也不安排默认小测。
