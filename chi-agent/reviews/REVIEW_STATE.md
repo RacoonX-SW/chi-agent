@@ -9,7 +9,7 @@
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）本轮已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y本轮候选的限定离线通过单列，不冒充主线合并、真实模型准入或用户验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 仍在 `codex/payer-evidence-prototype`；本次核对main仍 `0ac9f0fd9d4f5c4e5a41028727015768dbae8c07`，无rebase/merge。三份独立审核文档已提交并随实现分支推送；存储HEAD不代替上列已审候选身份。AGENTS.md/COLLABORATION.md用户diff保留，不纳入提交；原审核段落/复审目录/失败日志未改写 |
+| 当前分支与接手改动 | 仍在 `codex/payer-evidence-prototype`；本次核对main仍 `0ac9f0fd9d4f5c4e5a41028727015768dbae8c07`，无rebase/merge。三份独立审核文档已提交推送；用户追加授权将原先保留的AGENTS.md/COLLABORATION.md既有改动原样纳入同一PR。存储HEAD不代替已审候选身份，原审核段落/复审目录/失败日志未改写 |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；当前active pending/halt=null。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
