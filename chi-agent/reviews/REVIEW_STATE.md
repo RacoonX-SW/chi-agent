@@ -16,9 +16,9 @@
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本轮规划新增真实请求0，不读Key、不启动题世界；W/Y旧清单已收束。收尾计划提出最多24次C、8次coding-B及2响应患者probe的**待审额度**，尚未生效；执行启动时一次性固定实际范围/用途/额度并记录此处，包内不逐步等GPT。原t019/Claude/付费临床评审等暂停保持；F.5列入收尾待启动项，不能默认为已恢复 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | 本轮为纯文档规划，检查diff、链接/职责一致性和上传范围，不运行Docker/代码测试或真实账全审。此前Y的固定归档Docker独立复验、容量/Go回归、构包/隔离导入与全部命令只见Y容量复审，不冒充本轮新执行 |
+| 本轮验证 | 纯文档规划的git diff --check通过；12份文档的292个本地链接目标存在，职责/依赖/额度/上传范围人工核对。未运行Docker/代码测试或真实账全审。此前Y的固定归档Docker独立复验、容量/Go回归、构包/隔离导入与全部命令只见Y容量复审，不冒充本轮新执行 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR28](https://github.com/xsw932187210-cell/chi-agent/pull/28)、[PR29](https://github.com/xsw932187210-cell/chi-agent/pull/29)、[PR30](https://github.com/xsw932187210-cell/chi-agent/pull/30)均已合并；收尾规划准备独立base=main文档PR，未自行merge/auto-merge。下一步先按Z0核对外部条件、执行范围和真实额度；其余离线工作可按实际授权推进 |
+| PR 与下一步 | [PR28](https://github.com/xsw932187210-cell/chi-agent/pull/28)、[PR29](https://github.com/xsw932187210-cell/chi-agent/pull/29)、[PR30](https://github.com/xsw932187210-cell/chi-agent/pull/30)均已合并；收尾规划已推送并创建base=main的[PR31](https://github.com/xsw932187210-cell/chi-agent/pull/31)，交用户审核，未自行merge/auto-merge。下一步先按Z0核对外部条件、执行范围和真实额度；其余离线工作可按实际授权推进 |
 | 外部条件复核 | 本轮内置浏览未取得当前Kaggle Rules正文，概览索引与上次Rules解释冲突，强制材料/全量公开评测要求未重新确认；Go官方页面DeepSeek月度ZDR脚注仍只到2026-10-31，CHI非编码用途/十一月条件未确认。见[Z0来源与处置](../openspec/changes/project-completion/design.md#4-z0尽早解决会改变整个计划的外部条件)，不因额度较多自动放行对应载荷 |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null |
