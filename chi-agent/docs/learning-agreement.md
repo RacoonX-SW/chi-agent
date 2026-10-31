@@ -100,6 +100,7 @@
 | 官方启动组件与评分覆盖分层 | 按[U规格](../openspec/changes/harbor-launch-coverage/design.md)核对真实Harbor生命周期及独立runner接点；复用既有终态对应程序检查、内容rubric和任务不适用分支，证据见[U报告](../reviews/harbor-launch-coverage-review.md) | 已解释本地调度器、runner、官方启动器与判分器的职责，以及空证据rubric列表不能证明临床完整性；用户授权范围和顺序，没有新增独立复述/实践证据，不升级为掌握 |
 | 本地患者模拟与角色接线 | [V规格](../openspec/changes/representative-role-baseline/design.md)与[V报告](../reviews/representative-role-baseline-review.md)：原CM状态机、开发适配/broker、嵌套请求账与真实角色导出 | 围绕新功能集中讲解模型职责、消息翻转、锁与未知传播、实际接口和验收层级；用户提出Go替代及官方兼容取舍，尚无新增独立源码复述或运行实践，不升级为掌握 |
 | 统一角色操作者与失败终态 | [W规格](../openspec/changes/unified-role-cm-lifecycle/design.md)与[W报告](../reviews/unified-role-cm-lifecycle-review.md)：实际跨容器同账链、在途跟踪、停止/捕获/清理与三角色开发结果 | 串起单一所有者、独立辅助预算、同批fatal门禁、模型失败与世界静止；payer工程收口但终态不符，CM本地闭环不等于临床/官方通过。用户确定边界，代理执行，无新增用户独立复述/操作证据 |
+| payer失败的离线诊断 | [X规格](../openspec/changes/payer-offline-diagnosis/design.md)与[X报告](../reviews/payer-offline-diagnosis-review.md)：从实际观察、规则依据、不可修改动作和检查适用性解释证据边界 | 区分看见缺项、规则要求、主张越界与终态不符；工具汇总不是独立核验，诊断样本不是盲测。仅分析/规格，未实现新机制，无新增用户实践/掌握证据 |
 
 相关材料：
 
@@ -115,7 +116,9 @@
 
 ## 下一次从哪里继续
 
-下一入口转到[W设计](../openspec/changes/unified-role-cm-lifecycle/design.md)和[W报告](../reviews/unified-role-cm-lifecycle-review.md)：从统一角色操作者的资源/身份预检，沿包外runner进入原Go入口与工具循环，再跟踪CM世界如何回调同进程broker。重点理解单一计费所有者、MCP与billing锁、同批fatal停止、模型失败与世界静止的区别，以及终态/清理证据如何决定能否继续下一真实题。真实结果和费用只查W报告；不得把合成跨容器、真实模型业务和官方判分混为一层。
+下一入口转到[X设计](../openspec/changes/payer-offline-diagnosis/design.md)和[X报告](../reviews/payer-offline-diagnosis-review.md)：沿“原始公开文件→实际工具观察→下一请求→逐项主张→不可修改建议→终态→检查器”理解一次失败。重点是缺项是否属于必需条件、引用是否支持主张、程序计数是否只是重述模型判断，以及存在性检查与内容正确性的区别。下一方案先用自造材料检验证据核对原型，尚未实现/授权，不默认复测或按旧答案补规则。
+
+W调用链可从[W设计](../openspec/changes/unified-role-cm-lifecycle/design.md)和[W报告](../reviews/unified-role-cm-lifecycle-review.md)回读：从统一角色操作者的资源/身份预检，沿包外runner进入原Go入口与工具循环，再跟踪CM世界如何回调同进程broker。重点理解单一计费所有者、MCP与billing锁、同批fatal停止、模型失败与世界静止的区别，以及终态/清理证据如何决定能否继续下一真实题。真实结果和费用只查W报告；不得把合成跨容器、真实模型业务和官方判分混为一层。
 
 本轮从[V设计](../openspec/changes/representative-role-baseline/design.md)和[V报告](../reviews/representative-role-baseline-review.md)继续：围绕真实开发讲清参赛Agent模型、环境患者模拟器与评分模型的职责；本地显式启用Go患者模拟，官方默认Anthropic与judge保持各自路径。新功能/较大修复完成后集中串起入口、消息role翻转、原CM状态机、嵌套MCP与同一记账所有者的正常/失败路径，模型调整或常规测评不单独开课。当前按开发证据讲解，不因用户提出需求或代理完成测试而记录为掌握。
 
@@ -661,3 +664,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 等待和收尾：主请求、确认、患者HTTP、MCP、整体执行、broker drain和操作者分别有界；只延长一个HTTP读超时不能修复整链。锁定Uvicorn使用`capture_signals`，旧信号覆盖不生效；W由runner统一接SIGTERM，先收束回调再关闭账。正常和失败结果都分开记录模型/工具错误、捕获错误和清理错误，精确ID不存在才说明资源已清理。
 - 验证与限制：合成模型配真实官方world/SDK/MCP验证角色端点、公开PDF、STOP/回滚、同账与终态链；完整真实历史副本验证来源/旧ack/wire/seal及新未知阻断；当前身份B和固定三题真实模型运行另取证。字段/流程程序检查不能评价临床内容，开发患者条件也不能等同官方Anthropic或官方分数。最终包仍由官方世界正常供应，Harbor正式CLI/完整配送/F.5保留各自未验证边界。
 - 复述提纲：谁接输入并验证→谁持世界、模型和账→一次患者消息怎样往返→失败后哪些动作立即停止→怎样证明世界静止并保存终态→清理证据与结论层级。用户本轮明确范围、预算和停止规则，实际实现与运行由代理完成；没有新增亲自操作或独立源码复述证据，不升级掌握，也不安排默认小测。
+
+### X：从证据链诊断一次业务不符
+
+- 输入存在、读取成功、实际工具返回和后续请求携带分别取证；缺项已在后续模型请求内，不能再解释为PDF没读到。模型承认缺项也不等于它正确理解了该缺项对决定的影响。
+- 先找公开规则中的作用域与必需/建议性质，再谈动作。原终态不符不能倒推某个建议必然是硬条件；护士批准与MD存在性检查也不能合并成一条普遍规则。证据不足时保留未决比写进任务答案特判更有信息价值。
+- 模型将材料范围说得更充分是可定位的问题；后续工具的零缺项来自已填的met计数，不是第二个独立判断者。追到不可修改建议前，才能提出有针对性的证据核对方案；引用真实仍不保证临床解释正确，程序只宜校验其能证明的来源/结构边界。
+- 本轮只对已有失败作离线分析和规格，不是新功能验收教学或已修复证明。下一实现若另获授权并验收，再按约定串起完整新调用链；不默认安排小测。用户同意复盘方向，实际解析/源码核对由代理完成，无新增用户独立复述或操作证据。

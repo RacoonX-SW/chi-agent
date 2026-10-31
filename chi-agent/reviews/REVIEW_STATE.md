@@ -4,22 +4,22 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | W统一三角色操作者与CM Agent→world→Go broker完整链路通过本地开发验收，见[W报告](unified-role-cm-lifecycle-review.md)。唯一新B及三题各一次已收束；provider关单、CM闭环，payer终态未达预期。内容/官方评审未执行 |
+| 当前任务 | X payer离线诊断与后续规格完成，见[X报告](payer-offline-diagnosis-review.md)。已证明输入完整和部分材料主张越界；终态不符的充分因果解释仍未完成，不声称修复。无运行时改动/新增真实调用；W固定清单已收束，内容/官方评审未执行 |
 | 协作 | 默认一个 GPT-6.1 Terra / high 实现子代理、主代理独立审核；第二个按明确并行收益启用，纯文档由主代理完成。历史 Luna 派发不改写。现行职责见 [协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 上次独立审核候选 | W `ad2569937e0afe649807669c70f86da97c708e86`；独立归档/差异、全量/controller、三角色真实组件配合成模型、完整历史副本及实际清单均已审核，细节只见W报告 |
 | 上次通过的实现提交 | W同上SHA仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 实现验收身份保留上列 SHA；文档提交、PR 和合并提交不代替实现验收。Git 与上传流程见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 已核对PR26 merged及fetch/ls-remote后的最新main，从其建立 `codex/unified-role-cm-lifecycle`；两项既有用户文档改动完整保留。主代理规格/独立审核/Git，唯一Terra/high写实现；W基线及中断只见W报告 |
+| 当前分支与接手改动 | 已核对PR27 merged及fetch后的最新main，从其建立 `codex/payer-offline-diagnosis`；两项既有用户文档改动完整保留且不纳入提交。X纯分析/规格由主代理完成，无实现子代理或新实现验收身份 |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；当前active pending/halt=null。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | W唯一当前B及provider t032→payer t011→cm_afib三题各一次清单已完成，不再追加/重跑；新实验须另有界规格。t012/t014/t017/t013不重跑，t019/Claude/付费临床评审/F.5暂停 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | W独立全量/controller、同批fatal/取消/失败终态、三角色跨容器合成及完整旧账/新未知拒绝通过；实际B/三题及全部结算/终态/清理已核对。CM会话max_turns结束，评估/照护计划完成；程序检查不代替临床内容评审 |
+| 本轮验证 | X禁网Docker原历史/wire/tool/seal与公开输入、逐轮观察对齐、原verifier源码/自造数据特征检查及结束字节保全完成，详见X报告。W实现和实际运行仍按W报告，未重跑全量或模型，不改原false/NA |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR26](https://github.com/xsw932187210-cell/chi-agent/pull/26)已合并；W已推送并创建base=main的[PR27](https://github.com/xsw932187210-cell/chi-agent/pull/27)，交用户审核，未merge/auto-merge。payer后续先据原证据提出有界改进，当前清单不补跑；内容评审仍暂停，十一月隐私须按实际日期复核 |
-| 未验证项 | payer业务终态改进、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障 |
+| PR 与下一步 | [PR27](https://github.com/xsw932187210-cell/chi-agent/pull/27)已由用户合并；X已推送并创建base=main的[PR28](https://github.com/xsw932187210-cell/chi-agent/pull/28)，交用户审核，未merge/auto-merge。下一提案为[X规格](../openspec/changes/payer-offline-diagnosis/design.md)中的离线证据核对原型，尚未实现/授权；不能硬编码必挂起或自动复测，十一月真实调用前须按实际日期复核隐私 |
+| 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null |
 
 接续材料：
@@ -46,6 +46,7 @@
 - [真实Harbor启动预演与三题评分覆盖](harbor-launch-coverage-review.md)
 - [代表角色接线与本地Go患者模拟](representative-role-baseline-review.md)
 - [统一角色操作者与完整CM开发链路](unified-role-cm-lifecycle-review.md)
+- [payer离线诊断与后续规格](payer-offline-diagnosis-review.md)
 - [DeepSeek 评审的数据来源与审批证据](../docs/docker-workflow.md#deepseek-开发评审的数据来源与审批证据)
 - [实现子代理与独立审核](../docs/subagent-workflow.md)
 - [D0 接续 Prompt](../docs/d0-handoff-prompts.md)
