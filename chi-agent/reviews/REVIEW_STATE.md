@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 用户要求覆盖整个剩余项目、下周收尾；本轮已制定[Z0–Z8连续计划](../openspec/changes/project-completion/design.md)和验收契约，目标11/6冻结、11/8内部验收/材料及经批准交付。仅文档规划，未启动功能编码/真实实验；不把阶段数换算为完成百分比。Y限定离线原型/默认关闭shadow通过保持，旧失败见[Y容量复审](payer-evidence-prototype-review.md#codex容量独立复审2026-10-31) |
+| 当前任务 | 用户指出首版过度概括剩余功能，现补齐[F0–F7能力建设](../openspec/changes/project-completion/capabilities.md)：任务家族、状态记忆、角色规划、规则定位、上下文、完成核验、未知查证与实验工具；衔接[Z0–Z8全流程](../openspec/changes/project-completion/design.md)。11/6冻结、11/8内部验收/经批准交付仍为目标，未完成必需能力须明确延期/裁剪，不能靠打包宣布全部完成。仍仅文档规划，未启动功能编码/真实实验；Y既有通过/失败不变 |
 | 协作 | 收尾专项拟在用户启动后由DeepSeek协调/唯一实现写入、Gemini独立审查及有工具时Docker复验、GPT规划/累计审核、用户最终验收和合并；已授权包不逐包等GPT。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27)。本轮主代理直接处理规划，不派代理、不改全局模型配置 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
@@ -14,9 +14,9 @@
 | 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；上次审计active pending/halt=null，本轮未重审真实账。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
-| 付费验证范围 | 本轮规划新增真实请求0，不读Key、不启动题世界；W/Y旧清单已收束。收尾计划提出最多24次C、8次coding-B及2响应患者probe的**待审额度**，尚未生效；执行启动时一次性固定实际范围/用途/额度并记录此处，包内不逐步等GPT。原t019/Claude/付费临床评审等暂停保持；F.5列入收尾待启动项，不能默认为已恢复 |
+| 付费验证范围 | 本轮规划新增真实请求0，不读Key、不启动题世界；W/Y旧清单已收束。补齐功能计划后，额度提案修订为最多40次C、16次coding-B及2响应患者probe，含机制对照/九题未见集，**待审尚未生效**；独立摘要请求不包含。启动时一次性固定实际范围/用途/额度，包内不逐步等GPT。t019例行付费/Claude/付费临床评审等暂停保持，F.5待启动 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | 纯文档规划的git diff --check通过；12份文档的292个本地链接目标存在，职责/依赖/额度/上传范围人工核对。未运行Docker/代码测试或真实账全审。此前Y的固定归档Docker独立复验、容量/Go回归、构包/隔离导入与全部命令只见Y容量复审，不冒充本轮新执行 |
+| 本轮验证 | 纯文档规划的git diff --check通过；修订后13份文档的307个本地链接目标存在，职责/依赖/额度/上传范围人工核对。已补读当前runtime/tools/contract/guard及原执行循环讨论，区分源码已有与候选设计；未运行Docker/代码测试或真实账全审。此前Y的独立复验证据只见Y容量复审，不冒充本轮新执行 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
 | PR 与下一步 | [PR28](https://github.com/xsw932187210-cell/chi-agent/pull/28)、[PR29](https://github.com/xsw932187210-cell/chi-agent/pull/29)、[PR30](https://github.com/xsw932187210-cell/chi-agent/pull/30)均已合并；收尾规划已推送并创建base=main的[PR31](https://github.com/xsw932187210-cell/chi-agent/pull/31)，交用户审核，未自行merge/auto-merge。下一步先按Z0核对外部条件、执行范围和真实额度；其余离线工作可按实际授权推进 |
 | 外部条件复核 | 本轮内置浏览未取得当前Kaggle Rules正文，概览索引与上次Rules解释冲突，强制材料/全量公开评测要求未重新确认；Go官方页面DeepSeek月度ZDR脚注仍只到2026-10-31，CHI非编码用途/十一月条件未确认。见[Z0来源与处置](../openspec/changes/project-completion/design.md#4-z0尽早解决会改变整个计划的外部条件)，不因额度较多自动放行对应载荷 |

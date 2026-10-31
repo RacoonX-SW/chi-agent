@@ -121,6 +121,8 @@
 
 新的项目推进入口为[全项目收尾计划](../openspec/changes/project-completion/design.md)：把“正式输入→包/依赖供应→Harbor→runner→工具/状态→终态/清理→实验与交付”串成整条链，结合每包的真实证据解释哪些能力已验证、哪些仍依赖外部条件。当前仅制定计划，没有新实现、实验或用户实践；既有 Y/W 等源码带读入口继续保留。
 
+功能建设按[F0–F7计划](../openspec/changes/project-completion/capabilities.md)补齐，尤其区分journal执行账与业务工作记忆、claim与公开效果核验、完整历史校验与合法上下文重建。用户本轮指出剩余功能被概括过度；这说明其在审查计划范围，不据此增加源码/压缩/恢复的掌握记录。
+
 下一入口转到[Y容量独立复审](../reviews/payer-evidence-prototype-review.md#codex容量独立复审2026-10-31)及[Y执行契约](../openspec/changes/payer-evidence-prototype/design.md)：沿“工具结果实际进入模型请求→来源登记与同资源比较→释放失效旧槽→保留历史并登记当前/不可引用新记录→核对拒绝旧引用”回读本次正常和满额/超大正文失败路径。64限制当前槽位，旧文本/hash不删除；不能把无法收录新正文当作忽略已知更新的理由。已通过范围仅是离线原型/默认关闭shadow，PR和真实验证由用户另决定；无新增用户复述或实践证据，默认不安排小测。
 
 诊断依据从[X设计](../openspec/changes/payer-offline-diagnosis/design.md)和[X报告](../reviews/payer-offline-diagnosis-review.md)回读：沿“原始公开文件→实际工具观察→下一请求→逐项主张→不可修改建议→终态→检查器”理解一次失败。重点是缺项是否属于必需条件、引用是否支持主张、程序计数是否只是重述模型判断，以及存在性检查与内容正确性的区别；不得按原检查结果补写规则或默认复测。
