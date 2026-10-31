@@ -223,7 +223,7 @@ async def _run_b(journal, secret):
         await client.close()
 
 
-def main(argv=None):
+def main(argv=None, *, development=None):
     args = _parser().parse_args(argv)
     q = journal = None
     b_receipt = None
@@ -308,6 +308,8 @@ def main(argv=None):
                       "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(),
                       "mcp_url_sha256": hashlib.sha256(args.mcp_url.encode()).hexdigest(),
                       "tool_references_sha256": references, "handbook_sha256": _handbook_digest(handbook)}
+            if development is not None and args.role == 'cm':
+                launch['aux_contract'] = 'patient-simulator-v1'
         if args.history_mode == "local":
             if args.local_q_root is None:
                 raise GoFailure("chi_local_history_required")
@@ -339,10 +341,15 @@ def main(argv=None):
         else:
             import httpx
             from go_chi_runtime import run_chi
-            text = asyncio.run(run_chi(journal, secret, role=args.role, instruction=instruction, mcp_url=args.mcp_url,
-                instruction_path=instruction_path, logs_dir=logs_dir, workspace_root=args.workspace_root,
-                handbook_root=args.handbook_root, tool_references=args.tool_reference,
-                lower=httpx.AsyncHTTPTransport(retries=0, verify=True)))
+            async def execute():
+                kwargs = dict(role=args.role, instruction=instruction, mcp_url=args.mcp_url,
+                    instruction_path=instruction_path, logs_dir=logs_dir, workspace_root=args.workspace_root,
+                    handbook_root=args.handbook_root, tool_references=args.tool_reference,
+                    lower=httpx.AsyncHTTPTransport(retries=0, verify=True))
+                if development is None:
+                    return await run_chi(journal, secret, **kwargs)
+                return await development(journal, secret, run_chi, kwargs)
+            text = asyncio.run(execute())
         journal.finish("complete")
         if args.mode == "coding-b":
             journal.prepare_b_receipt()

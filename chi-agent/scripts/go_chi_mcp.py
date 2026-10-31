@@ -116,6 +116,9 @@ class MCPBridge:
         # Serialize dispatch so identical calls cannot race for a call ID and
         # provider relations are checked again immediately before any write.
         async with self.lock:
+            fatal = getattr(self.guard, 'fatal_getter', lambda: None)()
+            if fatal:
+                raise GoFailure(fatal)
             pending = [r for r in self.guard.contract.records
                        if r["name"] == model_name and r["arguments"] == args and r["result"] is None]
             if not pending:

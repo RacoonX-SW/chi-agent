@@ -99,6 +99,7 @@
 | 客户端超时、服务端完成与对账证据 | 按[T规格](../openspec/changes/go-chi-timeout-recovery/design.md)修复用途等待与在途收尾，并检查官方Console导出；已讲解服务端完成、客户端收到决策、用量和各项费用完整性分别取证 | 用户提供官方JSON参与定位；未亲自改代码/运行或复述超时/对账链路，不据提供文件升级为掌握 |
 | 官方启动组件与评分覆盖分层 | 按[U规格](../openspec/changes/harbor-launch-coverage/design.md)核对真实Harbor生命周期及独立runner接点；复用既有终态对应程序检查、内容rubric和任务不适用分支，证据见[U报告](../reviews/harbor-launch-coverage-review.md) | 已解释本地调度器、runner、官方启动器与判分器的职责，以及空证据rubric列表不能证明临床完整性；用户授权范围和顺序，没有新增独立复述/实践证据，不升级为掌握 |
 | 本地患者模拟与角色接线 | [V规格](../openspec/changes/representative-role-baseline/design.md)与[V报告](../reviews/representative-role-baseline-review.md)：原CM状态机、开发适配/broker、嵌套请求账与真实角色导出 | 围绕新功能集中讲解模型职责、消息翻转、锁与未知传播、实际接口和验收层级；用户提出Go替代及官方兼容取舍，尚无新增独立源码复述或运行实践，不升级为掌握 |
+| 统一角色操作者与失败终态 | [W规格](../openspec/changes/unified-role-cm-lifecycle/design.md)与[W报告](../reviews/unified-role-cm-lifecycle-review.md)：实际跨容器同账链、在途跟踪、停止/捕获/清理与三角色开发结果 | 串起单一所有者、独立辅助预算、同批fatal门禁、模型失败与世界静止；payer工程收口但终态不符，CM本地闭环不等于临床/官方通过。用户确定边界，代理执行，无新增用户独立复述/操作证据 |
 
 相关材料：
 
@@ -113,6 +114,8 @@
 - [共同协作约定](../../COLLABORATION.md)
 
 ## 下一次从哪里继续
+
+下一入口转到[W设计](../openspec/changes/unified-role-cm-lifecycle/design.md)和[W报告](../reviews/unified-role-cm-lifecycle-review.md)：从统一角色操作者的资源/身份预检，沿包外runner进入原Go入口与工具循环，再跟踪CM世界如何回调同进程broker。重点理解单一计费所有者、MCP与billing锁、同批fatal停止、模型失败与世界静止的区别，以及终态/清理证据如何决定能否继续下一真实题。真实结果和费用只查W报告；不得把合成跨容器、真实模型业务和官方判分混为一层。
 
 本轮从[V设计](../openspec/changes/representative-role-baseline/design.md)和[V报告](../reviews/representative-role-baseline-review.md)继续：围绕真实开发讲清参赛Agent模型、环境患者模拟器与评分模型的职责；本地显式启用Go患者模拟，官方默认Anthropic与judge保持各自路径。新功能/较大修复完成后集中串起入口、消息role翻转、原CM状态机、嵌套MCP与同一记账所有者的正常/失败路径，模型调整或常规测评不单独开课。当前按开发证据讲解，不因用户提出需求或代理完成测试而记录为掌握。
 
@@ -648,3 +651,13 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 三个工程故障展示了为何要检查整链：底层HTTP延长而外层MCP仍默认5秒；Docker两种禁网参数对localhost解析不同；CM导出没有PA的world_id。分别用真实延迟/容器和严格来源捕获验证，保留原失败，不能通过删检查或补造字段变成成功。超时与读取策略属于自有客户端/SDK策略，不冒充竞赛限时。
 - 验证分层：合成模型配真实SDK/MCP/service验证预算、回滚和失败；真实world只读验证资源、角色、导出/清理；自造患者真实Go往返验证接口。它们共同不等于完整CM解题或官方内容评分。后续应沿统一角色操作者、broker/world生命周期再做单次业务试验，保留全部失败和不确定性，不在trial内人工代选或修结果。
 - 教学与复述：可按“哪个模型负责什么→消息如何往返→谁持状态和账→在哪些失败必须停止→各层测试证明什么”复述。用户目前参与需求和方向选择，实际实现/运行由代理执行；没有新增亲自实践或独立复述证据，不安排默认测验。
+
+### W：从统一操作者理解一次运行怎样收口
+
+- 项目全貌：前面已有参赛Agent循环、世界工具和患者适配器，W把它们接成可审核的一次开发运行。`role_operator.main()`负责资源/包/镜像预检、新世界/网络/输入供应、终态和清理；`role_runner.development()`负责同进程broker与等待收尾；原`go_chi_entry.main()`仍负责身份、公开输入、Q→CHI独占锁、历史/当前B门禁与封存。模型负责从公开任务和工具结果选下一动作，程序负责真实派发、上限、费用和证据，操作者不在trial内代选动作或修答案。
+- 正常调用链：原`run_chi()`/SDK→`ChiGuard`预留/发送/结算→`MCPBridge.invoke()`→官方CM `send_message()`→开发adapter→内部HTTP broker→`AuxiliaryTransport`/同一journal→原service保存患者消息/STOP→SDK接收工具结果后继续。患者模型看的是原prompt、persona与翻转后的对话，参赛Agent只看公开工具结果；同一模型服务不等于同一职责，也没有因此替换评分器。
+- 单一所有者的取舍：runner已持Q→CHI锁，world若另开同账客户端会重复取锁；另开账又会绕过未知/历史控制。broker因此留在runner事件循环中，主HTTP只取billing，MCP派发持锁等待world时，world回调只取billing。辅助请求在同账中单列purpose/parent/会话和费用，不能消耗或伪造Agent剩余反馈。world只持本轮能力token、仅连internal网络；runner才有外网和Go Key，能力文件结束后删除并只留hash。
+- 两条失败路径：患者返回已知用量的错误时，先保留结算，原service回滚本轮消息；broker fatal使共享派发锁内的同批后排MCP/本地写入和下一HTTP都停止。若MCP已完整返回，可保存失败原终态。若客户端取消/断开而服务端仍可能写，包外TrackedServer把状态记为uncertain，不能因runner退出或等够时间就宣称终态稳定；保留缺口并清理，后续真实调用停止。新token未知仍保留pending，不自动套用旧S已批准的留档处置。
+- 等待和收尾：主请求、确认、患者HTTP、MCP、整体执行、broker drain和操作者分别有界；只延长一个HTTP读超时不能修复整链。锁定Uvicorn使用`capture_signals`，旧信号覆盖不生效；W由runner统一接SIGTERM，先收束回调再关闭账。正常和失败结果都分开记录模型/工具错误、捕获错误和清理错误，精确ID不存在才说明资源已清理。
+- 验证与限制：合成模型配真实官方world/SDK/MCP验证角色端点、公开PDF、STOP/回滚、同账与终态链；完整真实历史副本验证来源/旧ack/wire/seal及新未知阻断；当前身份B和固定三题真实模型运行另取证。字段/流程程序检查不能评价临床内容，开发患者条件也不能等同官方Anthropic或官方分数。最终包仍由官方世界正常供应，Harbor正式CLI/完整配送/F.5保留各自未验证边界。
+- 复述提纲：谁接输入并验证→谁持世界、模型和账→一次患者消息怎样往返→失败后哪些动作立即停止→怎样证明世界静止并保存终态→清理证据与结论层级。用户本轮明确范围、预算和停止规则，实际实现与运行由代理完成；没有新增亲自操作或独立源码复述证据，不升级掌握，也不安排默认小测。
