@@ -18,7 +18,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | W独立全量/controller、同批fatal/取消/失败终态、三角色跨容器合成及完整旧账/新未知拒绝通过；实际B/三题及全部结算/终态/清理已核对。CM会话max_turns结束，评估/照护计划完成；程序检查不代替临床内容评审 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [PR26](https://github.com/xsw932187210-cell/chi-agent/pull/26)已由用户合并；W完成，待本轮base=main PR交用户审核。payer后续先据原证据提出有界改进，不在当前清单补跑；内容评审仍暂停，十一月隐私须按实际日期复核 |
+| PR 与下一步 | [PR26](https://github.com/xsw932187210-cell/chi-agent/pull/26)已合并；W已推送并创建base=main的[PR27](https://github.com/xsw932187210-cell/chi-agent/pull/27)，交用户审核，未merge/auto-merge。payer后续先据原证据提出有界改进，当前清单不补跑；内容评审仍暂停，十一月隐私须按实际日期复核 |
 | 未验证项 | payer业务终态改进、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null |
 

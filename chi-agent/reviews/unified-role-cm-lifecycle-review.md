@@ -92,4 +92,6 @@ CM主请求33次为3901866/28392输入/输出tokens，患者辅助10次为47916/
 
 本轮清单已收束，不因payer未达目标再跑一遍。后续可基于原证据提出公开策略改进和有界新规格；t012/t014/t017/t013不重跑，t019例行付费、Claude/Go付费临床评审、正式Harbor CLI/真实Go Trial/完整配送/F.5仍暂停。其他任务/跨任务统计稳定性、Go非编码官方许可、十一月ZDR、1M/长期缓存及controller硬中断/daemon故障均未验证。official_reward=null。
 
-README、OpenSpec、唯一REVIEW_STATE与既有学习账本按职责维护；最终上传检查、提交/推送和PR以实际Git结果续记，文档提交不改变固定实现验收身份。
+README、OpenSpec、唯一REVIEW_STATE与既有学习账本按职责维护；6份文档200条本地链接及代码围栏、git diff --check通过。`evidence/upload-audit.json`核对恰为16项允许源码/测试/职责文档，真实Key值缺席；题文/世界/persona/原评分材料/原始轨迹/数据/vendor未选入，具体期望值只留本地证据。
+
+实现候选ad25699与证据/教学文档e60a790已显式提交并推送 `codex/unified-role-cm-lifecycle`，创建base=main的[PR27](https://github.com/xsw932187210-cell/chi-agent/pull/27)。交用户审核决定合并，主代理未merge/auto-merge；最终链接/清单提交仅为文档，不改变实现验收身份或触发重复B。收尾再次fetch核实origin/main仍是本轮基线。原AGENTS.md、COLLABORATION.md两项既有用户修改完整保留且未纳入PR，不把整个工作区称为干净。
