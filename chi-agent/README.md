@@ -530,7 +530,9 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
   --root runs/releases/go-chi-001 --plan delivery-plan.json
 ```
 
-构建/校验不联网、不读 Key、不启动模型/世界/Trial；相同源码和 commit 产生相同 manifest/SHA256SUMS。通过只证明包字节和 supply 形状，不证明真实干净依赖安装、world/MCP、真实模型、日志/清理或官方任务。设计见 [Z6 契约](openspec/changes/z6-release-package/design.md)，证据见 [阶段报告](reviews/z6-release-package-review.md)。
+构建/校验不联网、不读 Key、不启动模型/世界/Trial；相同源码和 commit 产生相同 manifest/SHA256SUMS。通过只证明包字节和 supply 形状，不证明真实干净依赖安装、world/MCP、真实模型、日志/清理或官方任务。
+
+2026-11-01 已在 Docker/Python 3.12 用两个全新空卷、固定带 hash 的 model/PDF 锁完成安装，并对 release 包做无 Key、禁网 preflight：`identity_verified`，upstream clean，`official_reward=null`。这证明空卷安装/包身份边界，不证明 world/MCP、真实模型或 Trial。命令与 hash 见 [干净复现报告](reviews/z6-clean-repro-review.md)。设计见 [Z6 契约](openspec/changes/z6-release-package/design.md)，离线发布包证据见 [阶段报告](reviews/z6-release-package-review.md)。
 
 ## Go CHI 独立包入口
 

@@ -786,3 +786,9 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 通过覆盖发布包布局/白名单、确定性构建、SHA256 + 内层 Bundle 核验；边界仍是离线发布包/合成构建，没有真实干净依赖安装、Harbor Trial、模型或官方判分。
 - SHA/checksum 能发现构建后篡改，但不是签名；不能证明来源可信、执行许可或真实环境可用。
 - 合并后下一步不是直接跑模型，而是整理真实 Z4/Z6 的一次性审批包：任务/候选/资源/用途/次数/停止条件，以及 Z8 材料结构。
+
+### Z6 干净复现：空卷安装与 preflight
+
+- 实际用两个全新空卷、固定带 hash 的 model/PDF 锁完成安装；release 包在无 Key、禁网容器中跑 preflight，返回 `identity_verified`，upstream clean，`official_reward=null`。这证明“空卷安装 + 包/依赖/上游身份”可复现。
+- 它不证明 world/MCP、真实模型、Harbor Trial、状态持久化、owned 资源清理或官方判分。空卷安装需要网络，但 preflight 不需要；不要把安装成功当成运行授权。
+- 下一步是一次性真实审批包：具体任务/角色、候选/release SHA、资源/镜像 hash、B/C 次数、用途、停止条件和账目边界。用户批准前不启动真实运行。
