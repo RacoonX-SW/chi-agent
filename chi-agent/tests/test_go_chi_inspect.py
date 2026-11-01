@@ -120,7 +120,7 @@ class InspectionTests(unittest.TestCase):
     def test_bad_console_values_or_hash_refused(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'record.json'
-            for key, value in [('model', 'other'), ('stream', True), ('outputTokens', -1), ('attemptCount', 2), ('requestID', 'other')]:
+            for key, value in [('model', 'other'), ('stream', 'yes'), ('outputTokens', -1), ('attemptCount', 2), ('requestID', 'other')]:
                 doc = event(); doc['event'][key] = value; path.write_text(json.dumps(doc))
                 with self.subTest(key=key), self.assertRaisesRegex(GoFailure, 'chi_provider_record_invalid'):
                     inspect_provider(path, hashlib.sha256(path.read_bytes()).hexdigest(), None)
