@@ -851,3 +851,66 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 结论要改：**这是单次抖动，不是系统性差异**。t030 短链上 off/on 也完全一致（23/28）。本组数据不支持“能力包带来可测收益”。
 - 教训：n=1 的失败很容易被讲成机制故事；先重复，再解释。报告里必须给分布和重复次数，而不是挑一次最戏剧性的结果。
 - 另外记录一个工具缺口：`payer-010` 是 `chi_transport_error`（Console 无该 session 记录，请求未到服务端），但 `acknowledge_unsettled` 只接受 `chi_timeout`，所以该 pending 无法走既有对账路径；本轮用新 state 继续，不清旧账。
+
+## 教学：payer 与 CM 的一次真实运行怎么走
+
+日期：2026-11-02。依据当前 `main` 代码与 t011/t027/t030、CM-003/CM-004 的真实运行记录；不引用隐藏期望。
+
+### 共同骨架（三角色都一样）
+
+1. `role_operator` 校验配置：bundle SHA、runtime identity、资源 manifest SHA、state 目录、dev 文件哈希；启动 world 容器（按角色端口）和 runner 容器。
+2. `role_runner live` → `go_chi_entry live`：核对 bundle identity、要求同 identity 的 coding-B 收据、检查 `state.pending/halted` 为空。
+3. `run_chi()` 建立 MCP 服务器 + 本地工具 + `ChiGuard`（校验路由/请求体/历史/每批 tool_calls）+ `ChiJournal`（reserve → settle，失败记 pending）。
+4. 模型每一步：读工具结果 → 调下一个工具 → 直到结束或失败；所有请求/响应/工具结果都落 `wire-evidence`/`tool-evidence`。
+
+### payer：一条 stage 流水线
+
+工具面来自官方 `payer_agent_tool_names()`，命名空间是：
+
+- `payer_intake_hub`：队列、取案、列文档、保存 header/诊断/请求方/明细、`confirm_decisions`
+- `triage`：`get`、`calculate_sla`、`check_gold_card`、`set_disposition`、`route_case`
+- `review`：护士与 MD 两条线（`get_nurse_review_data`、`save_criteria_evaluation`、`submit_nurse_case_recommendation`；`get_md_review_data`、`save_md_review`、`submit_md_case_decision`）
+- `determination`：`get_summary`（汇总上游来源）、`finalize`（写终态）
+- `payer_letter_center`：按结局生成 approval/partial/denial/pend/notification，`audit_completeness`、`deliver`
+- `p2p` / `p2p_session`：排期与会话记录
+
+真实 t011 的路径：intake → triage → nurse 建议 → **MD 决定** → `determination.finalize` → approval 信 → deliver → 回读。终态 26/28；剩下两项由隐藏 expectations 定义，公开信息推不出来。
+
+关键控制点：
+- `determination.source` 必须指向真实存在的上游记录（护士建议/MD 决定/intake），不能凭空写。
+- 信件类型必须与结局匹配；`audit_completeness` 是公开的完整性检查工具。
+- 失败路径：阶段漏步（旧 guidance 的坑）、transport/超时（pending 阻断）、输出截断（偶发）。
+
+### CM：自己 + 一个受控患者通道
+
+CM 的工具面是固定 16 个 `cm_*`：
+
+- `cm_intake`：队列、取转诊、开案、退案
+- `cm_chart`：读病历、提交 chart review
+- `cm_outreach`：开始通话、发消息、读 transcript、结束通话
+- `cm_assessment`：开始评估、分段保存（clinical/medication/behavioral/sdoh）、完成评估
+- `cm_care_plan`：建草稿、保存、finalize
+
+和 payer 最大的不同是**患者是活的**：模型调用 `cm_outreach.send_message` 时，`PatientBroker` 会用同一个模型 API 另开一条会话（`purpose=patient_simulator`），把“患者”的回复作为工具结果返回。
+
+工程约束：
+- 患者通道有独立预算（每次 CM 运行最多 10 条），但计入同一账本；
+- broker 绑定 parent call id，乱序/伪造/重复都会拒绝；
+- 需要 `/run/chi-capability` 能力文件（开发模拟器），官方模拟器兼容未验证；
+- 患者说 STOP 或不同意入组时，Agent 必须停在 outreach，不能继续评估——CM-003 正是这样停的，这是**合规路径**。
+
+真实 CM-004 的路径：开案 → chart review → 外呼（患者同意）→ 四段评估 → care plan 草稿 → save → finalize → 回读，14/14 检查通过。
+
+### 两者对照
+
+| 维度 | payer | CM |
+| --- | --- | --- |
+| 业务形态 | 单人流水线，阶段推进 | 有交互对象，需处理同意/拒绝 |
+| 外部依赖 | 只有 world | world + 开发患者 broker |
+| 主要失败模式 | 阶段漏步、信件/终态不匹配 | 同意未取得、评估前置条件、STOP |
+| 检查项 | 28 项 | 14 项 |
+| 真实证据 | t011 26/28、t027 21/22、t030 23/28 | CM-003 停在 outreach、CM-004 14/14 |
+
+### 一句话总结
+
+payer 是“按阶段把决定做对、把信发对”；CM 是“先拿到同意，再按四段做评估、出计划”。两者共用同一套请求/账目/证据骨架，差别在工具面和是否需要与患者交互。
