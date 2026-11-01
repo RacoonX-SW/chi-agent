@@ -28,5 +28,6 @@
 ## 测试
 
 - 策略不变量：`main_read_seconds >= 180`、`main_io_seconds > main_read_seconds`、confirmation > main、main_io < chi_admission、operator < operator_max。
+- 配置一致性：`profiles/go-chi-entry.json` 必须与 `go_chi_entry.CONFIG` 全等；测试不得打桩 `_identity`，否则配置漂移不可见。
 - 现有超时测试改为读取 `TIME_POLICY`，不再写死 60/360，避免策略调整后测试与实现脱节。
 - 既有 `chi_timeout` 路径测试（墙钟、取消、pending 保留）不变。

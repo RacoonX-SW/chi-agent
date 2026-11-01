@@ -216,7 +216,8 @@ async def _run_b(journal, secret):
     client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",
         default_headers={"User-Agent": "chi-agent", "X-OpenCode-Session": session}, max_retries=0,
         http_client=httpx.AsyncClient(transport=guard, trust_env=False, follow_redirects=False,
-                                      timeout=httpx.Timeout(60.0, connect=10.0)))
+                                      timeout=httpx.Timeout(float(TIME_POLICY['main_read_seconds']),
+                                                            connect=float(TIME_POLICY['connect_seconds']))))
     try:
         return await run_coding_b(client, guard, tools)
     finally:

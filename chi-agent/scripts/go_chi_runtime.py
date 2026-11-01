@@ -10,6 +10,7 @@ from opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as 
                                   _matches_patch, _same_route_reasoning)
 from model_runner_adapter import _patch_empty_history_compatibility
 from go_chi_context import DEFAULT_BUDGET, check_budget
+from go_chi_policy import TIME_POLICY
 from go_chi_guidance import digest as guidance_digest
 from go_chi_state import TaskState
 
@@ -212,7 +213,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",
                 default_headers={"User-Agent": "chi-agent", "X-OpenCode-Session": session}, max_retries=0,
                 http_client=httpx.AsyncClient(transport=guard, trust_env=False, follow_redirects=False,
-                                              timeout=httpx.Timeout(60.0, connect=10.0)))
+                                              timeout=httpx.Timeout(float(TIME_POLICY['main_read_seconds']),
+                                                                    connect=float(TIME_POLICY['connect_seconds']))))
             holder["client"] = client
             class BudgetModel(OpenAIChatCompletionsModel):
                 async def get_response(self, system_instructions, *args, **kwargs):
