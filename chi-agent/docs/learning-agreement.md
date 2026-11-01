@@ -772,3 +772,11 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - PR36（Z1）已合入 main；本 F7 分支合并最新 main 后，需重跑全量（预计 461）再合并。这是分支依赖，不是代码质量结论。
 - 面试可讲：为什么 caller-owned、为什么 install 不联网、delivery check 能拦哪些缺件/错凭据，以及“检查通过”为什么不等于真实 Trial 通过。
 - 下一讲解入口：Z4/Z6 的真实 Trial 供应链（world 镜像、state/log 持久化、owned 资源清理）与用户一次性运行批准包。
+
+### Z6：发布包是“字节身份”，不是“真实启动证明”
+
+- 这层 release 把已有内层 bundle 包起来：`package/` + `release-manifest.json` + `SHA256SUMS` + supply plan 模板。manifest 绑定 source commit、bundle manifest、entry config、依赖锁和每个文件 hash；顶层只允许这四项，包内只允许 bundle 文件，data/vendor/tests/runs/.env/符号链接都拒绝。
+- 确定性构建不写时间戳/宿主路径/凭据；相同源码和 commit 产生相同 manifest/SHA256SUMS。SHA/checksum 能发现构建后篡改，但不是签名，不能证明来源可信或获得执行许可。
+- `verify` 还会可选调用 Z1 的 `check_plan()`，确认运行环境供应；但两者都通过仍不等于真实干净安装、world/MCP、真实模型、日志/清理或官方任务。
+- 验证：5 个 release 测试、全量 466 tests（2 个既有环境错误、8 skipped）；真实 Z6/Z4 未运行。
+- 下一讲解入口：真实 Z4/Z6 的干净环境/Trial 审批包，以及 Z8 的 Writeup/技术报告/交付清单。

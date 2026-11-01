@@ -511,6 +511,27 @@ docker run --rm --network none -v "$PWD:/workspace:ro" \
 
 这仍只是离线供应准入；真实 Harbor Trial、world 镜像供应、清理和真实模型/官方任务仍在 Z4/Z6。设计见 [Z1 契约](openspec/changes/go-chi-delivery-supply/design.md)，证据见 [阶段报告](reviews/go-chi-delivery-supply-review.md)。
 
+## Z6 离线发布包与干净环境校验
+
+`go_chi_release.py` 在现有 Go bundle 外加一层可复核的发布包：`package/`、`release-manifest.json`、`SHA256SUMS`、`supply-plan.example.json`。它绑定源码 commit、内层 bundle manifest、依赖锁和每个文件 hash，拒绝 data/vendor/tests/runs/.env/符号链接/额外文件。
+
+```bash
+# 构建；target 必须尚不存在
+docker run --rm --network none -v "$PWD:/workspace:rw" \
+  -e PYTHONPATH=/workspace/scripts -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python scripts/go_chi_release.py build \
+  --target runs/releases/go-chi-001 --source-root /workspace \
+  --source-commit "$(git rev-parse HEAD)"
+
+# 只读校验；可选同时校验 caller-owned supply plan
+docker run --rm --network none -v "$PWD:/workspace:rw" \
+  -e PYTHONPATH=/workspace/scripts -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python scripts/go_chi_release.py verify \
+  --root runs/releases/go-chi-001 --plan delivery-plan.json
+```
+
+构建/校验不联网、不读 Key、不启动模型/世界/Trial；相同源码和 commit 产生相同 manifest/SHA256SUMS。通过只证明包字节和 supply 形状，不证明真实干净依赖安装、world/MCP、真实模型、日志/清理或官方任务。设计见 [Z6 契约](openspec/changes/z6-release-package/design.md)，证据见 [阶段报告](reviews/z6-release-package-review.md)。
+
 ## Go CHI 独立包入口
 
 `scripts/go_chi_entry.py` 接收外部 instruction、一个角色 MCP、日志目录和 evaluation/task/attempt/run 身份；它只在经过 manifest 校验的导出包内运行。原 `opencode_go_provider.py` 继续是固定 coding 探针，原 `evaluation_entry.py` 的 live 拒绝保持。实际已验证范围、固定候选和限制只查 [审核状态](reviews/REVIEW_STATE.md)。
