@@ -24,7 +24,7 @@
 
 - [x] 15 个合成测试通过：manifest 字段/配对/比较、全分母、跳过/阻断、缺日志、缺用量、候选不一致、重复/计划外、official、by_role、CLI。
 - [x] 全量 Docker：451 tests，2 个既有环境错误（缺 `anthropic`），8 skipped。
-- [ ] 外部 Gemini 复审 `fd617c3`。
+- [x] 外部 Gemini 复审 `fd617c3`：通过（LGTM；限离线契约/Docker 合成，无真实任务/模型/判分）。
 - [ ] Z4/Z5 用真实 manifest/record 填充；需用户批准任务/次数/资源。
 
 ## 明确不做
