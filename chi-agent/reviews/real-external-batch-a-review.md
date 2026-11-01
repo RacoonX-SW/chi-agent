@@ -230,3 +230,35 @@ release-v3：bundle `6f6e71d8…`、identity `b936b7…`、state-v3。
 修复：`delivered_invariants()` 作为唯一来源，`guidance()` 与 `digest()` 共用；新 digest `db66857e…`；新增测试断言 digest 覆盖该行。
 
 不重跑 CM 004 的理由：行为未变，仅摘要覆盖面修正；重跑只会重复同一业务路径并消耗额度。CM 004 的证据保留，并以本段说明其 `guidance_sha256` 的已知含义。
+
+## 13. release-v6：payer 阶段遵从修复后重跑（2026-11-01）
+
+候选 `ad6e8f7`（payer guidance 要求执行 instruction 点名的 MD 阶段）复审通过，构建 release-v6：
+
+- bundle `7206012a…`、identity `55b55cd7…`、state 根 `state-v6`
+- B6 complete：3 请求，1,387 入 / 126 出
+
+### payer 004
+
+`real-ext-payer-004` complete：35 请求，6,643,314 入 / 27,239 出，全部 settled，`pending=null`，清理确认。
+
+确定性检查从 24 true / 4 false 变为 **26 true / 2 false**：
+
+| 检查 | payer 003 | payer 004 |
+| --- | --- | --- |
+| `md.audit` | false | **true** |
+| `md.decision_exists` | false | **true** |
+| `outcome.letter_types` | false | false |
+| `outcome.target_status` | false | false |
+
+终态：case `approved`；MD 决定 `MCD-570a69e8`（approve）；determination 来源 `md_decision`；已生成并投递 approval 信；另外生成过一次 notification。阶段遵从修复达到预期：模型这次真的走了 MD 分支，而不是拿护士建议直接结案。
+
+### 剩余两项的含义
+
+`outcome.letter_types` 与 `outcome.target_status` 由任务 expectations 定义的终态/信件集合决定。公开 instruction 只要求“drive … to final determination”，没有给出该题期望的终态与信件清单；继续对齐只能读隐藏 expectations，属于既定禁止的调参边界。
+
+因此本项按“26/28、剩余两项不在公开可推断范围”收口，不再为此改 Agent。
+
+### 另一个观察
+
+`local-claim_done` 被拒两次：F5 要求写后回读业务记录，Agent 却去读本地文件，所以完成声明一直未获准。这是可改进的指导点（回读应通过 MCP 读业务状态，而不是读工作区文件），但不影响本次终态证据。

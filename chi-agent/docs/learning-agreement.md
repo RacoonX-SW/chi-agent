@@ -830,3 +830,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - CM 003 也 `complete`，结局是“患者不同意入组 → 不做评估 → 停在 outreach_complete”。这是合规路径，所以 `cm.assessment.record_exists` 等为 false 属于预期，不能当工程失败。
 - CM 同时暴露接线缺口：`local-fs-write` 只接受 `<case>/<provider|payer|cm|shared>/file`，但工具描述没写；`<case>/shared/...` 父目录不存在时也不创建。模型两次猜 `care-manager/`、一次撞到缺目录，承诺的书面材料没落盘。这是典型的“契约在代码里、不在工具说明里”的问题。
 - 教训：真实跑的“完成”只说明链路跑通；业务终态、合规路径和工具可用性要分别看，不能用一个 status 概括。
+
+### 指导文案也能改变业务结果
+
+- payer 003 的 4 项 false 不是工具缺失，而是计划漏步：公开 instruction 明确要求“drive clinical review, MD decision … through to final determination”，模型只读了 MD 数据就结案。
+- 把 guidance 从“MD 不是必经步骤”改成“MD 不是必经，但 instruction 点名时必须执行，提前收口要记录规则依据”后，payer 004 的 MD audit 与 MD 决定立刻转 true——说明阶段指导是真实生效的控制点。
+- 剩余两项 `letter_types` / `target_status` 由任务 expectations 定义，公开 instruction 推不出来；继续对齐就得读隐藏期望，那是禁止的调参边界。所以停在 26/28，并把原因写清楚。
+- 另一个细节：F5 要求写后回读业务记录，模型却去读本地文件，`local-claim_done` 两次被拒。这批证据说明“完成声明”门禁在工作，但指导需要说明回读要走 MCP 业务状态。
