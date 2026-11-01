@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | **真实批次A已启动并触发未知用量停止**：B `real-ext-b-002` 成功（3请求/1406入/123出/费用完整）；provider t032 C `real-ext-provider-001` 在17请求后 `chi_timeout`，round 17 pending/usage unknown；operator清理与world quiescence已确认，业务仅部分检查。payer/CM/Y未运行；**不自动重试、不换账根**。证据见[真实批次A记录](real-external-batch-a-review.md)。Z0 Rules已读（75公开题、公开结果可选、三材料、11/15截止、模拟数据）；Go隐私按用户决定不再确认 |
+| 当前任务 | **真实批次A：B成功，provider C超时但提供方记录已对上**。B `real-ext-b-002` 成功；provider `real-ext-provider-001` round17 对应 Console `01a196e9…`：HTTP200、369422入/8192出、$0.0603285、67.7s；content-length/session hash 与 journal 一致。本地 `pending` 仍未结算；payer/CM/Y未运行。需决定：受审external结算工具，或保持pending按未完成收口。证据见[真实批次A记录](real-external-batch-a-review.md) |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F6、F7、Z1均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | Z6`ccdf8f2`经外部Gemini离线复审通过（LGTM）：发布包布局/白名单、确定性构建、SHA256+内层Bundle核验；Z1`a9965e5`、F7`fd617c3`、F4–F6`efc9019`、F0–F3`5c1fa51`此前均通过。所有结论限静态/契约/Docker合成，无真实Trial/模型/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
@@ -19,10 +19,10 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | Docker/Python3.12全量`466 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；Z6 release定向5 tests、外部Gemini复审通过。另用两个全新空卷从固定锁安装model/PDF依赖，release包无Key禁网preflight返回`identity_verified`（`identity_sha256=d4651a…`、upstream clean、`official_reward=null`）。无world/模型/Trial/判分；详见[干净复现报告](z6-clean-repro-review.md) |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR28–PR37均已合并。external操作者`codex/real-external-operator`（`0fd2029`）与Z6/真实证据`codex/z6-clean-repro`待PR。批次A已触发pending：需用户提供round17 Console记录或明确处置；**在此之前不跑payer/CM/Y、不重试、不换账根**。bundle清单修复`81a3b15`需随下一PR合并。 |
+| PR 与下一步 | PR28–PR37均已合并。external操作者`codex/real-external-operator`（`0fd2029`）与Z6/真实证据`codex/z6-clean-repro`待PR。round17提供方记录已对上，但本地pending未结算；需用户决定：A 受审external结算工具，或 B 保持pending按未完成收口。**在此之前不跑payer/CM/Y、不重试、不换账根**。bundle清单修复`81a3b15`随下一PR。 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
-| 真实运行 | W历史保留。2026-11-01 external批次A：B `real-ext-b-002` 成功（3请求/1406入/123出/费用完整）；provider t032 `real-ext-provider-001` 17请求后`chi_timeout`，round17 pending/usage unknown；runner清理与world quiescence已确认，业务部分检查。payer/CM/Y未运行，0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
+| 真实运行 | W历史保留。2026-11-01 external批次A：B `real-ext-b-002` 成功（3请求/1406入/123出/费用完整）；provider `real-ext-provider-001` 17请求后客户端60s超时，Console匹配 round17 `01a196e9…` 显示 HTTP200/369422入/8192出/$0.0603285/67.7s；本地pending未结算。清理与world quiescence确认，业务部分检查。payer/CM/Y未运行，0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
 
 接续材料：
 

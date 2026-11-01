@@ -44,6 +44,19 @@ B 收据已写入 `state-v2`；这是真实 Go 调用，不是合成。
 
 失败发生在 16 次大上下文请求之后（第 15/16 次已约 345k/365k input tokens）；第 17 次等待响应超时。仅证明调用方没有及时取得结果，**不能证明服务端未处理**。
 
+## 3.1 round 17 的提供方记录（2026-11-01 补核）
+
+用户提供的 OpenCode Console 日志已精确对上 round 17：
+
+- request ID：`01a196e9-2bf4-7c19-a984-fba43d6b9b21`
+- 时间：19:40:25.972–19:41:33.700（本地），duration 67,728 ms
+- 状态：HTTP 200 / succeeded
+- input 369,422 / output 8,192 / reasoning 8,192 / cache 0；cost 0.0603285 USD
+- content-length 1,274,867，等于 journal dispatch 的 body_bytes
+- session `chi-22a92…` 的 SHA-256 等于 dispatch session_sha256 `7bc5b6…`
+
+因此：**服务端实际执行并返回了 200，客户端的 60 秒读超时先发生**。本地 `pending` 是客户端未收全结果的账目状态，不是“服务端未知”。但本报告不自行把 pending 改成 settled；需要受审的结算/处置路径。
+
 ## 4. 为什么停止
 
 `chi-accounting.json` 的 `pending` 指向 provider round 17，usage/response 未知。按现行规则：
@@ -63,7 +76,8 @@ B 收据已写入 `state-v2`；这是真实 Go 调用，不是合成。
 
 ## 6. 下一步（未执行）
 
-1. 用户提供 round 17 的 OpenCode Console 单请求导出（或明确不提供）；离线核对 request/usage，不重发。
-2. 若可结算，评估是否解除该 unknown；若不可结算，保持停止并把批次 A 记为未完成。
-3. 不启动 payer/CM/Y，直到 unknown 有明确处置。
-4. 若要修超时/上下文策略，另开候选、离线测试、Gemini 复审，再申请新 attempt；不能把本次 timeout 自动当重试理由。
+1. 提供方记录已证明 round 17 服务端 200、usage/cost 已知；但本地 `pending` 仍未结算。
+2. 选项 A：新增**受审的 external pending 结算工具**，严格校验 session/body/request ID，保留原账原字节并追加事件；经 Gemini 复审后结算，再评估 payer/CM/Y 新 attempt。
+3. 选项 B：不结算，批次 A 记为未完成，保持 pending，停止真实 C，转 Z8 材料/离线工作。
+4. 无论哪项，都不能直接编辑 `chi-accounting.json`、重发 round 17 或换账根。
+5. 超时本身暴露 F4/timeout 策略问题：369k input + 8192 output 花了 67.7s，超过 60s read；需独立候选/复审，不自动重试。
