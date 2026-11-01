@@ -743,17 +743,32 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 这次通过不改变“自动压缩不采用”的决策；压缩设计按讨论搁置，以后单独做确定性检查点/可选摘要变更。
 - 面试可讲：预算为什么在 dispatch 前拦、完成报告为什么只做机械验证、未知写为什么先阻断再只读查证、停滞为什么只给信号/有限阻断而不自动重试。具体代码走读可参照 [F0–F3 走读](f0-f3-walkthrough.md) 的同一方式补 F4–F6。
 
+### F7：实验清单、检查适用性与全分母
+
+- F7 的第一原则是“先冻结再跑”：manifest 固定 candidate（源码/包/模型/端点/模拟器/能力）、任务与资源 hash、F1–F6 的 off/on 或 `na`、请求/输出上限、检查项和停止条件。off/on 两臂必须同任务集合与 limits，否则不是单变量对照；不可独立切换的机制用 `na`+reason，不能伪造 on 臂。
+- 汇总不输出 success rate。它只给全分母计数：planned/attempted/completed/failed/skipped/blocked/not_run/missing_evidence；checks 的 pass/fail/na/not_run；business/content；usage 的 known sum 与 missing；official reward 的 present/absent。跳过、未运行、NA、缺日志都不补成 pass，缺用量不补 0。
+- 失败历史不可覆盖：同一计划单元只能一条 record，重试要预先登记新 attempt；计划外/重复/候选不一致的记录直接拒绝。off/on 只并列展示，不自动计算“某机制有效”。
+- 验证：15 个合成测试通过，全量 451 tests（2 个既有环境错误、8 skipped）；真实 Z4/Z5 的 manifest/record、真实检查器和费用字段仍未接入。
+- 下一讲解入口：Z1 正式配送的离线准备（bundle/依赖/资源/state 供应责任），再回到真实运行的批准包。
+
+### F7 复审通过的含义
+
+- 通过覆盖 manifest 冻结、record 完整性、全分母 summary 和 CLI；边界仍是离线契约/Docker 合成，没有真实任务、模型、患者模拟器或官方判分。
+- 这证明的是“实验工具不会把跳过/阻断/缺证据算成通过，也不会合成官方分数”，不证明某个机制在真实任务上有效。
+- Z4/Z5 真正运行前，仍需把真实检查器、日志/用量字段和任务清单映射进 manifest/record，并由用户批准任务/次数/资源。
+- 下一讲解入口：Z1 正式配送离线准备；重点是 bundle/依赖/资源/state/B 的供应责任，而不是 stock agent 自动识别。
+
 ### Z1：正式配送的供应责任与 install no-op
 
 - Z1 的核心不是“写一个安装脚本”，而是明确谁在什么时候供应什么：导出包、固定 model/PDF 依赖、官方 vendor、公开 instruction/handbook/tool refs、单角色 MCP、可写 state/logs 都由调用方/操作者在 world 或启动环境中提供；runner 只拿 `OPENCODE_API_KEY`。`GoChiHarness.install()` 明确不联网、不安装，真正闸门是 `run()` 里的无 Key preflight。
 - `go_chi_delivery.py` 把这些条件变成启动前可检查的 plan：bundle manifest/SHA、依赖目录、vendor 源码、资源普通文件/非链接、MCP 角色端口、logs 新目录、state 父目录、local/external history、凭据白名单。失败返回稳定 code，不自动下载或重试。
 - 为什么用 caller-owned：官方世界镜像/依赖卷/授权资源本来就在调用方边界内，自动联网安装会引入不可审计网络、版本漂移和凭据混入风险；no-op 本身不是安装能力，必须配 preflight 和 supply check。
-- 验证：定向 16 tests、全量 446 tests（2 个既有环境错误、8 skipped）；真实 Harbor Trial、world 镜像、依赖锁逐包校验、清理和官方任务仍未验证。本轮 main 尚未包含 F7，合并后需 rebase 重跑。
+- 验证：Z1 定向 16 tests、基线全量 446 tests（2 个既有环境错误、8 skipped）；与本 F7 分支合并后需重跑全量（预计 461）。真实 Harbor Trial、world 镜像、依赖锁逐包校验、清理和官方任务仍未验证。
 - 下一讲解入口：Z4/Z6 的真实 Trial 供应链（world 镜像、state/log 持久化、owned 资源清理）与用户一次性运行批准包。
 
 ### Z1 复审通过的含义
 
 - 通过覆盖供应契约、静态检查器、Harness 闸门（install no-op + run 前无 Key 预检）；边界仍是离线静态/契约与 Docker 合成，没有真实 Trial、world 镜像、模型或官方判分。
-- 当前 Z1 分支基于 `4ade699`，不含 F7；复审建议先合并 PR35，再 rebase 到最新 main 并重跑全量（预计 461 tests），之后才创建/合并 Z1 PR。这是分支依赖，不是代码质量结论。
+- PR36（Z1）已合入 main；本 F7 分支合并最新 main 后，需重跑全量（预计 461）再合并。这是分支依赖，不是代码质量结论。
 - 面试可讲：为什么 caller-owned、为什么 install 不联网、delivery check 能拦哪些缺件/错凭据，以及“检查通过”为什么不等于真实 Trial 通过。
 - 下一讲解入口：Z4/Z6 的真实 Trial 供应链（world 镜像、state/log 持久化、owned 资源清理）与用户一次性运行批准包。

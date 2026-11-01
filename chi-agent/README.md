@@ -471,6 +471,29 @@ F6 对 MCP mutation 的 dispatch 异常返回 `UNKNOWN_WRITE_EFFECT: <code>`，�
 
 这些能力仍只在合成 SDK/MCP 边界验证；真实 tokenizer、真实超时副作用、真实模型行为和官方评分未验证。设计与证据见 [F4–F6 契约](openspec/changes/agent-capabilities-f4-f6/design.md) 和 [阶段报告](reviews/f4-f6-context-completion-review.md)。
 
+## F7 实验清单与全分母汇总
+
+`scripts/experiment_manifest.py` 与 `scripts/experiment_summary.py` 独立于被测 Agent，先冻结实验条件，再汇总记录。
+
+```bash
+# 校验/冻结 manifest；输出规范 JSON 与 SHA-256
+docker run --rm --network none -v "$PWD:/workspace:ro" \
+  -e PYTHONPATH=/workspace/scripts -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python scripts/experiment_manifest.py validate --manifest campaign.json
+docker run --rm --network none -v "$PWD:/workspace:ro" \
+  -e PYTHONPATH=/workspace/scripts -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python scripts/experiment_manifest.py freeze --manifest campaign.json
+
+# 汇总 records（JSON 数组或 .jsonl）
+docker run --rm --network none -v "$PWD:/workspace:ro" \
+  -e PYTHONPATH=/workspace/scripts -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python scripts/experiment_summary.py summarize \
+  --manifest campaign.json --records records.json
+```
+
+manifest 固定 candidate（source/bundle/model/endpoint/simulator/capabilities）、F1–F6 机制的 off/on 或 `na`、任务/角色/attempt、资源 hash、世界镜像、检查项、请求/输出上限和停止条件。off/on 两臂必须同任务集合与 limits；不可独立切换的机制用 `na`+reason。汇总只给全分母计数：completed/failed/skipped/blocked/not_run/missing_evidence、checks pass/fail/na/not_run、business/content、usage known/missing、official present/absent；不输出 success rate、不补 0、不合成官方分数，也不计算某项机制的因果收益。
+
+当前只有合成记录测试（15 个）；真实 Z4/Z5 运行仍需用户批准任务/次数/资源。设计见 [F7 契约](openspec/changes/experiment-harness/design.md)，证据见 [阶段报告](reviews/experiment-harness-review.md)。
 ## Z1 正式配送供应检查
 
 Go CHI 采用 **caller-owned 供应**：导出包、固定 model/PDF 依赖、官方 vendor、公开 instruction/handbook/tool refs、单角色 MCP、可写 state/logs 由调用方/操作者在 world 镜像或启动环境中提供；runner 只接收 `OPENCODE_API_KEY`。`GoChiHarness.install()` 明确为无网络 no-op，`run()` 的无 Key 预检才是实际闸门。
