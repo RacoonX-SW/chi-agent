@@ -162,3 +162,40 @@ release-v3：bundle `6f6e71d8…`、identity `b936b7…`、state-v3。
 - 设计候选：阶段性工具过滤 + 可恢复 `tool_not_available` 错误语义；读超时改为配置项并做合成慢响应测试。
 - 两处均先离线测试、复审，再决定是否值得新 release + 新 B + 新 attempt；Y 还需第二个 payer 任务公开资源。
 - 不重试 provider/payer/CM，不换账根，不伪造 settled。
+
+## 11. release-v4：修复后重跑 payer / CM（2026-11-01）
+
+候选 `db7d402`（`index` 兼容 + 主读窗口 240/300 + profile 同步）经外部 Gemini 两轮复审通过，与真实证据分支合并为 `41b8edf`，构建 release-v4：
+
+- bundle `55d7393d7900a2bd2d5b3eea95bf2c0708ce2da5c2df70bf0942a044e2c0ab84`
+- identity `f7d11712eb9de79e2ddaec9513e4338bba9d1a32f0335b1f45fa41bfe523fb26`
+- 无 Key 禁网 preflight：`identity_verified`，upstream clean
+- state 根 `runs/real-external/state-v4`（新身份，不复用 v2/v3）
+
+### B4
+
+`real-ext-b-004` complete：3 请求，1,378 入 / 118 出，费用完整（清单 $0.0001646，allowance $0.00009876，charged 0）。
+
+### payer 003
+
+`real-ext-payer-003` **complete**，无 safe_error_code：
+
+- 37 请求、138 工具事件、579s；7,474,812 入 / 46,618 出；请求全部 settled，`pending=null`
+- 清理确认（world_quiescence confirmed），runner 退出码 0
+- 确定性检查：`md.audit`、`md.decision_exists`、`outcome.letter_types`、`outcome.target_status` 为 false —— **与 W 批次完全相同的一组**，说明这是稳定的业务终态差距，不是本次修复引入
+- F5 回读状态：`completion.verification=blocked`、`reason=completion_readback_required:<call>`，即最后一次写后没有回读
+
+### CM 003
+
+`real-ext-cm-003` **complete**，不再超时：
+
+- 23 次主请求 + 6 次患者模拟 = 29 条请求；2,333,183 入 / 26,024 出；359s；72 工具事件
+- 清理确认，`pending=null`
+- 业务结局：患者在电话中**没有给出入组同意**（要求先看书面材料、约周二回电），Agent 依据 CM-OUTREACH-001 §3.3/§3.4 拒绝开始 assessment，如实结束在 `outreach_complete`。因此 `cm.assessment.record_exists`、`cm.care_plan.record_exists`、`cm.cross_stage.audit_actions`、`cm.cross_stage.target_status` 为 false 是**预期路径**，不是工程失败
+- 同时暴露一个真实可用性缺陷：`local-fs-write` 三次被拒。两次是模型把目录写成 `<case>/care-manager/...`（允许的是 `<case>/cm|payer|provider|shared>/...`，工具描述没有写明），一次是 `<case>/shared/...` 因父目录不存在返回 `workspace parent unavailable`（工具不建目录）。结果是 Agent 承诺的书面材料没能落盘
+
+### 判断
+
+- 两个修复达到目的：`index` 字段不再杀运行；105k/370k 上下文的长生成不再因 60s 读超时中断
+- payer 的业务终态差距与 W 一致，需要单独分析（不是本次改动造成）；CM 的 false 检查来自合规的“未同意即不评估”路径
+- 新发现的工作区写路径问题属于 F2/F1 接线缺口，应在下一候选修复（写明 `<case>/<role>` 约定 + 允许写时创建父目录），再决定是否值得新 release 重跑

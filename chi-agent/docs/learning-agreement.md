@@ -822,3 +822,11 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 读窗口改在 `go_chi_policy.TIME_POLICY`，但 `profiles/go-chi-entry.json` 是同一份配置的文本副本；`go_chi_entry._identity()` 会做全等比较，所以没同步时任何真实入口都会 `chi_config_invalid`。
 - 单测没抓到，是因为既有测试用 `patch.object(entry, "_identity")` 直接绕过了这段比较。教训：凡是“运行时读取的真实文件 + 内存常量”双份存在，必须有一条不打桩的等价性测试；打桩只能测调用方行为，不能证明配置一致。
 - 修复后复跑：`config_matches 240 300`；全量 472 tests（2 个既有环境错误、8 skipped）。外部复审仍以修复后的新提交为准。
+
+### v4 重跑：两个修复都生效，但业务终态各有原因
+
+- payer 003 第一次在真实环境 `complete`：37 请求、138 工具事件、579s，全部结算。说明 `index` 兼容和 240s 读窗口解决了“跑不完”的问题。
+- 但 payer 的四项检查（MD audit/决定、信件类型、目标状态）仍为 false，且与 10/31 的 W 批次**完全一致**。这说明它是稳定的业务差距，不是这次修复或随机波动造成的；要改需要单独分析 payer 终态逻辑，不能靠重跑碰运气。
+- CM 003 也 `complete`，结局是“患者不同意入组 → 不做评估 → 停在 outreach_complete”。这是合规路径，所以 `cm.assessment.record_exists` 等为 false 属于预期，不能当工程失败。
+- CM 同时暴露接线缺口：`local-fs-write` 只接受 `<case>/<provider|payer|cm|shared>/file`，但工具描述没写；`<case>/shared/...` 父目录不存在时也不创建。模型两次猜 `care-manager/`、一次撞到缺目录，承诺的书面材料没落盘。这是典型的“契约在代码里、不在工具说明里”的问题。
+- 教训：真实跑的“完成”只说明链路跑通；业务终态、合规路径和工具可用性要分别看，不能用一个 status 概括。
