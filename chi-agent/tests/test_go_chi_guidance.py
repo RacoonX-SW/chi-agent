@@ -30,6 +30,9 @@ class GuidanceTests(unittest.TestCase):
         self.assertIn("not a mandatory step", payer.lower())
         self.assertIn("names a later stage", payer.lower())
         self.assertIn("makes the later stage unnecessary", payer.lower())
+        self.assertIn("signed_off", payer.lower())
+        self.assertIn("only request_info and p2p_review may leave it false", payer.lower())
+        self.assertIn("complete the peer-to-peer before finalizing", payer.lower())
         for outcome in ("approve", "deny", "pend", "route to md", "p2p"):
             self.assertIn(outcome, payer.lower())
         cm = str(guidance("cm"))

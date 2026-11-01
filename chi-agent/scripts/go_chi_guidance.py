@@ -26,6 +26,8 @@ _INVARIANTS = {
         "Closing on an earlier branch is legal only when the observed public rule makes the later stage unnecessary; record that reason in the determination or notes.",
         "Letter type and finalize/deliver actions must match the observed determination and the public rule.",
         "After finalize/deliver, read the determination or letter state back before claiming completion.",
+        "`submit_md_case_decision` takes an explicit `signed_off` flag: set it true for approve, deny and partial_approve; only request_info and p2p_review may leave it false.",
+        "If the MD decision is p2p_review, complete the peer-to-peer before finalizing; do not finalize an adverse determination from a decision that still reserves it.",
     ],
     "cm": [
         "Respect patient STOP and contact preferences; stop outreach when the patient declines or cannot be reached.",
