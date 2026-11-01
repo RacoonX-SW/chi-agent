@@ -172,7 +172,7 @@ def _handbook_digest(root: Path) -> str:
 
 def _parser():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("preflight", "coding-b", "live", "audit-history", "rebind-history", "inspect-history", "acknowledge-unsettled"))
+    parser.add_argument("mode", choices=("preflight", "coding-b", "live", "audit-history", "rebind-history", "inspect-history", "acknowledge-unsettled", "reconcile-provider"))
     parser.add_argument("--bundle-sha256", required=True)
     parser.add_argument("--evaluation-id")
     parser.add_argument("--task-id")
@@ -232,8 +232,33 @@ def main(argv=None, *, development=None):
     try:
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
+            import importlib
+            for module in ("go_chi_context", "go_chi_guidance", "go_chi_search", "go_chi_state",
+                           "go_chi_guard", "go_chi_mcp", "go_chi_tools", "go_chi_runtime"):
+                loaded = importlib.import_module(module)
+                path = Path(getattr(loaded, "__file__", "")).resolve()
+                if ROOT not in path.parents:
+                    raise GoFailure("chi_package_module_missing")
             print(json.dumps({"status": "identity_verified", "identity_sha256": identity,
                               "identity": identity_detail, "official_reward": None}, sort_keys=True))
+            return 0
+        if args.mode == "reconcile-provider":
+            from go_chi_journal import reconcile_provider_timeout
+            if (args.history_mode != "external" or args.local_q_root is not None
+                    or args.output_root is None or args.provider_record is None
+                    or args.provider_record_sha256 is None or args.target_run is None
+                    or args.target_round is None or args.expected_request_sha256 is None
+                    or args.expected_accounting_sha256 is None or args.acknowledgement_reason is None):
+                raise GoFailure("chi_reconcile_inputs_required")
+            if args.expected_old_identity is not None and args.expected_old_identity != identity:
+                raise GoFailure("chi_reconcile_identity_mismatch")
+            result = reconcile_provider_timeout(
+                _path(args.output_root, exists=True), identity=identity,
+                accounting_sha256=args.expected_accounting_sha256, run=args.target_run,
+                round_number=args.target_round, request_sha256=args.expected_request_sha256,
+                provider_path=args.provider_record, provider_sha256=args.provider_record_sha256,
+                reason=args.acknowledgement_reason)
+            print(json.dumps({**result, "official_reward": None}, sort_keys=True))
             return 0
         if args.mode in {"audit-history", "rebind-history", "inspect-history", "acknowledge-unsettled"}:
             from go_chi_journal import audit_or_rebind, inspect_history, acknowledge_unsettled

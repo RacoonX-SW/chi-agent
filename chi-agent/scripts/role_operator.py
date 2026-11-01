@@ -54,13 +54,28 @@ def _config(path, expected):
     keys = {'schema', 'run_id', 'evaluation_id', 'task_id', 'attempt_id', 'role', 'bundle_relative',
             'bundle_sha256', 'runtime_identity', 'runner_image_id', 'world_image_id', 'dataset_relative',
             'manifest_relative', 'manifest_sha256', 'output_relative', 'dev_sha256', 'operator_timeout_seconds'}
-    if type(c) is not dict or set(c) != keys or c['schema'] != 'chi-role-operator-v1': raise ValueError('config_invalid')
+    optional = {'history_mode', 'state_relative', 'local_q_root'}
+    if (type(c) is not dict or not keys <= set(c) <= keys | optional
+            or c['schema'] != 'chi-role-operator-v1'):
+        raise ValueError('config_invalid')
+    if c.get('history_mode', 'local') not in {'local', 'external'}:
+        raise ValueError('config_invalid')
     if c['role'] not in PORTS or any(type(c[k]) is not str or not ID.fullmatch(c[k]) for k in ('run_id', 'evaluation_id', 'task_id', 'attempt_id')): raise ValueError('config_invalid')
     if any(type(c[k]) is not str or not SHA.fullmatch(c[k]) for k in ('bundle_sha256', 'runtime_identity', 'manifest_sha256')): raise ValueError('config_invalid')
     if any(type(c[k]) is not str or not re.fullmatch(r'sha256:[0-9a-f]{64}', c[k]) for k in ('runner_image_id', 'world_image_id')): raise ValueError('config_invalid')
     if c['operator_timeout_seconds'] != 2040 or type(c['operator_timeout_seconds']) is not int: raise ValueError('config_invalid')
     if type(c['dev_sha256']) is not dict or set(c['dev_sha256']) != set(DEV_FILES): raise ValueError('config_invalid')
     if any(type(v) is not str or not SHA.fullmatch(v) for v in c['dev_sha256'].values()): raise ValueError('config_invalid')
+    mode = c.get('history_mode', 'local')
+    if mode == 'external':
+        if (type(c.get('state_relative')) is not str or not c['state_relative']
+                or 'local_q_root' in c):
+            raise ValueError('config_invalid')
+    else:
+        if 'state_relative' in c:
+            raise ValueError('config_invalid')
+        if 'local_q_root' in c and (type(c['local_q_root']) is not str or not c['local_q_root']):
+            raise ValueError('config_invalid')
     return c
 
 
@@ -93,6 +108,18 @@ def main(argv=None):
         if _sha(source / name) != digest: raise ValueError('dev_identity_invalid')
     output = _inside(c['output_relative'], exists=False)
     if output.exists() or not output.parent.is_dir() or any(output == p or output in p.parents or p in output.parents for p in (dataset, bundle, ROOT / 'runs/opencode-go-development')): raise ValueError('output_invalid')
+    mode = c.get('history_mode', 'local')
+    state = qroot = None
+    if mode == 'external':
+        state = _inside(c['state_relative'])
+        if (not state.is_dir() or any(state == p or state in p.parents or p in state.parents
+                                      for p in (dataset, bundle, output, ROOT / 'runs/opencode-go-development'))):
+            raise ValueError('history_invalid')
+    else:
+        qroot = _inside(c.get('local_q_root', 'runs/opencode-go-development'))
+        if (not qroot.is_dir() or any(qroot == p or qroot in p.parents or p in qroot.parents
+                                      for p in (dataset, bundle, output))):
+            raise ValueError('history_invalid')
     for path in (ROOT / 'vendor/chi-bench', ROOT / 'runs/opencode-go-development', ROOT / 'data/skills/managed-care-operations-handbook'):
         _reject_symlink_ancestors(path, 'input_invalid')
         if not path.is_dir(): raise ValueError('input_invalid')
@@ -174,7 +201,10 @@ def main(argv=None):
         secret = os.environ.get('OPENCODE_API_KEY')
         if not secret: raise ValueError('credential_missing')
         volumes = dict(common)
-        volumes.update({host(ROOT / 'runs/opencode-go-development'): {'bind': '/prior-go', 'mode': 'rw'}, host(logs): {'bind': '/runner-logs', 'mode': 'rw'},
+        history_volume = ({host(state): {'bind': '/state', 'mode': 'rw'}} if mode == 'external'
+                          else {host(qroot): {'bind': '/prior-go', 'mode': 'rw'}})
+        volumes.update(history_volume)
+        volumes.update({host(logs): {'bind': '/runner-logs', 'mode': 'rw'},
             host(artifacts): {'bind': '/logs/artifacts', 'mode': 'rw'}, host(dataset / manifest['instruction_path']): {'bind': '/input/instruction.md', 'mode': 'ro'},
             host(reference): {'bind': '/input/tool_reference.md', 'mode': 'ro'}, host(ROOT / 'data/skills/managed-care-operations-handbook'): {'bind': '/workspace/skills/managed-care-operations-handbook', 'mode': 'ro'},
             host(source / 'role_runner.py'): {'bind': '/dev-scripts/role_runner.py', 'mode': 'ro'},
@@ -183,9 +213,12 @@ def main(argv=None):
         mounts = [Mount(target=f'/opt/{alias}/tool_reference.md', source=host(reference), type='bind', read_only=True)
                   for alias in ('healthverse-task-assets', 'chi-bench-task-assets')]
         runner_env = dict(env, OPENCODE_API_KEY=secret, CHI_DEV_WORLD_HOST=names['world'])
+        history_args = (['--output-root', '/state', '--history-mode', 'external'] if mode == 'external'
+                        else ['--output-root', '/prior-go/chi-evaluation', '--history-mode', 'local',
+                              '--local-q-root', '/prior-go'])
         command = ['/usr/local/bin/python', '-S', '/dev-scripts/role_runner.py', 'live', '--bundle-sha256', c['bundle_sha256'],
                    '--evaluation-id', c['evaluation_id'], '--task-id', c['task_id'], '--attempt-id', c['attempt_id'], '--run-id', c['run_id'],
-                   '--output-root', '/prior-go/chi-evaluation', '--logs-dir', '/runner-logs/result', '--history-mode', 'local', '--local-q-root', '/prior-go',
+                   '--logs-dir', '/runner-logs/result'] + history_args + [
                    '--role', c['role'], '--instruction-file', '/input/instruction.md', '--mcp-url', f'http://{names["world"]}:{PORTS[c["role"]]}/mcp',
                    '--workspace-root', '/logs/artifacts/workspaces', '--handbook-root', '/workspace/skills/managed-care-operations-handbook', '--tool-reference', '/input/tool_reference.md']
         for alias in ('healthverse-task-assets', 'chi-bench-task-assets'):

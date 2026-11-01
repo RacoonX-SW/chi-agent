@@ -40,7 +40,7 @@ class InspectionTests(unittest.TestCase):
                 j.finish('failed'); j.close()
 
     def test_halted_history_can_be_inspected_but_not_rebound(self):
-        from test_go_chi_journal import USAGE, settle
+        from tests.test_go_chi_journal import USAGE, settle
         with tempfile.TemporaryDirectory() as d:
             root = Path(d); identity = 'a' * 64
             j = ChiJournal(root, identity=identity, evaluation='e', task='t', attempt='a', run='r')
@@ -57,7 +57,7 @@ class InspectionTests(unittest.TestCase):
                 audit_or_rebind(root, identity, digest)
 
     def test_halt_reports_exact_missing_allowance_or_source(self):
-        from test_go_chi_journal import USAGE, settle
+        from tests.test_go_chi_journal import USAGE, settle
         for missing in ('allowance', 'billing_source'):
             with self.subTest(missing=missing), tempfile.TemporaryDirectory() as d:
                 root = Path(d); identity = 'a' * 64
@@ -117,10 +117,22 @@ class InspectionTests(unittest.TestCase):
             with self.assertRaisesRegex(GoFailure, 'chi_provider_record_invalid'):
                 inspect_provider(record, hashlib.sha256(record.read_bytes()).hexdigest(), result['pending_request'])
 
+    def test_non_streaming_console_without_first_token_is_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "record.json"
+            doc = event()
+            doc["event"]["stream"] = False
+            doc["event"]["firstTokenAt"] = None
+            doc["event"]["timeToFirstTokenMs"] = None
+            path.write_text(json.dumps(doc), encoding="utf-8")
+            inspection = inspect_provider(path, hashlib.sha256(path.read_bytes()).hexdigest(), None)
+            self.assertEqual(inspection["status"], "inspected")
+            self.assertEqual(inspection["request_id"], "synthetic")
+
     def test_bad_console_values_or_hash_refused(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / 'record.json'
-            for key, value in [('model', 'other'), ('stream', True), ('outputTokens', -1), ('attemptCount', 2), ('requestID', 'other')]:
+            for key, value in [('model', 'other'), ('stream', 'yes'), ('outputTokens', -1), ('attemptCount', 2), ('requestID', 'other')]:
                 doc = event(); doc['event'][key] = value; path.write_text(json.dumps(doc))
                 with self.subTest(key=key), self.assertRaisesRegex(GoFailure, 'chi_provider_record_invalid'):
                     inspect_provider(path, hashlib.sha256(path.read_bytes()).hexdigest(), None)

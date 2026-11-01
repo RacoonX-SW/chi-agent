@@ -16,7 +16,7 @@ import re
 from decimal import Decimal
 from pathlib import Path
 
-from opencode_go_provider import GoFailure, _atomic, _billing, _object
+from opencode_go_provider import GoFailure, _atomic, _billing, _object, _unique
 from b_provider_transport import _reject_symlink_ancestors
 from go_chi_evidence import (envelope, write as write_evidence, verify as verify_evidence,
                              write_tool, verify_tool)
@@ -237,7 +237,16 @@ def inspect_history(root: Path, expected_identity: str, expected_sha256: str) ->
                   'accounting_sha256': expected_sha256, 'pending': pending, 'halted': state['halted'],
                   'usage': auditor.usage_totals(), 'missing': [],
                   'acknowledged_unsettled': [{'run': e['run'], 'round': e['round'], 'request_sha256': e['request_sha256'],
-                                               'status': 'unsettled'} for e in _acknowledged(root, state).values()]}
+                                               'status': 'unsettled'} for e in _acknowledged(root, state).values()],
+                  'reconciled_provider_timeouts': []}
+        for index, ref in enumerate(state.get('reconciliations', []), 1):
+            event_path = root / 'reconciliations' / f'{index:04d}-event-{ref["event_sha256"]}.json'
+            event = json.loads(_read_regular_bounded(event_path, 1024 * 1024, 'chi_history_invalid'))
+            result['reconciled_provider_timeouts'].append({
+                'run': event['run'], 'round': event['round'], 'request_sha256': event['request_sha256'],
+                'provider_request_id': event['provider_request_id'],
+                'tokens': {'input_tokens': event['input_tokens'], 'output_tokens': event['output_tokens']},
+                'console_cost': event['console_cost'], 'status': 'provider_proven_unsettled'})
         for attempt in state['attempts']:
             for item in attempt['requests']:
                 if item['status'] == 'settled':
@@ -323,6 +332,95 @@ def acknowledge_unsettled(root: Path, *, identity: str, accounting_sha256: str, 
         os.close(lock)
 
 
+def reconcile_provider_timeout(root: Path, *, identity: str, accounting_sha256: str, run: str,
+                               round_number: int, request_sha256: str, provider_path: Path,
+                               provider_sha256: str, reason: str) -> dict:
+    """Clear admission for a timeout only when a provider record proves the request.
+
+    The request stays unknown and the failed attempt/seal are not rewritten.
+    The event records provider identity, tokens and cost; billing splits remain
+    incomplete rather than being fabricated.
+    """
+    from evaluation_bundle import _check_components
+    from go_chi_inspect import inspect_provider
+    if (any(type(x) is not str or not DIGEST.fullmatch(x)
+            for x in (identity, accounting_sha256, request_sha256, provider_sha256))
+            or type(run) is not str or not ID.fullmatch(run) or type(round_number) is not int or round_number < 1
+            or type(reason) is not str or not reason.strip() or len(reason) > 256):
+        raise GoFailure('chi_reconcile_invalid')
+    root = Path(root); _reject_symlink_ancestors(root, 'chi_path_invalid')
+    lock = os.open(root / '.lock', os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        path = root / 'chi-accounting.json'
+        raw = _read_regular_bounded(path, MAX_STATE_BYTES, 'chi_history_invalid')
+        if hashlib.sha256(raw).hexdigest() != accounting_sha256: raise GoFailure('chi_reconcile_hash_mismatch')
+        auditor = object.__new__(ChiJournal)
+        auditor.root, auditor.path, auditor.state = root, path, _state_object(path)
+        auditor._validate(identity)
+        state = auditor.state
+        if state['pending'] != {'run': run, 'round': round_number} or state['halted'] is not None:
+            raise GoFailure('chi_reconcile_target_invalid')
+        attempt = next((a for a in state['attempts'] if a['run'] == run), None)
+        if attempt is None or attempt['status'] != 'failed' or round_number > len(attempt['requests']):
+            raise GoFailure('chi_reconcile_target_invalid')
+        request = attempt['requests'][round_number - 1]
+        if (request['status'] not in {'pending', 'unknown'} or request['request_sha256'] != request_sha256
+                or request['diagnostic_evidence_sha256'] is None or request['response_evidence_sha256'] is not None):
+            raise GoFailure('chi_reconcile_target_invalid')
+        inflight = root / 'tool-inflight'
+        if inflight.exists() and any(any(p.iterdir()) for p in inflight.iterdir()):
+            raise GoFailure('chi_reconcile_inflight')
+        doc = verify_evidence(root, run, round_number, 'request', request['request_evidence_sha256'])
+        diagnostic = verify_evidence(root, run, round_number, 'diagnostic', request['diagnostic_evidence_sha256'])
+        if diagnostic.get('code') != 'chi_timeout' or doc.get('dispatch') is None:
+            raise GoFailure('chi_reconcile_target_invalid')
+        body = doc.get('body_utf8')
+        pending = {'kind': attempt['kind'], 'purpose': request['purpose'], 'dispatch': doc.get('dispatch'),
+                   'body_bytes': len(body.encode()) if body is not None else None}
+        inspection = inspect_provider(provider_path, provider_sha256, pending)
+        if inspection['correlation']['status'] != 'consistent':
+            raise GoFailure('chi_reconcile_provider_mismatch')
+        provider_path = _check_components(Path(provider_path), 'chi_provider_record_invalid', final_may_be_missing=False)
+        provider_raw = _read_regular_bounded(provider_path, 1024 * 1024, 'chi_provider_record_invalid')
+        if hashlib.sha256(provider_raw).hexdigest() != provider_sha256:
+            raise GoFailure('chi_provider_record_invalid')
+        event = {
+            'schema': 'chi-go-provider-reconciliation-v1', 'identity': identity,
+            'accounting_sha256': accounting_sha256, 'provider_sha256': provider_sha256,
+            'provider_request_id': inspection['request_id'], 'run': run, 'round': round_number,
+            'request_sha256': request_sha256,
+            'input_tokens': inspection['tokens']['inputTokens'],
+            'output_tokens': inspection['tokens']['outputTokens'],
+            'console_cost': inspection['console_cost'], 'reason': reason.strip(),
+        }
+        event_raw = (json.dumps(event, ensure_ascii=True, sort_keys=True, separators=(',', ':')) + '\n').encode()
+        event_sha = hashlib.sha256(event_raw).hexdigest()
+        marker = root / 'reconciliation.pending'
+        _write_exclusive(marker, b'reconciliation in progress\n'); _fsync_dir(root)
+        directory = root / 'reconciliations'
+        directory.mkdir(mode=0o700, exist_ok=True)
+        _reject_symlink_ancestors(directory, 'chi_path_invalid'); _fsync_dir(root)
+        index = len(state.get('reconciliations', [])) + 1
+        for kind, payload in (('accounting', raw), ('provider', provider_raw), ('event', event_raw)):
+            _write_exclusive(directory / f'{index:04d}-{kind}-{hashlib.sha256(payload).hexdigest()}.json', payload)
+            _fsync_dir(directory)
+        updated = copy.deepcopy(state)
+        updated['pending'] = None
+        updated['reconciliations'] = state.get('reconciliations', []) + [{'event_sha256': event_sha}]
+        _atomic(path, updated)
+        marker.unlink(); _fsync_dir(root)
+        return {'status': 'reconciled_provider_timeout', 'run': run, 'round': round_number,
+                'execution_allowed': False, 'request_retry_allowed': False,
+                'admission_cleared': True, 'settled': False, 'event_sha256': event_sha,
+                'provider_request_id': inspection['request_id'],
+                'tokens': {'input_tokens': inspection['tokens']['inputTokens'],
+                           'output_tokens': inspection['tokens']['outputTokens']},
+                'console_cost': inspection['console_cost']}
+    finally:
+        os.close(lock)
+
+
 class ChiJournal:
     """Exclusive one-identity namespace with immutable attempt claims.
 
@@ -404,10 +502,56 @@ class ChiJournal:
     def _validate(self, identity: str) -> None:
         try:
             s = self.state
-            if any((self.root / name).exists() or (self.root / name).is_symlink() for name in ('migration.pending', 'acknowledgement.pending')):
+            if any((self.root / name).exists() or (self.root / name).is_symlink() for name in
+                   ('migration.pending', 'acknowledgement.pending', 'reconciliation.pending')):
                 raise ValueError
             acknowledged = _acknowledged(self.root, s)
             used_acknowledgements = set()
+            reconciliations = s.get('reconciliations', [])
+            if type(reconciliations) is not list: raise ValueError
+            reconciled, reconciled_requests, expected_reconciliations = set(), {}, set()
+            reconciliation_dir = self.root / 'reconciliations'
+            for index, ref in enumerate(reconciliations, 1):
+                if (type(ref) is not dict or set(ref) != {'event_sha256'}
+                        or type(ref['event_sha256']) is not str or not DIGEST.fullmatch(ref['event_sha256'])):
+                    raise ValueError
+                name = f'{index:04d}-event-{ref["event_sha256"]}.json'
+                path = reconciliation_dir / name
+                raw = _read_regular_bounded(path, 1024 * 1024, 'chi_history_invalid')
+                if hashlib.sha256(raw).hexdigest() != ref['event_sha256']: raise ValueError
+                event = json.loads(raw, object_pairs_hook=_unique, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                keys = {'schema', 'identity', 'accounting_sha256', 'provider_sha256',
+                        'provider_request_id', 'run', 'round', 'request_sha256',
+                        'input_tokens', 'output_tokens', 'console_cost', 'reason'}
+                if (type(event) is not dict or set(event) != keys
+                        or event['schema'] != 'chi-go-provider-reconciliation-v1'
+                        or event['identity'] != s['identity']
+                        or any(type(event[k]) is not str or not DIGEST.fullmatch(event[k])
+                               for k in ('accounting_sha256', 'provider_sha256', 'request_sha256'))
+                        or type(event['provider_request_id']) is not str or not event['provider_request_id']
+                        or type(event['run']) is not str or not ID.fullmatch(event['run'])
+                        or type(event['round']) is not int or event['round'] < 1
+                        or type(event['input_tokens']) is not int or event['input_tokens'] < 0
+                        or type(event['output_tokens']) is not int or event['output_tokens'] < 0
+                        or type(event['console_cost']) is not str or not Decimal(event['console_cost']).is_finite()
+                        or Decimal(event['console_cost']) < 0
+                        or type(event['reason']) is not str or not event['reason'].strip() or len(event['reason']) > 256):
+                    raise ValueError
+                target = (event['run'], event['round'])
+                if target in reconciled: raise ValueError
+                accounting_name = f'{index:04d}-accounting-{event["accounting_sha256"]}.json'
+                accounting_raw = _read_regular_bounded(reconciliation_dir / accounting_name, MAX_STATE_BYTES,
+                                                       'chi_history_invalid')
+                if hashlib.sha256(accounting_raw).hexdigest() != event['accounting_sha256']:
+                    raise ValueError
+                provider_name = f'{index:04d}-provider-{event["provider_sha256"]}.json'
+                provider_raw = _read_regular_bounded(reconciliation_dir / provider_name, 1024 * 1024,
+                                                     'chi_history_invalid')
+                if hashlib.sha256(provider_raw).hexdigest() != event['provider_sha256']:
+                    raise ValueError
+                reconciled.add(target); reconciled_requests[target] = event['request_sha256']
+                expected_reconciliations.update({name, accounting_name, provider_name})
+            used_reconciliations = set()
             transitions = s.get("source_transitions", [])
             if type(transitions) is not list: raise ValueError
             archive = self.root / "source-archives"
@@ -469,7 +613,7 @@ class ChiJournal:
                         if (path.is_symlink() or not path.is_file()
                                 or (directory.name, path.name) not in (allowed_pending, allowed_parent)): raise ValueError
             keys = {"schema", "identity", "account_prior_history", "attempts", "pending", "halted"}
-            if (type(s) is not dict or not keys <= set(s) or set(s) - keys - {'source_transitions', 'acknowledgements'}
+            if (type(s) is not dict or not keys <= set(s) or set(s) - keys - {'source_transitions', 'acknowledgements', 'reconciliations'}
                     or s["schema"] != "chi-go-evaluation-usd-v1" or s["identity"] != identity
                     or s["account_prior_history"] != "unknown" or type(s["attempts"]) is not list
                     or s["halted"] not in (None, "billing_details_unknown", "billing_source_unexpected")):
@@ -651,6 +795,10 @@ class ChiJournal:
                         target = (a['run'], index)
                         if target in acknowledged:
                             used_acknowledgements.add(target)
+                        elif target in reconciled:
+                            if item['request_sha256'] != reconciled_requests[target]:
+                                raise ValueError
+                            used_reconciliations.add(target)
                         else:
                             pending = {"run": a["run"], "round": index}
                     elif item.get("status") == "settled":
@@ -673,8 +821,14 @@ class ChiJournal:
                         halt = inferred if fee_policy is None else effective_fee_stop
                     else:
                         raise ValueError
-            if used_acknowledgements != set(acknowledged) or pending != s["pending"] or halt != s["halted"]:
+            if (used_acknowledgements != set(acknowledged) or used_reconciliations != reconciled
+                    or pending != s["pending"] or halt != s["halted"]):
                 raise ValueError
+            if reconciliation_dir.exists():
+                if reconciliation_dir.is_symlink() or not reconciliation_dir.is_dir(): raise ValueError
+                actual_reconciliations = {path.name for path in reconciliation_dir.iterdir()}
+                if actual_reconciliations != expected_reconciliations: raise ValueError
+                if any(path.is_symlink() or not path.is_file() for path in reconciliation_dir.iterdir()): raise ValueError
             evidence_root = self.root / "wire-evidence"
             if evidence_root.is_symlink(): raise ValueError
             actual_evidence = set()
@@ -710,8 +864,8 @@ class ChiJournal:
             if receipts.exists() and ({p.name for p in receipts.iterdir()} != expected_receipts
                                       or any(p.is_symlink() or not p.is_file() for p in receipts.iterdir())): raise ValueError
             if expected_receipts and not receipts.is_dir(): raise ValueError
-        except Exception:
-            raise GoFailure("chi_history_invalid") from None
+        except Exception as exc:
+            raise GoFailure("chi_history_invalid") from exc
 
     def _persist(self):
         if len((json.dumps(self.state, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode()) > MAX_STATE_BYTES:
