@@ -237,7 +237,16 @@ def inspect_history(root: Path, expected_identity: str, expected_sha256: str) ->
                   'accounting_sha256': expected_sha256, 'pending': pending, 'halted': state['halted'],
                   'usage': auditor.usage_totals(), 'missing': [],
                   'acknowledged_unsettled': [{'run': e['run'], 'round': e['round'], 'request_sha256': e['request_sha256'],
-                                               'status': 'unsettled'} for e in _acknowledged(root, state).values()]}
+                                               'status': 'unsettled'} for e in _acknowledged(root, state).values()],
+                  'reconciled_provider_timeouts': []}
+        for index, ref in enumerate(state.get('reconciliations', []), 1):
+            event_path = root / 'reconciliations' / f'{index:04d}-event-{ref["event_sha256"]}.json'
+            event = json.loads(_read_regular_bounded(event_path, 1024 * 1024, 'chi_history_invalid'))
+            result['reconciled_provider_timeouts'].append({
+                'run': event['run'], 'round': event['round'], 'request_sha256': event['request_sha256'],
+                'provider_request_id': event['provider_request_id'],
+                'tokens': {'input_tokens': event['input_tokens'], 'output_tokens': event['output_tokens']},
+                'console_cost': event['console_cost'], 'status': 'provider_proven_unsettled'})
         for attempt in state['attempts']:
             for item in attempt['requests']:
                 if item['status'] == 'settled':
@@ -402,7 +411,8 @@ def reconcile_provider_timeout(root: Path, *, identity: str, accounting_sha256: 
         _atomic(path, updated)
         marker.unlink(); _fsync_dir(root)
         return {'status': 'reconciled_provider_timeout', 'run': run, 'round': round_number,
-                'execution_allowed': True, 'settled': False, 'event_sha256': event_sha,
+                'execution_allowed': False, 'request_retry_allowed': False,
+                'admission_cleared': True, 'settled': False, 'event_sha256': event_sha,
                 'provider_request_id': inspection['request_id'],
                 'tokens': {'input_tokens': inspection['tokens']['inputTokens'],
                            'output_tokens': inspection['tokens']['outputTokens']},

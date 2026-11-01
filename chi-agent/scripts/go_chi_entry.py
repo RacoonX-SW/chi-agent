@@ -250,7 +250,7 @@ def main(argv=None, *, development=None):
                 round_number=args.target_round, request_sha256=args.expected_request_sha256,
                 provider_path=args.provider_record, provider_sha256=args.provider_record_sha256,
                 reason=args.acknowledgement_reason)
-            print(json.dumps(result, sort_keys=True))
+            print(json.dumps({**result, "official_reward": None}, sort_keys=True))
             return 0
         if args.mode in {"audit-history", "rebind-history", "inspect-history", "acknowledge-unsettled"}:
             from go_chi_journal import audit_or_rebind, inspect_history, acknowledge_unsettled

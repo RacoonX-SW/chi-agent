@@ -548,7 +548,7 @@ python scripts/go_chi_entry.py reconcile-provider \
   --acknowledgement-reason "provider console 200 after client timeout"
 ```
 
-工具校验 Console 200/session SHA/body bytes/时间/tokens/cost，保存原 accounting/provider/event 三份副本；request 仍为 pending/unknown、attempt 仍 failed、run seal 不变。`execution_allowed=true` 只表示该 pending 不再阻断新 attempt，不是原请求重试授权。设计见 [对账契约](openspec/changes/provider-timeout-reconciliation/design.md)。
+工具校验 Console 200/session SHA/body bytes/时间/tokens/cost，保存原 accounting/provider/event 三份副本；request 仍为 pending/unknown、attempt 仍 failed、run seal 不变。`execution_allowed=false`、`request_retry_allowed=false`，只有 `admission_cleared=true` 表示该 pending 不再阻断新 attempt；原请求不可重发。设计见 [对账契约](openspec/changes/provider-timeout-reconciliation/design.md)。
 
 ## Go CHI 独立包入口
 

@@ -42,7 +42,9 @@
 {
   "status": "reconciled_provider_timeout",
   "run": "...", "round": 17,
-  "execution_allowed": true,
+  "execution_allowed": false,
+  "request_retry_allowed": false,
+  "admission_cleared": true,
   "settled": false,
   "event_sha256": "...",
   "provider_request_id": "...",
@@ -51,7 +53,7 @@
 }
 ```
 
-- `execution_allowed=true` 仅表示该 pending 不再阻断**新的** attempt；不是原请求重试授权。
+- `execution_allowed=false`、`request_retry_allowed=false`：原请求明确不可重发；只有 `admission_cleared=true` 表示该 pending 不再阻断**新的** attempt。
 - `settled=false`：原请求仍是 unknown；`usage_totals` 仍把它列为 unsettled，billing 三项仍不完整。
 - 不自动重发、不自动换 candidate、不自动判业务成功。
 

@@ -18,7 +18,7 @@ session/body/time/status/token 任一不一致，拒绝并保持原账字节；�
 
 ### 场景：后续准入
 
-成功返回 `execution_allowed=true`，仅表示该 pending 不再阻断新 attempt；`settled=false`，原请求仍 unknown，`usage_totals` 仍列 unsettled，billing 三项 incomplete。
+成功返回 `execution_allowed=false` / `request_retry_allowed=false`，只有 `admission_cleared=true` 表示该 pending 不再阻断新 attempt；`settled=false`，原请求仍 unknown，`usage_totals` 仍列 unsettled，billing 三项 incomplete。
 
 ### 场景：不重试
 

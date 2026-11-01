@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from go_chi_journal import ChiJournal, reconcile_provider_timeout
+from go_chi_journal import ChiJournal, inspect_history, reconcile_provider_timeout
 from opencode_go_provider import GoFailure
 
 
@@ -70,7 +70,9 @@ class ReconcileTests(unittest.TestCase):
     def test_reconcile_clears_admission_without_rewriting_request_or_seal(self):
         result = self.reconcile()
         self.assertEqual(result["status"], "reconciled_provider_timeout")
-        self.assertTrue(result["execution_allowed"])
+        self.assertFalse(result["execution_allowed"])
+        self.assertFalse(result["request_retry_allowed"])
+        self.assertTrue(result["admission_cleared"])
         self.assertFalse(result["settled"])
         state = json.loads((self.root / "chi-accounting.json").read_text())
         self.assertIsNone(state["pending"])
@@ -82,10 +84,37 @@ class ReconcileTests(unittest.TestCase):
         self.assertTrue(any("-event-" in name for name in files))
         self.assertTrue(any("-accounting-" in name for name in files))
         self.assertTrue(any("-provider-" in name for name in files))
+        current = (self.root / "chi-accounting.json").read_bytes()
+        inspection = inspect_history(self.root, self.identity, hashlib.sha256(current).hexdigest())
+        self.assertFalse(inspection["execution_allowed"])
+        self.assertEqual(inspection["reconciled_provider_timeouts"][0]["provider_request_id"], "req-1")
+        self.assertEqual(inspection["reconciled_provider_timeouts"][0]["tokens"],
+                         {"input_tokens": 369422, "output_tokens": 8192})
         # Reopening validates the reconciled history and allows a new attempt.
         reopened = ChiJournal(self.root, identity=self.identity, evaluation="eval", task="task2",
                               attempt="attempt2", run="run2", kind="chi", launch={})
         reopened.finish("complete"); reopened.close()
+
+    def test_duplicate_reconcile_is_rejected(self):
+        self.reconcile()
+        current = (self.root / "chi-accounting.json").read_bytes()
+        with self.assertRaises(GoFailure) as caught:
+            reconcile_provider_timeout(
+                self.root, identity=self.identity,
+                accounting_sha256=hashlib.sha256(current).hexdigest(),
+                run="run", round_number=1, request_sha256=self.request["request_sha256"],
+                provider_path=self.provider,
+                provider_sha256=hashlib.sha256(self.provider.read_bytes()).hexdigest(),
+                reason="duplicate")
+        self.assertEqual(caught.exception.code, "chi_reconcile_target_invalid")
+
+    def test_leftover_marker_blocks_validation(self):
+        self.reconcile()
+        (self.root / "reconciliation.pending").write_text("in progress\n", encoding="utf-8")
+        with self.assertRaises(GoFailure) as caught:
+            ChiJournal(self.root, identity=self.identity, evaluation="eval", task="task2",
+                       attempt="attempt2", run="run2", kind="chi", launch={})
+        self.assertEqual(caught.exception.code, "chi_history_invalid")
 
     def test_provider_mismatch_is_rejected_without_state_change(self):
         bad = json.loads(self.provider.read_text())

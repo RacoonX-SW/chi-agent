@@ -26,7 +26,7 @@
 | session SHA | `7bc5b6…`（与 dispatch 一致） |
 | tokens | 369,422 input / 8,192 output |
 | console cost | 0.0603285 USD |
-| 结果 | `reconciled_provider_timeout`，`settled=false` |
+| 结果 | `reconciled_provider_timeout`，`execution_allowed=false`，`admission_cleared=true`，`settled=false` |
 | state.pending | null |
 | request status | 仍 `pending` |
 | run seal | 字节不变 |
@@ -37,14 +37,14 @@
 
 ## 3. 测试
 
-- 定向：`tests.test_go_chi_reconcile` 2 tests OK；`tests.test_go_chi_inspect` 通过。
-- 全量：`Ran 468 tests`，2 个既有环境错误（缺 `anthropic`），8 skipped。
-- 合成覆盖：正常对账、provider session mismatch 拒绝、账本不变、seal 不变、reopen。
+- 定向：`tests.test_go_chi_reconcile tests.test_go_chi_inspect` 12 tests OK。
+- 全量：`Ran 471 tests`，2 个既有环境错误（缺 `anthropic`），8 skipped。
+- 合成覆盖：正常对账、provider session mismatch 拒绝、账本不变、seal 不变、reopen、重复对账拒绝、事务标记拒绝、真实 Console `firstTokenAt/timeToFirstTokenMs=null`。
 
 ## 4. 边界
 
 - 工具不把请求写成 settled，不补 charged/list/allowance，不伪造 response evidence。
-- `execution_allowed=true` 仅解除该 pending 对新 attempt 的准入阻断，不是原请求重试授权。
+- `execution_allowed=false` / `request_retry_allowed=false`：原请求不可重发；只有 `admission_cleared=true` 解除该 pending 对新 attempt 的准入阻断。
 - 不自动重发、不换 candidate/账根；official_reward=null。
 - 业务成功、临床正确性、官方分数仍未验证。
 
