@@ -5,6 +5,9 @@
 ### 场景：写入合法路径
 给定工作区根与 `<case_id>/<role>/<file>`（role 为 provider/payer/cm）或 `<case_id>/shared/<file>`，工具应写入成功并返回 `workspace file written`；缺失的父目录由工具创建。
 
+### 场景：case 目录不存在
+`<workspace>/<case_id>` 不存在时，工具必须返回错误且不创建 case 目录。
+
 ### 场景：路径不符合约定
 `<case_id>/care-manager/<file>`、跨角色目录或工作区外路径必须被拒绝，且不创建文件。
 

@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 运行时修复候选`db7d402`（`index`兼容 + 主读窗口240s/300s + profile同步）经外部Gemini两轮复审通过；已并入`codex/real-run-v4`，准备 release-v4 + 新coding-B + state-v4，再跑 payer-003/CM-003。真实批次A（v3）：B3成功；payer 002 `chi_tool_batch_invalid`（真实根因是tool_call多出`index`字段）；CM 002 `chi_timeout` round8 已对账。Y未运行（缺第二道payer题公开资源）。472 tests；不自动重试/换账根。证据见[真实批次A记录](real-external-batch-a-review.md) |
+| 当前任务 | 运行时修复`db7d402`经复审通过；release-v4（identity`f7d11712…`）已跑 B4/payer-003/CM-003（见真实运行行）。新候选`19e5602`修复工作区写路径（工具说明+guidance+父目录创建，不建虚构case），**待外部复审**；通过后再建 release-v5 + 新B，决定是否重跑 CM。真实批次A（v3）：B3成功；payer 002 `chi_tool_batch_invalid`（真实根因是tool_call多出`index`字段）；CM 002 `chi_timeout` round8 已对账。Y未运行（缺第二道payer题公开资源）。472 tests；不自动重试/换账根。证据见[真实批次A记录](real-external-batch-a-review.md) |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F6、F7、Z1均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | Z6`ccdf8f2`经外部Gemini离线复审通过（LGTM）：发布包布局/白名单、确定性构建、SHA256+内层Bundle核验；Z1`a9965e5`、F7`fd617c3`、F4–F6`efc9019`、F0–F3`5c1fa51`此前均通过。所有结论限静态/契约/Docker合成，无真实Trial/模型/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
@@ -17,7 +17,7 @@
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本轮规划新增真实请求0，不读Key、不启动题世界；W/Y旧清单已收束。补齐功能计划后，额度提案修订为最多40次C、16次coding-B及2响应患者probe，含机制对照/九题未见集，**待审尚未生效**；独立摘要请求不包含。启动时一次性固定实际范围/用途/额度，包内不逐步等GPT。t019例行付费/Claude/付费临床评审等暂停保持，F.5待启动 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | Docker/Python3.12全量`472 tests`：2个既有环境错误（缺`anthropic`）、8 skipped。新增：`index`兼容4 tests（含真实018响应回归）、策略不变量1 test、不打桩配置一致性1 test；`profiles/go-chi-entry.json`已同步240/300。历史Z6的474 tests含当时未合并的reconcile tests。无真实Trial/模型/判分 |
+| 本轮验证 | Docker/Python3.12全量`484 tests`：2个既有环境错误（缺`anthropic`）、11 skipped。含`index`兼容4 tests、策略不变量1 test、不打桩配置一致性1 test、工作区写入约定4 tests。无真实Trial/模型/判分 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
 | PR 与下一步 | PR28–PR37均已合并。`codex/tool-call-index-tolerance`（`db7d402`）待PR；真实批次证据/审批/reconcile在`codex/z6-clean-repro`。下一步：从`codex/real-run-v4`建release-v4 → 新coding-B `real-ext-b-004` → state-v4 → payer-003/CM-003；Z4对照/Z5未见集/Z8材料仍未开始 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |

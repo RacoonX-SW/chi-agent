@@ -141,6 +141,9 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         path = writable(args.get("path"))
         if path is None:
             return "REFUSED: workspace_case_unverified_or_role_invalid"
+        case_root = workspace_root / path.relative_to(workspace_root).parts[0]
+        if not case_root.is_dir() or case_root.is_symlink():
+            return "ERROR: workspace parent unavailable"
         parent = path.parent
         if not parent.is_dir():
             try:
@@ -149,7 +152,8 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                 return "ERROR: workspace parent unavailable"
             try:
                 root = workspace_root.resolve(strict=True)
-                if root != parent.resolve(strict=True) and root not in parent.resolve(strict=True).parents:
+                resolved = parent.resolve(strict=True)
+                if root != resolved and root not in resolved.parents:
                     return "ERROR: workspace parent unavailable"
             except OSError:
                 return "ERROR: workspace parent unavailable"
