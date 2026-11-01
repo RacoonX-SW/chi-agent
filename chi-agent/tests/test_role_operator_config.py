@@ -53,6 +53,20 @@ class RoleOperatorConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check(value)
 
+    def test_capabilities_defaults_and_accepts_off(self):
+        self.assertNotIn("capabilities", self.check(dict(self.base)))
+        value = dict(self.base); value["capabilities"] = "off"
+        self.assertEqual(self.check(value)["capabilities"], "off")
+        value["capabilities"] = "f0-f3-v1"
+        self.assertEqual(self.check(value)["capabilities"], "f0-f3-v1")
+
+    def test_capabilities_rejects_unknown_mode(self):
+        for mode in ("f0-f6-v1", "", None, 0, True):
+            with self.subTest(mode=mode):
+                value = dict(self.base); value["capabilities"] = mode
+                with self.assertRaises(ValueError):
+                    self.check(value)
+
     def test_local_rejects_state_relative(self):
         value = dict(self.base); value["history_mode"] = "local"
         value["state_relative"] = "runs/external-state"

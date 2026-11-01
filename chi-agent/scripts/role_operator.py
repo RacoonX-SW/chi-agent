@@ -54,11 +54,13 @@ def _config(path, expected):
     keys = {'schema', 'run_id', 'evaluation_id', 'task_id', 'attempt_id', 'role', 'bundle_relative',
             'bundle_sha256', 'runtime_identity', 'runner_image_id', 'world_image_id', 'dataset_relative',
             'manifest_relative', 'manifest_sha256', 'output_relative', 'dev_sha256', 'operator_timeout_seconds'}
-    optional = {'history_mode', 'state_relative', 'local_q_root'}
+    optional = {'history_mode', 'state_relative', 'local_q_root', 'capabilities'}
     if (type(c) is not dict or not keys <= set(c) <= keys | optional
             or c['schema'] != 'chi-role-operator-v1'):
         raise ValueError('config_invalid')
     if c.get('history_mode', 'local') not in {'local', 'external'}:
+        raise ValueError('config_invalid')
+    if c.get('capabilities', 'f0-f3-v1') not in {'f0-f3-v1', 'off'}:
         raise ValueError('config_invalid')
     if c['role'] not in PORTS or any(type(c[k]) is not str or not ID.fullmatch(c[k]) for k in ('run_id', 'evaluation_id', 'task_id', 'attempt_id')): raise ValueError('config_invalid')
     if any(type(c[k]) is not str or not SHA.fullmatch(c[k]) for k in ('bundle_sha256', 'runtime_identity', 'manifest_sha256')): raise ValueError('config_invalid')
@@ -212,7 +214,8 @@ def main(argv=None):
         if capability_path is not None: volumes[host(capability_path)] = {'bind': '/run/chi-capability', 'mode': 'ro'}
         mounts = [Mount(target=f'/opt/{alias}/tool_reference.md', source=host(reference), type='bind', read_only=True)
                   for alias in ('healthverse-task-assets', 'chi-bench-task-assets')]
-        runner_env = dict(env, OPENCODE_API_KEY=secret, CHI_DEV_WORLD_HOST=names['world'])
+        runner_env = dict(env, OPENCODE_API_KEY=secret, CHI_DEV_WORLD_HOST=names['world'],
+                          CHI_DEV_CAPABILITIES=c.get('capabilities', 'f0-f3-v1'))
         history_args = (['--output-root', '/state', '--history-mode', 'external'] if mode == 'external'
                         else ['--output-root', '/prior-go/chi-evaluation', '--history-mode', 'local',
                               '--local-q-root', '/prior-go'])

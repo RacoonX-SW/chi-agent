@@ -20,6 +20,15 @@ STATUS_PATH = Path('/runner-logs/lifecycle.json')
 CAPABILITY_PATH = Path('/run/chi-capability')
 
 
+def capability_mode(value):
+    """Map the development capability override to the runtime flag."""
+    if value in (None, '', 'f0-f3-v1'):
+        return 'f0-f3-v1'
+    if value == 'off':
+        return None
+    raise RuntimeError('capabilities_invalid')
+
+
 class TrackedServer:
     """Remember whether an MCP mutation might still be running remotely."""
     def __init__(self, server, state):
@@ -56,6 +65,7 @@ async def development(journal, secret, run_chi, kwargs):
     old_term = signal.getsignal(signal.SIGTERM)
     loop.add_signal_handler(signal.SIGTERM, task.cancel)
     try:
+        kwargs['capabilities'] = capability_mode(os.environ.get('CHI_DEV_CAPABILITIES'))
         shadow = os.environ.get('CHI_DEV_EVIDENCE_SHADOW')
         if shadow not in (None, '', 'off', 'shadow'):
             raise RuntimeError('evidence_shadow_invalid')
