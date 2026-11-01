@@ -4,10 +4,12 @@
 
 - [x] 用户确认批次 A：1 coding-B + 3 C。
 - [x] payer/CM 公开资源已在本地数据集找到；运行前只选公开文件并冻结 hash。
-- [ ] 用户确认 history mode（external 隔离 / local 接续旧 Q）。
+- [x] 用户确认 history mode = external。
 - [x] 用户确认同时批准 Y 4 C；允许清单内新 attempt。
 - [x] Z0 Kaggle Rules 已读：75 公开题、公开结果可选、三材料、11/15 截止、模拟数据；Go 隐私按用户决定不再确认。
-- [ ] 运行前用 F7 manifest 冻结任务/资源/候选/检查/上限/停止条件。
+- [x] 生成 external 操作者配置（provider t032 / payer t011 / CM afib），状态根 `runs/real-external/state`。
+- [ ] 用户创建 `runs/real-external/auth/go.env`（仅 OPENCODE_API_KEY，0600）。
+- [ ] 运行前用 F7 manifest 冻结任务/资源/候选/检查/上限/停止条件（基线 cell 需扩展 baseline 或使用操作者计划）。
 - [ ] 运行前用 Z1 delivery plan 检查包/依赖/vendor/资源/MCP/state/凭据。
 - [ ] 新 release 的 coding-B 成功收据；不伪造/复用旧 B。
 - [ ] 逐次保留请求/工具/用量/费用/终态/清理；未知即停，零自动重试。

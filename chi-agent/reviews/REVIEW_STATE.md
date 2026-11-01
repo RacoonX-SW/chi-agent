@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | F0–F7、Z1、Z6发布包已合并。Z6干净复现已完成：空卷固定锁安装+无Key禁网preflight `identity_verified`；466 tests。用户已批准真实批次A+Y（1 coding-B+7 C）、允许清单内新attempt；payer t011/CM资源已在本地数据集找到。**history mode待确认**；0次真实调用。Z0 Kaggle Rules已读（75公开题、公开结果可选、三材料、11/15截止、模拟数据）；Go隐私按用户决定不再确认。证据见[干净复现报告](z6-clean-repro-review.md)与[审批草案](../openspec/changes/real-run-approval/proposal.md) |
+| 当前任务 | F0–F7、Z1、Z6发布包已合并；Z6干净复现`identity_verified`。用户已批准真实批次A+Y（1 coding-B+7 C）、external history、清单内新attempt；provider改用资源完整的t032，payer t011/CM afib资源已找到；external操作者配置已生成。**仅Go Key注入文件未就绪**；0次真实调用。Z0 Rules已读（75公开题、公开结果可选、三材料、11/15截止、模拟数据）；Go隐私按用户决定不再确认。证据见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F6、F7、Z1均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | Z6`ccdf8f2`经外部Gemini离线复审通过（LGTM）：发布包布局/白名单、确定性构建、SHA256+内层Bundle核验；Z1`a9965e5`、F7`fd617c3`、F4–F6`efc9019`、F0–F3`5c1fa51`此前均通过。所有结论限静态/契约/Docker合成，无真实Trial/模型/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
@@ -19,7 +19,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | Docker/Python3.12全量`466 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；Z6 release定向5 tests、外部Gemini复审通过。另用两个全新空卷从固定锁安装model/PDF依赖，release包无Key禁网preflight返回`identity_verified`（`identity_sha256=d4651a…`、upstream clean、`official_reward=null`）。无world/模型/Trial/判分；详见[干净复现报告](z6-clean-repro-review.md) |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR28–PR37均已合并。Z6干净复现证据与[真实运行审批](../openspec/changes/real-run-approval/proposal.md)在`codex/z6-clean-repro`，待PR。用户已批准1B+7C/资源/新attempt；仅history mode待确认。确认后冻结F7 manifest/delivery plan并启动；否则继续Z8材料。0次真实调用。 |
+| PR 与下一步 | PR28–PR37均已合并。external操作者支持在`codex/real-external-operator`（`0fd2029`，待PR）；Z6证据/审批包在`codex/z6-clean-repro`。用户已确认external、t032、1B+7C、新attempt。当前仅缺`runs/real-external/auth/go.env`（仅Go Key，0600）；就绪后跑B→3C→Y4C。0次真实调用。 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null。本轮F0–F3真实请求0、未启动题世界 |

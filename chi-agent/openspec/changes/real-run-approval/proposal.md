@@ -22,7 +22,7 @@
 | 用途 | 次数 | 条件 |
 | --- | ---: | --- |
 | 当前候选 coding-B | 1 | 6 请求/1024 输出；成功收据；不连接业务世界 |
-| provider 基线 | 1 C | `pa_t013_t013_o002_p01_new_referral_provider`；新世界；一次尝试 |
+| provider 基线 | 1 C | `pa_t032_t032_o002_p01_new_referral_provider`；新世界；一次尝试 |
 | payer 基线 | 1 C | `pa_t011_t011_o003_p01_intake_payer`（或批准的等价 payer 题）；新世界；一次尝试 |
 | CM 基线 | 1 C | `cm_afib_moderate_anxious_001`；开发 Go 患者模拟；新世界；一次尝试 |
 
@@ -30,7 +30,7 @@
 
 **资源条件**：
 
-- provider t013：`data/provider-baseline/...` 已有固定公开资源与 manifest；
+- provider t032：`runs/representative-role-baseline-root/resources/dataset/prior_auth_provider/tasks/pa_t032_t032_o002_p01_new_referral_provider` 与 `evidence/role-resources-provider.json` 已有完整 role manifest/world；t013 只有 data 任务文件、没有现成 role manifest/world，故首批用 t032；
 - payer t011：`runs/representative-role-baseline-root/resources/dataset/prior_auth_um/tasks/pa_t011_t011_o003_p01_intake_payer` 已有 instruction/tool_reference/task/fixtures manifest；
 - CM：`runs/representative-role-baseline-root/resources/dataset/care_management/tasks/cm_afib_moderate_anxious_001` 已有 instruction/task/fixtures manifest 与 shared world；
 - 运行前只选公开 instruction/tool_reference/资源与 world；`fixtures/expectations.json`、tests、solution、judge 不进入 Agent 输入；实际资源 hash/世界镜像由 F7 manifest 与 delivery plan 冻结；
@@ -58,9 +58,12 @@
 ## 6. 确认状态
 
 - [x] 批次 A（1 B + 3 C）已批准。
-- [x] payer/CM 资源已在本地开发数据集中找到；运行前只选公开文件并冻结 hash，无需用户另行上传。
-- [ ] history mode：`external` 隔离（推荐）还是 `local` 接续旧 Q？**待确认**。
+- [x] payer/CM/provider 资源已在本地开发数据集中找到；运行前只选公开文件并冻结 hash，无需用户另行上传。
+- [x] history mode：`external` 已确认。
 - [x] 批次 B（Y 4 C）已批准。
 - [x] 停止后允许在同一清单内换新 attempt（不自动重发原请求）。
+- [x] 已生成 external 操作者配置：`runs/real-external/configs/{provider,payer,cm}.json`；状态根 `runs/real-external/state`。
+- [ ] Go Key 只读注入文件：需用户创建 `runs/real-external/auth/go.env`（仅 `OPENCODE_API_KEY`，0600）；当前 shell 政策禁止直接读 `.env`。
+- [ ] 批次 A/Y 的真实 B/C 尚未启动。
 
-未确认 history mode 前，我只继续离线准备；不启动真实调用。
+Key 文件就绪后，先跑 coding-B，再依次跑 3 个基线 C，最后跑 Y 4 C；每步检查终态/清理/未知。
