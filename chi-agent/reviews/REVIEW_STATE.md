@@ -22,7 +22,7 @@
 | PR 与下一步 | PR28–PR37均已合并。`codex/tool-call-index-tolerance`（`db7d402`）待PR；真实批次证据/审批/reconcile在`codex/z6-clean-repro`。下一步：从`codex/real-run-v4`建release-v4 → 新coding-B `real-ext-b-004` → state-v4 → payer-003/CM-003；Z4对照/Z5未见集/Z8材料仍未开始 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
-| 真实运行 | W历史保留。2026-11-01 external：v2 B成功/provider超时已对账；v3 B3成功/payer 002工具批次失败/CM 002超时已对账。**v4（bundle`55d7393d…`、identity`f7d11712…`）**：B4成功；payer 003 **complete**（37请求、747万入/4.66万出、138工具、579s，4项业务检查false与W相同）；CM 003 **complete**（23+6请求、359s；患者未同意→停在outreach_complete，检查false为预期路径；暴露workspace写路径被拒）。全部settled、pending=null、清理确认。Y未运行。0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
+| 真实运行 | W历史保留。2026-11-01 external：v2 B成功/provider超时已对账；v3 B3成功/payer 002工具批次失败/CM 002超时已对账。**v4（identity`f7d11712…`）**：B4成功；payer 003 complete（37请求、4项业务检查false与W相同）；CM 003 complete（患者未同意→停在outreach_complete；暴露workspace写路径被拒）。**v5（identity`c8cba721…`）**：B5成功；CM 004 complete（37+10请求、602s；写入0拒绝；14项检查全true、care plan finalized）。全部settled、pending=null、清理确认。Y未运行。0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
 
 接续材料：
 

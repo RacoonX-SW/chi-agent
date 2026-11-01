@@ -199,3 +199,34 @@ release-v3：bundle `6f6e71d8…`、identity `b936b7…`、state-v3。
 - 两个修复达到目的：`index` 字段不再杀运行；105k/370k 上下文的长生成不再因 60s 读超时中断
 - payer 的业务终态差距与 W 一致，需要单独分析（不是本次改动造成）；CM 的 false 检查来自合规的“未同意即不评估”路径
 - 新发现的工作区写路径问题属于 F2/F1 接线缺口，应在下一候选修复（写明 `<case>/<role>` 约定 + 允许写时创建父目录），再决定是否值得新 release 重跑
+
+## 12. release-v5：工作区写路径修复后重跑 CM（2026-11-01）
+
+候选 `780d097`（工作区写入约定 + 父目录创建）复审通过后构建 release-v5：
+
+- bundle `7a4582c485d0211bcdb0507fdbff526a1fb86ea27a87c3a7c545842acaabf8d9`
+- identity `c8cba7215bcd9a0f0345e522be2e6b418ecf9c9bbf58bc85f0a58759ea55e632`
+- state 根 `runs/real-external/state-v5`；无 Key preflight `identity_verified`
+
+### B5
+
+`real-ext-b-005` complete：3 请求，1,399 入 / 114 出，费用完整。
+
+### CM 004
+
+`real-ext-cm-004` **complete**：
+
+- 37 次主请求 + 10 次患者模拟；5,465,882 入 / 约 5.2 万出（患者模拟 47,325/5,232）；602s；110 工具事件
+- `local-fs-write` **0 次拒绝**（对比 CM 003 的 3 次），说明路径约定和父目录创建生效
+- 业务路径：患者本次给出同意 → 四段评估 → care plan `CP-692179FC` finalize → case 终态 closed
+- 确定性检查：**14 项 true、0 项 false**（CM 003 的 4 项 false 全部消除）
+- 仍余 `local-state-update` 拒绝 2 次、`local-claim_done` 拒绝 2 次（不影响终态，但说明状态层还有可用性问题）
+- 全部请求 settled、`pending=null`、清理确认、退出码 0
+
+### 发现的证据缺陷（已修，未重跑）
+
+`go_chi_guidance.digest()` 只哈希 `_INVARIANTS`，而 `guidance()` 实际返回 `_INVARIANTS[role] + [_WORKSPACE_INVARIANT]`。因此 CM 004 记录的 `guidance_sha256=eca20d…` 没有覆盖新增的工作区约定行；文件字节本身已进入 bundle identity，但日志摘要少算了一条。
+
+修复：`delivered_invariants()` 作为唯一来源，`guidance()` 与 `digest()` 共用；新 digest `db66857e…`；新增测试断言 digest 覆盖该行。
+
+不重跑 CM 004 的理由：行为未变，仅摘要覆盖面修正；重跑只会重复同一业务路径并消耗额度。CM 004 的证据保留，并以本段说明其 `guidance_sha256` 的已知含义。
