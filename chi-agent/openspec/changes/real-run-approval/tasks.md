@@ -11,9 +11,10 @@
 - [x] 用户创建 `runs/real-external/auth/go.env`（仅 OPENCODE_API_KEY，0600）。
 - [x] B `real-ext-b-002` 成功；release bundle 修复为 `ee004c…`，identity `e41ae1…`。
 - [x] provider t032 一次 C 已尝试：`real-ext-provider-001` 17请求后 `chi_timeout`，round17 pending/usage unknown；清理确认，业务部分检查。
-- [ ] **未知用量处置**：等待用户提供 round17 Console 记录或明确决定；不自动重试/换账根。
-- [ ] payer t011 / CM afib / Y 4C 均未运行，待 unknown 关闭后另行确认。
-- [ ] bundle 清单修复 `81a3b15` 与 external operator `0fd2029` 待PR合并。
+- [x] round17 Console 记录已提供并精确匹配；正式 `state-v2` 已执行一次对账：pending=null、event `e96cbb…`、seal不变、request仍pending。
+- [x] payer t011 `real-ext-payer-001` 尝试：在发请求前 `chi_history_invalid`（旧 release-v2 journal 不识别 `reconciliations`）；0请求/费用；world_quiescence unproven。
+- [ ] payer/CM/Y 未完成；需 **新 release（含 reconcile 源码）+ 新 coding-B + 新 external state-v3**，待用户批准。
+- [ ] bundle 清单修复 `81a3b15`、external operator `0fd2029`、reconcile工具 `2493cd3` 待PR合并。
 - [ ] 新 release 的 coding-B 成功收据；不伪造/复用旧 B。
 - [ ] 逐次保留请求/工具/用量/费用/终态/清理；未知即停，零自动重试。
 

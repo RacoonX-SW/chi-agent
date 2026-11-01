@@ -81,3 +81,24 @@ B 收据已写入 `state-v2`；这是真实 Go 调用，不是合成。
 3. 选项 B：不结算，批次 A 记为未完成，保持 pending，停止真实 C，转 Z8 材料/离线工作。
 4. 无论哪项，都不能直接编辑 `chi-accounting.json`、重发 round 17 或换账根。
 5. 超时本身暴露 F4/timeout 策略问题：369k input + 8192 output 花了 67.7s，超过 60s read；需独立候选/复审，不自动重试。
+
+## 7. 正式对账与 payer 尝试（2026-11-01）
+
+正式 `state-v2` 已按复审通过的 `reconcile_provider_timeout` 执行一次：
+
+- 结果：`reconciled_provider_timeout`，`execution_allowed=false`、`request_retry_allowed=false`、`admission_cleared=true`、`settled=false`
+- provider request ID `01a196e9…`，tokens 369422/8192，console cost 0.0603285
+- `state.pending=null`；原 request 仍 pending，attempt 仍 failed，run seal 字节不变
+- event SHA `e96cbb2584c88d01f4811d006cc42479e26317a0afb09415dc19cf50f16f525a`
+- 对账后 accounting SHA `b9bdf98e92e8e19861cdb74a2bc5bf47e18974be4649cb0d39dba27732b89922`
+- 备份：`runs/real-external/state-v2-pre-reconcile-backup-20261101`
+
+随后尝试 payer t011 `real-ext-payer-001`，**在发请求前失败**：
+
+- runner 日志：`{"status":"blocked","safe_error_code":"chi_history_invalid"}`
+- 原因：release-v2 包内 `go_chi_journal.py` 早于 reconciliation schema，不识别 `reconciliations` 字段
+- 无 provider 请求、无 journal attempt、无 token/费用
+- operator：runner/world/network 已移除、client closed；`world_quiescence=unproven`、`capture_error=world_quiescence_unproven`、无 final capture
+- 原 `payer-001` 输出保留，不覆盖
+
+因此 payer/CM/Y 不能继续用旧 release-v2；需要新 release（含 reconciliation 源码）+ 新 coding-B + 新 external state（state-v3），并保留旧 state/失败证据。
