@@ -102,3 +102,30 @@ B 收据已写入 `state-v2`；这是真实 Go 调用，不是合成。
 - 原 `payer-001` 输出保留，不覆盖
 
 因此 payer/CM/Y 不能继续用旧 release-v2；需要新 release（含 reconciliation 源码）+ 新 coding-B + 新 external state（state-v3），并保留旧 state/失败证据。
+
+## 8. release-v3 新 B、payer 002 与 CM 002（2026-11-01）
+
+release-v3：bundle `6f6e71d8…`、identity `b936b7…`、state-v3。
+
+### B3
+
+- `real-ext-b-003` complete：3 请求，1399 input / 133 output，费用完整；`official_reward=null`。
+
+### payer 002
+
+- `real-ext-payer-002`：`failed`，`chi_tool_batch_invalid`。
+- 18 请求、68 工具事件；请求全部 settled，**无 pending**。
+- 清理确认（runner/world/network removed，world_quiescence confirmed）。
+- 确定性检查：intake/nurse 多为 true；md/outcome/letter 多项 false/NA；业务未完成。
+- 已知工具批次/协议失败，不是未知用量；不自动重试。
+
+### CM 002
+
+- `real-ext-cm-002`：`failed`，`chi_timeout`。
+- 8 请求、36 工具事件；7 次 settled（约 62k/64k input 的最后两次），round 8 pending/usage unknown。
+- 清理确认；确定性检查多为 false/NA，业务未完成。
+- 这再次触发同账准入停止；Y 未运行。
+
+### 当前停止点
+
+`state-v3.pending = {run: real-ext-cm-002, round: 8}`。需要 CM round8 的 Console 记录（若显示 200）才能评估对账；否则批次 A 按未完成收口。不能自动重试或换账根。

@@ -13,7 +13,10 @@
 - [x] provider t032 一次 C 已尝试：`real-ext-provider-001` 17请求后 `chi_timeout`，round17 pending/usage unknown；清理确认，业务部分检查。
 - [x] round17 Console 记录已提供并精确匹配；正式 `state-v2` 已执行一次对账：pending=null、event `e96cbb…`、seal不变、request仍pending。
 - [x] payer t011 `real-ext-payer-001` 尝试：在发请求前 `chi_history_invalid`（旧 release-v2 journal 不识别 `reconciliations`）；0请求/费用；world_quiescence unproven。
-- [ ] payer/CM/Y 未完成；需 **新 release（含 reconcile 源码）+ 新 coding-B + 新 external state-v3**，待用户批准。
+- [x] 新 release-v3（bundle `6f6e71d8…`、identity `b936b7…`）+ 新 B3 `real-ext-b-003` 成功；state-v3。
+- [x] payer 002 `real-ext-payer-002`：`chi_tool_batch_invalid`，18请求/68工具，全settled、无pending、清理确认，业务部分。
+- [x] CM 002 `real-ext-cm-002`：`chi_timeout`，round8 pending/usage unknown，7 settled、清理确认；Y未运行。
+- [ ] 需 CM round8 Console记录评估对账；否则批次A按未完成收口。
 - [ ] bundle 清单修复 `81a3b15`、external operator `0fd2029`、reconcile工具 `2493cd3` 待PR合并。
 - [ ] 新 release 的 coding-B 成功收据；不伪造/复用旧 B。
 - [ ] 逐次保留请求/工具/用量/费用/终态/清理；未知即停，零自动重试。

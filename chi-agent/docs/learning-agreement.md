@@ -807,3 +807,4 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 这也暴露 F4/timeout 研究点：30万+ input 的长上下文请求在 60s 读超时下超时；不能直接改超时后重试，需独立候选/复审/新 attempt。
 - 对账工具复审通过后已对正式 `state-v2` 执行一次：`pending=null`、`admission_cleared=true`、原 request 仍 pending、seal 不变、event `e96cbb…`；这不是把请求改成成功。
 - 随后 payer 001 在发请求前失败 `chi_history_invalid`：runner 用的旧 release-v2 包不包含 reconciliation schema，无法读取新状态。它没有模型请求/费用，但 world_quiescence 未证明。教训：账 schema 变化必须同步重建包和 B，不能拿旧包读新账；旧失败目录不覆盖，改用新 release/B/state-v3。
+- release-v3 的 B3 成功；payer 002 是 `chi_tool_batch_invalid`（工具批次/协议问题，全部请求已结算、无 pending、清理确认，业务只完成 intake/nurse）；CM 002 又在 round8 `chi_timeout`，pending/usage unknown，触发同账停止。说明：不同失败要分开——工具批次错误可离线定位，未知用量必须停；两者都不能自动重试。
