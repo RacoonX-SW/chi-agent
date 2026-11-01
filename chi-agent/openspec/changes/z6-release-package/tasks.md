@@ -15,7 +15,7 @@
 
 - [x] 5 个合成测试：构建/plan、篡改/额外布局、缺 manifest/plan 不匹配、确定性/CLI、目标已存在。
 - [x] 全量 Docker：466 tests，2 个既有环境错误（缺 `anthropic`），8 skipped。
-- [ ] 外部 Gemini 复审 `ccdf8f2`。
+- [x] 外部 Gemini 复审 `ccdf8f2`：通过（LGTM；限离线发布包/合成构建，无真实 Trial/模型/判分）。
 - [ ] 真实干净依赖安装/空状态、Harbor Trial、真实模型、清理（Z6 真实部分）。
 
 ## 明确不做
