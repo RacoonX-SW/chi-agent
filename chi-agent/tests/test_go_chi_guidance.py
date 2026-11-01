@@ -28,6 +28,8 @@ class GuidanceTests(unittest.TestCase):
         self.assertIn("do not submit", provider.lower())
         payer = str(guidance("payer"))
         self.assertIn("not a mandatory step", payer.lower())
+        self.assertIn("names a later stage", payer.lower())
+        self.assertIn("makes the later stage unnecessary", payer.lower())
         for outcome in ("approve", "deny", "pend", "route to md", "p2p"):
             self.assertIn(outcome, payer.lower())
         cm = str(guidance("cm"))

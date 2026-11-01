@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 运行时修复`db7d402`经复审通过；release-v4（identity`f7d11712…`）已跑 B4/payer-003/CM-003（见真实运行行）。新候选`19e5602`修复工作区写路径（工具说明+guidance+父目录创建，不建虚构case），**待外部复审**；通过后再建 release-v5 + 新B，决定是否重跑 CM。真实批次A（v3）：B3成功；payer 002 `chi_tool_batch_invalid`（真实根因是tool_call多出`index`字段）；CM 002 `chi_timeout` round8 已对账。Y未运行（缺第二道payer题公开资源）。472 tests；不自动重试/换账根。证据见[真实批次A记录](real-external-batch-a-review.md) |
+| 当前任务 | payer 003 的 4 项 false 已定位为**计划漏步**（公开 instruction 点名 MD 决定，轨迹只读了 MD 数据未提交）。候选 `payer-stage-compliance` 已改 payer guidance 条件句，待复审/新release。 | 运行时修复`db7d402`经复审通过；release-v4（identity`f7d11712…`）已跑 B4/payer-003/CM-003（见真实运行行）。新候选`19e5602`修复工作区写路径（工具说明+guidance+父目录创建，不建虚构case），**待外部复审**；通过后再建 release-v5 + 新B，决定是否重跑 CM。真实批次A（v3）：B3成功；payer 002 `chi_tool_batch_invalid`（真实根因是tool_call多出`index`字段）；CM 002 `chi_timeout` round8 已对账。Y未运行（缺第二道payer题公开资源）。472 tests；不自动重试/换账根。证据见[真实批次A记录](real-external-batch-a-review.md) |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F6、F7、Z1均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | Z6`ccdf8f2`经外部Gemini离线复审通过（LGTM）：发布包布局/白名单、确定性构建、SHA256+内层Bundle核验；Z1`a9965e5`、F7`fd617c3`、F4–F6`efc9019`、F0–F3`5c1fa51`此前均通过。所有结论限静态/契约/Docker合成，无真实Trial/模型/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |

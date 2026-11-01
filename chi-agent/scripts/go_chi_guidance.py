@@ -22,7 +22,8 @@ _INVARIANTS = {
     "payer": [
         "Approval, partial approval, denial, pend and routing are all legal outcomes; do not assume one is correct.",
         "Presence of a document does not prove a criterion is met; apply the observed public rule to the observed facts.",
-        "MD review is one possible branch, not a mandatory step for every case.",
+        "MD review is one possible branch, not a mandatory step for every case; when the task instruction says you own the case end to end and names a later stage such as the MD decision or P2P, perform that stage before finalizing.",
+        "Closing on an earlier branch is legal only when the observed public rule makes the later stage unnecessary; record that reason in the determination or notes.",
         "Letter type and finalize/deliver actions must match the observed determination and the public rule.",
         "After finalize/deliver, read the determination or letter state back before claiming completion.",
     ],
