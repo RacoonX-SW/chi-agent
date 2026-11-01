@@ -534,6 +534,24 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 
 2026-11-01 已在 Docker/Python 3.12 用两个全新空卷、固定带 hash 的 model/PDF 锁完成安装，并对 release 包做无 Key、禁网 preflight：`identity_verified`，upstream clean，`official_reward=null`。这证明空卷安装/包身份边界，不证明 world/MCP、真实模型或 Trial。命令与 hash 见 [干净复现报告](reviews/z6-clean-repro-review.md)。设计见 [Z6 契约](openspec/changes/z6-release-package/design.md)，离线发布包证据见 [阶段报告](reviews/z6-release-package-review.md)。
 
+## Provider 超时与 Console 记录对账
+
+当客户端读超时但 OpenCode Console 单请求记录证明服务端返回 200 时，`go_chi_entry.py reconcile-provider` 可清空该 pending 的准入阻断，但**不把请求改成 settled、不伪造 response evidence、不补三项 USD**：
+
+```bash
+python scripts/go_chi_entry.py reconcile-provider \
+  --bundle-sha256 <当前包 identity> --history-mode external \
+  --output-root /state \
+  --expected-accounting-sha256 <旧账 SHA> \
+  --target-run <run> --target-round <round> \
+  --expected-request-sha256 <request SHA> \
+  --provider-record /provider-single-request.json \
+  --provider-record-sha256 <Console 记录 SHA> \
+  --acknowledgement-reason "provider console 200 after client timeout"
+```
+
+工具校验 Console 200/session SHA/body bytes/时间/tokens/cost，保存原 accounting/provider/event 三份副本；request 仍为 pending/unknown、attempt 仍 failed、run seal 不变。`execution_allowed=false`、`request_retry_allowed=false`，只有 `admission_cleared=true` 表示该 pending 不再阻断新 attempt；原请求不可重发。设计见 [对账契约](openspec/changes/provider-timeout-reconciliation/design.md)。
+
 ## Go CHI 独立包入口
 
 `scripts/go_chi_entry.py` 接收外部 instruction、一个角色 MCP、日志目录和 evaluation/task/attempt/run 身份；它只在经过 manifest 校验的导出包内运行。原 `opencode_go_provider.py` 继续是固定 coding 探针，原 `evaluation_entry.py` 的 live 拒绝保持。实际已验证范围、固定候选和限制只查 [审核状态](reviews/REVIEW_STATE.md)。

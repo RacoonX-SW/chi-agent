@@ -23,9 +23,11 @@ def inspect_provider(path: Path, expected_sha256: str, pending: dict | None) -> 
         e = doc['event']
         fixed = {'category': 'inference', 'model': 'deepseek-v4.1-flash', 'requestedModel': 'deepseek-v4.1-flash',
                  'provider': 'opencode', 'product': 'go', 'protocol': 'openai-chat', 'method': 'POST',
-                 'path': '/inference/go/openai/v1/chat/completions', 'stream': False, 'statusCode': 200,
-                 'outcome': 'succeeded', 'reasoningEffort': 'high', 'reasoningMode': 'effort', 'attemptCount': 1}
+                 'path': '/inference/go/openai/v1/chat/completions',
+                 'statusCode': 200, 'outcome': 'succeeded', 'reasoningEffort': 'high',
+                 'reasoningMode': 'effort', 'attemptCount': 1}
         if any(type(e.get(k)) is not type(v) or e[k] != v for k, v in fixed.items()): raise ValueError
+        if type(e.get('stream')) is not bool: raise ValueError
         for key in ('id', 'requestID', 'sessionID'):
             if type(e.get(key)) is not str or not e[key] or len(e[key]) > 256: raise ValueError
         if e['id'] != e['requestID'] or not re.fullmatch(r'chi-[0-9a-f]{32}', e['sessionID']): raise ValueError
@@ -35,12 +37,20 @@ def inspect_provider(path: Path, expected_sha256: str, pending: dict | None) -> 
                 or type(headers.get('content-length')) is not str or not re.fullmatch(r'[1-9][0-9]{0,7}', headers['content-length'])): raise ValueError
         length = int(headers['content-length'])
         if length > 8 * 1024 * 1024: raise ValueError
-        times = ('startedAt', 'finishedAt', 'durationMs', 'firstTokenAt', 'lastTokenAt', 'timeToFirstTokenMs')
+        required_times = ('startedAt', 'finishedAt', 'durationMs', 'lastTokenAt')
+        optional_times = ('firstTokenAt', 'timeToFirstTokenMs')
         tokens = ('inputTokens', 'outputTokens', 'reasoningTokens', 'cacheReadTokens', 'cacheWriteTokens')
-        if any(type(e.get(k)) is not int or e[k] < 0 for k in times + tokens): raise ValueError
-        if (not 0 < e['startedAt'] <= e['firstTokenAt'] <= e['lastTokenAt'] <= e['finishedAt']
+        if any(type(e.get(k)) is not int or e[k] < 0 for k in required_times + tokens): raise ValueError
+        if any(e.get(k) is not None and (type(e[k]) is not int or e[k] < 0) for k in optional_times):
+            raise ValueError
+        if (not 0 < e['startedAt'] <= e['lastTokenAt'] <= e['finishedAt']
                 or e['durationMs'] != e['finishedAt'] - e['startedAt']
-                or e['timeToFirstTokenMs'] != e['firstTokenAt'] - e['startedAt']
+                or (e.get('firstTokenAt') is not None
+                    and not e['startedAt'] <= e['firstTokenAt'] <= e['lastTokenAt'])
+                or (e.get('firstTokenAt') is None and e.get('lastTokenAt') is not None and e['lastTokenAt'] < e['startedAt'])
+                or (e.get('timeToFirstTokenMs') is not None
+                    and (e.get('firstTokenAt') is None
+                         or e['timeToFirstTokenMs'] != e['firstTokenAt'] - e['startedAt']))
                 or e['durationMs'] > 3600000 or e['inputTokens'] > 1048576 or e['outputTokens'] > 32768
                 or e['reasoningTokens'] > e['outputTokens']): raise ValueError
         cost = e.get('cost')
@@ -64,6 +74,8 @@ def inspect_provider(path: Path, expected_sha256: str, pending: dict | None) -> 
             correlation = {'status': 'consistent' if all(checks.values()) else 'mismatch',
                            'checks': checks, 'unique_match': False, 'purpose': 'unavailable'}
         return {'status': 'inspected', 'sha256': expected_sha256, 'console_cost': str(cost),
+                'request_id': e['requestID'], 'session_id': e['sessionID'],
+                'started_at': e['startedAt'], 'finished_at': e['finishedAt'],
                 'tokens': {k: e[k] for k in tokens}, 'correlation': correlation,
                 'missing': ['response_usage_cost', 'charged_usd', 'billing_source', 'list_cost_usd', 'allowance_usd'],
                 'execution_allowed': False}
