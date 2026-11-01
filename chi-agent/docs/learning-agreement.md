@@ -792,3 +792,9 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 实际用两个全新空卷、固定带 hash 的 model/PDF 锁完成安装；release 包在无 Key、禁网容器中跑 preflight，返回 `identity_verified`，upstream clean，`official_reward=null`。这证明“空卷安装 + 包/依赖/上游身份”可复现。
 - 它不证明 world/MCP、真实模型、Harbor Trial、状态持久化、owned 资源清理或官方判分。空卷安装需要网络，但 preflight 不需要；不要把安装成功当成运行授权。
 - 下一步是一次性真实审批包：具体任务/角色、候选/release SHA、资源/镜像 hash、B/C 次数、用途、停止条件和账目边界。用户批准前不启动真实运行。
+
+### 真实运行边界：规则、资源与 history mode
+
+- 官方 Rules 已读：公开 75 题；公开结果和 75 题 audit packet 非必需；必交 Kaggle Writeup、私有可运行包、IEEE 两栏 ≤5 页报告；报名/组队 11/7，最终提交 11/15 23:59 UTC；患者是模拟数据、无真实 PHI；handbook 受限且不得再分发。
+- payer t011 与 CM 题的公开 instruction/task/fixtures manifest/world 已在本地开发数据集找到；运行前只选公开文件并冻结 hash，expectations/tests/solution/judge 不进入 Agent。用户因此不需要另外上传这两题资源。
+- `external` history 是新的隔离 evaluation/state，不复用旧 Q 账本；它不证明账户历史为零。`local` 是接续旧 Q，先审计旧 pending/halt，可能被历史阻断。批次 A/Y 推荐 external；确认前不启动真实调用。

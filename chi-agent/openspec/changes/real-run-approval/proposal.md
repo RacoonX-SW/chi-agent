@@ -15,6 +15,8 @@
 
 任何代码/release 变化都使上述身份失效，需要新 release、新的 coding-B 和新的资源 hash。
 
+官方 Rules 已于 2026-11-01 读取：公开 75 题；公开结果/75题 audit packet 非必需；必交 Kaggle Writeup、私有可运行包、IEEE 两栏 ≤5 页报告，截止 11/15 23:59 UTC；报名/组队 11/7；结果为模拟患者、无真实 PHI；handbook 受限且不得再分发。Go 隐私/非编码用途按用户决定不再确认，但不写成官方许可。
+
 ## 2. 建议的最小批次 A：1 B + 3 C
 
 | 用途 | 次数 | 条件 |
@@ -28,14 +30,19 @@
 
 **资源条件**：
 
-- provider t013 的公开资源与 manifest 已在本地有固定副本；
-- payer t011、CM 题的任务 instruction/工具参考/world/资源需要先供应并计算 manifest/hash；未供应则本批次缩减为 provider 或延期；
-- 三题都必须使用公开输入/工具；fixture/expectations/verifier/judge 不进入 Agent 输入；
-- 世界镜像、MCP 端点、handbook、工具参考、state/logs 在运行前由 delivery plan 检查。
+- provider t013：`data/provider-baseline/...` 已有固定公开资源与 manifest；
+- payer t011：`runs/representative-role-baseline-root/resources/dataset/prior_auth_um/tasks/pa_t011_t011_o003_p01_intake_payer` 已有 instruction/tool_reference/task/fixtures manifest；
+- CM：`runs/representative-role-baseline-root/resources/dataset/care_management/tasks/cm_afib_moderate_anxious_001` 已有 instruction/task/fixtures manifest 与 shared world；
+- 运行前只选公开 instruction/tool_reference/资源与 world；`fixtures/expectations.json`、tests、solution、judge 不进入 Agent 输入；实际资源 hash/世界镜像由 F7 manifest 与 delivery plan 冻结；
+- 若某题资源/世界预检失败，只用通过的题或延期，不伪造 hash。
 
-## 3. 可选批次 B：Y 去留（4 C）
+用户已确认：批次 A、Y 4C、允许清单内新 attempt；`external` 隔离仍待最后确认。
 
-在批次 A 完成后，两个已见 payer 开发题 × off/shadow，各一次；任务/模型/参数/资源/预算固定。只用于判断来源校验是否保留，不声称稳定收益；若题目/资源不满足，明确不做，保持默认关闭。
+## 3. 批次 B：Y 去留（4 C，用户已批准）
+
+两个已见 payer 开发题 × off/shadow，各一次；任务/模型/参数/资源/预算固定。只用于判断来源校验是否保留，不声称稳定收益；若题目/资源不满足，明确不做，保持默认关闭。
+
+合计：**1 coding-B + 7 C**（A 3 + B 4）。C 的 provider 请求上界按 50 计算，项目请求总上界约 `6 + 7×60 = 426`；实际按公开任务和停止条件记录，不要求跑满。
 
 ## 4. 可选批次 C：F1–F6 机制对照（最多 12 C）
 
@@ -48,12 +55,12 @@
 - 自动重试、换模型、换账根、清理旧 pending/halt。
 - 对外发布或提交。
 
-## 6. 需要用户一次性确认
+## 6. 确认状态
 
-1. 是否批准批次 A（1 B + 3 C）？
-2. payer/CM 资源是否由你提供；若不能，是否只跑 provider 或延期？
-3. history mode：`external` 隔离（推荐，声明不证明旧账为零）还是 `local` 接续旧 Q？
-4. 是否同时批准批次 B（Y 4 C），还是先看 A？
-5. 停止后是否允许在同一批准清单内换新 attempt（不自动重发原请求）？
+- [x] 批次 A（1 B + 3 C）已批准。
+- [x] payer/CM 资源已在本地开发数据集中找到；运行前只选公开文件并冻结 hash，无需用户另行上传。
+- [ ] history mode：`external` 隔离（推荐）还是 `local` 接续旧 Q？**待确认**。
+- [x] 批次 B（Y 4 C）已批准。
+- [x] 停止后允许在同一清单内换新 attempt（不自动重发原请求）。
 
-未确认前，我只继续离线材料/Z8；不启动真实调用。
+未确认 history mode 前，我只继续离线准备；不启动真实调用。
