@@ -45,6 +45,41 @@ def _same(a, b):
     return a == b
 
 
+def _canonical_calls(calls):
+    """Return calls with only canonical keys, tolerating an optional position index.
+
+    Some OpenAI-compatible endpoints add ``index`` to non-streamed tool calls.
+    The field carries no scheduling meaning here, so it is validated when present
+    and dropped before a batch is committed; every other unknown key still fails.
+    """
+    if type(calls) is not list:
+        raise ValueError("tool_calls_invalid")
+    canonical = []
+    for call in calls:
+        if type(call) is not dict:
+            raise ValueError("tool_call_invalid")
+        extra = set(call) - {"id", "type", "function", "index"}
+        if extra:
+            raise ValueError("tool_call_unknown_field")
+        if "index" in call and (type(call["index"]) is not int or call["index"] < 0):
+            raise ValueError("tool_call_index_invalid")
+        canonical.append({"id": call.get("id"), "type": call.get("type"), "function": call.get("function")})
+    return canonical
+
+
+def _same_assistant(candidate, stored):
+    """Compare a replayable assistant message, ignoring the optional call index."""
+    if type(candidate) is not dict or type(stored) is not dict:
+        return False
+    try:
+        calls = _canonical_calls(candidate.get("tool_calls"))
+    except ValueError:
+        return False
+    normalized = {key: value for key, value in candidate.items() if key != "tool_calls"}
+    normalized["tool_calls"] = calls
+    return _same(normalized, stored)
+
+
 def _local_schema_references(value):
     if isinstance(value, dict):
         for key, item in value.items():
@@ -98,8 +133,9 @@ class ToolContract:
             if any(record["result"] is None for record in self.records):
                 raise ValueError
             calls, ids = [], set()
-            for call in message["tool_calls"]:
-                if type(call) is not dict or set(call) != {"id", "type", "function"} or call["type"] != "function":
+            canonical = _canonical_calls(message["tool_calls"])
+            for call in canonical:
+                if set(call) != {"id", "type", "function"} or call["type"] != "function":
                     raise ValueError
                 call_id, fn = call["id"], call["function"]
                 if (type(call_id) is not str or not CALL_ID.fullmatch(call_id)
@@ -116,7 +152,9 @@ class ToolContract:
             raise ContractFailure("tool_batch_invalid") from None
         self.seen.update(ids)
         self.records.extend(calls)
-        self.batches.append({"message": copy.deepcopy(message), "ids": [c["id"] for c in calls]})
+        stored = {key: copy.deepcopy(value) for key, value in message.items() if key != "tool_calls"}
+        stored["tool_calls"] = copy.deepcopy(canonical)
+        self.batches.append({"message": stored, "ids": [c["id"] for c in calls]})
         return copy.deepcopy(calls)
 
     def record_result(self, call_id: str, result: Any) -> None:
@@ -143,7 +181,7 @@ class ToolContract:
             by_id = {record["id"]: record for record in self.records}
             index = 2
             for batch in self.batches:
-                if index >= len(messages) or not _same(messages[index], batch["message"]):
+                if index >= len(messages) or not _same_assistant(messages[index], batch["message"]):
                     raise ValueError
                 index += 1
                 pending = set(batch["ids"])
