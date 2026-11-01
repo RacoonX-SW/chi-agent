@@ -78,3 +78,14 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 1. 外部 Gemini 审查供应契约、install no-op 决策、依赖/vendor 检查粒度和凭据隔离。
 2. 按意见返工后创建 PR。
 3. F7 合并后 rebase/重跑；随后进入 Z4/Z6 真实 Trial 准备，仍需用户批准任务/次数/资源。
+
+## 7. 外部 Gemini 复审结论（2026-11-01）
+
+- **结论**：通过（LGTM），具备创建 PR 条件。
+- **审查对象**：Z1 候选 `a9965e5` / 文档 HEAD `0ce593f`；复审方未另附命令日志，本条按用户转述记录。
+- **逐项结论**：
+  - 供应契约：责任划分清晰，覆盖 bundle、依赖、vendor、资源、MCP、状态与凭据。
+  - 静态检查器：离线纯只读，路径防逃逸严格，bundle 逐文件哈希核验充分。
+  - Harness 闸门：`install()` 无网络 no-op 契约成立，执行前无 Key 预检完好。
+- **边界**：仅离线静态/契约与 Docker 合成；未运行真实 Harbor Trial、真实模型或官方判分。
+- **合并建议**：当前分支基于 `4ade699`，未包含 F7；应先合并 PR35，再把本分支 rebase 到最新 main，重跑全量（预计 461 tests）后才合并。

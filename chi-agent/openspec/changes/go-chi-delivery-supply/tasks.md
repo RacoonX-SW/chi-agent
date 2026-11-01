@@ -21,7 +21,8 @@
 
 - [x] 定向 16 tests OK（delivery + harness）。
 - [x] 全量 Docker：446 tests，2 个既有环境错误（缺 `anthropic`），8 skipped。
-- [ ] 外部 Gemini 复审 `a9965e5`。
+- [x] 外部 Gemini 复审 `a9965e5`：通过（LGTM；限离线静态/契约/Docker 合成，无真实 Trial/模型/判分）。
+- [ ] F7/PR35 合并后 rebase 本分支并重跑全量（预计 461），再创建 PR。
 - [ ] 与 F7 合并后重跑（当前 main 尚未包含 F7）。
 
 ## 明确不做

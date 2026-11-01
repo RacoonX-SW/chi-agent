@@ -750,3 +750,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 为什么用 caller-owned：官方世界镜像/依赖卷/授权资源本来就在调用方边界内，自动联网安装会引入不可审计网络、版本漂移和凭据混入风险；no-op 本身不是安装能力，必须配 preflight 和 supply check。
 - 验证：定向 16 tests、全量 446 tests（2 个既有环境错误、8 skipped）；真实 Harbor Trial、world 镜像、依赖锁逐包校验、清理和官方任务仍未验证。本轮 main 尚未包含 F7，合并后需 rebase 重跑。
 - 下一讲解入口：Z4/Z6 的真实 Trial 供应链（world 镜像、state/log 持久化、owned 资源清理）与用户一次性运行批准包。
+
+### Z1 复审通过的含义
+
+- 通过覆盖供应契约、静态检查器、Harness 闸门（install no-op + run 前无 Key 预检）；边界仍是离线静态/契约与 Docker 合成，没有真实 Trial、world 镜像、模型或官方判分。
+- 当前 Z1 分支基于 `4ade699`，不含 F7；复审建议先合并 PR35，再 rebase 到最新 main 并重跑全量（预计 461 tests），之后才创建/合并 Z1 PR。这是分支依赖，不是代码质量结论。
+- 面试可讲：为什么 caller-owned、为什么 install 不联网、delivery check 能拦哪些缺件/错凭据，以及“检查通过”为什么不等于真实 Trial 通过。
+- 下一讲解入口：Z4/Z6 的真实 Trial 供应链（world 镜像、state/log 持久化、owned 资源清理）与用户一次性运行批准包。
