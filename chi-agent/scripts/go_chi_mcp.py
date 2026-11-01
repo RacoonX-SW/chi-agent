@@ -12,6 +12,7 @@ import re
 from jsonschema import Draft202012Validator
 
 from opencode_go_provider import GoFailure
+from go_chi_state import effect_for
 
 CM_NAMES = {
     "cm_intake.list_referral_queue", "cm_intake.get_referral", "cm_intake.open_case", "cm_intake.disenroll_case",
@@ -146,14 +147,23 @@ class MCPBridge:
                                                    secrets=(self.guard.secret, self.guard.session))
                     self.guard.contract.record_result(selected["id"], result)
                     return result
+            warning = None
             if self.state is not None:
-                blocked = self.state.block_mutation(canonical, "mcp")
+                stagnant = self.state.stagnation_block_reason(canonical, "mcp", args)
+                if stagnant is not None:
+                    result = "REFUSED: " + stagnant
+                    self.guard.journal.refuse_tool(selected["id"], canonical, args, result,
+                                                   secrets=(self.guard.secret, self.guard.session))
+                    self.guard.contract.record_result(selected["id"], result)
+                    return result
+                blocked = self.state.block_mutation(canonical, "mcp", args)
                 if blocked is not None:
                     result = "REFUSED: " + blocked
                     self.guard.journal.refuse_tool(selected["id"], canonical, args, result,
                                                    secrets=(self.guard.secret, self.guard.session))
                     self.guard.contract.record_result(selected["id"], result)
                     return result
+                warning = self.state.stagnation_warning(canonical, "mcp", args)
             self.guard.journal.start_tool(selected["id"], canonical, args)
             try:
                 if self.auxiliary is not None and canonical == 'cm_outreach.send_message':
@@ -187,6 +197,8 @@ class MCPBridge:
                     # content in readable form for patient visibility checks.
                     prefix = json.dumps(structured, ensure_ascii=False) + "\n" if type(structured) is dict else ""
                     result = prefix + json.dumps(value, ensure_ascii=False, allow_nan=False)
+                if warning:
+                    result = result + "\n" + warning
                 self.guard.contract.record_result(selected["id"], result)
                 self.guard.journal.record_tool(selected["id"], canonical, result,
                                                event="returned_error" if is_error else "returned",
@@ -203,8 +215,21 @@ class MCPBridge:
             except BaseException as exc:
                 code = ("chi_tool_cancelled" if isinstance(exc, asyncio.CancelledError) else
                         exc.code if isinstance(exc, GoFailure) else "chi_mcp_transport_error")
+                fatal = None
                 try:
-                    self.guard.journal.record_tool(selected["id"], canonical, code, event="failed",
+                    getter = getattr(self.guard, "fatal_getter", None)
+                    fatal = getter() if callable(getter) else None
+                except Exception:
+                    fatal = "chi_fatal_unknown"
+                mutation_unknown = (self.state is not None
+                                    and effect_for(canonical, "mcp") == "mutation"
+                                    and not isinstance(exc, asyncio.CancelledError)
+                                    and not fatal)
+                result = ("UNKNOWN_WRITE_EFFECT: " + code) if mutation_unknown else code
+                if mutation_unknown:
+                    self.guard.contract.record_result(selected["id"], result)
+                try:
+                    self.guard.journal.record_tool(selected["id"], canonical, result, event="failed",
                                                    secrets=(self.guard.secret, self.guard.session))
                 except Exception:
                     pass
@@ -213,11 +238,13 @@ class MCPBridge:
                         run_doc = getattr(self.guard.journal, "run", None)
                         rounds = len(run_doc.get("requests", [])) if isinstance(run_doc, dict) else 0
                         self.state.observe(call_id=selected["id"], tool=canonical, kind="mcp",
-                                           arguments=args, result=code, event="failed",
+                                           arguments=args, result=result, event="failed",
                                            round_number=rounds,
                                            scope=self.state.scope_for_arguments(args))
                     except Exception:
                         pass
                 if self.binding is not None:
                     self.binding.poisoned = True
+                if mutation_unknown:
+                    return result
                 raise

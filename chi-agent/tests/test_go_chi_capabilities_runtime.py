@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import httpx
 
+from go_chi_context import DEFAULT_BUDGET
 from go_chi_journal import ChiJournal
 from go_chi_runtime import run_chi
 from opencode_go_provider import GoFailure
@@ -71,7 +72,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.temp.cleanup()
 
     async def exercise(self, responses, *, names=("triage.get",), role="payer", capabilities="f0-f3-v1",
-                       fail=None, expect_failure=False):
+                       fail=None, expect_failure=False, context_budget=DEFAULT_BUDGET):
         journal = ChiJournal(self.root / "state", identity="a" * 64, evaluation="eval",
                              task=role, attempt="a", run="run")
         server = Server(names, fail=fail)
@@ -86,7 +87,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     instruction_path=self.instruction, logs_dir=self.root / "logs",
                     workspace_root=self.workspace, handbook_root=self.handbook, tool_references=[],
                     lower=httpx.MockTransport(wire), server_factory=lambda _url: server,
-                    capabilities=capabilities)
+                    capabilities=capabilities, context_budget=context_budget)
             except GoFailure:
                 if not expect_failure:
                     raise
@@ -105,15 +106,17 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
                 "target": {"case_id": "CASE-A"},
                 "latest_business_status": {"text": "case open", "source_call_id": "call_3"},
                 "next_candidates": ["read the documents"]})]),
-            completion([("call_5", "local-task-state", {})]),
-            completion([("call_6", "local-claim_done", {})]),
+            completion([("call_5", "local-task-state", {}),
+                        ("call_6", "local-completion-check", {})]),
+            completion([("call_7", "local-claim_done", {})]),
             completion(),
         ]
         output, observed, server, journal = await self.exercise(responses)
         self.assertEqual(output, "done")
         self.assertEqual(server.calls, [("triage.get", {"case_id": "CASE-A"})])
         tools = {item["function"]["name"] for item in observed[0]["tools"]}
-        for name in ("local-task-state", "local-state-update", "local-role-guidance", "local-fs-search"):
+        for name in ("local-task-state", "local-state-update", "local-role-guidance",
+                     "local-fs-search", "local-completion-check"):
             self.assertIn(name, tools)
         state = json.loads((self.root / "logs" / "task-state" / "task-state.json").read_text())
         self.assertEqual(state["target"]["case_id"], "CASE-A")
@@ -126,6 +129,13 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(log["task_state_version"], state["version"])
         self.assertRegex(log["guidance_sha256"], r"^[0-9a-f]{64}$")
         self.assertRegex(log["task_state_sha256"], r"^[0-9a-f]{64}$")
+        self.assertEqual(log["context_budget"], "chi-context-budget-v1")
+        context_lines = (self.root / "logs" / "context.jsonl").read_text().splitlines()
+        self.assertEqual(len(context_lines), log["context_requests"])
+        self.assertGreater(log["context_max_chars"], 0)
+        self.assertNotIn("Synthetic payer instruction", "\n".join(context_lines))
+        self.assertEqual(log["completion"]["verification"], "mechanical_pass")
+        self.assertEqual(log["completion"]["business_effect"], "observed")
         # The search tool returned a bounded hit from the public handbook.
         tool_messages = [message for request in observed for message in request["messages"]
                          if message.get("role") == "tool" and message.get("tool_call_id") == "call_2"]
@@ -253,14 +263,123 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
                    if message.get("role") == "tool"}
         self.assertIn("ERROR: search_unreadable", results["call_1"])
 
-    async def test_unknown_write_is_recorded_before_the_run_stops(self):
-        responses = [completion([("call_1", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})])]
-        with self.assertRaises(GoFailure):
-            await self.exercise(responses, names=("payer_intake_hub.confirm_decisions",),
-                                fail="payer_intake_hub.confirm_decisions")
+    async def test_context_budget_exceeded_stops_before_send(self):
+        tiny = {"schema": "chi-context-budget-v1", "max_chars": 10,
+                "max_estimated_tokens": 10, "output_reserve_tokens": 1, "basis": "test"}
+        output, observed, server, _ = await self.exercise(
+            [completion()], expect_failure=True, context_budget=tiny)
+        self.assertIsNone(output)
+        self.assertEqual(observed, [])
+        self.assertEqual(server.calls, [])
+        log = json.loads((self.root / "logs" / "run_log.txt").read_text())
+        self.assertEqual(log["status"], "incomplete")
+        self.assertEqual(log["safe_error_code"], "chi_context_budget_exceeded")
+        self.assertEqual(log["context_requests"], 0)
+
+    async def test_unknown_write_can_be_read_back_and_resolved(self):
+        responses = [
+            completion([("call_1", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
+            completion([("call_2", "determination__get_summary", {"case_id": "CASE-A"})]),
+            completion([("call_3", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "determined", "source_call_id": "call_2"},
+                "resolve_unknown": [{"unknown_id": "u1", "source_call_id": "call_2",
+                                     "note": "read after transport loss"}]})]),
+            completion([("call_4", "local-claim_done", {})]),
+            completion(),
+        ]
+        output, observed, server, journal = await self.exercise(
+            responses, names=("payer_intake_hub.confirm_decisions", "determination.get_summary"),
+            fail="payer_intake_hub.confirm_decisions")
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("UNKNOWN_WRITE_EFFECT", results["call_1"])
+        self.assertIn("task marked as done", results["call_4"])
+        state = json.loads((self.root / "logs" / "task-state" / "task-state.json").read_text())
+        self.assertEqual(state["unknowns"][0]["status"], "resolved")
+        self.assertIsNotNone(state["claim"])
+        self.assertEqual([call[0] for call in server.calls],
+                         ["payer_intake_hub.confirm_decisions", "determination.get_summary"])
+
+    async def test_unresolved_unknown_write_ends_incomplete(self):
+        responses = [
+            completion([("call_1", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
+            completion(),
+        ]
+        output, _, _, _ = await self.exercise(
+            responses, names=("payer_intake_hub.confirm_decisions",),
+            fail="payer_intake_hub.confirm_decisions", expect_failure=True)
+        self.assertIsNone(output)
+        log = json.loads((self.root / "logs" / "run_log.txt").read_text())
+        self.assertEqual(log["status"], "incomplete")
+        self.assertEqual(log["safe_error_code"], "chi_unknown_write_effect")
         state = json.loads((self.root / "logs" / "task-state" / "task-state.json").read_text())
         self.assertEqual(state["unknowns"][0]["status"], "open")
-        self.assertEqual(state["unknowns"][0]["call_id"], "call_1")
+
+    async def test_write_is_blocked_while_unknown_is_open(self):
+        responses = [
+            completion([("call_1", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
+            completion([("call_2", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
+            completion([("call_3", "determination__get_summary", {"case_id": "CASE-A"})]),
+            completion([("call_4", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "determined", "source_call_id": "call_3"},
+                "resolve_unknown": [{"unknown_id": "u1", "source_call_id": "call_3",
+                                     "note": "read after loss"}]})]),
+            completion([("call_5", "local-claim_done", {})]),
+            completion(),
+        ]
+        output, observed, server, _ = await self.exercise(
+            responses, names=("payer_intake_hub.confirm_decisions", "determination.get_summary"),
+            fail="payer_intake_hub.confirm_decisions")
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("unknown_write_effect_pending", results["call_2"])
+        self.assertEqual([call[0] for call in server.calls],
+                         ["payer_intake_hub.confirm_decisions", "determination.get_summary"])
+
+    async def test_repeated_write_is_refused(self):
+        responses = [
+            completion([("call_1", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
+            completion([("call_2", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
+            completion([("call_3", "determination__get_summary", {"case_id": "CASE-A"})]),
+            completion([("call_4", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "determined", "source_call_id": "call_3"}})]),
+            completion([("call_5", "local-claim_done", {})]),
+            completion(),
+        ]
+        output, observed, server, _ = await self.exercise(
+            responses, names=("payer_intake_hub.confirm_decisions", "determination.get_summary"))
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("repeated_write_forbidden", results["call_2"])
+        self.assertEqual([call[0] for call in server.calls],
+                         ["payer_intake_hub.confirm_decisions", "determination.get_summary"])
+
+    async def test_repeated_read_warns_then_is_blocked(self):
+        responses = [
+            completion([("call_1", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("call_2", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("call_3", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("call_4", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("call_5", "triage__get", {"case_id": "CASE-A"})]),
+            completion(),
+        ]
+        output, observed, server, _ = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("STAGNATION", results["call_3"])
+        self.assertIn("stagnation_detected", results["call_5"])
+        self.assertEqual(len(server.calls), 4)
 
     async def test_capabilities_none_keeps_the_old_toolset_and_claim(self):
         responses = [

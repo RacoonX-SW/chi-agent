@@ -461,6 +461,16 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
   /opt/venv/bin/python -m unittest discover -s tests
 ```
 
+## F4–F6 上下文预算、完成核验与失败处理
+
+`run_chi()` 默认启用 `context_budget=DEFAULT_BUDGET`（`chi-context-budget-v1`）：3.5M 字符、1M 估计 token、8192 输出预留，来源标 `configured_unverified`。每次通过 contract 的请求在 `journal.reserve()` 前测量 system/instruction/tools/history/tool_result/reasoning，写入 `logs/context.jsonl`（只含计数，不含正文）；超限在发送前返回 `chi_context_budget_exceeded`。`run_log.txt` 另记 `context_requests`、最大字符/估计 token 和已结算输入 token。自动历史压缩**未采用**：当前完整批次校验要求未满足新 contract/真实协议证据，不能靠删消息绕过。
+
+完成核验通过 `local-completion-check` 返回 `chi-completion-v1`，区分 `mechanical_pass/not_applicable/blocked` 与 `observed/not_observed/not_verified/unknown/violation`，并写入 run_log 的 `completion`；它不替代 claim，也不是临床或官方 verdict。
+
+F6 对 MCP mutation 的 dispatch 异常返回 `UNKNOWN_WRITE_EFFECT: <code>`，登记 open unknown；未知期间拒绝所有写，只能用同目标更晚只读观察 resolve；未解决结束为 `chi_unknown_write_effect` incomplete。重复读第 3 次追加 `STAGNATION`、第 5 次拒绝；重复写第 2 次拒绝；不自动重试或换模型。本地文件写异常仍按原逻辑失败。
+
+这些能力仍只在合成 SDK/MCP 边界验证；真实 tokenizer、真实超时副作用、真实模型行为和官方评分未验证。设计与证据见 [F4–F6 契约](openspec/changes/agent-capabilities-f4-f6/design.md) 和 [阶段报告](reviews/f4-f6-context-completion-review.md)。
+
 ## Go CHI 独立包入口
 
 `scripts/go_chi_entry.py` 接收外部 instruction、一个角色 MCP、日志目录和 evaluation/task/attempt/run 身份；它只在经过 manifest 校验的导出包内运行。原 `opencode_go_provider.py` 继续是固定 coding 探针，原 `evaluation_entry.py` 的 live 拒绝保持。实际已验证范围、固定候选和限制只查 [审核状态](reviews/REVIEW_STATE.md)。

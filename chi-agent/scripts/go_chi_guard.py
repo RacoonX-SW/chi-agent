@@ -9,6 +9,7 @@ import time
 
 import httpx
 
+from go_chi_context import check_budget, measure_request
 from go_chi_contract import ToolContract, ContractFailure
 from opencode_go_provider import (GoFailure, _contains_secret, _unique,
                                   SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
@@ -26,7 +27,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
     """
     def __init__(self, journal, secret, session, lower, *, tools, system, instruction,
                  claimed, confirmation, before_batch=None, observed_request=None, run_started=None,
-                 billing_lock=None, fatal_getter=None):
+                 billing_lock=None, fatal_getter=None, context_recorder=None, context_limit=None):
         if (type(secret) is not str or not secret.strip() or type(session) is not str
                 or not re.fullmatch(r"chi-[0-9a-f]{32}", session)
                 or type(system) is not str or type(instruction) is not str
@@ -36,7 +37,12 @@ class ChiGuard(httpx.AsyncBaseTransport):
             raise GoFailure("chi_guard_invalid")
         if observed_request is not None and not callable(observed_request):
             raise GoFailure("chi_guard_invalid")
+        if context_recorder is not None and not callable(context_recorder):
+            raise GoFailure("chi_guard_invalid")
+        if context_limit is not None and type(context_limit) is not dict:
+            raise GoFailure("chi_guard_invalid")
         self.journal, self.secret, self.session, self.lower = journal, secret, session, lower
+        self.context_recorder, self.context_limit = context_recorder, context_limit
         self.contract = ToolContract(tools)
         self.system, self.instruction = system, instruction
         self.claimed, self.confirmation = claimed, confirmation
@@ -98,7 +104,16 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                                coding_probe=coding_b)
                 if self.observed_request is not None:
                     self.observed_request(body["messages"], used)
+            if self.context_recorder is not None or self.context_limit is not None:
+                metric = measure_request(body)
+                blocked = check_budget(metric, self.context_limit)
+                if blocked is not None:
+                    raise GoFailure(blocked)
+                if self.context_recorder is not None:
+                    self.context_recorder(metric, purpose)
             return purpose
+        except GoFailure:
+            raise
         except Exception:
             raise GoFailure("chi_request_invalid") from None
 

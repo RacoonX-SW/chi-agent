@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 
 from opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
                                   SCHEMAS as B_SCHEMAS, DESCRIPTIONS as B_DESCRIPTIONS,
                                   _matches_patch, _same_route_reasoning)
 from model_runner_adapter import _patch_empty_history_compatibility
+from go_chi_context import DEFAULT_BUDGET, check_budget
 from go_chi_guidance import digest as guidance_digest
 from go_chi_state import TaskState
 
@@ -82,7 +84,7 @@ async def run_coding_b(client, guard, tools):
 async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_path,
                   logs_dir, workspace_root, handbook_root, tool_references, lower,
                   server_factory=None, auxiliary=None, evidence_shadow=None,
-                  capabilities="f0-f3-v1"):
+                  capabilities="f0-f3-v1", context_budget=DEFAULT_BUDGET):
     """Run one role using a previously preflighted journal and injected transport.
 
     No authorization or bundle/source verification is performed here. The
@@ -122,8 +124,25 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         raise GoFailure("chi_transport_missing")
     if capabilities not in {None, "f0-f3-v1"}:
         raise GoFailure("chi_capabilities_invalid")
+    if context_budget is not None and check_budget(
+            {"total_chars": 0, "estimated_tokens": 0}, context_budget) == "chi_context_budget_invalid":
+        raise GoFailure("chi_context_budget_invalid")
     logs_dir = __import__("pathlib").Path(logs_dir)
     logs_dir.mkdir(mode=0o700, parents=False, exist_ok=False)
+    context_metrics = []
+    context_path = logs_dir / "context.jsonl"
+
+    def record_context(metric, purpose):
+        value = dict(metric)
+        value["purpose"] = purpose
+        context_metrics.append(value)
+        try:
+            with context_path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(value, sort_keys=True, ensure_ascii=False, allow_nan=False) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+        except OSError:
+            raise GoFailure("chi_context_persistence_failed") from None
     run_started = time.monotonic()
     context = contextvars.ContextVar("chi_confirmation", default=None)
     holder, exchanges = {}, []
@@ -186,7 +205,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                              instruction=instruction, claimed=lambda: journal.run["claim_done"],
                              confirmation=context.get, before_batch=before_batch, observed_request=observed_request,
                              run_started=run_started, billing_lock=auxiliary.billing_lock if auxiliary else None,
-                             fatal_getter=(lambda: auxiliary.fatal) if auxiliary else None)
+                             fatal_getter=(lambda: auxiliary.fatal) if auxiliary else None,
+                             context_recorder=record_context, context_limit=context_budget)
             holder["guard"] = guard
             bridge.guard = guard
             client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",
@@ -218,6 +238,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                 # Defense in depth: a mutation observed after a claim invalidates
                 # it; do not let the run finish with only the journal claim.
                 raise GoFailure("chi_claim_invalidated")
+            if state is not None and any(item["status"] == "open" for item in state.data["unknowns"]):
+                raise GoFailure("chi_unknown_write_effect")
     except BaseException as exc:
         failure = getattr(locals().get("guard"), "error", None) or (auxiliary.fatal if auxiliary else None) or (exc.code if isinstance(exc, GoFailure) else "chi_runner_failed")
         if isinstance(exc, __import__("asyncio").CancelledError):
@@ -264,11 +286,22 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                     "task_state_claim_violation": bool(state.data.get("claim_violation")),
                     "task_state_open_unknowns": [item["id"] for item in state.data["unknowns"]
                                                  if item["status"] == "open"],
+                    "completion": state.completion_report(),
                 })
                 try:
                     summary["task_state_sha256"] = hashlib.sha256(state.path.read_bytes()).hexdigest()
                 except OSError:
                     summary["task_state_sha256"] = None
+            if context_budget is not None:
+                summary.update({
+                    "context_budget": context_budget["schema"],
+                    "context_requests": len(context_metrics),
+                    "context_max_chars": max((item["total_chars"] for item in context_metrics), default=0),
+                    "context_max_estimated_tokens": max(
+                        (item["estimated_tokens"] for item in context_metrics), default=0),
+                    "context_prompt_tokens": sum(
+                        item["usage"]["input_tokens"] for item in settled),
+                })
             if auxiliary is not None:
                 aux = [item for item in journal.run['requests'] if item['purpose'] == 'patient_simulator']
                 summary['patient_simulator_requests'] = len(aux)

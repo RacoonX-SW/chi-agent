@@ -727,3 +727,18 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 因此 F0–F3 可以进入用户合并决策，但真实运行仍需新的 bundle manifest、合规 B 凭据和配额校验；F4–F7、Z1–Z8 也不会因为这次通过而自动完成。
 - 下一讲解入口仍是 F4 上下文预算/组织与压缩可行性；等 PR32 合并后从最新 main 开新分支实现，避免把 F4–F6 堆进已审的 F0–F3 差异。
 - 面试版完整走读（层次、代码入口、正常/失败链、失败状态表、追问与 60 秒表述）见 [F0–F3 走读](f0-f3-walkthrough.md)。
+
+### F4–F6：预算、完成证据与失败恢复
+
+- F4 先把“上下文里有什么”变成可测数据：system、instruction、tools、history、tool_result、reasoning 分开计字符，再给字节和 `chars/4` 的估计 token；不把估计冒充 tokenizer。预算在 `journal.reserve()` 前检查，超限直接停止，不产生请求。`context.jsonl` 只存计数，不复制正文。
+- 自动压缩没有采用，原因是 `ToolContract.validate_history()` 要求完整已接受工具批次；要合法换历史，需要新 contract 版本、reasoning/tool 关联重放、替换 hash、旧检查点防覆盖和真实 SDK/API 证据。当前交付的是测量、预算、状态/片段组织和超限停止，不是“压缩已完成”。
+- F5 的完成报告把 `mechanical_pass`（机械/来源通过）、`not_applicable`（没有可核验效果）和 `blocked`（缺口/未知/违规）分开；业务效果再分 `observed/not_observed/not_verified/unknown/violation`。claim 仍是模型声明，报告不是临床或官方 verdict。
+- F6 的未知写不是“失败”也不是“成功”：MCP 写异常返回 `UNKNOWN_WRITE_EFFECT`，登记 open unknown；期间禁止再写，只能用同目标更晚只读观察 resolve；未解决就结束则 run 为 `chi_unknown_write_effect` incomplete。重复读第 3 次警告、第 5 次阻断；重复写第 2 次阻断，不自动重试。
+- 验证：定向 37 tests、全量 436 tests（2 个既有环境错误、8 skipped）；真实 tokenizer、真实 MCP 超时副作用、真实模型是否遵守停滞提示仍未验证。
+- 下一讲解入口：F7 实验清单/分母/费用汇总与 Z1 正式配送准备；真实运行审批包另行准备。
+
+### F4–F6 复审通过的含义
+
+- 外部 Gemini 的通过覆盖四项：F4 预算/度量、F5 完工检验、F6 未知写恢复、F6 停滞保护；边界仍是离线静态/契约与 Docker 合成，没有真实模型、官方判分或未见题。
+- 这次通过不改变“自动压缩不采用”的决策；压缩设计按讨论搁置，以后单独做确定性检查点/可选摘要变更。
+- 面试可讲：预算为什么在 dispatch 前拦、完成报告为什么只做机械验证、未知写为什么先阻断再只读查证、停滞为什么只给信号/有限阻断而不自动重试。具体代码走读可参照 [F0–F3 走读](f0-f3-walkthrough.md) 的同一方式补 F4–F6。
