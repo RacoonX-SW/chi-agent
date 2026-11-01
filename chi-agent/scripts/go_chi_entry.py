@@ -231,6 +231,13 @@ def main(argv=None, *, development=None):
     try:
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
+            import importlib
+            for module in ("go_chi_context", "go_chi_guidance", "go_chi_search", "go_chi_state",
+                           "go_chi_guard", "go_chi_mcp", "go_chi_tools", "go_chi_runtime"):
+                loaded = importlib.import_module(module)
+                path = Path(getattr(loaded, "__file__", "")).resolve()
+                if ROOT not in path.parents:
+                    raise GoFailure("chi_package_module_missing")
             print(json.dumps({"status": "identity_verified", "identity_sha256": identity,
                               "identity": identity_detail, "official_reward": None}, sort_keys=True))
             return 0
