@@ -306,3 +306,26 @@ t027 终态：MD 决定 `p2p_review`、`signed_off=False`、determination `denie
 - 在同 bundle、同题、同参数下，能力包在这两道 payer 题上**没有产生可测差异**；一次截断属于偶发，不能写成机制效果。
 - 这比“讲一个漂亮故事”更可信：能力包的价值可能在别的任务家族或更长的链上，但本组数据不支持。
 - 所有运行均 settled（payer-010 除外），无自动重试、无换账根。
+
+## 15. MD 签核指导与 t027 重跑（2026-11-02）
+
+候选 `a2a8199`：payer guidance 增加两条——
+
+- `submit_md_case_decision` 的 `signed_off` 对 approve/deny/partial_approve 必须为 true；
+- 选 `p2p_review` 时必须先完成 P2P，且不得从“仍保留决定”的记录直接 finalize 出不利终态。
+
+release-v7（bundle `aeb61fdc…`、identity `40a2e975…`）、B10 complete。
+
+`real-ext-payer-014`（t027，35 请求，696 万入 / 3.6 万出）complete，但结果与 v6 相同：
+
+- MD 决定仍是 `p2p_review`、`signed_off=False`；
+- determination 仍为 `denied`、denial 信已投递；
+- 检查仍 **21 true / 1 false（`md.signed_off`）**。
+
+指导摘要确实变了（`bd63286c…` → `8cbdad4e…`），说明新文本已交付；模型仍选择了“先 p2p_review、再直接 finalize 不利终态”，违反第二条。
+
+判断：
+
+- 公开工具文档允许 `p2p_review` 不签核，也允许 `determination.finalize`；该题的期望用了签核的 deny 路径，属于**任务期望选择**，公开 instruction 无法区分两条合法路径。
+- 继续用指导文案施压没有效果；要在程序层强制，只能新增“p2p_review 不得直接 finalize 出不利终态”的规则，但那会发明一条公开文档没有的业务规则。
+- 因此本项按 21/22 收口，不再改 Agent；`signed_off` 指导保留（对真正的终局决定仍然正确）。

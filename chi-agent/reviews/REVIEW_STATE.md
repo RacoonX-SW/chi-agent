@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | Z4 第一组 A/B 完成并**修正**：payer t011 上 off(n=3, 2 完成) 与 on(n=1) 同为 26/28；t030 triage 上 off/on 同为 23/28——能力包未见可测差异，payer-005 的 8192 截断为单次抖动。第二道 payer 题 t027 已跑：complete、21/22，唯一 false 是 `md.signed_off`。`state-abl-on` 保留 payer-010 的 transport 未结算 pending，改用 `state-abl-on2`。 |
+| 当前任务 | t027 的 `md.signed_off` 用 guidance 修（`a2a8199`/release-v7）**未生效**：新文本已交付（digest 变化），模型仍选 `p2p_review`+直接 denied，21/22 不变。判定为期望选择差异，公开文档无法区分两条合法路径；不再为此改 Agent。下一步：实现输出截断的“续写”机制（新 purpose）。 |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F6、F7、Z1均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | Z6`ccdf8f2`经外部Gemini离线复审通过（LGTM）：发布包布局/白名单、确定性构建、SHA256+内层Bundle核验；Z1`a9965e5`、F7`fd617c3`、F4–F6`efc9019`、F0–F3`5c1fa51`此前均通过。所有结论限静态/契约/Docker合成，无真实Trial/模型/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
