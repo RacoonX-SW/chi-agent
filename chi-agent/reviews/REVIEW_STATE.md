@@ -4,28 +4,29 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | F0–F3已合并（PR32）。F4–F6离线候选`efc9019`经外部Gemini复审**通过（LGTM）**：上下文预算/度量、完成核验、未知写恢复、停滞保护；436 tests（2个既有环境错误、8 skipped），**仅合成SDK/MCP，未真实运行**。待创建base=main的PR由用户合并。F7、Z1–Z8仍待做；自动压缩设计搁置。证据见[F4–F6报告](f4-f6-context-completion-review.md) |
+| 当前任务 | F0–F6已合并。F7离线工具候选`fd617c3`：experiment manifest（off/on/na、冻结SHA）、record严格校验、全分母汇总、CLI；451 tests（2个既有环境错误、8 skipped），**无真实实验/模型/判分**。待外部Gemini复审并开PR。Z1–Z8、真实Z4/Z5仍待做；自动压缩设计搁置。证据见[F7报告](experiment-harness-review.md) |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F3、F4–F6均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | F4–F6候选`efc9019`/文档`20b59b5`经外部Gemini复审通过（LGTM）：限离线静态、契约、Docker合成MCP/HTTP；未调用外部付费/模型API、未判分/未见题。上一轮F0–F3候选`5c1fa51`同样离线通过。均不能扩大为真实模型/业务/官方评分通过 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | F0–F3已合并，`origin/main`=`066c9ae`。F4–F6分支`codex/f4-f6-context-completion`，实现`efc9019`、文档HEAD`20b59b5`；PR待创建，未合并。未改vendor/账目/历史证据；下次开始须再核对远端 |
+| 当前分支与接手改动 | F0–F6已合并，`origin/main`=`4ade699`。F7分支`codex/f7-experiment-harness`，实现`fd617c3`；契约/报告为后续文档提交。未改vendor/账目/历史证据；下次开始须再核对远端 |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；上次审计active pending/halt=null，本轮未重审真实账。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本轮规划新增真实请求0，不读Key、不启动题世界；W/Y旧清单已收束。补齐功能计划后，额度提案修订为最多40次C、16次coding-B及2响应患者probe，含机制对照/九题未见集，**待审尚未生效**；独立摘要请求不包含。启动时一次性固定实际范围/用途/额度，包内不逐步等GPT。t019例行付费/Claude/付费临床评审等暂停保持，F.5待启动 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | Docker/Python3.12全量`436 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；新增12个F4–F6测试，定向37 tests OK。覆盖上下文分列/预算停止、完成报告、未知写读回/resolve、未知期间写拒绝、未解决终态、重复读警告/阻断、重复写阻断。外部Gemini离线复审通过（LGTM）；未真实模型/任务/判分；详见[F4–F6报告](f4-f6-context-completion-review.md) |
+| 本轮验证 | Docker/Python3.12全量`451 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；新增15个F7测试，定向15 tests OK。覆盖manifest字段/off-on配对/比较、全分母、跳过/阻断、缺日志/用量、候选不一致、重复/计划外、official、by_role、CLI。无真实实验/模型/判分；待外部Gemini复审；详见[F7报告](experiment-harness-review.md) |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR28–PR32均已合并。F4–F6分支已推送、外部Gemini复审通过，待创建base=main的PR由用户合并；合并后从最新main开F7/Z1准备。真实运行仍需用户一次性确认任务/候选/资源/次数 |
+| PR 与下一步 | PR28–PR34均已合并。F7分支已固定候选`fd617c3`，待推送/开PR并交外部Gemini复审；通过后进入Z1正式配送离线准备。真实Z4/Z5运行仍需用户一次性确认任务/候选/资源/次数 |
 | 外部条件复核 | 本轮内置浏览未取得当前Kaggle Rules正文，概览索引与上次Rules解释冲突，强制材料/全量公开评测要求未重新确认；Go官方页面DeepSeek月度ZDR脚注仍只到2026-10-31，CHI非编码用途/十一月条件未确认。见[Z0来源与处置](../openspec/changes/project-completion/design.md#4-z0尽早解决会改变整个计划的外部条件)，不因额度较多自动放行对应载荷 |
-| 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用、模型对停滞提示的遵守、自动压缩可行性、F4–F6外部复审 |
+| 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用、模型对停滞提示的遵守、自动压缩可行性、F4–F6外部复审；F7真实manifest/record、检查项映射、日志/用量字段、外部复审 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null。本轮F0–F3真实请求0、未启动题世界 |
 
 接续材料：
 
+- [F7 实验清单与全分母汇总](experiment-harness-review.md)
 - [F4–F6 上下文、完成核验与失败处理](f4-f6-context-completion-review.md)
 - [F0–F3 能力实现与离线证据](f0-f3-agent-capabilities-review.md)
 - [A 独立审核与实际接入证据](bootstrap-baseline-a-review.md)

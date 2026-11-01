@@ -742,3 +742,11 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 外部 Gemini 的通过覆盖四项：F4 预算/度量、F5 完工检验、F6 未知写恢复、F6 停滞保护；边界仍是离线静态/契约与 Docker 合成，没有真实模型、官方判分或未见题。
 - 这次通过不改变“自动压缩不采用”的决策；压缩设计按讨论搁置，以后单独做确定性检查点/可选摘要变更。
 - 面试可讲：预算为什么在 dispatch 前拦、完成报告为什么只做机械验证、未知写为什么先阻断再只读查证、停滞为什么只给信号/有限阻断而不自动重试。具体代码走读可参照 [F0–F3 走读](f0-f3-walkthrough.md) 的同一方式补 F4–F6。
+
+### F7：实验清单、检查适用性与全分母
+
+- F7 的第一原则是“先冻结再跑”：manifest 固定 candidate（源码/包/模型/端点/模拟器/能力）、任务与资源 hash、F1–F6 的 off/on 或 `na`、请求/输出上限、检查项和停止条件。off/on 两臂必须同任务集合与 limits，否则不是单变量对照；不可独立切换的机制用 `na`+reason，不能伪造 on 臂。
+- 汇总不输出 success rate。它只给全分母计数：planned/attempted/completed/failed/skipped/blocked/not_run/missing_evidence；checks 的 pass/fail/na/not_run；business/content；usage 的 known sum 与 missing；official reward 的 present/absent。跳过、未运行、NA、缺日志都不补成 pass，缺用量不补 0。
+- 失败历史不可覆盖：同一计划单元只能一条 record，重试要预先登记新 attempt；计划外/重复/候选不一致的记录直接拒绝。off/on 只并列展示，不自动计算“某机制有效”。
+- 验证：15 个合成测试通过，全量 451 tests（2 个既有环境错误、8 skipped）；真实 Z4/Z5 的 manifest/record、真实检查器和费用字段仍未接入。
+- 下一讲解入口：Z1 正式配送的离线准备（bundle/依赖/资源/state 供应责任），再回到真实运行的批准包。
