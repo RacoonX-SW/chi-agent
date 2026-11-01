@@ -53,6 +53,14 @@ class EntryTests(unittest.TestCase):
                 self.assertTrue((qroot / "chi-evaluation" / "chi-accounting.json").exists())
             self.assertEqual(q_bytes, (qroot / "accounting.json").read_bytes())
 
+    def test_profile_matches_entry_config_without_patching(self):
+        raw = (entry.ROOT / "profiles/go-chi-entry.json").read_bytes()
+        config = entry.json.loads(raw, object_pairs_hook=entry._pairs,
+                                  parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+        self.assertTrue(entry._same(config, entry.CONFIG))
+        self.assertEqual(config["time_policy"]["main_read_seconds"],
+                         entry.TIME_POLICY["main_read_seconds"])
+
     def test_reference_forbids_fixture_paths(self):
         with tempfile.TemporaryDirectory() as d:
             path = Path(d) / "fixtures" / "instruction.md"

@@ -11,6 +11,7 @@ import httpx
 from go_chi_guard import ChiGuard
 from go_chi_journal import ChiJournal
 from opencode_go_provider import GoFailure, SYSTEM, INSTRUCTION, SCHEMAS, DESCRIPTIONS
+from go_chi_policy import TIME_POLICY
 from request_budget import feedback
 
 URL = "https://opencode.ai/inference/go/openai/v1/chat/completions"
@@ -35,6 +36,13 @@ def request(data):
 
 
 class GuardTests(unittest.IsolatedAsyncioTestCase):
+    def test_main_read_window_covers_measured_generations(self):
+        self.assertGreaterEqual(TIME_POLICY["main_read_seconds"], 180)
+        self.assertGreater(TIME_POLICY["main_io_seconds"], TIME_POLICY["main_read_seconds"])
+        self.assertGreater(TIME_POLICY["confirmation_read_seconds"], TIME_POLICY["main_read_seconds"])
+        self.assertLess(TIME_POLICY["main_io_seconds"], TIME_POLICY["chi_admission_seconds"])
+        self.assertLess(TIME_POLICY["chi_operator_seconds"], TIME_POLICY["operator_max_seconds"])
+
     async def test_purpose_timeouts_and_dispatch_evidence(self):
         for confirmation in (False, True):
             with self.subTest(confirmation=confirmation), tempfile.TemporaryDirectory() as directory:
@@ -54,7 +62,9 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
                                 max_tokens=32768, response_format={'type': 'json_object'})
                     del data['tools']
                 await guard.handle_async_request(request(data))
-                self.assertEqual(seen, [{'connect': 10, 'read': 360 if confirmation else 60, 'write': 60, 'pool': 60}])
+                self.assertEqual(seen, [{'connect': TIME_POLICY['connect_seconds'],
+                    'read': TIME_POLICY['confirmation_read_seconds' if confirmation else 'main_read_seconds'],
+                    'write': TIME_POLICY['write_seconds'], 'pool': TIME_POLICY['pool_seconds']}])
                 doc = json.loads((root / 'wire-evidence/r/001-request.json').read_text())
                 self.assertEqual(doc['dispatch']['purpose'], 'confirmation' if confirmation else 'main')
                 self.assertEqual(doc['dispatch']['session_sha256'], hashlib.sha256(SESSION.encode()).hexdigest())
@@ -378,6 +388,36 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(calls)
             self.assertFalse(j.run["requests"])
             j.finish("failed"); j.close()
+
+
+    async def test_tool_call_position_index_is_tolerated_end_to_end(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            j = ChiJournal(root, identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+            assistant = {"role": "assistant", "content": None, "reasoning_content": "think",
+                         "tool_calls": [{"index": 0, "id": "call_0_read", "type": "function",
+                                         "function": {"name": "read", "arguments": "{}"}}]}
+            async def answer(req):
+                payload = json.loads(req.content)
+                if len(payload["messages"]) == 2:
+                    return httpx.Response(200, request=req, json={"usage": USAGE, "model": "deepseek-v4.1-flash",
+                        "choices": [{"finish_reason": "tool_calls", "message": assistant}]})
+                return httpx.Response(200, request=req, json={"usage": USAGE, "model": "deepseek-v4.1-flash",
+                    "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "done"}}]})
+            guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
+                             system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
+            await guard.handle_async_request(request(body()))
+            self.assertEqual([c["name"] for c in guard.contract.records], ["read"])
+            guard.contract.record_result("call_0_read", "ok")
+            replay = body(1)
+            replay["messages"] += [
+                {"role": "assistant", "content": None, "reasoning_content": "think",
+                 "tool_calls": [{"index": 0, "id": "call_0_read", "type": "function",
+                                 "function": {"name": "read", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "call_0_read", "content": "ok"}]
+            await guard.handle_async_request(request(replay))
+            self.assertEqual([item["status"] for item in j.run["requests"]], ["settled", "settled"])
+            j.finish("complete"); j.close()
 
 
 if __name__ == "__main__":

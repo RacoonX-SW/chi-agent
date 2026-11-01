@@ -11,6 +11,7 @@ from openai import AsyncOpenAI
 
 from go_chi_guard import ChiGuard
 from go_chi_journal import ChiJournal
+from go_chi_policy import TIME_POLICY
 from model_runner_adapter import _patch_empty_history_compatibility
 from opencode_go_provider import _same_route_reasoning
 from request_budget import feedback
@@ -241,7 +242,9 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
             try:
                 self.assertTrue(await run_coding_b(client, guard, tools))
                 self.assertEqual(len(journal.run["requests"]), 3)
-                self.assertEqual(timeouts, [{'connect': 10, 'read': 60, 'write': 60, 'pool': 60}] * 3)
+                self.assertEqual(timeouts, [{'connect': TIME_POLICY['connect_seconds'],
+                    'read': TIME_POLICY['main_read_seconds'], 'write': TIME_POLICY['write_seconds'],
+                    'pool': TIME_POLICY['pool_seconds']}] * 3)
                 journal.finish("complete")
             finally:
                 await client.close()

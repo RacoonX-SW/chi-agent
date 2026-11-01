@@ -79,6 +79,41 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ContractFailure):
             contract.validate_history(history, system="system", instruction="instruction", used=1, claimed=False)
 
+    def test_optional_position_index_is_dropped_from_stored_batch(self):
+        contract = ToolContract(definition())
+        indexed = call('a', '{"id":1}')
+        indexed["index"] = 0
+        batch = message([indexed])
+        calls = contract.accept_batch(batch)
+        self.assertEqual([c['name'] for c in calls], ['read'])
+        self.assertEqual(contract.batches[0]["message"]["tool_calls"], [call('a', '{"id":1}')])
+        self.assertNotIn("index", contract.batches[0]["message"]["tool_calls"][0])
+        contract.record_result('a', 'observed')
+        history = [{'role': 'system', 'content': 'system' + feedback(1, False)[0]},
+                   {'role': 'user', 'content': 'instruction'},
+                   message([indexed]),
+                   {'role': 'tool', 'tool_call_id': 'a', 'content': 'observed'}]
+        contract.validate_history(history, system='system', instruction='instruction', used=1, claimed=False)
+
+    def test_unknown_tool_call_field_is_rejected_without_commit(self):
+        contract = ToolContract(definition())
+        forged = call('a', '{"id":1}')
+        forged["parallel"] = True
+        with self.assertRaises(ContractFailure):
+            contract.accept_batch(message([forged]))
+        self.assertEqual(contract.records, [])
+        self.assertEqual(contract.batches, [])
+
+    def test_invalid_position_index_is_rejected(self):
+        for value in (-1, "0", 0.0, True, None):
+            with self.subTest(index=value):
+                contract = ToolContract(definition())
+                indexed = call('a', '{"id":1}')
+                indexed["index"] = value
+                with self.assertRaises(ContractFailure):
+                    contract.accept_batch(message([indexed]))
+                self.assertEqual(contract.records, [])
+
     def test_text_block_result_must_replay_exactly(self):
         contract = ToolContract(definition())
         batch = message([call("a", '{"id":1}')])

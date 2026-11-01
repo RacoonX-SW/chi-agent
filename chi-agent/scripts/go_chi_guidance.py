@@ -22,7 +22,8 @@ _INVARIANTS = {
     "payer": [
         "Approval, partial approval, denial, pend and routing are all legal outcomes; do not assume one is correct.",
         "Presence of a document does not prove a criterion is met; apply the observed public rule to the observed facts.",
-        "MD review is one possible branch, not a mandatory step for every case.",
+        "MD review is one possible branch, not a mandatory step for every case; when the task instruction says you own the case end to end and names a later stage such as the MD decision or P2P, perform that stage before finalizing.",
+        "Closing on an earlier branch is legal only when the observed public rule makes the later stage unnecessary; record that reason in the determination or notes.",
         "Letter type and finalize/deliver actions must match the observed determination and the public rule.",
         "After finalize/deliver, read the determination or letter state back before claiming completion.",
     ],
@@ -33,6 +34,9 @@ _INVARIANTS = {
         "After a finalize write, read the case/plan state back before claiming completion.",
     ],
 }
+
+_WORKSPACE_INVARIANT = ("Write artifacts only under '<case_id>/<role>/' or '<case_id>/shared/' in the role workspace; "
+                        "the role directory is the exact role id (provider, payer or cm), not a job title.")
 
 _STAGES = {
     "provider": [
@@ -129,6 +133,11 @@ _STAGES = {
 }
 
 
+def delivered_invariants() -> dict[str, list[str]]:
+    """Invariants exactly as delivered, including the shared workspace rule."""
+    return {role: _INVARIANTS[role] + [_WORKSPACE_INVARIANT] for role in _INVARIANTS}
+
+
 def guidance(role: str, state_summary: dict | None = None) -> dict:
     if role not in _STAGES:
         raise ValueError("chi_guidance_role_invalid")
@@ -139,7 +148,7 @@ def guidance(role: str, state_summary: dict | None = None) -> dict:
         "schema": VERSION,
         "role": role,
         "stages": _STAGES[role],
-        "invariants": _INVARIANTS[role],
+        "invariants": delivered_invariants()[role],
         "current_target": target,
         "next_candidates": next_candidates,
         "state_version": summary.get("version"),
@@ -150,6 +159,6 @@ def guidance(role: str, state_summary: dict | None = None) -> dict:
 
 
 def digest() -> str:
-    raw = json.dumps({"version": VERSION, "invariants": _INVARIANTS, "stages": _STAGES},
+    raw = json.dumps({"version": VERSION, "invariants": delivered_invariants(), "stages": _STAGES},
                      ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()

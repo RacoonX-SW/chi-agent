@@ -83,3 +83,69 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(observation["effect"], "mutation")
             self.assertEqual(observation["event"], "failed")
             self.assertEqual(observation["scope"], "case:CASE-A")
+
+
+class WorkspaceWriteTests(unittest.IsolatedAsyncioTestCase):
+    def _tools(self, root, role, workspace, state=None, binding=None):
+        handbook = root / "handbook"; handbook.mkdir(exist_ok=True)
+        instruction = root / "instruction.md"; instruction.write_text("synthetic")
+        holder = {}
+        tools = local_tools(role=role, workspace_root=workspace, instruction_path=instruction,
+            tool_references=[], handbook_root=handbook, journal=Journal(), binding=binding,
+            guard_getter=lambda: holder["guard"], client_getter=lambda: None,
+            confirmation_context=contextvars.ContextVar("test", default=None), exchanges=[],
+            dispatch_lock=asyncio.Lock(), state=state, capabilities="f0-f3-v1")
+        holder["guard"] = SimpleNamespace(contract=ToolContract([Converter.tool_to_openai(t) for t in tools]),
+                                          secret="secret", session="session")
+        return tools, holder
+
+    async def test_write_creates_missing_parent_directories(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); workspace = root / "workspace"; workspace.mkdir()
+            state = TaskState(root / "state", run="run_1", role="cm")
+            tools, holder = self._tools(root, "cm", workspace, state=state)
+            (workspace / "CASE-A").mkdir()
+            path = str(workspace / "CASE-A" / "cm" / "notes" / "deep" / "letter.md")
+            args = {"path": path, "content": "written"}
+            holder["guard"].contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": "c", "type": "function",
+                                "function": {"name": "local-fs-write", "arguments": json.dumps(args)}}]})
+            write = next(t for t in tools if t.name == "local-fs-write")
+            self.assertEqual(await write.on_invoke_tool(None, json.dumps(args)), "workspace file written")
+            self.assertEqual(Path(path).read_text(), "written")
+
+    async def test_write_refuses_case_directory_that_does_not_exist(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); workspace = root / "workspace"; workspace.mkdir()
+            state = TaskState(root / "state", run="run_1", role="cm")
+            tools, holder = self._tools(root, "cm", workspace, state=state)
+            path = str(workspace / "CASE-FAKE" / "cm" / "letter.md")
+            args = {"path": path, "content": "x"}
+            holder["guard"].contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": "c", "type": "function",
+                                "function": {"name": "local-fs-write", "arguments": json.dumps(args)}}]})
+            write = next(t for t in tools if t.name == "local-fs-write")
+            result = await write.on_invoke_tool(None, json.dumps(args))
+            self.assertTrue(result.startswith("ERROR:"))
+            self.assertFalse((workspace / "CASE-FAKE").exists())
+
+    async def test_write_does_not_follow_symlinked_role_directory(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); workspace = root / "workspace"; outside = root / "outside"
+            workspace.mkdir(); outside.mkdir()
+            (workspace / "CASE-A").mkdir()
+            (workspace / "CASE-A" / "cm").symlink_to(outside)
+            state = TaskState(root / "state", run="run_1", role="cm")
+            tools, holder = self._tools(root, "cm", workspace, state=state)
+            path = str(workspace / "CASE-A" / "cm" / "letter.md")
+            args = {"path": path, "content": "leak"}
+            holder["guard"].contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": "c", "type": "function",
+                                "function": {"name": "local-fs-write", "arguments": json.dumps(args)}}]})
+            write = next(t for t in tools if t.name == "local-fs-write")
+            result = await write.on_invoke_tool(None, json.dumps(args))
+            self.assertTrue(result.startswith(("ERROR:", "REFUSED:")))
+            self.assertFalse((outside / "letter.md").exists())

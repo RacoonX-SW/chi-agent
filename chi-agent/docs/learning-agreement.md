@@ -786,3 +786,54 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 通过覆盖发布包布局/白名单、确定性构建、SHA256 + 内层 Bundle 核验；边界仍是离线发布包/合成构建，没有真实干净依赖安装、Harbor Trial、模型或官方判分。
 - SHA/checksum 能发现构建后篡改，但不是签名；不能证明来源可信、执行许可或真实环境可用。
 - 合并后下一步不是直接跑模型，而是整理真实 Z4/Z6 的一次性审批包：任务/候选/资源/用途/次数/停止条件，以及 Z8 材料结构。
+
+### Z6 干净复现：空卷安装与 preflight
+
+- 实际用两个全新空卷、固定带 hash 的 model/PDF 锁完成安装；release 包在无 Key、禁网容器中跑 preflight，返回 `identity_verified`，upstream clean，`official_reward=null`。这证明“空卷安装 + 包/依赖/上游身份”可复现。
+- 它不证明 world/MCP、真实模型、Harbor Trial、状态持久化、owned 资源清理或官方判分。空卷安装需要网络，但 preflight 不需要；不要把安装成功当成运行授权。
+- 下一步是一次性真实审批包：具体任务/角色、候选/release SHA、资源/镜像 hash、B/C 次数、用途、停止条件和账目边界。用户批准前不启动真实运行。
+
+### 真实运行边界：规则、资源与 history mode
+
+- 官方 Rules 已读：公开 75 题；公开结果和 75 题 audit packet 非必需；必交 Kaggle Writeup、私有可运行包、IEEE 两栏 ≤5 页报告；报名/组队 11/7，最终提交 11/15 23:59 UTC；患者是模拟数据、无真实 PHI；handbook 受限且不得再分发。
+- payer t011 与 CM 题的公开 instruction/task/fixtures manifest/world 已在本地开发数据集找到；运行前只选公开文件并冻结 hash，expectations/tests/solution/judge 不进入 Agent。用户因此不需要另外上传这两题资源。
+- `external` history 是新的隔离 evaluation/state，不复用旧 Q 账本；它不证明账户历史为零。`local` 是接续旧 Q，先审计旧 pending/halt，可能被历史阻断。批次 A/Y 推荐 external；确认前不启动真实调用。
+
+### 真实批次A：B 成功与 provider 超时未结算
+
+- 首次 real external B 在 import 阶段失败，根因是最终 bundle 漏打包 F1–F6 新模块；修复 `PACKAGE_FILES` 和 preflight 导入检查后，新 bundle `ee004c…` 的 B `real-ext-b-002` 成功（3请求，费用完整）。旧失败保留，不覆盖。
+- provider t032 C 在 17 次请求后 `chi_timeout`；第 17 次请求 pending/usage unknown。已知 16 次 token（约314万入/3.37万出），但未知请求不能当 0 或成功。operator 清理/world quiescence 已确认，业务检查只部分通过。
+- 关键判断：**超时只证明调用方没及时收到结果，不证明服务端没执行**。按规则立即停止同账后续 B/C，payer/CM/Y 未跑，不自动重试、不换账根、不删除 pending。下一步需要 provider Console 单请求记录或用户明确处置。
+- 这也暴露 F4/timeout 研究点：30万+ input 的长上下文请求在 60s 读超时下超时；不能直接改超时后重试，需独立候选/复审/新 attempt。
+- 对账工具复审通过后已对正式 `state-v2` 执行一次：`pending=null`、`admission_cleared=true`、原 request 仍 pending、seal 不变、event `e96cbb…`；这不是把请求改成成功。
+- 随后 payer 001 在发请求前失败 `chi_history_invalid`：runner 用的旧 release-v2 包不包含 reconciliation schema，无法读取新状态。它没有模型请求/费用，但 world_quiescence 未证明。教训：账 schema 变化必须同步重建包和 B，不能拿旧包读新账；旧失败目录不覆盖，改用新 release/B/state-v3。
+- release-v3 的 B3 成功；payer 002 是 `chi_tool_batch_invalid`（工具批次/协议问题，全部请求已结算、无 pending、清理确认，业务只完成 intake/nurse）；CM 002 又在 round8 `chi_timeout`，pending/usage unknown，触发同账停止。说明：不同失败要分开——工具批次错误可离线定位，未知用量必须停；两者都不能自动重试。
+- CM round8 的 Console 记录也精确匹配（200、105,771入/4,623出、$0.01863945、90.8s），已用同一复审工具对 `state-v3` 对账：`pending=null`、event `5be3fa…`、seal 不变、原 request 仍 pending。两次超时都不是“服务端失败”，而是**客户端 60s 读超时早于服务端完成**（67.7s / 90.8s），所以正确做法是保留未知、只清准入，而不是把请求改成功。
+- payer 002 的最终定位（复现后更正）：模型调用 `determination__get_summary` 本身合法，失败是因为响应里 tool_call 多了一个 `"index": 0`，而 guard 要求键集合全等。之前“阶段工具面拒绝”的判断不成立；修复见上方「真实运行暴露的两类通用故障」。
+### 真实运行暴露的两类“通用”故障
+
+- **协议字段比模型行为更常杀死运行**：payer 002 第 18 轮原始响应多了一个 `"index": 0`。它不是模型选错工具，而是 OpenAI 兼容端点偶发带上的位置字段；旧校验器要求 tool_call 的键集合完全等于 `{id,type,function}`，于是整轮判 `chi_tool_batch_invalid`。教训：外部协议的可选字段要显式建模，不能靠全等比较；但也不能放开所有未知键，否则无法区分端点漂移和伪造。
+- **读超时是“客户端放弃”，不是“服务端失败”**：provider round 17 服务端 67.7s、CM round 8 服务端 90.8s 都返回 200 并计费，客户端 60s 已先超时。非流式响应在生成完成前不产生字节，所以 read timeout 直接等于“服务端是否被允许算完”。正确处置是先对账未知用量，再单独评估窗口；直接把超时调大后原样重试会造成二次计费。
+- **两种失败要分开处理**：工具批次/协议错误可以离线复现并修校验器；未知 token/费用必须先停止同账准入。都不能自动重试。
+- **调策略会改包身份**：`TIME_POLICY` 进入 runtime profile，所以读窗口从 60s 改到 240s 后，旧 coding-B 收据不适用，必须新 release + 新 B。
+
+### 复审抓到的“配置漂移”比逻辑错误更隐蔽
+
+- 读窗口改在 `go_chi_policy.TIME_POLICY`，但 `profiles/go-chi-entry.json` 是同一份配置的文本副本；`go_chi_entry._identity()` 会做全等比较，所以没同步时任何真实入口都会 `chi_config_invalid`。
+- 单测没抓到，是因为既有测试用 `patch.object(entry, "_identity")` 直接绕过了这段比较。教训：凡是“运行时读取的真实文件 + 内存常量”双份存在，必须有一条不打桩的等价性测试；打桩只能测调用方行为，不能证明配置一致。
+- 修复后复跑：`config_matches 240 300`；全量 472 tests（2 个既有环境错误、8 skipped）。外部复审仍以修复后的新提交为准。
+
+### v4 重跑：两个修复都生效，但业务终态各有原因
+
+- payer 003 第一次在真实环境 `complete`：37 请求、138 工具事件、579s，全部结算。说明 `index` 兼容和 240s 读窗口解决了“跑不完”的问题。
+- 但 payer 的四项检查（MD audit/决定、信件类型、目标状态）仍为 false，且与 10/31 的 W 批次**完全一致**。这说明它是稳定的业务差距，不是这次修复或随机波动造成的；要改需要单独分析 payer 终态逻辑，不能靠重跑碰运气。
+- CM 003 也 `complete`，结局是“患者不同意入组 → 不做评估 → 停在 outreach_complete”。这是合规路径，所以 `cm.assessment.record_exists` 等为 false 属于预期，不能当工程失败。
+- CM 同时暴露接线缺口：`local-fs-write` 只接受 `<case>/<provider|payer|cm|shared>/file`，但工具描述没写；`<case>/shared/...` 父目录不存在时也不创建。模型两次猜 `care-manager/`、一次撞到缺目录，承诺的书面材料没落盘。这是典型的“契约在代码里、不在工具说明里”的问题。
+- 教训：真实跑的“完成”只说明链路跑通；业务终态、合规路径和工具可用性要分别看，不能用一个 status 概括。
+
+### 指导文案也能改变业务结果
+
+- payer 003 的 4 项 false 不是工具缺失，而是计划漏步：公开 instruction 明确要求“drive clinical review, MD decision … through to final determination”，模型只读了 MD 数据就结案。
+- 把 guidance 从“MD 不是必经步骤”改成“MD 不是必经，但 instruction 点名时必须执行，提前收口要记录规则依据”后，payer 004 的 MD audit 与 MD 决定立刻转 true——说明阶段指导是真实生效的控制点。
+- 剩余两项 `letter_types` / `target_status` 由任务 expectations 定义，公开 instruction 推不出来；继续对齐就得读隐藏期望，那是禁止的调参边界。所以停在 26/28，并把原因写清楚。
+- 另一个细节：F5 要求写后回读业务记录，模型却去读本地文件，`local-claim_done` 两次被拒。这批证据说明“完成声明”门禁在工作，但指导需要说明回读要走 MCP 业务状态。

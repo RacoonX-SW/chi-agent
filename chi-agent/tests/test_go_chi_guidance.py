@@ -28,6 +28,8 @@ class GuidanceTests(unittest.TestCase):
         self.assertIn("do not submit", provider.lower())
         payer = str(guidance("payer"))
         self.assertIn("not a mandatory step", payer.lower())
+        self.assertIn("names a later stage", payer.lower())
+        self.assertIn("makes the later stage unnecessary", payer.lower())
         for outcome in ("approve", "deny", "pend", "route to md", "p2p"):
             self.assertIn(outcome, payer.lower())
         cm = str(guidance("cm"))
@@ -44,6 +46,23 @@ class GuidanceTests(unittest.TestCase):
         self.assertEqual(value["current_target"], {"case_id": "CASE-A"})
         self.assertEqual(value["next_candidates"], [{"text": "read status"}])
         self.assertEqual([item["id"] for item in value["unknowns"]], ["u1"])
+
+    def test_workspace_convention_is_stated_for_every_role(self):
+        for role in ("provider", "payer", "cm"):
+            invariants = " ".join(guidance(role)["invariants"]).lower()
+            self.assertIn("<case_id>/<role>/", invariants)
+            self.assertIn("exact role id", invariants)
+
+    def test_digest_covers_the_delivered_workspace_invariant(self):
+        import hashlib
+        import json
+        from go_chi_guidance import _INVARIANTS, _STAGES
+        legacy = json.dumps({"version": VERSION, "invariants": _INVARIANTS, "stages": _STAGES},
+                            ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        self.assertNotEqual(digest(), hashlib.sha256(legacy).hexdigest())
+        for role in ("provider", "payer", "cm"):
+            self.assertEqual(guidance(role)["invariants"][-1],
+                             guidance("cm")["invariants"][-1])
 
     def test_invalid_role_is_rejected(self):
         with self.assertRaises(ValueError):
