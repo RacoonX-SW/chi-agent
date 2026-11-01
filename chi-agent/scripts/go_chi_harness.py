@@ -55,7 +55,15 @@ class GoChiHarness(OpenAIAgentsHarness):
         return {}
 
     async def install(self, environment) -> None:
-        # Package and its pinned dependencies are supplied by the caller.
+        """Intentionally no network install.
+
+        The caller supplies the exported package, pinned model/PDF dependencies,
+        official source checkout, public resources and writable state/log
+        directories in the world image. ``run()`` performs the no-key package
+        preflight before any model credential is read; a missing package or
+        dependency fails there rather than being downloaded here.
+        """
+        del environment
         return None
 
     def populate_context_post_run(self, context) -> None:
