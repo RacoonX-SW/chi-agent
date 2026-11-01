@@ -129,3 +129,36 @@ release-v3：bundle `6f6e71d8…`、identity `b936b7…`、state-v3。
 ### 当前停止点
 
 `state-v3.pending = {run: real-ext-cm-002, round: 8}`。需要 CM round8 的 Console 记录（若显示 200）才能评估对账；否则批次 A 按未完成收口。不能自动重试或换账根。
+
+## 9. CM round8 对账与 payer 失败定位（2026-11-01 补）
+
+- CM round8 Console 精确匹配：request `01a19734-9e29-7610-a59e-a52bb1ff8ba2`，HTTP200，105,771 input / 4,623 output，cost 0.01863945，90.8s，body 394,869/session SHA 与 dispatch 一致。
+- 已对正式 `state-v3` 执行同款对账：`execution_allowed=false`、`admission_cleared=true`、`settled=false`；event `5be3fa04…`，对账后 accounting SHA `c384e379…`；seal 不变、原 request 仍 pending；备份 `state-v3-pre-cm-reconcile-backup-20261101`。
+- payer 002 最后响应是合法 JSON，但工具调用为 `determination__get_summary({case_id: CASE-6B9F238D})`；该工具在 intake 阶段没有被当前角色工具面接受，guard 返回 `chi_tool_batch_invalid`，整个 run 终止。不是用量未知，也不是网络失败。模型在 nurse 建议后直接跳到 determination，未先按阶段路由/终态路径推进。
+- payer 失败无 pending、全部请求 settled；CM 失败已对账；state-v3 pending=null。Y 未运行。
+
+## 10. 现状总结与下一步（2026-11-01）
+
+批次 A 与 Y 的实际状态：
+
+| run | 任务 | 状态 | 请求 | 用量 | pending |
+| --- | --- | --- | --- | --- | --- |
+| `real-ext-b-002` | coding-B（release-v2） | complete | 3 | 1406/123 | 无 |
+| `real-ext-provider-001` | provider t032 | failed `chi_timeout` | 17 | 3,147,059/33,754 | 已对账（round17） |
+| `real-ext-payer-001` | payer t011 | blocked `chi_history_invalid` | 0 | 0 | 无 |
+| `real-ext-b-003` | coding-B（release-v3） | complete | 3 | 1399/133 | 无 |
+| `real-ext-payer-002` | payer t011 | failed `chi_tool_batch_invalid` | 18 | 2,304,350/11,329 | 无 |
+| `real-ext-cm-002` | CM afib | failed `chi_timeout` | 8 | 343,056/3,068 | 已对账（round8） |
+| Y 4C | — | 未运行 | 0 | 0 | — |
+
+两个工程问题：
+
+1. **60s 客户端读超时短于长上下文生成时间**。provider round17 服务端 67.7s、CM round8 90.8s，均 HTTP200 后客户端已放弃。已完成受审对账，但真正修复需评估更长读超时或上下文预算策略；不能只改超时后原样重跑（新候选 + 新 attempt）。
+2. **payer 阶段工具面过大/错误不可恢复**。模型在 intake/nurse 后直接调用 `determination__get_summary`，guard 判 `chi_tool_batch_invalid` 并 fatal，整个运行终止。需要的是按阶段暴露工具或把“当前阶段不可用”返回为可恢复的工具错误，让模型改道，而不是放宽校验。
+
+下一步（离线）：
+
+- 复现 payer 002 的工具序列，确认 `determination__get_summary` 在 intake 阶段为何出现在可用工具列表里（ListTools 快照/阶段白名单）。
+- 设计候选：阶段性工具过滤 + 可恢复 `tool_not_available` 错误语义；读超时改为配置项并做合成慢响应测试。
+- 两处均先离线测试、复审，再决定是否值得新 release + 新 B + 新 attempt；Y 还需第二个 payer 任务公开资源。
+- 不重试 provider/payer/CM，不换账根，不伪造 settled。

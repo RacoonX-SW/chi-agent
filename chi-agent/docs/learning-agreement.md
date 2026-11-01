@@ -808,3 +808,5 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 对账工具复审通过后已对正式 `state-v2` 执行一次：`pending=null`、`admission_cleared=true`、原 request 仍 pending、seal 不变、event `e96cbb…`；这不是把请求改成成功。
 - 随后 payer 001 在发请求前失败 `chi_history_invalid`：runner 用的旧 release-v2 包不包含 reconciliation schema，无法读取新状态。它没有模型请求/费用，但 world_quiescence 未证明。教训：账 schema 变化必须同步重建包和 B，不能拿旧包读新账；旧失败目录不覆盖，改用新 release/B/state-v3。
 - release-v3 的 B3 成功；payer 002 是 `chi_tool_batch_invalid`（工具批次/协议问题，全部请求已结算、无 pending、清理确认，业务只完成 intake/nurse）；CM 002 又在 round8 `chi_timeout`，pending/usage unknown，触发同账停止。说明：不同失败要分开——工具批次错误可离线定位，未知用量必须停；两者都不能自动重试。
+- CM round8 的 Console 记录也精确匹配（200、105,771入/4,623出、$0.01863945、90.8s），已用同一复审工具对 `state-v3` 对账：`pending=null`、event `5be3fa…`、seal 不变、原 request 仍 pending。两次超时都不是“服务端失败”，而是**客户端 60s 读超时早于服务端完成**（67.7s / 90.8s），所以正确做法是保留未知、只清准入，而不是把请求改成功。
+- payer 002 的具体原因：模型在 nurse 建议后直接调用 `determination__get_summary`，该工具属于后续阶段，intake 阶段工具面不接受，guard 判 `chi_tool_batch_invalid` 并 fatal。这是**阶段工具选择/错误语义**问题，不是 token 未知；需要改的是阶段性工具可见性或把“工具不可用”变成可恢复反馈，而不是放宽批次校验。

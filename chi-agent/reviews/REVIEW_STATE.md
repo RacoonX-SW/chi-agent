@@ -4,25 +4,25 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 真实批次A（v3）：B3`real-ext-b-003`成功；payer `real-ext-payer-002` `chi_tool_batch_invalid`（18请求/68工具，全settled，无pending，清理确认，业务部分）；CM `real-ext-cm-002` `chi_timeout`，round8 pending/usage unknown（7 settled，清理确认），**再次触发同账停止**；Y未运行。需CM round8 Console记录评估对账，否则按未完成收口；不自动重试/换账根。证据见[真实批次A记录](real-external-batch-a-review.md) |
+| 当前任务 | 真实批次A（v3）：B3成功；payer 002 `chi_tool_batch_invalid`（18请求/68工具，全settled、无pending、清理确认；最后调用`determination__get_summary`在intake阶段不被接受）；CM 002 `chi_timeout` round8 已由Console精确匹配并对账（event`5be3fa…`、pending=null、seal不变）。Y未运行。**当前主要问题是60s读超时/长上下文与payer阶段工具选择，不是缺Key**；不自动重试/换账根。证据见[真实批次A记录](real-external-batch-a-review.md) |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F6、F7、Z1均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | Z6`ccdf8f2`经外部Gemini离线复审通过（LGTM）：发布包布局/白名单、确定性构建、SHA256+内层Bundle核验；Z1`a9965e5`、F7`fd617c3`、F4–F6`efc9019`、F0–F3`5c1fa51`此前均通过。所有结论限静态/契约/Docker合成，无真实Trial/模型/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | `origin/main`=`dac6080`。`codex/real-external-operator`（`0fd2029`，external操作者）与`codex/z6-clean-repro`（Z6证据/审批/真实记录；含bundle清单修复`81a3b15`与合并）均未合并。真实状态根`runs/real-external/state-v2`，provider round17 pending。未改vendor/账目/历史证据；下次开始须再核对远端 |
+| 当前分支与接手改动 | `origin/main`=`dac6080`。`codex/real-external-operator`（`0fd2029`）、`codex/reconcile-provider-timeout`（`2493cd3`，已并入下分支）与`codex/z6-clean-repro`（Z6证据/审批/真实记录，含merge `5f913f6`）均未合并。正式状态根`state-v2`（provider round17已对账、pending=null）与`state-v3`（CM round8已对账、pending=null）；两者的原request均仍pending。未改vendor/历史证据；下次开始须再核对远端 |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
-| 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；上次审计active pending/halt=null，本轮未重审真实账。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
+| 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；上次审计active pending/halt=null，本轮未重审真实账。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。external两处超时（provider round17、CM round8）已按复审工具对账：pending=null，原request仍pending、三项USD未补，seal不变。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本轮规划新增真实请求0，不读Key、不启动题世界；W/Y旧清单已收束。补齐功能计划后，额度提案修订为最多40次C、16次coding-B及2响应患者probe，含机制对照/九题未见集，**待审尚未生效**；独立摘要请求不包含。启动时一次性固定实际范围/用途/额度，包内不逐步等GPT。t019例行付费/Claude/付费临床评审等暂停保持，F.5待启动 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | Docker/Python3.12全量`466 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；Z6 release定向5 tests、外部Gemini复审通过。另用两个全新空卷从固定锁安装model/PDF依赖，release包无Key禁网preflight返回`identity_verified`（`identity_sha256=d4651a…`、upstream clean、`official_reward=null`）。无world/模型/Trial/判分；详见[干净复现报告](z6-clean-repro-review.md) |
+| 本轮验证 | Docker/Python3.12全量`474 tests`：2个既有环境错误（缺`anthropic`）、11 skipped；Z6 release定向5 tests、外部Gemini复审通过。另用两个全新空卷从固定锁安装model/PDF依赖，release包无Key禁网preflight返回`identity_verified`（`identity_sha256=d4651a…`、upstream clean、`official_reward=null`）。真实v3 preflight identity `b936b7…`。无world/模型/Trial/判分；详见[干净复现报告](z6-clean-repro-review.md) |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR28–PR37均已合并。external操作者`0fd2029`、reconcile工具`2493cd3`、Z6/真实证据分支待PR。v3 B成功；payer工具批次失败（无pending）；CM round8 pending。下一步：用户提供CM round8 Console记录→评估对账；否则批次A按未完成收口。Y不运行、provider不重试、不换账根。 |
+| PR 与下一步 | PR28–PR37均已合并。external操作者`0fd2029`、reconcile工具`2493cd3`、Z6/真实证据分支待PR。state-v2（provider round17）与state-v3（CM round8）均已对账，pending=null；payer 002 工具批次失败无pending。下一步：离线修复60s读超时/长上下文与payer阶段工具面语义（先测试+复审），再决定Y（需第二个payer任务公开资源）；不重试provider/payer、不换账根。 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
-| 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
-| 真实运行 | W历史保留。2026-11-01 external批次A：B `real-ext-b-002` 成功；provider 001 17请求后超时，Console 200/369422入/8192出/$0.0603285，state-v2已对账（event`e96cbb…`）。release-v3：B3`real-ext-b-003`成功（3请求/1399入/133出）；payer 002 `chi_tool_batch_invalid`（18请求/68工具，全settled，无pending，清理确认，业务部分）；CM 002 `chi_timeout` round8 pending（7 settled，清理确认），Y未运行。0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
+| 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
+| 真实运行 | W历史保留。2026-11-01 external批次A：B `real-ext-b-002` 成功；provider 001 17请求后超时，Console 200/369422入/8192出/$0.0603285/67.7s，state-v2已对账（event`e96cbb…`）。release-v3（bundle`6f6e71d8…`）：B3`real-ext-b-003`成功（3请求/1399入/133出/$0.000158）；payer 002 `chi_tool_batch_invalid`（18请求/68工具，全settled、无pending，业务部分）；CM 002 `chi_timeout` round8，Console 200/105771入/4623出/$0.01863945/90.8s，state-v3已对账（event`5be3fa…`）。Y未运行。0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
 
 接续材料：
 
