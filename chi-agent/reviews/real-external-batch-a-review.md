@@ -263,35 +263,46 @@ release-v3：bundle `6f6e71d8…`、identity `b936b7…`、state-v3。
 
 `local-claim_done` 被拒两次：F5 要求写后回读业务记录，Agent 却去读本地文件，所以完成声明一直未获准。这是可改进的指导点（回读应通过 MCP 读业务状态，而不是读工作区文件），但不影响本次终态证据。
 
-## 14. Z4 方案 C 第一组 A/B：能力包开关（2026-11-02）
+## 14. Z4 方案 C 第一组 A/B：能力包开关（2026-11-02，含重复与修正）
 
-同一 release-v6（bundle `7206012a…`、identity `55b55cd7…`）、同一 payer t011、同一模型/资源/超时；唯一变量是 `capabilities`。
+同一 release-v6（bundle `7206012a…`、identity `55b55cd7…`）、同一题、同一模型/资源/超时；唯一变量是 `capabilities`。
 
-| 臂 | 配置 | state | B | C |
-| --- | --- | --- | --- | --- |
-| A（对照） | `capabilities=off` | `state-abl-off` | `real-ext-b-007` complete | `real-ext-payer-005` |
-| B（实验） | `capabilities=f0-f3-v1` | `state-abl-on` | `real-ext-b-008` complete | `real-ext-payer-006` |
+### t011（长链：intake→triage→review→MD→determination）
 
-### 结果
+| run | 条件 | 结果 | 请求 | 输入/输出 | 检查 |
+| --- | --- | --- | ---: | --- | --- |
+| payer-005 | off | failed `chi_output_truncated` | 13 | 197万/2.9万 | 17/28 |
+| payer-007 | off | complete | 28 | 484万/2.3万 | 26/28 |
+| payer-008 | off | complete | 30 | 564万/4.1万 | 26/28 |
+| payer-006 | on | complete | 36 | 761万/4.4万 | 26/28 |
 
-| 指标 | A（off） | B（on） |
-| --- | --- | --- |
-| 运行状态 | **failed `chi_output_truncated`** | complete |
-| 请求 | 13 | 36 |
-| 工具事件 | 70 | 148 |
-| 确定性检查 true | 17 | 26 |
-| false | 7（含 nurse 3 项） | 2（`letter_types`、`target_status`） |
-| pending | 无 | 无 |
+**修正：** 之前据 payer-005 得出“无结构必然撞 8192 上限”是过度解释。payer-005 第 13 轮 reasoning 用尽 8192、content 为空，但这是**单次抖动**；随后两次同条件都正常完成。t011 上 **off 与 on 的检查结果完全相同（26/28，剩 `letter_types`、`target_status`）**，即未见能力包带来的可测差异。
 
-A 的第 13 次主请求 `finish_reason=length`、output 8,192 tokens、content 为空，guard 按既有策略 `chi_output_truncated` 终止；全部请求已结算，无未知用量。
+### t030（短链 triage，denial 路径）
 
-### 解读（限定）
+| run | 条件 | 结果 | 请求 | 检查 |
+| --- | --- | --- | ---: | --- |
+| payer-009 | off | complete | 31 | 23/28 |
+| payer-012 | on | complete | 47 | 23/28 |
 
-- 差异真实存在，但**不是**"guidance 让模型补上 MD 阶段"这种单项因果：A 在更早的位置就因为输出上限失败，根本没走到 review/determination。
-- 更准确的描述：能力包（state/guidance/completion/search）把任务拆成了多次可回读的小步，使 payer 能走到终态；无能力时模型试图一次产出过长内容而失败。
-- n=1，只能算探索性信号，不能作为机制收益估计，也不能外推到其他任务。
+两组 false 完全相同：`md.signed_off`、`outcome.determination_decision_matches`、`outcome.letter_types`、`outcome.target_status`。**短链上也没有差异。**
 
-### 附带结论
+### 新题（第二道 payer 题）
 
-- 两组共用同一 bundle identity，说明 A/B 没有混入身份差异；每组各有独立 state 与 B 收据。
-- A 的失败也说明 8192 输出上限是真实约束：对长任务，靠"一次写完"不可行，能力包的分步结构是必要的。
+| run | 题 | 结果 | 请求 | 检查 |
+| --- | --- | --- | ---: | --- |
+| payer-013 | t027 nurse_review（denial） | complete | 30 | 21 true / 1 false（`md.signed_off`） |
+
+t027 终态：MD 决定 `p2p_review`、`signed_off=False`、determination `denied`、denial 信已投递、case `denied`。唯一 false 是 MD 决定没有签核，属于可解释的行为缺口，不是隐藏期望问题。
+
+### 运输中断（未结算）
+
+`payer-010`（t030 on）第 1 次请求 164ms 内 `chi_transport_error`，无 response。Console 导出覆盖 00:52:35–00:53:36，**该 session 无任何记录**（按 session sha 匹配 0 条），即请求未到服务端。
+
+该 state（`state-abl-on`）因此保留 `pending={run: payer-010, round: 1}`，未做任何清除；后续改用新 state `state-abl-on2`。现有 `acknowledge_unsettled` 只接受 `chi_timeout`，不覆盖 transport 错误，属于工具缺口，本轮不绕过。
+
+### 结论（限定）
+
+- 在同 bundle、同题、同参数下，能力包在这两道 payer 题上**没有产生可测差异**；一次截断属于偶发，不能写成机制效果。
+- 这比“讲一个漂亮故事”更可信：能力包的价值可能在别的任务家族或更长的链上，但本组数据不支持。
+- 所有运行均 settled（payer-010 除外），无自动重试、无换账根。
