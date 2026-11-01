@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | F0–F7、Z1均已合并。Z6离线发布包候选`ccdf8f2`经外部Gemini复审**通过（LGTM）**：release wrapper、SHA256SUMS、确定性构建、可选supply plan校验；466 tests（2个既有环境错误、8 skipped），**无真实Trial/模型/判分**。待创建base=main的PR由用户合并；之后准备真实Z4/Z6审批包与Z8材料。自动压缩设计搁置。证据见[Z6报告](z6-release-package-review.md) |
+| 当前任务 | 真实批次A后的两项运行时修复候选（未合并）：①工具调用可选`index`兼容（payer 002真实`chi_tool_batch_invalid`根因，离线复现）；②主请求读窗口60→240s、墙钟120→300s（provider/CM两次服务端200但客户端先超时）。471 tests，2个既有环境错误、8 skipped；**无新真实运行**。证据见[tool-call-index-tolerance](../openspec/changes/tool-call-index-tolerance/proposal.md)与[go-chi-main-read-timeout](../openspec/changes/go-chi-main-read-timeout/proposal.md) |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F6、F7、Z1均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | Z6`ccdf8f2`经外部Gemini离线复审通过（LGTM）：发布包布局/白名单、确定性构建、SHA256+内层Bundle核验；Z1`a9965e5`、F7`fd617c3`、F4–F6`efc9019`、F0–F3`5c1fa51`此前均通过。所有结论限静态/契约/Docker合成，无真实Trial/模型/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
@@ -17,9 +17,9 @@
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本轮规划新增真实请求0，不读Key、不启动题世界；W/Y旧清单已收束。补齐功能计划后，额度提案修订为最多40次C、16次coding-B及2响应患者probe，含机制对照/九题未见集，**待审尚未生效**；独立摘要请求不包含。启动时一次性固定实际范围/用途/额度，包内不逐步等GPT。t019例行付费/Claude/付费临床评审等暂停保持，F.5待启动 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | Docker/Python3.12全量`466 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；新增5个Z6 release测试，定向5 tests OK。覆盖构建/plan、篡改/额外布局、缺manifest/plan不匹配、确定性/CLI、目标存在。外部Gemini离线复审通过（LGTM）；无真实Trial/模型/判分；详见[Z6报告](z6-release-package-review.md) |
+| 本轮验证 | Docker/Python3.12全量`471 tests`：2个既有环境错误（缺`anthropic`）、8 skipped。新增：`index`兼容4 tests（含真实018响应回归）、策略不变量1 test；原写死60/360的超时断言改为读取`TIME_POLICY`。无真实Trial/模型/判分 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR28–PR36均已合并（含F7/Z1）。Z6分支已推送、外部Gemini复审通过，待创建base=main的PR由用户合并；合并后准备真实Z4/Z6 Trial审批包与Z8材料。真实运行仍需用户一次性确认任务/候选/资源/次数 |
+| PR 与下一步 | PR28–PR37均已合并。本分支`codex/tool-call-index-tolerance`含两项运行时修复，待复审/PR。真实批次A证据、external操作者、超时对账在另一分支。下一步：外部Gemini复审本候选 → 合并 → 重建release并取新coding-B → 再决定是否继续真实C；Z4对照/Z5未见集/Z8材料仍未开始 |
 | 外部条件复核 | 本轮内置浏览未取得当前Kaggle Rules正文，概览索引与上次Rules解释冲突，强制材料/全量公开评测要求未重新确认；Go官方页面DeepSeek月度ZDR脚注仍只到2026-10-31，CHI非编码用途/十一月条件未确认。见[Z0来源与处置](../openspec/changes/project-completion/design.md#4-z0尽早解决会改变整个计划的外部条件)，不因额度较多自动放行对应载荷 |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null。本轮F0–F3真实请求0、未启动题世界 |

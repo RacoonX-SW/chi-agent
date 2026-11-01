@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import httpx
 
 from go_chi_journal import ChiJournal
+from go_chi_policy import TIME_POLICY
 from go_chi_runtime import run_chi
 
 
@@ -172,8 +173,13 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                     server_factory=lambda _url: server)
                 self.assertEqual(len(calls), 5)
                 self.assertEqual(calls[3]["max_tokens"], 32768)
-                self.assertEqual([t['read'] for t in timeouts], [60, 60, 60, 360, 60])
-                self.assertTrue(all(t['connect'] == 10 and t['write'] == 60 and t['pool'] == 60 for t in timeouts))
+                main_read = TIME_POLICY['main_read_seconds']
+                confirmation_read = TIME_POLICY['confirmation_read_seconds']
+                self.assertEqual([t['read'] for t in timeouts],
+                                 [main_read, main_read, main_read, confirmation_read, main_read])
+                self.assertTrue(all(t['connect'] == TIME_POLICY['connect_seconds']
+                                    and t['write'] == TIME_POLICY['write_seconds']
+                                    and t['pool'] == TIME_POLICY['pool_seconds'] for t in timeouts))
                 self.assertIn("Already sent before this request: 4", calls[4]["messages"][0]["content"])
                 self.assertEqual([item["purpose"] for item in journal.run["requests"]], ["main", "main", "main", "confirmation", "main"])
                 self.assertTrue(any(e["event"] == "confirmation_result" for e in journal.run["patient_binding_events"]))
