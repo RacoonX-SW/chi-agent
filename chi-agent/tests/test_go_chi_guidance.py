@@ -45,6 +45,12 @@ class GuidanceTests(unittest.TestCase):
         self.assertEqual(value["next_candidates"], [{"text": "read status"}])
         self.assertEqual([item["id"] for item in value["unknowns"]], ["u1"])
 
+    def test_workspace_convention_is_stated_for_every_role(self):
+        for role in ("provider", "payer", "cm"):
+            invariants = " ".join(guidance(role)["invariants"]).lower()
+            self.assertIn("<case_id>/<role>/", invariants)
+            self.assertIn("exact role id", invariants)
+
     def test_invalid_role_is_rejected(self):
         with self.assertRaises(ValueError):
             guidance("admin")

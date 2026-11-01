@@ -34,6 +34,9 @@ _INVARIANTS = {
     ],
 }
 
+_WORKSPACE_INVARIANT = ("Write artifacts only under '<case_id>/<role>/' or '<case_id>/shared/' in the role workspace; "
+                        "the role directory is the exact role id (provider, payer or cm), not a job title.")
+
 _STAGES = {
     "provider": [
         {"id": "identify_target", "goal": "Identify the patient and the service supported by the public chart.",
@@ -139,7 +142,7 @@ def guidance(role: str, state_summary: dict | None = None) -> dict:
         "schema": VERSION,
         "role": role,
         "stages": _STAGES[role],
-        "invariants": _INVARIANTS[role],
+        "invariants": _INVARIANTS[role] + [_WORKSPACE_INVARIANT],
         "current_target": target,
         "next_candidates": next_candidates,
         "state_version": summary.get("version"),

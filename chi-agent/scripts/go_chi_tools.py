@@ -143,7 +143,16 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             return "REFUSED: workspace_case_unverified_or_role_invalid"
         parent = path.parent
         if not parent.is_dir():
-            return "ERROR: workspace parent unavailable"
+            try:
+                parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            except OSError:
+                return "ERROR: workspace parent unavailable"
+            try:
+                root = workspace_root.resolve(strict=True)
+                if root != parent.resolve(strict=True) and root not in parent.resolve(strict=True).parents:
+                    return "ERROR: workspace parent unavailable"
+            except OSError:
+                return "ERROR: workspace parent unavailable"
         try:
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -368,7 +377,9 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
     defs = [
         ("local-fs-read", "Read an allowlisted task, handbook or role workspace file.", schema({"path": {"type": "string"}, "offset": {"type": "integer", "minimum": 1}, "limit": {"type": "integer", "minimum": 1}}, ["path"]), read_file),
         ("local-fs-list", "List an allowlisted role workspace or handbook directory.", schema({"path": {"type": "string"}}, ["path"]), list_files),
-        ("local-fs-write", "Write a file inside the permitted role workspace.", schema({"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]), write_file),
+        ("local-fs-write", "Write a file inside the permitted role workspace. The path must be an absolute path of the form "
+         "'<workspace>/<case_id>/<role>/<file>' or '<workspace>/<case_id>/shared/<file>', where <role> is exactly "
+         "provider, payer or cm; missing parent directories are created.", schema({"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]), write_file),
         ("local-fs-edit", "Edit a file inside the permitted role workspace.", schema({"path": {"type": "string"}, "old_string": {"type": "string", "minLength": 1}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}}, ["path", "old_string", "new_string"]), edit_file),
         ("local-claim_done", "Mark the task as complete after finishing the work.", empty, claim),
     ]
