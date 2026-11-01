@@ -471,6 +471,23 @@ F6 对 MCP mutation 的 dispatch 异常返回 `UNKNOWN_WRITE_EFFECT: <code>`，�
 
 这些能力仍只在合成 SDK/MCP 边界验证；真实 tokenizer、真实超时副作用、真实模型行为和官方评分未验证。设计与证据见 [F4–F6 契约](openspec/changes/agent-capabilities-f4-f6/design.md) 和 [阶段报告](reviews/f4-f6-context-completion-review.md)。
 
+## Z1 正式配送供应检查
+
+Go CHI 采用 **caller-owned 供应**：导出包、固定 model/PDF 依赖、官方 vendor、公开 instruction/handbook/tool refs、单角色 MCP、可写 state/logs 由调用方/操作者在 world 镜像或启动环境中提供；runner 只接收 `OPENCODE_API_KEY`。`GoChiHarness.install()` 明确为无网络 no-op，`run()` 的无 Key 预检才是实际闸门。
+
+`scripts/go_chi_delivery.py` 在 Trial 启动前检查供应形状，不联网、不读 Key：
+
+```bash
+docker run --rm --network none -v "$PWD:/workspace:ro" \
+  -e PYTHONPATH=/workspace/scripts -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python scripts/go_chi_delivery.py check \
+  --plan delivery-plan.json --plan-sha256 <可选 plan SHA>
+```
+
+检查 bundle manifest/SHA、model/PDF 依赖目录、vendor `src/chi_bench`、instruction/handbook/tool refs（普通文件、非链接、非隐藏/评分目录）、MCP 角色端口、logs 新目录、state 父目录、local/external history 和凭据白名单。失败返回稳定 code（如 `delivery_bundle_identity_invalid`、`delivery_logs_exist`、`delivery_credentials_invalid`），不自动下载/安装、不自动重试。
+
+这仍只是离线供应准入；真实 Harbor Trial、world 镜像供应、清理和真实模型/官方任务仍在 Z4/Z6。设计见 [Z1 契约](openspec/changes/go-chi-delivery-supply/design.md)，证据见 [阶段报告](reviews/go-chi-delivery-supply-review.md)。
+
 ## Go CHI 独立包入口
 
 `scripts/go_chi_entry.py` 接收外部 instruction、一个角色 MCP、日志目录和 evaluation/task/attempt/run 身份；它只在经过 manifest 校验的导出包内运行。原 `opencode_go_provider.py` 继续是固定 coding 探针，原 `evaluation_entry.py` 的 live 拒绝保持。实际已验证范围、固定候选和限制只查 [审核状态](reviews/REVIEW_STATE.md)。
