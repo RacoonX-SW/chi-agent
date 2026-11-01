@@ -32,6 +32,6 @@
 
 - [x] 全量 Docker：436 tests，2 个既有环境错误（缺 `anthropic`），8 skipped；新增 12 个测试。
 - [x] `git diff --check` 通过。
-- [ ] 外部 Gemini 复审实现候选 `efc9019`。
+- [x] 外部 Gemini 复审实现候选 `efc9019`：通过（LGTM；限离线静态/契约/Docker 合成，无真实模型/判分/未见题）。
 - [ ] 更新 README/REVIEW_STATE/阶段报告（本提交）。
 - [ ] 用户合并后开 Z1/F7 或真实运行审批包；不在本 PR 混入真实调用。
