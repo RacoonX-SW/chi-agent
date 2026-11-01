@@ -1,6 +1,6 @@
 # 审核接续状态
 
-更新：2026-11-01。只保存接续所需状态；实现通过范围以对应报告为准，存储提交不能代替验收。
+更新：2026-11-02。只保存接续所需状态；实现通过范围以对应报告为准，存储提交不能代替验收。
 
 | 项目 | 当前状态 |
 | --- | --- |
@@ -22,6 +22,8 @@
 | PR 与下一步 | PR28–PR37均已合并。`codex/tool-call-index-tolerance`（`db7d402`）待PR；真实批次证据/审批/reconcile在`codex/z6-clean-repro`。下一步：从`codex/real-run-v4`建release-v4 → 新coding-B `real-ext-b-004` → state-v4 → payer-003/CM-003；Z4第一组A/B已完成（探索性）；Y第二题t027资源已就位待跑；Z5/Z8未开始 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
+| 已知结构问题 | **发布边界只存在于代码里**：`go_chi_bundle.py` 的 `PACKAGE_FILES` 是唯一依据，`scripts/` 58 个模块、约 2.1 万行中 31 个进包、27 个不进包，物理目录看不出哪部分交付。真实缺陷：包内 `model_runner_adapter._budget_check` 局部导入未进包的 `run_baseline.evaluate_budget`，Go 路径当前不经过该函数，属潜在 `ImportError`。用户决定**功能开发完成后统一重构**（按进包/开发工具/历史存档分层）；现在不改路径，因为路径参与 bundle 身份、需新 B 与复审。未做：README 模块地图、learning-agreement 结构记录（等在途分支合并后补，避免与其改动冲突）。本次仅只读分析，未改实现 |
+| 架构评审 | 2026-11-02 全仓只读评审（61 模块/2.1 万行）：主要问题为**同一事实多处重复**——输出/请求上限散落 8 处、路径策略 3 份实现、错误码坍缩丢失 cause、journal 三合一、双轨遗留代码、manifest 手写、身份与策略耦合。赛前建议：`limits.py`/`paths.py` 单一来源 + 诊断 `cause`（影响 identity）；manifest 生成器/静态 import 检查/表驱动契约测试（不影响 identity）。赛后：journal 拆分、双轨分目录、身份/策略解耦。详见[架构评审](../docs/architecture-review.md) |
 | 待与 GPT 讨论 | ①t027 `md.signed_off`：公开文档允许 `p2p_review` 不签核，任务期望用签核 deny；Guidance 已加但仍未改变，需决定是否加程序规则（可能发明业务规则）。②输出截断续写：设计要点（新 `purpose=continuation`、把部分内容作历史、最多 2 次、禁止凭空工具调用）已写在 [真实批次记录](real-external-batch-a-review.md#15-md-签核指导与-t027-重跑2026-11-02) 与本轮对话；未实现。 |
 | 真实运行 | W历史保留。2026-11-01 external：v2 B成功/provider超时已对账；v3 B3成功/payer 002工具批次失败/CM 002超时已对账。**v4（identity`f7d11712…`）**：B4成功；payer 003 complete（37请求、4项业务检查false与W相同）；CM 003 complete（患者未同意→停在outreach_complete；暴露workspace写路径被拒）。**v5（identity`c8cba721…`）**：B5成功；CM 004 complete（37+10请求、602s；写入0拒绝；14项检查全true、care plan finalized）。**v6（identity`55b55cd7…`）**：B6成功；payer 004 complete（35请求、664万入、26/28项true：MD audit与MD决定已转true；剩余letter_types/target_status由隐藏expectations定义，不在公开可推断范围，按26/28收口）。全部settled、pending=null、清理确认。Y未运行。0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
 
