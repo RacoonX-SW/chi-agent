@@ -494,6 +494,22 @@ docker run --rm --network none -v "$PWD:/workspace:ro" \
 manifest 固定 candidate（source/bundle/model/endpoint/simulator/capabilities）、F1–F6 机制的 off/on 或 `na`、任务/角色/attempt、资源 hash、世界镜像、检查项、请求/输出上限和停止条件。off/on 两臂必须同任务集合与 limits；不可独立切换的机制用 `na`+reason。汇总只给全分母计数：completed/failed/skipped/blocked/not_run/missing_evidence、checks pass/fail/na/not_run、business/content、usage known/missing、official present/absent；不输出 success rate、不补 0、不合成官方分数，也不计算某项机制的因果收益。
 
 当前只有合成记录测试（15 个）；真实 Z4/Z5 运行仍需用户批准任务/次数/资源。设计见 [F7 契约](openspec/changes/experiment-harness/design.md)，证据见 [阶段报告](reviews/experiment-harness-review.md)。
+## Z1 正式配送供应检查
+
+Go CHI 采用 **caller-owned 供应**：导出包、固定 model/PDF 依赖、官方 vendor、公开 instruction/handbook/tool refs、单角色 MCP、可写 state/logs 由调用方/操作者在 world 镜像或启动环境中提供；runner 只接收 `OPENCODE_API_KEY`。`GoChiHarness.install()` 明确为无网络 no-op，`run()` 的无 Key 预检才是实际闸门。
+
+`scripts/go_chi_delivery.py` 在 Trial 启动前检查供应形状，不联网、不读 Key：
+
+```bash
+docker run --rm --network none -v "$PWD:/workspace:ro" \
+  -e PYTHONPATH=/workspace/scripts -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python scripts/go_chi_delivery.py check \
+  --plan delivery-plan.json --plan-sha256 <可选 plan SHA>
+```
+
+检查 bundle manifest/SHA、model/PDF 依赖目录、vendor `src/chi_bench`、instruction/handbook/tool refs（普通文件、非链接、非隐藏/评分目录）、MCP 角色端口、logs 新目录、state 父目录、local/external history 和凭据白名单。失败返回稳定 code（如 `delivery_bundle_identity_invalid`、`delivery_logs_exist`、`delivery_credentials_invalid`），不自动下载/安装、不自动重试。
+
+这仍只是离线供应准入；真实 Harbor Trial、world 镜像供应、清理和真实模型/官方任务仍在 Z4/Z6。设计见 [Z1 契约](openspec/changes/go-chi-delivery-supply/design.md)，证据见 [阶段报告](reviews/go-chi-delivery-supply-review.md)。
 
 ## Go CHI 独立包入口
 

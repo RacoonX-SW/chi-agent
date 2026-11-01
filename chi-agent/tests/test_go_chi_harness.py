@@ -61,6 +61,13 @@ class HarnessTests(unittest.IsolatedAsyncioTestCase):
             "CHI_GO_RUN_ID": "run", "CHI_GO_BUNDLE_SHA256": "a" * 64, "CHI_GO_HISTORY_MODE": "external"}
         return harness
 
+    async def test_install_is_explicitly_no_network_noop(self):
+        harness = self.create(0)
+        class Environment:
+            def __getattr__(self, name):
+                raise AssertionError("install must not touch the environment")
+        self.assertIsNone(await harness.install(Environment()))
+
     async def test_command_environment_and_logs(self):
         harness = self.create(0)
         await harness.run("synthetic 'instruction'", FakeEnvironment(harness), None)
