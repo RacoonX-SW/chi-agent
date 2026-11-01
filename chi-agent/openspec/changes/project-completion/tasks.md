@@ -46,7 +46,7 @@
 ## Z4 有界真实开发与对照
 
 - [x] 冻结公开任务、资源、模型/参数、候选和检查适用性（批次 A/Y）。
-- [x] 三角色各一基线：B 成功；provider `chi_timeout`（已对账）；payer `chi_tool_batch_invalid`（工具批次，无 pending）；CM `chi_timeout`（已对账）。
+- [x] 三角色各一基线**已尝试**（非全部成功）：B 成功；provider `chi_timeout`（已对账）；payer `chi_tool_batch_invalid`（工具批次，无 pending）；CM `chi_timeout`（已对账）。
 - [ ] F1–F6 机制对照合计最多 12 次 C（未开始）。
 - [ ] payer off/shadow 最多 4 次 C（未开始）。
 - [ ] 问题驱动的最多六次开发回归（未开始）。
