@@ -4,13 +4,13 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | F0–F7、Z1、Z6发布包已合并；Z6干净复现`identity_verified`。用户已批准真实批次A+Y（1 coding-B+7 C）、external history、清单内新attempt；provider改用资源完整的t032，payer t011/CM afib资源已找到；external操作者配置已生成。**仅Go Key注入文件未就绪**；0次真实调用。Z0 Rules已读（75公开题、公开结果可选、三材料、11/15截止、模拟数据）；Go隐私按用户决定不再确认。证据见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
+| 当前任务 | **真实批次A已启动并触发未知用量停止**：B `real-ext-b-002` 成功（3请求/1406入/123出/费用完整）；provider t032 C `real-ext-provider-001` 在17请求后 `chi_timeout`，round 17 pending/usage unknown；operator清理与world quiescence已确认，业务仅部分检查。payer/CM/Y未运行；**不自动重试、不换账根**。证据见[真实批次A记录](real-external-batch-a-review.md)。Z0 Rules已读（75公开题、公开结果可选、三材料、11/15截止、模拟数据）；Go隐私按用户决定不再确认 |
 | 协作 | OpenCode内Gemini子代理启动失败（`Insufficient account funds`）；用户切外部订阅Gemini审阅，OpenCode只用DeepSeek。F0–F6、F7、Z1均由DeepSeek实现/自测，外部Gemini离线复审；用户最终验收/合并。现行专项与默认模型关系见[协作约定](../../COLLABORATION.md#当前协作方式2026-10-27) |
 | 最新独立审核 | Z6`ccdf8f2`经外部Gemini离线复审通过（LGTM）：发布包布局/白名单、确定性构建、SHA256+内层Bundle核验；Z1`a9965e5`、F7`fd617c3`、F4–F6`efc9019`、F0–F3`5c1fa51`此前均通过。所有结论限静态/契约/Docker合成，无真实Trial/模型/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | `origin/main`=`dac6080`（Z6/PR37已合并）。Z6干净复现分支`codex/z6-clean-repro`，仅新增证据/文档，未改代码；下一步真实运行审批包另开分支。未改vendor/账目/历史证据；下次开始须再核对远端 |
+| 当前分支与接手改动 | `origin/main`=`dac6080`。`codex/real-external-operator`（`0fd2029`，external操作者）与`codex/z6-clean-repro`（Z6证据/审批/真实记录；含bundle清单修复`81a3b15`与合并）均未合并。真实状态根`runs/real-external/state-v2`，provider round17 pending。未改vendor/账目/历史证据；下次开始须再核对远端 |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap、原Go/CHI账根及Q→CHI锁不变；上次审计active pending/halt=null，本轮未重审真实账。唯一旧超时经用户批准留档，其原失败请求仍pending未结算，原账原字节保留；不再占用全局准入。新费用缺项保留null/warning，新的结果/token未知仍停止；不换账根、零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
@@ -19,13 +19,14 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | Docker/Python3.12全量`466 tests`：2个既有环境错误（缺`anthropic`）、8 skipped；Z6 release定向5 tests、外部Gemini复审通过。另用两个全新空卷从固定锁安装model/PDF依赖，release包无Key禁网preflight返回`identity_verified`（`identity_sha256=d4651a…`、upstream clean、`official_reward=null`）。无world/模型/Trial/判分；详见[干净复现报告](z6-clean-repro-review.md) |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR28–PR37均已合并。external操作者支持在`codex/real-external-operator`（`0fd2029`，待PR）；Z6证据/审批包在`codex/z6-clean-repro`。用户已确认external、t032、1B+7C、新attempt。当前仅缺`runs/real-external/auth/go.env`（仅Go Key，0600）；就绪后跑B→3C→Y4C。0次真实调用。 |
+| PR 与下一步 | PR28–PR37均已合并。external操作者`codex/real-external-operator`（`0fd2029`）与Z6/真实证据`codex/z6-clean-repro`待PR。批次A已触发pending：需用户提供round17 Console记录或明确处置；**在此之前不跑payer/CM/Y、不重试、不换账根**。bundle清单修复`81a3b15`需随下一PR合并。 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
-| 真实运行 | W固定当前B与三角色各一次完成，所有新请求已结算、零新增未知/自动重试/回退，owned资源及能力文件已清理。payer批准结果未通过固定终态检查，不改写；原Q/R/S失败及唯一旧未结算原样，Claude/付费临床评审0，official_reward=null。本轮F0–F3真实请求0、未启动题世界 |
+| 真实运行 | W历史保留。2026-11-01 external批次A：B `real-ext-b-002` 成功（3请求/1406入/123出/费用完整）；provider t032 `real-ext-provider-001` 17请求后`chi_timeout`，round17 pending/usage unknown；runner清理与world quiescence已确认，业务部分检查。payer/CM/Y未运行，0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
 
 接续材料：
 
+- [真实批次A执行记录：B成功、provider C超时未结算](real-external-batch-a-review.md)
 - [真实运行一次性审批包（草案，未生效）](../openspec/changes/real-run-approval/proposal.md)
 - [Z6 干净依赖安装与独立包预检](z6-clean-repro-review.md)
 - [Z6 离线发布包与干净环境校验](z6-release-package-review.md)

@@ -1,6 +1,6 @@
 # 真实运行一次性审批包（草案，未生效）
 
-建立：2026-11-01。**这不是调用授权**。只有用户在对话中明确批准具体任务/候选/资源/用途/次数/停止条件后，才可启动真实 B/C。当前 0 次真实调用。
+建立：2026-11-01。**这不是调用授权**。只有用户在对话中明确批准具体任务/候选/资源/用途/次数/停止条件后，才可启动真实 B/C。当前已执行 B 1 次 + provider C 1 次；provider round17 pending/unknown，已停止 payer/CM/Y，禁止自动重试/换账根。详见 [真实批次A记录](../../../reviews/real-external-batch-a-review.md)。
 
 ## 1. 绑定身份
 
@@ -63,7 +63,7 @@
 - [x] 批次 B（Y 4 C）已批准。
 - [x] 停止后允许在同一清单内换新 attempt（不自动重发原请求）。
 - [x] 已生成 external 操作者配置：`runs/real-external/configs/{provider,payer,cm}.json`；状态根 `runs/real-external/state`。
-- [ ] Go Key 只读注入文件：需用户创建 `runs/real-external/auth/go.env`（仅 `OPENCODE_API_KEY`，0600）；当前 shell 政策禁止直接读 `.env`。
-- [ ] 批次 A/Y 的真实 B/C 尚未启动。
-
-Key 文件就绪后，先跑 coding-B，再依次跑 3 个基线 C，最后跑 Y 4 C；每步检查终态/清理/未知。
+- [x] Go Key 只读注入文件已就绪（仅 `OPENCODE_API_KEY`，0600）。
+- [x] B `real-ext-b-002` 成功；provider t032 C `real-ext-provider-001` 17请求后 `chi_timeout`，round17 pending/unknown；清理与world quiescence确认。
+- [ ] payer t011 / CM afib / Y 4C：**未运行**；等待 unknown 处置。
+- [ ] 不自动重试、不换账根；需用户提供 round17 Console 记录或明确决定。

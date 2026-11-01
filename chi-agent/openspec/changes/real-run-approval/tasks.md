@@ -8,9 +8,12 @@
 - [x] 用户确认同时批准 Y 4 C；允许清单内新 attempt。
 - [x] Z0 Kaggle Rules 已读：75 公开题、公开结果可选、三材料、11/15 截止、模拟数据；Go 隐私按用户决定不再确认。
 - [x] 生成 external 操作者配置（provider t032 / payer t011 / CM afib），状态根 `runs/real-external/state`。
-- [ ] 用户创建 `runs/real-external/auth/go.env`（仅 OPENCODE_API_KEY，0600）。
-- [ ] 运行前用 F7 manifest 冻结任务/资源/候选/检查/上限/停止条件（基线 cell 需扩展 baseline 或使用操作者计划）。
-- [ ] 运行前用 Z1 delivery plan 检查包/依赖/vendor/资源/MCP/state/凭据。
+- [x] 用户创建 `runs/real-external/auth/go.env`（仅 OPENCODE_API_KEY，0600）。
+- [x] B `real-ext-b-002` 成功；release bundle 修复为 `ee004c…`，identity `e41ae1…`。
+- [x] provider t032 一次 C 已尝试：`real-ext-provider-001` 17请求后 `chi_timeout`，round17 pending/usage unknown；清理确认，业务部分检查。
+- [ ] **未知用量处置**：等待用户提供 round17 Console 记录或明确决定；不自动重试/换账根。
+- [ ] payer t011 / CM afib / Y 4C 均未运行，待 unknown 关闭后另行确认。
+- [ ] bundle 清单修复 `81a3b15` 与 external operator `0fd2029` 待PR合并。
 - [ ] 新 release 的 coding-B 成功收据；不伪造/复用旧 B。
 - [ ] 逐次保留请求/工具/用量/费用/终态/清理；未知即停，零自动重试。
 

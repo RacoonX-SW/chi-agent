@@ -798,3 +798,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 官方 Rules 已读：公开 75 题；公开结果和 75 题 audit packet 非必需；必交 Kaggle Writeup、私有可运行包、IEEE 两栏 ≤5 页报告；报名/组队 11/7，最终提交 11/15 23:59 UTC；患者是模拟数据、无真实 PHI；handbook 受限且不得再分发。
 - payer t011 与 CM 题的公开 instruction/task/fixtures manifest/world 已在本地开发数据集找到；运行前只选公开文件并冻结 hash，expectations/tests/solution/judge 不进入 Agent。用户因此不需要另外上传这两题资源。
 - `external` history 是新的隔离 evaluation/state，不复用旧 Q 账本；它不证明账户历史为零。`local` 是接续旧 Q，先审计旧 pending/halt，可能被历史阻断。批次 A/Y 推荐 external；确认前不启动真实调用。
+
+### 真实批次A：B 成功与 provider 超时未结算
+
+- 首次 real external B 在 import 阶段失败，根因是最终 bundle 漏打包 F1–F6 新模块；修复 `PACKAGE_FILES` 和 preflight 导入检查后，新 bundle `ee004c…` 的 B `real-ext-b-002` 成功（3请求，费用完整）。旧失败保留，不覆盖。
+- provider t032 C 在 17 次请求后 `chi_timeout`；第 17 次请求 pending/usage unknown。已知 16 次 token（约314万入/3.37万出），但未知请求不能当 0 或成功。operator 清理/world quiescence 已确认，业务检查只部分通过。
+- 关键判断：**超时只证明调用方没及时收到结果，不证明服务端没执行**。按规则立即停止同账后续 B/C，payer/CM/Y 未跑，不自动重试、不换账根、不删除 pending。下一步需要 provider Console 单请求记录或用户明确处置。
+- 这也暴露 F4/timeout 研究点：30万+ input 的长上下文请求在 60s 读超时下超时；不能直接改超时后重试，需独立候选/复审/新 attempt。
