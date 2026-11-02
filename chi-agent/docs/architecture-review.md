@@ -115,6 +115,8 @@ DeepSeek负责实现不意味着其任务不重要；划分依据是是否触及
 
 2026-11-02后续C3已在隔离包实际触发上述局部导入失败，并以纯函数提取补齐闭包；Go主循环并未因此被证明发生过故障。两种导出包、函数行为/签名及身份链的独立证据见[C1/C3阶段报告](../reviews/c1-c3-admission-package-review.md)。表中是初核时判断，其余项不随C3完成而关闭。
 
+C4随后按[用途边界契约](../openspec/changes/project-completion/policy-boundaries.md)完成不改数值的一致性核对及独立漂移反例，证据见[C4报告](../reviews/c4-policy-consistency-review.md)。独立安全检查保留，未做常量归并或扩大预算；外部编排计时仍不在动态通过范围。
+
 ## 14. 两项必须保留的不确定性
 
 ### 未结算请求与新state

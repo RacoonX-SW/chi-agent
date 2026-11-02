@@ -4,29 +4,31 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 用户合并C2后继续C1只读核查与C3最小包依赖修复，限定离线范围通过；C1未知处置/后继授权证据仍未闭合，不开放真实准入。详细证据集中在[C1/C3报告](c1-c3-admission-package-review.md)。不处理C4/C5、输入摘要、M2或旧pending |
+| 当前任务 | 用户合并PR43后继续C4用途参数一致性检查，限定离线通过；登记权威声明与独立门禁，只新增检查及文档，不改运行数值/包身份。详细证据集中在[C4报告](c4-policy-consistency-review.md)。C1未知/后继授权缺口保持，不开放真实准入；C5、摘要、M2及旧pending不在本包 |
 | 协作 | 本轮按用户指定由主代理规格/拆分/独立审核/Git，一个显式gpt-6.1-terra/high、fork_turns=none实现及Docker自测；使用隔离worktree/证据目录，原DeepSeek目录不动。其他收尾专项安排保持，用户最终验收/合并 |
-| 最新独立审核 | C1/C3已审/限定离线通过实现`ae47067584c7e6761f9bf844dd938da3a1b46bc5`；最终快照、原函数等价性、受影响回归、两种严格隔离包及真实身份核对见本轮报告。C2此前限定离线通过及变基映射保留在[C2报告](c2-input-output-recovery-review.md)，PR42已合并；均不扩大为真实Go/业务/官方评分 |
+| 最新独立审核 | C4已审/限定离线通过测试候选`9fc41ca964caeec2a8b0c83b8955727a31a4b83a`；主代理固定快照受影响回归及无源码checkout的真实包身份/配置变异/预留反例通过。C1/C3通过候选`ae470675…`及C2历史范围保留原报告，不扩大为真实Go/业务/官方评分 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 核实PR42已合并，最新origin/main=`5e8418e`；从其新建`codex/c1-c3-admission-package`。复用隔离worktree及独立测试资源；原目录DeepSeek分支、未合并报告/旧证据不动，不merge/push main |
+| 当前分支与接手改动 | 核实PR43已合并，最新origin/main=`4495937`；从其新建`codex/c4-policy-consistency`。复用隔离worktree及独立测试资源，原目录DeepSeek分支/未合并报告/旧证据不动，不merge/push main |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap及原锁/未知门禁不变。C1确认payer-010旧pending与后继state/evaluation切换，所选来源不能闭合其处置/授权；旧账字节不变，不做清账或真实准入。旧S/external超时对账保持历史含义；可信token费用缺项留null/warning，新结果/token未知仍停止，零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
-| 付费验证范围 | 用户要求继续下一步，本轮完成C1只读/C3连续离线实现、审核、文档及PR；真实请求0，不读Key、不启动world/B/C/Trial/判分。C2真实探针也未执行；原40C/16B等规划/旧审批历史不改，payer-010处置与特定后继授权仍待补齐，不用新账根绕阻断 |
+| 付费验证范围 | 用户要求继续开发，本轮完成C4离线检查、独立复验、文档及PR；真实请求0，不读Key、不启动world/真实B/C/Trial/判分。原规划/旧审批历史不改，payer-010处置与特定后继授权仍待补齐，不用新账根绕阻断 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | C1五组原证据只读前后hash不变；C3主代理固定快照独立原函数行为/签名、受影响回归、最终两种无源码挂载包实际预算路径及真实身份核对通过。返工/环境失败/skip分列保留，数量与命令只见本轮报告；不重跑旧任务，不把包内检查当真实调用 |
+| 本轮验证 | C4固定快照独立真实配置/SDK/guard/journal/context及混合用途回归通过，基线与候选两包manifest实际相同；无源码checkout包的真实身份/合法重新打包后的配置变异及精确byte边界通过。作者错误预期、主代理脚本映射失败及skip保留，数量只见C4报告；外部role编排计时仅源码核对，未动态验收 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | C2 PR42已由用户合并；[C1/C3 PR43](https://github.com/xsw932187210-cell/chi-agent/pull/43)为base=main/open，供用户审核，主代理不合并/启用auto-merge。后续可另行冻结C4/C5离线范围；真实新B/探针须先闭合历史处置与具体授权。C2调用链已集中讲解，输入自动摘要仍独立包、不默认小测 |
+| PR 与下一步 | PR42/PR43已由用户合并；本轮C4 PR待创建，主代理不合并/启用auto-merge。后续离线入口C5公开P2P实际链核查；真实新B/探针须先闭合历史处置及具体授权。C2/C4调用链已讲解，输入摘要仍独立包、不默认小测 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
-| 结构/可靠性判断 | C3局部依赖缺口已隔离复现并以纯函数最小提取关闭；不是Go主循环实故障结论。C4上限一致性、未锁环境依赖及C5业务解释仍未关闭；[架构评审](../docs/architecture-review.md)保留初核历史及后续报告指针，不搬目录或拆journal |
+| 结构/可靠性判断 | C3局部依赖闭合保持；C4当前用途一致性限定离线核对通过，无数值漂移修复或常量归并。未锁环境依赖、外部编排动态计时及C5业务解释仍未关闭；[架构评审](../docs/architecture-review.md)保留初核及后续指针，不搬目录/拆journal |
 | 待讨论/核对 | C2真实端点兼容与输入摘要仍未验证/未实现；C1已完成事实核对，但payer-010 unknown结算与特定后继授权来源仍缺，不直接判用户违规或清账。t027实际P2P完成链待C5 |
 | 真实运行 | W历史保留。2026-11-01 external：v2 B成功/provider超时已对账；v3 B3成功/payer 002工具批次失败/CM 002超时已对账。**v4（identity`f7d11712…`）**：B4成功；payer 003 complete（37请求、4项业务检查false与W相同）；CM 003 complete（患者未同意→停在outreach_complete；暴露workspace写路径被拒）。**v5（identity`c8cba721…`）**：B5成功；CM 004 complete（37+10请求、602s；写入0拒绝；14项检查全true、care plan finalized）。**v6（identity`55b55cd7…`）**：B6成功；payer 004 complete（35请求、664万入、26/28项true：MD audit与MD决定已转true；剩余letter_types/target_status由隐藏expectations定义，不在公开可推断范围，按26/28收口）。全部settled、pending=null、清理确认。Y未运行。0自动重试/换账根，official_reward=null。原Q/R/S/旧未结算原样；Claude/付费临床评审0 |
 
 接续材料：
+
+- [C4用途参数一致性及独立审核](c4-policy-consistency-review.md)
 
 - [C1只读准入核查与C3包依赖闭合](c1-c3-admission-package-review.md)
 
