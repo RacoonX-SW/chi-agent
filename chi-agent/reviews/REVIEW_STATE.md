@@ -6,11 +6,11 @@
 | --- | --- |
 | 当前任务 | C2输入计量/用途预留及有界length恢复在限定离线范围实现并独立通过，默认关闭；自动摘要仍为后续独立包。详细字段、失败、命令、包身份和未验证项仅见[C2阶段报告](c2-input-output-recovery-review.md)。本轮不处理C1/C3/C5、旧pending或M2 |
 | 协作 | 本轮按用户指定由主代理规格/拆分/独立审核/Git，一个显式gpt-6.1-terra/high、fork_turns=none实现及Docker自测；使用隔离worktree/证据目录，原DeepSeek目录不动。其他收尾专项安排保持，用户最终验收/合并 |
-| 最新独立审核 | C2已审/已通过实现候选`bd1b9f5b322e6a47d2087f6fef5ebe8006208381`，仅Docker/Python3.12、真实SDK+MockTransport、故障反例及最终隔离包路径；不扩大为真实Go协议、模型效果、临床或官方评分。此前Z6/Z1/F7/F0–F6结论保留原报告范围 |
+| 最新独立审核 | C2原已审/已通过实现候选`bd1b9f5b322e6a47d2087f6fef5ebe8006208381`；PR40合并后变基实现为`5da610a`，代码/测试/配置/包内说明与原候选逐文件一致，离线包身份保持。通过仍限原Docker/SDK合成、故障及隔离包范围，不扩大为真实Go/业务/官方评分；细节见C2报告 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 刷新后origin/main=`5d11c40`，PR39/PR41已合并，PR40仍open/merged=false。C2从此main新建`codex/c2-input-output-recovery`隔离分支；PR41的M2修复已随基线进入，不在本轮代审。原目录仍`codex/reliability-boundaries`/`7984b60`且干净，不带入未合并A/B或改写旧证据 |
+| 当前分支与接手改动 | 最新origin/main=`42b8688`，PR39/PR40/PR41已合并。C2最初从`5d11c40`建立，现因PR40文档重叠冲突变基到最新main，保留已合并规划与实施/审核结果；只更新本PR分支，不merge/push main。原目录与未合并A/B、旧证据不动，原提交由本地备份分支及归档保留 |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap及原锁/未知门禁不变；本轮未重审真实账，不能把此前active pending/halt=null扩展到后续A/B。旧S留档及external两处超时的既有对账记录保留原请求pending、费用缺项及seal，不重做处置。未合并报告中的payer-010/后继state关系待C1核对。可信token费用缺项留null/warning；新结果/token未知仍停止，零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
@@ -19,7 +19,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | 主代理从固定C2快照独立反例/受影响回归、最终包真实身份链及无源码挂载SDK恢复路径通过；首次vendor路径环境失败、作者夹具失败及skip均保留并单列，详细数量只见C2报告。不是全历史任务重跑，未审真实账；旧环境缺口不改为通过 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | [C2 PR42](https://github.com/xsw932187210-cell/chi-agent/pull/42)已创建，base=main/open，供用户审核；PR40仍open且有规格文档重叠，未自动合并/关闭。新候选真实B与A/B协议探针另需范围授权；输入自动摘要独立包。用户验收后按学习约定集中讲解，不默认小测；不merge/auto-merge或按旧状态续跑 |
+| PR 与下一步 | [C2 PR42](https://github.com/xsw932187210-cell/chi-agent/pull/42)保持base=main/open，PR40合并引起的文档冲突已处理，供用户审核；主代理不合并/启用auto-merge。真实新B与A/B探针另需授权；输入自动摘要独立包，用户验收后集中讲解、不默认小测 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 结构/可靠性判断 | [架构评审](../docs/architecture-review.md)保留DeepSeek原分析并追加Codex初核：包外局部导入为已见潜在依赖缺口；上限重复为高影响风险，尚未证明当前全部漂移；先地图/检查、再经讨论做有界修正，不马上搬目录或拆journal。详细负责人、方法和验收只见报告与收尾设计 |

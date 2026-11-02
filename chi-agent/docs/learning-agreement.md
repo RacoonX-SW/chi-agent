@@ -121,7 +121,7 @@
 
 C2 用户验收后集中沿[阶段报告](../reviews/c2-input-output-recovery-review.md)与真实源码讲解：entry/launch → Runner → 最终wire计量 → 原响应留证/结算 → 一次性许可 → partial/regenerate → 原工具门禁 → wire/许可轨迹及同账回放。正常工具闭环与再次length、未知/取消、残缺批次、已完成写重放、落盘中断分别展开。完整证据、SDK接受历史和临时wire视图分开；没有自动摘要，不安排默认小测。用户参与了范围及首版策略取舍，尚无本功能源码复述或亲自实践证据，不升级为掌握。以下保留此前学习入口与历史。
 
-2026-11-02接续[输入治理设计](../openspec/changes/project-completion/input-context.md)：已讲解并记录Codex/Harness借鉴边界、完整证据与活跃视图、实际请求计量/输出预留、来源保护及同步摘要检查点；用户认可方向并要求落文档，没有压缩实现或用户实践证据。下一步讨论输出截断：先辨认推理/文字/工具参数的截断及结算，再决定预算与受控恢复，不默认续写次数/purpose，不默认小测。
+2026-11-02规划时接续[输入治理设计](../openspec/changes/project-completion/input-context.md)及[输出恢复实施方案](../openspec/changes/project-completion/output-recovery.md)：区分流式传输、提高单次上限和截断后追加请求；用户补充受控接续建议并要求准备新对话开发。首版保留单次上限，区分无工具的上下文接续与含工具的整批重生成，次数/同账/历史/停止边界见方案。当时约定先做P0事实/SDK接缝和P1完整计量，再实现恢复，主代理独立复审后集中讲正常/失败链；该规划记录不构成用户实践证据，不升级掌握，不默认小测。实际实现及下一教学入口见上段。
 
 可靠性讨论入口仍为[架构评审第12节起](architecture-review.md)和[工作包](../openspec/changes/project-completion/design.md#15-可靠性治理与分阶段重构)。本轮通过合成反例说明作者测试通过与契约覆盖完整是两件事，实际候选核对证据集中在架构评审第16节；不把Codex执行记作用户亲自测试或已掌握。
 

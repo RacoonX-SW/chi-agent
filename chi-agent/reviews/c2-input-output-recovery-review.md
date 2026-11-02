@@ -98,8 +98,18 @@ docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
 
 用户验收后按学习约定集中讲解正常与失败调用链，不默认安排小测；无用户实践证据，不记为掌握。
 
-### Git交付
+### 首次Git交付
 
-[PR42](https://github.com/xsw932187210-cell/chi-agent/pull/42)已创建为base=main、非draft/open，附加到本聊天，未合并/启用auto-merge。实现提交为bd1b9f5，首轮文档提交4442866已通过git ls-remote核对后建PR；此节与短状态链接随后单独文档提交，不改变已审代码或包身份。PR40仍open，不自动关闭或把它写成已合并。仅显式暂存自有代码/合成测试/配置及文档；runs、原始轨迹、Key、数据、vendor和离线包均未上传。
+[PR42](https://github.com/xsw932187210-cell/chi-agent/pull/42)首次创建为base=main、非draft/open，附加到本聊天，未合并/启用auto-merge。原实现提交为bd1b9f5，首轮文档提交4442866已通过git ls-remote核对后建PR；随后文档提交23c3f05不改变已审代码或包身份。当时PR40仍open，未由主代理合并/关闭。仅显式暂存自有代码/合成测试/配置及文档；runs、原始轨迹、Key、数据、vendor和离线包均未上传。
 
 收尾一次批量保存曾因自动审批用量耗尽被拒绝执行，非安全判定；原命令未执行。用户将聊天工作区切换到本worktree并更新写权限后，正常workspace写入保存证据/报告；后续Git提交/推送审批实际成功，没有绕过被拒绝的Git动作。记录见independent/p0-environment-failures.log。
+
+### PR40合并后的冲突消解（2026-11-02）
+
+用户报告PR42冲突后重新fetch：main已为`42b86881009d48e5ca3c5a934a6ef92e2fd6b628`，PR40已合并。原PR42的`23c3f05`归档保存在本地，备份分支`codex/c2-recovery-pre-pr40-backup`保留完整原提交链。将本任务分支rebase到最新main，没有merge或push main；六个冲突均在学习入口、design、output-recovery、spec、tasks和REVIEW_STATE文档，代码提交自动干净重放。
+
+变基实现提交为`5da610a`。与原已审提交链逐文件比较scripts、profiles、tests及包内runbook均无差异；原bd1b9f5及其测试结论保留历史身份，变基只改变祖先/提交SHA，不冒充新功能复验。已合并PR40的AGENTS/COLLABORATION、架构评审及路线补充保留，文档同时保留规划取舍与后来的实际实施状态；旧“PR40仍open”只保留为首次交付历史，当前状态更新为已合并。
+
+本轮仅做文档冲突消解，检查冲突标记、diff和链接，并按冻结38文件包manifest再次核对实际源码/大小/hash。包身份及之前离线证据适用范围保持，不重跑无变化的功能测试，不读取Key、不发真实请求、不处置旧账。变基推送使用绑定原远端`23c3f05f456cbc12aead3261cedb3b0591276a3c`的force-with-lease，防止覆盖其他新增提交；最终再核对远端SHA及PR可合并状态。
+
+冲突消解后的Docker/Python3.12检查实际通过：10份入口/规格/状态文档无冲突标记，244个本地链接目标存在；全部38个包文件逐字节大小/SHA256与上述最终manifest一致，manifest仍为`b6833fbc6f692203e5ce4a1a64e5a340888bcf9d86112133b8542506b626d56b`。脚本与日志在`independent/pr40-conflict/`，没有安装依赖或运行真实请求。
