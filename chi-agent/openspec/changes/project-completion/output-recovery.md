@@ -1,12 +1,12 @@
 # 输出截断恢复：首版实施方案与验收
 
-日期：2026-11-02（Asia/Shanghai）。这是 C2 的后续实施契约，与[输入侧设计](input-context.md)配套。用户要求保存可开发方案，并计划在新对话由 GPT-6.1 Sol/high 规划与独立审核、一个 GPT-6.1 Terra/high 子代理实现。本轮只修改文档；新对话明确启动后可连续完成下列离线工作包，不逐项等用户确认。真实模型/摘要/续写探针、B/C/Trial/判分及发布不由本文件授权，仍查 REVIEW_STATE。
+日期：2026-11-02（Asia/Shanghai）。这是 C2 的实施契约，与[输入侧设计](input-context.md)配套。本文最初随 PR40 保存文档规划；用户已在本轮明确启动 P0–P3，由主代理规格/独立审核、一个显式 GPT-6.1 Terra/high 子代理实现。实际候选、验证、失败与限制集中在[阶段报告](../../../reviews/c2-input-output-recovery-review.md)，短状态只查 REVIEW_STATE。真实模型/摘要/续写探针、B/C/Trial/判分及发布不由本文件授权。
 
 ## 1. 首版选择及证据边界
 
 首版采用已知输出截断后的有界恢复，不统一提高单次输出上限，不接流式，不更换参赛模型/路由/思考强度。提高上限是后续独立取舍，不能作为偷偷调整的实现细节。
 
-本轮已核对 `go_chi_guard`、`go_chi_contract`、`go_chi_runtime`、`go_chi_journal` 和 profile：主循环 length 当前终止；可信 usage 先保存/结算；历史只接受完整已认可工具往返；runtime 使用单个 Agents SDK Runner 与主响应适配器。恢复必须同时接通这几层，不能只清空 guard.error 或在外层重新启动整题。
+规划时已核对 `go_chi_guard`、`go_chi_contract`、`go_chi_runtime`、`go_chi_journal` 和 profile：旧主循环 length 终止，可信 usage 先保存/结算，历史只接受完整已认可工具往返，runtime 使用单个 Agents SDK Runner。新恢复必须同时接通这些层，不能只清空 guard.error 或在外层重新启动整题；默认关闭仍保留旧停止路径。
 
 DeepSeek 官方 [Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)区分流式增量与 length；[思考模式](https://api-docs.deepseek.com/guides/thinking_mode/)说明携带 tools 时需要回传相关 reasoning。以上是官方 API 资料，不能证明 OpenCode Go 同名模型路由已兼容本方案。此前评审的8192 reasoning耗尽样本及限制见[架构评审第15节](../../../docs/architecture-review.md#15-截断项的待讨论材料)。部分reasoning回传仅作为新请求的上下文，不保证恢复模型内部状态或语义连续。
 
