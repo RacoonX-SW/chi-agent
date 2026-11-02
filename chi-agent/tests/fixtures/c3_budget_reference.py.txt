@@ -71,4 +71,3 @@ def evaluate_budget(
     if projected > cap:
         return "stopped_insufficient_budget", f"Next-request reserve would bring cumulative cost to {projected} CNY above cap {cap} CNY"
     return "within_budget", f"Measured cumulative cost {cumulative} CNY plus conservative next-request reserve {reserve_cny} CNY fits cap {cap} CNY (pricing {pricing_version}; FX {fx_rate_source})"
-

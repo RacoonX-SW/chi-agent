@@ -21,7 +21,7 @@ REFERENCE = ROOT / 'tests/fixtures/c3_budget_reference.py.txt'
 
 def baseline_function():
     raw = REFERENCE.read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == '915043ffa34227e63b8c563d5cf704c232b6f851539f4e7c36c49dabab23ee6c'
+    assert hashlib.sha256(raw).hexdigest() == 'c8339dc92c9244955ddcb16c7de5772d5d23a5fe033d69b3624a066f64d010fd'
     tree = ast.parse(raw, filename='frozen_origin_main_budget')
     assert len(tree.body) == 1 and isinstance(tree.body[0], ast.FunctionDef)
     namespace = {'Decimal': Decimal, 'InvalidOperation': InvalidOperation}
