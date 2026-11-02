@@ -14,9 +14,15 @@ Agent 可见资源只包括公开 instruction/工具参考、已授权的 manage
 
 运行模型固定 `deepseek-v4.1-flash`，SDK base URL 为 `https://opencode.ai/inference/go/openai/v1`，thinking/high，不追加 `[1m]`。文档标称上下文不等于实测百万 token；自有 User-Agent、每对话稳定 session、TLS、禁用代理/redirect/自动重试均是接点的一部分。
 
-自主任务的 SDK turns 和共享 provider 请求上限均为 50；患者确认最多两次，也消耗这 50 次。主请求输出上限 8192，确认 32768。可信剩余次数由程序根据已发送数生成，确认后刷新；工具调用次数不等于模型请求数。coding B 是独立固定探针合约，最多 6 次/1024 输出，不显示 50 次任务反馈，不作为临床业务成功证据。
+自主任务的 SDK turns 上限为 50；main、患者确认与 continuation 共享最多 50 次 provider 请求，患者模拟保持原独立计数。患者确认最多两次。主请求及 continuation 输出上限 8192，确认 32768。可信剩余次数按实际已发送数刷新；一次 SDK 模型步可包含主响应与一次 continuation，工具次数也不等于模型请求数。coding B 仍是独立固定探针合约，最多 6 次/1024 输出，不进入恢复器，不作为临床业务成功证据。
 
-HTTP 连接/写入/连接池等待分别为 10/60/60 秒；主请求读取超时 60 秒，确认请求读取超时 360 秒。Guard 对完整发送与读取再施加主请求 120 秒、确认 420 秒绝对上限。B 的新请求只在开始后 180 秒内准入，C 为 900 秒；窗口内已发出的请求可以继续至其自身上限。控制器配置 `timeout_seconds` 的范围为 B 360–3600 秒、C 1380–3600 秒。超时不触发自动重试，未知用量仍阻断后续调用。
+HTTP 连接/写入/连接池等待分别为 10/60/60 秒；主请求及 continuation 读取超时 240 秒，确认 360 秒。Guard 对完整发送与读取再施加主请求及 continuation 300 秒、确认 420 秒绝对上限。B 的新请求只在开始后 180 秒内准入，C 为 900 秒；恢复不重置起点或总截止。窗口内已发出的请求可以继续至其自身上限。控制器配置 `timeout_seconds` 的范围为 B 360–3600 秒、C 1380–3600 秒。这里沿用现有 TIME_POLICY 数值；超时不触发自动重试，未知用量仍阻断后续调用。
+
+输入按最终实际发送的完整 JSON 计量，覆盖 reasoning、工具定义、参数、结果、中文及结构，记录原始 wire 字节；`chi-context-v2` 的 UTF-8 字节估算不是精确 tokenizer，容量依据仍标为 configured_unverified。本次输出预留取配置基础预留与实际 max_tokens 的较大值，未知容量、坏配置和超限在发送前拒绝。没有自动摘要或输入压缩。
+
+输出恢复默认关闭。仅 CHI `live` 入口支持显式选项 `--output-recovery chi-output-recovery-v1`，版本写入 launch；启用必须另有对应真实请求授权及新候选准入。可信 length 先留证结算，程序再消耗一次性许可；每链最多一次、每运行最多两次追加，全部计入共享 50。无工具的 length 精确保留同源部分正文/reasoning 后接续；含工具的 length 整批零执行，从最后合法历史重新生成。新工具仍经过原批次、实体、角色、路径、claim 门禁及已完成写指纹检查。不拼接工具参数、不造 tool 结果；再次 length、取消、网络、未知或持久化失败停止，不跨进程自动续发。
+
+HTTP/SDK 通用自动重试仍为零；显式开启本策略会产生上述有界 length 追加请求。`wire-trace.jsonl` 每次实际派发一行；`recovery-trace.jsonl` 记录许可消耗及未发送/结算/未知结果。`run_log.txt` 分列物理用途次数和 SDK 逻辑步；当前运行已知 token 与整账累计 `journal_usage` 分开，费用/未知不补零。原 SDK trace 只反映返回 Runner 的完整响应，应结合 wire 证据审计。
 
 工具响应的 `reasoning_content` 缺失或为 null 时，按 SDK 实际历史表示不附加该字段；字符串（包括空串）按原值回放，其他类型仍拒绝。原始 HTTP 响应证据保持不变，后续历史仍须与已验证结果严格一致。
 

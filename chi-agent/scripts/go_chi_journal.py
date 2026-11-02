@@ -16,7 +16,7 @@ import re
 from decimal import Decimal
 from pathlib import Path
 
-from opencode_go_provider import GoFailure, _atomic, _billing, _object, _unique
+from opencode_go_provider import GoFailure, _atomic, _billing, _object, _unique, _contains_secret
 from b_provider_transport import _reject_symlink_ancestors
 from go_chi_evidence import (envelope, write as write_evidence, verify as verify_evidence,
                              write_tool, verify_tool)
@@ -26,6 +26,20 @@ from go_chi_policy import FEE_POLICY
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MAX_STATE_BYTES = 32 * 1024 * 1024
+RECOVERY_POLICY = "chi-output-recovery-v1"
+
+
+def _recovery_enabled(launch: dict, kind: str) -> bool:
+    """Validate the optional launch version without mutating persisted data."""
+    if (type(launch) is not dict or type(kind) is not str
+            or kind not in {"chi", "coding_b", "patient_probe"}):
+        raise GoFailure("chi_identity_invalid")
+    if "output_recovery" not in launch:
+        return False
+    if (kind != "chi" or type(launch["output_recovery"]) is not str
+            or launch["output_recovery"] != RECOVERY_POLICY):
+        raise GoFailure("chi_identity_invalid")
+    return True
 
 
 def _fee_decision(usage: dict, policy: str | None) -> tuple[dict, str | None, str | None]:
@@ -421,6 +435,57 @@ def reconcile_provider_timeout(root: Path, *, identity: str, accounting_sha256: 
         os.close(lock)
 
 
+def _recovery_source(root: Path, run: dict, parent_round: int):
+    """Reconstruct a recovery source only from verified, settled evidence."""
+    from b_provider_transport import GuardedTransport
+    from go_chi_recovery import derive_view, mode_and_fragment
+    if (type(parent_round) is not int or not 1 <= parent_round <= len(run["requests"])):
+        raise ValueError("chi_recovery_invalid")
+    item = run["requests"][parent_round - 1]
+    if (type(item) is not dict or item.get("round") != parent_round or item.get("purpose") != "main"
+            or item.get("status") != "settled"):
+        raise ValueError("chi_recovery_invalid")
+    docs = [verify_evidence(root, run["run"], parent_round, kind, item[kind + "_evidence_sha256"])
+            for kind in ("request", "response", "diagnostic")]
+    request, response, diagnostic = docs
+    if (request.get("kind") != "request" or response.get("kind") != "response"
+            or diagnostic.get("schema") != "chi-go-diagnostic-v1"
+            or diagnostic.get("kind") != "diagnostic" or diagnostic.get("code") != "ok"
+            or response.get("http_status") != 200
+            or any(doc.get("schema") != "chi-go-wire-evidence-v1" or doc.get("redaction") is not None
+                   or type(doc.get("body_utf8")) is not str or type(doc.get("raw_sha256")) is not str
+                   or hashlib.sha256(doc["body_utf8"].encode()).hexdigest() != doc["raw_sha256"]
+                   for doc in (request, response))
+            or request["raw_sha256"] != item["request_sha256"]):
+        raise ValueError("chi_recovery_invalid")
+    parse = lambda raw: json.loads(raw, object_pairs_hook=_unique,
+                                  parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+    request_body, response_body = parse(request["body_utf8"]), parse(response["body_utf8"])
+    if (type(request_body) is not dict or type(request_body.get("max_tokens")) is not int
+            or request_body["max_tokens"] != 8192):
+        raise ValueError("chi_recovery_invalid")
+    incoming, outgoing = GuardedTransport._usage(response_body)
+    if (item.get("usage") != {"input_tokens": incoming, "output_tokens": outgoing}
+            or response.get("usage") != response_body.get("usage") or incoming > 1048576 or outgoing > 8192):
+        raise ValueError("chi_recovery_invalid")
+    billed, error, halt = _fee_decision(response_body["usage"], run["launch"].get("fee_policy"))
+    if billed != item.get("billing") or error != item.get("billing_error") or halt is not None:
+        raise ValueError("chi_recovery_invalid")
+    mode_and_fragment(response_body)
+    old_used = sum(r.get("purpose") != "patient_simulator" for r in run["requests"][:parent_round - 1])
+    candidates = []
+    for claimed in (False, True):
+        try:
+            view = derive_view(request_body, response_body, old_used=old_used, claimed=claimed)
+            candidates.append((claimed, view))
+        except ValueError:
+            pass
+    if len(candidates) != 1:
+        raise ValueError("chi_recovery_history_changed")
+    claimed, view = candidates[0]
+    return request_body, response_body, response["raw_sha256"], old_used, claimed, view
+
+
 class ChiJournal:
     """Exclusive one-identity namespace with immutable attempt claims.
 
@@ -437,6 +502,7 @@ class ChiJournal:
                 or any(type(x) is not str or not ID.fullmatch(x)
                        for x in (evaluation, task, attempt, run))):
             raise GoFailure("chi_identity_invalid")
+        recovery_enabled = _recovery_enabled(launch if launch is not None else {}, kind)
         if launch is not None and 'aux_contract' in launch:
             if (launch['aux_contract'] != 'patient-simulator-v1' or kind not in {'chi', 'patient_probe'}
                     or (kind == 'chi' and launch.get('role') != 'cm')):
@@ -492,6 +558,8 @@ class ChiJournal:
                         "kind": kind, "status": "started", "requests": [], "patient_binding_events": [],
                         "claim_done": False, "tool_events": [], "safe_error_code": None,
                         "launch": launch or {}}
+            if recovery_enabled:
+                self.run["recovery_events"] = []
             self.run_doc = self.run
             self.state["attempts"].append(self.run)
             self._persist()
@@ -625,7 +693,14 @@ class ChiJournal:
             expected_seals = set()
             expected_receipts = set()
             for a in s["attempts"]:
-                if (type(a) is not dict or set(a) != {"evaluation", "task", "attempt", "run", "kind", "status", "requests", "patient_binding_events", "claim_done", "tool_events", "safe_error_code", "launch"}
+                if type(a) is not dict:
+                    raise ValueError
+                recovery_enabled = _recovery_enabled(a.get("launch"), a.get("kind"))
+                run_keys = {"evaluation", "task", "attempt", "run", "kind", "status", "requests", "patient_binding_events", "claim_done", "tool_events", "safe_error_code", "launch"}
+                if recovery_enabled:
+                    run_keys.add("recovery_events")
+                if (set(a) != run_keys
+                        or (recovery_enabled and (type(a["recovery_events"]) is not list or len(a["recovery_events"]) > 2))
                         or any(type(a[k]) is not str or not ID.fullmatch(a[k]) for k in ("evaluation", "task", "attempt", "run"))
                         or a["kind"] not in {"chi", "coding_b", "patient_probe"}
                         or type(a["patient_binding_events"]) is not list
@@ -644,7 +719,7 @@ class ChiJournal:
                 if aux_enabled and (a['kind'] not in {'chi', 'patient_probe'}
                         or (a['kind'] == 'chi' and a['launch'].get('role') != 'cm')): raise ValueError
                 if a['kind'] == 'patient_probe' and not aux_enabled: raise ValueError
-                if sum(r.get('purpose') in {'main', 'confirmation'} for r in a['requests']) > (6 if a['kind'] == 'coding_b' else 50): raise ValueError
+                if sum(r.get('purpose') in {'main', 'confirmation', 'continuation'} for r in a['requests']) > (6 if a['kind'] == 'coding_b' else 50): raise ValueError
                 if sum(r.get('purpose') == 'patient_simulator' for r in a['requests']) > (2 if a['kind'] == 'patient_probe' else 10 if aux_enabled else 0): raise ValueError
                 fee_policy = a['launch'].get('fee_policy')
                 if fee_policy not in (None, FEE_POLICY): raise ValueError
@@ -719,7 +794,7 @@ class ChiJournal:
                 for index, item in enumerate(a["requests"], 1):
                     effective_fee_stop = None
                     if (type(item) is not dict or item.get("round") != index
-                            or item.get("purpose") not in ({"main", "confirmation", "patient_simulator"} if aux_enabled else {"main", "confirmation"})
+                            or item.get("purpose") not in ({"main", "confirmation"} | ({"patient_simulator"} if aux_enabled else set()) | ({"continuation"} if recovery_enabled else set()))
                             or (a["kind"] == "coding_b" and item.get("purpose") != "main")
                             or (a['kind'] == 'patient_probe' and item.get('purpose') != 'patient_simulator')
                             or item.get("max_tokens") != (1024 if a["kind"] == "coding_b" else 32768 if item.get("purpose") == "confirmation" else 8192)
@@ -821,6 +896,40 @@ class ChiJournal:
                         halt = inferred if fee_policy is None else effective_fee_stop
                     else:
                         raise ValueError
+                if recovery_enabled:
+                    from go_chi_recovery import validate_permit
+                    from go_chi_recovery import canonical_sha
+                    seen_parents, bound_rounds = set(), set()
+                    for event in a["recovery_events"]:
+                        if (type(event) is not dict or set(event) != {"parent_round", "permit_sha256", "continuation_round"}
+                                or type(event["parent_round"]) is not int or event["parent_round"] in seen_parents
+                                or type(event["permit_sha256"]) is not str or not DIGEST.fullmatch(event["permit_sha256"])
+                                or (event["continuation_round"] is not None and type(event["continuation_round"]) is not int)):
+                            raise ValueError
+                        number = event["parent_round"]
+                        seen_parents.add(number)
+                        request_body, response_body, response_sha, old_used, claimed, _ = _recovery_source(self.root, a, number)
+                        permit = verify_evidence(self.root, a["run"], number, "recovery", event["permit_sha256"])
+                        validate_permit(permit, identity=run_identities.get(a["run"], identity), run=a,
+                                        parent_round=number, parent_request=request_body, parent_response=response_body,
+                                        response_sha256=response_sha, old_used=old_used, claimed=claimed)
+                        continuation = event["continuation_round"]
+                        if continuation is None:
+                            if number != len(a["requests"]) or a["status"] == "complete": raise ValueError
+                        else:
+                            if (continuation != number + 1 or continuation > len(a["requests"])
+                                    or continuation in bound_rounds): raise ValueError
+                            bound_rounds.add(continuation)
+                            item = a["requests"][continuation - 1]
+                            if item["purpose"] != "continuation": raise ValueError
+                            evidence = verify_evidence(self.root, a["run"], continuation, "request", item["request_evidence_sha256"])
+                            if evidence.get("redaction") is not None or type(evidence.get("body_utf8")) is not str: raise ValueError
+                            raw_body = json.loads(evidence["body_utf8"], object_pairs_hook=_unique,
+                                                  parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                            if canonical_sha(raw_body) != permit["view_sha256"]: raise ValueError
+                        expected_evidence.add((a["run"], f"{number:03d}-recovery.json"))
+                    if bound_rounds != {item["round"] for item in a["requests"] if item["purpose"] == "continuation"}:
+                        raise ValueError
             if (used_acknowledgements != set(acknowledged) or used_reconciliations != reconciled
                     or pending != s["pending"] or halt != s["halted"]):
                 raise ValueError
@@ -868,6 +977,8 @@ class ChiJournal:
             raise GoFailure("chi_history_invalid") from exc
 
     def _persist(self):
+        if getattr(self, "_recovery_persistence_failed", False):
+            raise GoFailure("chi_recovery_persistence_failed")
         if len((json.dumps(self.state, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode()) > MAX_STATE_BYTES:
             raise GoFailure("chi_state_limit")
         _atomic(self.path, self.state)
@@ -942,12 +1053,102 @@ class ChiJournal:
         except Exception:
             raise GoFailure("chi_evidence_persistence_failed") from None
 
-    def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None, parent_call_id=None) -> None:
+    def issue_recovery(self, view_body: dict, *, secrets: tuple[str, ...] = ()) -> int:
+        """Persist one consumed, immutable permit without issuing a request."""
+        from go_chi_recovery import (POLICY, VIEW, INSTRUCTION_VERSION, canonical_sha,
+                                     mode_and_fragment, validate_permit)
+        if getattr(self, "_recovery_persistence_failed", False):
+            raise GoFailure("chi_recovery_persistence_failed")
+        if (not _recovery_enabled(self.run["launch"], self.run["kind"])
+                or self.run["status"] != "started" or self.state["pending"] is not None
+                or self.state["halted"] is not None or not self.run["requests"]):
+            raise GoFailure("chi_recovery_invalid")
+        events = self.run["recovery_events"]
+        if len(events) >= 2:
+            raise GoFailure("chi_recovery_limit")
+        number = len(self.run["requests"])
+        if any(event["parent_round"] == number for event in events):
+            raise GoFailure("chi_recovery_limit")
+        try:
+            request_body, response_body, response_sha, old_used, claimed, view = _recovery_source(self.root, self.run, number)
+            if claimed != self.run["claim_done"] or canonical_sha(view_body) != canonical_sha(view):
+                raise ValueError
+            mode, _ = mode_and_fragment(response_body)
+            permit = {"schema": "chi-recovery-permit-v1", "policy": POLICY, "identity": self.state["identity"],
+                      **{k: self.run[k] for k in ("evaluation", "task", "attempt", "run")},
+                      "root_round": number, "parent_round": number, "parent_response_sha256": response_sha,
+                      "mode": mode, "chain_ordinal": 1, "history_version": "chi-tool-history-v1",
+                      "history_sha256": canonical_sha(request_body["messages"]),
+                      "instruction_version": INSTRUCTION_VERSION, "view_version": VIEW,
+                      "view_sha256": canonical_sha(view), "view_body": view,
+                      "continuation_round": None, "decision": "issued", "result": "pending"}
+            validate_permit(permit, identity=self.state["identity"], run=self.run, parent_round=number,
+                            parent_request=request_body, parent_response=response_body, response_sha256=response_sha,
+                            old_used=old_used, claimed=claimed)
+            raw = json.dumps(permit, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+            if (_contains_secret(permit, *secrets) or any(secret and secret in raw for secret in secrets)):
+                raise ValueError
+        except Exception:
+            raise GoFailure("chi_recovery_invalid") from None
+        try:
+            sha = write_evidence(self.root, self.run_id, number, "recovery", permit)
+            events.append({"parent_round": number, "permit_sha256": sha, "continuation_round": None})
+            self._persist()
+        except Exception:
+            self._recovery_persistence_failed = True
+            raise GoFailure("chi_recovery_persistence_failed") from None
+        return len(events) - 1
+
+    def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
+                parent_call_id=None, recovery_permit=None) -> None:
+        try:
+            self._reserve(raw, purpose, secrets=secrets, dispatch=dispatch, parent_call_id=parent_call_id,
+                          recovery_permit=recovery_permit)
+        except BaseException:
+            if purpose == "continuation": self._recovery_persistence_failed = True
+            raise
+
+    def _reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
+                 parent_call_id=None, recovery_permit=None) -> None:
+        if getattr(self, "_recovery_persistence_failed", False):
+            raise GoFailure("chi_recovery_persistence_failed")
         if self.state["pending"] is not None or self.state["halted"] is not None:
             raise GoFailure("chi_usage_unknown")
         aux = self.run['launch'].get('aux_contract') == 'patient-simulator-v1'
-        if purpose not in ({"main", "confirmation", "patient_simulator"} if aux else {"main", "confirmation"}) or type(raw) is not bytes:
+        enabled = _recovery_enabled(self.run['launch'], self.run['kind'])
+        purposes = {"main", "confirmation"} | ({"patient_simulator"} if aux else set()) | ({"continuation"} if enabled else set())
+        if purpose not in purposes or type(raw) is not bytes:
             raise GoFailure("chi_reservation_invalid")
+        if purpose != "continuation" and recovery_permit is not None:
+            raise GoFailure("chi_reservation_invalid")
+        if enabled and purpose != "continuation" and any(e["continuation_round"] is None for e in self.run["recovery_events"]):
+            raise GoFailure("chi_recovery_invalid")
+        selected = None
+        if purpose == "continuation":
+            if self.run["status"] != "started":
+                raise GoFailure("chi_recovery_invalid")
+            from go_chi_recovery import canonical_sha, validate_permit
+            events = self.run["recovery_events"]
+            if type(recovery_permit) is not int or not 0 <= recovery_permit < len(events):
+                raise GoFailure("chi_recovery_invalid")
+            selected = events[recovery_permit]
+            if selected["continuation_round"] is not None or selected["parent_round"] != len(self.run["requests"]):
+                raise GoFailure("chi_recovery_invalid")
+            try:
+                number = selected["parent_round"]
+                parent_request, parent_response, response_sha, old_used, claimed, _ = _recovery_source(self.root, self.run, number)
+                permit = verify_evidence(self.root, self.run_id, number, "recovery", selected["permit_sha256"])
+                validate_permit(permit, identity=self.state["identity"], run=self.run, parent_round=number,
+                                parent_request=parent_request, parent_response=parent_response,
+                                response_sha256=response_sha, old_used=old_used, claimed=claimed)
+                body = json.loads(raw, object_pairs_hook=_unique,
+                                  parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                if claimed != self.run["claim_done"] or canonical_sha(body) != permit["view_sha256"]:
+                    raise ValueError
+                screened = envelope(raw, kind="request", secrets=secrets)
+                if screened["redaction"] is not None or screened["body_utf8"] is None: raise ValueError
+            except Exception:
+                raise GoFailure("chi_recovery_invalid") from None
         if self.run["kind"] == "coding_b" and purpose != "main":
             raise GoFailure("chi_reservation_invalid")
         if purpose != 'patient_simulator' and sum(x['purpose'] != 'patient_simulator' for x in self.run['requests']) >= (6 if self.run['kind'] == 'coding_b' else 50):
@@ -980,6 +1181,8 @@ class ChiJournal:
         request_doc = envelope(raw, kind="request", secrets=secrets, dispatch=dispatch)
         entry["request_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "request", request_doc)
         self.run["requests"].append(entry)
+        if selected is not None:
+            selected["continuation_round"] = entry["round"]
         self.state["pending"] = {"run": self.run["run"], "round": entry["round"]}
         self._persist()
 
@@ -1025,6 +1228,8 @@ class ChiJournal:
     def finish(self, status: str, error: str | None = None) -> None:
         if status not in {"complete", "failed"} or self.run["status"] != "started":
             raise GoFailure("chi_status_invalid")
+        if status == "complete" and any(event["continuation_round"] is None for event in self.run.get("recovery_events", [])):
+            raise GoFailure("chi_recovery_invalid")
         if error is not None and (type(error) is not str or not re.fullmatch(r"[a-z0-9_]{1,64}", error)):
             raise GoFailure("chi_status_invalid")
         self._mark_tool_inflight("__run_finalize__")

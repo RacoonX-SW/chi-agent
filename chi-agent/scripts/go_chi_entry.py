@@ -23,14 +23,15 @@ from evaluation_bundle import BundleFailure, _check_components, _read_regular_bo
 from go_chi_bundle import validate_bundle
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
-from go_chi_policy import TIME_POLICY, FEE_POLICY
+from go_chi_policy import TIME_POLICY, FEE_POLICY, RECOVERY_POLICY
 from opencode_go_provider import GoFailure, INSTRUCTION, SYSTEM, load_profile
 
 CONFIG = {"schema": "chi-go-evaluation-entry-v1", "provider_profile_id": "opencode-go-deepseek-v4.1-flash-v1",
           "policy_mode": "record_only", "hard_cap_usd": None, "chi_max_requests": 50,
           "chi_max_output_tokens": 8192, "confirmation_max_requests": 2,
           "confirmation_max_output_tokens": 32768, "coding_b_max_requests": 6,
-          "coding_b_max_output_tokens": 1024, "automatic_retries": 0, "time_policy": TIME_POLICY, "fee_policy": FEE_POLICY}
+          "coding_b_max_output_tokens": 1024, "automatic_retries": 0, "time_policy": TIME_POLICY, "fee_policy": FEE_POLICY,
+          "output_recovery_policy": RECOVERY_POLICY}
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -191,6 +192,7 @@ def _parser():
     parser.add_argument("--target-round", type=int)
     parser.add_argument("--expected-request-sha256")
     parser.add_argument("--acknowledgement-reason")
+    parser.add_argument("--output-recovery", choices=(RECOVERY_POLICY["version"],), default=None)
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
     parser.add_argument("--mcp-url")
@@ -230,10 +232,12 @@ def main(argv=None, *, development=None):
     b_receipt = None
     output = {"status": "blocked", "official_reward": None}
     try:
+        if args.output_recovery is not None and args.mode != "live":
+            raise GoFailure("chi_recovery_invalid")
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
             import importlib
-            for module in ("go_chi_context", "go_chi_guidance", "go_chi_search", "go_chi_state",
+            for module in ("go_chi_context", "go_chi_recovery", "go_chi_guidance", "go_chi_search", "go_chi_state",
                            "go_chi_guard", "go_chi_mcp", "go_chi_tools", "go_chi_runtime"):
                 loaded = importlib.import_module(module)
                 path = Path(getattr(loaded, "__file__", "")).resolve()
@@ -334,6 +338,8 @@ def main(argv=None, *, development=None):
                       "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(),
                       "mcp_url_sha256": hashlib.sha256(args.mcp_url.encode()).hexdigest(),
                       "tool_references_sha256": references, "handbook_sha256": _handbook_digest(handbook)}
+            if args.output_recovery is not None:
+                launch['output_recovery'] = args.output_recovery
             if development is not None and args.role == 'cm':
                 launch['aux_contract'] = 'patient-simulator-v1'
         if args.history_mode == "local":

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import hashlib
 import json
 import re
@@ -9,7 +10,7 @@ import time
 
 import httpx
 
-from go_chi_context import check_budget, measure_request
+from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
 from go_chi_contract import ToolContract, ContractFailure
 from opencode_go_provider import (GoFailure, _contains_secret, _unique,
                                   SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
@@ -27,7 +28,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
     """
     def __init__(self, journal, secret, session, lower, *, tools, system, instruction,
                  claimed, confirmation, before_batch=None, observed_request=None, run_started=None,
-                 billing_lock=None, fatal_getter=None, context_recorder=None, context_limit=None):
+                 billing_lock=None, fatal_getter=None, context_recorder=None, context_limit=DEFAULT_BUDGET,
+                 recovery_blocker=None, canonical_tools=None, wire_recorder=None):
         if (type(secret) is not str or not secret.strip() or type(session) is not str
                 or not re.fullmatch(r"chi-[0-9a-f]{32}", session)
                 or type(system) is not str or type(instruction) is not str
@@ -41,6 +43,18 @@ class ChiGuard(httpx.AsyncBaseTransport):
             raise GoFailure("chi_guard_invalid")
         if context_limit is not None and type(context_limit) is not dict:
             raise GoFailure("chi_guard_invalid")
+        if wire_recorder is not None and not callable(wire_recorder):
+            raise GoFailure("chi_guard_invalid")
+        self.wire_recorder = wire_recorder
+        if recovery_blocker is not None and not callable(recovery_blocker):
+            raise GoFailure("chi_guard_invalid")
+        if canonical_tools is not None and (type(canonical_tools) is not dict or
+                any(type(k) is not str or type(v) is not str for k, v in canonical_tools.items())):
+            raise GoFailure("chi_guard_invalid")
+        self.recovery_blocker = recovery_blocker or (lambda: None)
+        self.canonical_tools = dict(canonical_tools or {})
+        self._active_permit = None
+        self._control_lock = asyncio.Lock()
         self.journal, self.secret, self.session, self.lower = journal, secret, session, lower
         self.context_recorder, self.context_limit = context_recorder, context_limit
         self.contract = ToolContract(tools)
@@ -82,7 +96,13 @@ class ChiGuard(httpx.AsyncBaseTransport):
             coding_b = self.journal.run["kind"] == "coding_b"
             if coding_b and context is not None:
                 raise ValueError
-            purpose = "confirmation" if context is not None else "main"
+            active = self._active_permit
+            continuation = active is not None and request is active["request"]
+            if active is not None and not continuation:
+                raise GoFailure("chi_recovery_invalid")
+            if continuation and context is not None:
+                raise GoFailure("chi_recovery_invalid")
+            purpose = "continuation" if continuation else "confirmation" if context is not None else "main"
             keys = {"model", "messages", "max_tokens", "reasoning_effort", "thinking"}
             keys |= {"response_format"} if context is not None else {"tools"}
             if (type(body) is not dict or set(body) != keys or body["model"] != "deepseek-v4.1-flash"
@@ -99,18 +119,24 @@ class ChiGuard(httpx.AsyncBaseTransport):
             else:
                 if not self.contract.definitions_match(body["tools"]):
                     raise ValueError
-                self.contract.validate_history(body["messages"], system=self.system, instruction=self.instruction,
+                messages = body["messages"]
+                if continuation:
+                    from go_chi_recovery import canonical_sha
+                    if (hashlib.sha256(raw).hexdigest() != active["body_sha256"]
+                            or canonical_sha(body) != active["view_sha256"]):
+                        raise GoFailure("chi_recovery_history_changed")
+                    messages = messages[:active["history_length"]]
+                self.contract.validate_history(messages, system=self.system, instruction=self.instruction,
                                                used=used, claimed=self.claimed(),
                                                coding_probe=coding_b)
                 if self.observed_request is not None:
-                    self.observed_request(body["messages"], used)
-            if self.context_recorder is not None or self.context_limit is not None:
-                metric = measure_request(body)
-                blocked = check_budget(metric, self.context_limit)
-                if blocked is not None:
-                    raise GoFailure(blocked)
-                if self.context_recorder is not None:
-                    self.context_recorder(metric, purpose)
+                    self.observed_request(messages, used)
+            metric = measure_request(body, raw)
+            blocked = check_budget(metric, self.context_limit)
+            if blocked is not None:
+                raise GoFailure(blocked)
+            if self.context_recorder is not None:
+                self.context_recorder(metric, purpose)
             return purpose
         except GoFailure:
             raise
@@ -128,6 +154,11 @@ class ChiGuard(httpx.AsyncBaseTransport):
         if type(msg) is not dict or msg.get("role") != "assistant" or msg.get("function_call") is not None:
             raise GoFailure("chi_response_invalid")
         if choice.get("finish_reason") == "length":
+            if purpose == "main" and self.journal.run["kind"] == "chi" and self.journal.run["launch"].get("output_recovery") == "chi-output-recovery-v1":
+                from go_chi_recovery import mode_and_fragment
+                try: mode_and_fragment(payload)
+                except ValueError: raise GoFailure("chi_response_invalid") from None
+                return True
             if purpose != "confirmation":
                 raise GoFailure("chi_output_truncated")
             if (msg.get("tool_calls") not in (None, []) or
@@ -146,7 +177,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                         or records[0]["result"] != "def add(a, b):\n    return a - b\n"
                         or records[1]["name"] != "verify_patch" or records[1]["result"] != "verification:pass"):
                     raise GoFailure("chi_b_incomplete")
-        elif purpose == "main" and choice.get("finish_reason") == "tool_calls":
+        elif purpose in {"main", "continuation"} and choice.get("finish_reason") == "tool_calls":
             # Store exactly the assistant representation required for subsequent history.
             clean = {"role": "assistant", "content": msg.get("content"), "tool_calls": msg.get("tool_calls")}
             try:
@@ -167,6 +198,28 @@ class ChiGuard(httpx.AsyncBaseTransport):
                              and records[0]["result"] == "def add(a, b):\n    return a - b\n"
                              and name == "verify_patch")):
                         raise ContractFailure("chi_b_order_invalid")
+                if purpose == "continuation":
+                    from go_chi_recovery import canonical_sha, classify
+                    parsed = copy.deepcopy(self.contract).accept_batch(clean)
+                    completed = set()
+                    dispatched = {event['call_id'] for event in self.journal.run['tool_events']
+                                  if event.get('event') in {'returned', 'returned_error'}}
+                    for record in self.contract.records:
+                        canonical = self.canonical_tools.get(record["name"])
+                        try:
+                            effect = classify(canonical)
+                        except (TypeError, ValueError):
+                            raise GoFailure("chi_recovery_tool_unclassified") from None
+                        if record["id"] in dispatched and record["result"] is not None and effect == "mutation":
+                            completed.add(canonical_sha({"name": canonical, "arguments": record["arguments"]}))
+                    for call in parsed:
+                        canonical = self.canonical_tools.get(call["name"])
+                        try:
+                            effect = classify(canonical)
+                        except (TypeError, ValueError):
+                            raise GoFailure("chi_recovery_tool_unclassified") from None
+                        if effect == "mutation" and canonical_sha({"name": canonical, "arguments": call["arguments"]}) in completed:
+                            raise GoFailure("chi_recovery_replay")
                 parsed = self.contract.accept_batch(clean)
                 if self.before_batch is not None:
                     self.before_batch(parsed)
@@ -175,9 +228,76 @@ class ChiGuard(httpx.AsyncBaseTransport):
         else:
             raise GoFailure("chi_response_invalid")
 
+    def _contract_snapshot(self):
+        from go_chi_recovery import canonical_sha
+        return canonical_sha({"definitions": self.contract.definitions, "records": self.contract.records,
+                              "batches": self.contract.batches, "seen": sorted(self.contract.seen),
+                              "refusals": self.contract.refusals})
+
+    def _recovery_check(self, snapshot, raw_hash, request, used, claimed, *, issued=False):
+        fatal = self.fatal_getter()
+        if fatal: raise GoFailure(fatal)
+        if self.error is not None: raise GoFailure(self.error)
+        task = asyncio.current_task()
+        if task is not None and task.cancelling(): raise asyncio.CancelledError
+        if self.recovery_blocker(): raise GoFailure("chi_recovery_invalid")
+        if (self.journal.state["pending"] is not None or self.journal.state["halted"] is not None
+                or any(event.get("event") == "failed" for event in self.journal.run["tool_events"])
+                or any(record["result"] is None for record in self.contract.records)):
+            raise GoFailure("chi_recovery_invalid")
+        if (self._contract_snapshot() != snapshot or hashlib.sha256(request.content).hexdigest() != raw_hash
+                or self.claimed() != claimed):
+            raise GoFailure("chi_recovery_history_changed")
+        if time.monotonic() - self.run_started >= TIME_POLICY['chi_admission_seconds']:
+            raise GoFailure("chi_run_time_limit")
+        if sum(x['purpose'] != 'patient_simulator' for x in self.journal.run['requests']) != used + 1:
+            raise GoFailure("chi_recovery_history_changed")
+        if used + 1 >= 50 or len(self.journal.run['recovery_events']) > (2 if issued else 1):
+            raise GoFailure("chi_recovery_limit")
+
     async def handle_async_request(self, request):
-        async with self.billing_lock:
-            return await self._handle_serialized(request)
+        from go_chi_recovery import canonical_sha, derive_view
+        async with self._control_lock:
+            snapshot = self._contract_snapshot()
+            raw_hash = hashlib.sha256(request.content).hexdigest()
+            used = sum(x['purpose'] != 'patient_simulator' for x in self.journal.run['requests'])
+            claimed = self.claimed()
+            async with self.billing_lock:
+                response, candidate = await self._handle_serialized(request)
+            if candidate is None:
+                return response
+            try:
+                self._recovery_check(snapshot, raw_hash, request, used, claimed)
+                original = json.loads(request.content, object_pairs_hook=_unique,
+                                      parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                self.contract.validate_history(original["messages"], system=self.system, instruction=self.instruction,
+                                               used=used, claimed=claimed)
+                view = derive_view(original, candidate, old_used=used, claimed=claimed)
+                wire = json.dumps(view, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
+                blocked = check_budget(measure_request(view, wire), self.context_limit)
+                if blocked: raise GoFailure(blocked)
+                self._recovery_check(snapshot, raw_hash, request, used, claimed)
+                permit = self.journal.issue_recovery(view, secrets=(self.secret, self.session))
+                headers = httpx.Headers(request.headers)
+                if "content-length" in headers: del headers["content-length"]
+                follow = httpx.Request(request.method, request.url, headers=headers, content=wire,
+                                       extensions=dict(request.extensions))
+                self._active_permit = {"index": permit, "request": follow,
+                    "body_sha256": hashlib.sha256(wire).hexdigest(), "view_sha256": canonical_sha(view),
+                    "history_length": len(original["messages"])}
+                async with self.billing_lock:
+                    self._recovery_check(snapshot, raw_hash, request, used, claimed, issued=True)
+                    final, _ = await self._handle_serialized(follow)
+                return final
+            except BaseException as exc:
+                fatal = self.fatal_getter()
+                self.error = (fatal if fatal else self.error if self.error else
+                              "chi_cancelled" if isinstance(exc, asyncio.CancelledError) else
+                              exc.code if isinstance(exc, GoFailure) else "chi_recovery_invalid")
+                if isinstance(exc, asyncio.CancelledError): raise
+                raise GoFailure(self.error) from None
+            finally:
+                self._active_permit = None
 
     async def _handle_serialized(self, request):
         try:
@@ -189,17 +309,20 @@ class ChiGuard(httpx.AsyncBaseTransport):
             dispatch = {'version': 'chi-go-dispatch-v1', 'purpose': purpose,
                         'session_sha256': hashlib.sha256(self.session.encode()).hexdigest(),
                         'started_utc_ms': time.time_ns() // 1000000, 'body_bytes': len(raw)}
-            self.journal.reserve(raw, purpose, secrets=(self.secret, self.session), dispatch=dispatch)
+            self.journal.reserve(raw, purpose, secrets=(self.secret, self.session), dispatch=dispatch,
+                                 recovery_permit=self._active_permit["index"] if purpose == "continuation" else None)
         except Exception as exc:
             self.error = exc.code if isinstance(exc, GoFailure) else "chi_persistence_failed"
             raise GoFailure(self.error) from None
         start = time.monotonic()
         persistence_failed = False
+        dispatched = False
         try:
             request.extensions['timeout'] = {'connect': TIME_POLICY['connect_seconds'],
                 'read': TIME_POLICY['confirmation_read_seconds' if purpose == 'confirmation' else 'main_read_seconds'],
                 'write': TIME_POLICY['write_seconds'], 'pool': TIME_POLICY['pool_seconds']}
             async with asyncio.timeout(TIME_POLICY['confirmation_io_seconds' if purpose == 'confirmation' else 'main_io_seconds']):
+                dispatched = True
                 response = await self.lower.handle_async_request(request)
                 raw_response = await response.aread()
             payload = None
@@ -245,13 +368,13 @@ class ChiGuard(httpx.AsyncBaseTransport):
             if (payload["usage"]["prompt_tokens"] > 1048576
                     or payload["usage"]["completion_tokens"] > (1024 if self.journal.run["kind"] == "coding_b" else 32768 if purpose == "confirmation" else 8192)):
                 raise GoFailure("chi_usage_over_limit")
-            self._response(payload, purpose)
+            recoverable = self._response(payload, purpose)
             try:
                 self.journal.record_diagnostic("ok", int((time.monotonic() - start) * 1000))
             except Exception:
                 persistence_failed = True
                 raise GoFailure("chi_evidence_persistence_failed") from None
-            return response
+            return response, payload if recoverable else None
         except BaseException as exc:
             self.error = ("chi_cancelled" if isinstance(exc, asyncio.CancelledError) else
                           exc.code if isinstance(exc, GoFailure) else
@@ -265,6 +388,15 @@ class ChiGuard(httpx.AsyncBaseTransport):
             if isinstance(exc, asyncio.CancelledError):
                 raise
             raise GoFailure(self.error) from None
+        finally:
+            if dispatched and self.wire_recorder is not None:
+                original_error = __import__("sys").exc_info()[1]
+                try:
+                    self.wire_recorder(self.journal.run["requests"][-1])
+                except Exception:
+                    self.error = self.error or "chi_log_persistence_failed"
+                    if not isinstance(original_error, asyncio.CancelledError):
+                        raise GoFailure(self.error) from None
 
     async def aclose(self):
         await self.lower.aclose()
