@@ -97,3 +97,9 @@ docker run --rm --pull=never --network none --read-only --tmpfs /tmp \
 若后续批准真实验证，最小提案为候选实现bd1b9f5及上述最终bundle/runtime identity，同一Go endpoint、deepseek-v4.1-flash/high不变：先只读核对现行同账准入，旧未知仍按原门禁阻断，不换root；获准后新coding-B一次、最多6请求/每次1024，再做A/B各一条自造协议历史探针（每条最多2请求/每次8192，总最多4请求）。只验证精确部分reasoning视图与完整新工具往返；探针不伪造“真实length发生”，B不证明恢复收益。需要自然length的任务回归时再冻结具体已见任务/角色/每run50与对照条件。任何未知token/结果、意外费用源/Extra Usage、协议不符、额外工具或超限立即停止并留证。本提案未执行/未授权，不占摘要预算，不把旧B/基线写成新候选证据。
 
 用户验收后按学习约定集中讲解正常与失败调用链，不默认安排小测；无用户实践证据，不记为掌握。
+
+### Git交付
+
+[PR42](https://github.com/xsw932187210-cell/chi-agent/pull/42)已创建为base=main、非draft/open，附加到本聊天，未合并/启用auto-merge。实现提交为bd1b9f5，首轮文档提交4442866已通过git ls-remote核对后建PR；此节与短状态链接随后单独文档提交，不改变已审代码或包身份。PR40仍open，不自动关闭或把它写成已合并。仅显式暂存自有代码/合成测试/配置及文档；runs、原始轨迹、Key、数据、vendor和离线包均未上传。
+
+收尾一次批量保存曾因自动审批用量耗尽被拒绝执行，非安全判定；原命令未执行。用户将聊天工作区切换到本worktree并更新写权限后，正常workspace写入保存证据/报告；后续Git提交/推送审批实际成功，没有绕过被拒绝的Git动作。记录见independent/p0-environment-failures.log。
