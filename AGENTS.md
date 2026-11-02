@@ -13,6 +13,7 @@
 
 ## 稳定协作规则
 
+- **C2 输入/输出专项（2026-11-02）**按[输出恢复实施方案](chi-agent/openspec/changes/project-completion/output-recovery.md)接续：用户指定Sol/high规划及独立审核、一个显式Terra/high子代理实现/Docker自测，在此范围覆盖下条DeepSeek分工；本轮仅文档，新对话启动P0–P3离线开发。DeepSeek原M包不由本专项接管，隔离checkout/测试资源或串行写入；真实调用权限仍只查REVIEW_STATE。
 - 本次全项目收尾采用[连续执行计划](chi-agent/openspec/changes/project-completion/design.md)：用户启动该范围后由 DeepSeek 协调/实现、Gemini 独立审查及有条件的 Docker 复验，GPT 负责规划及后续累计审核，用户最终验收/合并；在该范围内覆盖下条默认模型分工，不逐包等待 GPT。当前规划本身不启动功能编码、项目真实调用或发布；权限仍只查 REVIEW_STATE。
 - 默认 **一个 `gpt-6.1-terra` / `high` 实现子代理 + 主代理独立审核**。主代理负责规格、任务边界、审核、教学和 GitHub；子代理负责实现及 Docker 内自测。只有已授权开发中存在明确可独立并行的工作、预期收益足够时，主代理先说明第二个代理的职责与收益，再按需启用；不固定凑两个、不递归扩增、不静默换模型。普通问答、纯文档和 Git 管理由主代理直接处理。
 - 同一工作区同一时段一个实现写入者；真正并行写入须隔离工作区及测试资源。实现停止并固定候选后，主代理按差异和必要调用代码独立复验；自测、commit 或 push 不等于验收。

@@ -4,6 +4,7 @@
 
 ## 当前协作方式（2026-10-27）
 
+- **2026-11-02 C2 输入/输出专项**：用户指定新对话由 GPT-6.1 Sol/high 负责规划与独立审核，一个显式 `gpt-6.1-terra`/`high` 子代理负责实现及Docker自测；在C2范围覆盖下条DeepSeek连续执行分工。入口为[输入设计](chi-agent/openspec/changes/project-completion/input-context.md)和[输出恢复P0–P3](chi-agent/openspec/changes/project-completion/output-recovery.md)。本轮仅文档；新对话明确启动后连续做离线开发/审核/PR，不逐字段等待用户。模型不可用须说明，不静默替换。DeepSeek继续其M包；共享目录不能并行写入，隔离checkout/测试资源后才可同时工作。真实请求、摘要、B/C/Trial/发布仍依REVIEW_STATE，不随本分工自动恢复。
 - **2026-10-31 全项目收尾专项**：用户要求扩大规划，由 DeepSeek/Gemini 连续推进剩余项目、GPT 在额度刷新后检查累计方向。本次先交付[收尾计划](chi-agent/openspec/changes/project-completion/design.md)及[验收契约](chi-agent/openspec/changes/project-completion/specs/project-closeout/spec.md)，不启动编码/真实调用。用户启动该范围后，DeepSeek V4.1 Flash High/Max 为执行协调者和唯一实现写入者，Gemini 3.8 Flash High 独立审查、在有工具且实际执行时提供 Docker 复验，GPT 负责规划和后续累计审核，用户最终验收/合并。规格内日常拆解、修复和已授权工作包衔接无需等 GPT；本专项覆盖下条默认模型分工，不更换参赛运行时模型、不自动恢复项目调用/判分/发布。详细执行/实验边界只在计划和 REVIEW_STATE，旧阶段历史不改写。
 - **默认一个实现子代理，主代理独立审核**：实现代理显式使用 GPT-6.1 Terra（`gpt-6.1-terra`）/ `high`，承担有界实现及 Docker 自测；主代理负责规格、协调、独立复验、教学与 GitHub。普通问答、纯文档和 Git 管理由主代理直接完成。只有已授权开发中存在明确可独立并行的工作且预期收益足够，主代理先说明职责、文件所有权与收益，再启用第二个代理；不凑固定人数、不递归扩增、不静默换模型。历史 Luna 实际派发记录保留；本项不更换参赛运行时模型。详见 [实现与独立审核](chi-agent/docs/subagent-workflow.md)。
 - **固定候选后审核**：共享目录只有一个实现写入者；真正并行写入需隔离工作区和结果目录。实现停止后，主代理先看基线/候选差异，再补读相关入口、调用者和必要测试，独立验证受影响行为。子代理自测、commit 或 push 不等于验收。
