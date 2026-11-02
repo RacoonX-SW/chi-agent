@@ -47,6 +47,7 @@ PACKAGE_FILES: dict[str, str] = {
     "scripts/b_provider_profile.py": "scripts/b_provider_profile.py",
     "scripts/b_provider_transport.py": "scripts/b_provider_transport.py",
     "scripts/model_runner_adapter.py": "scripts/model_runner_adapter.py",
+    "scripts/budget_evaluation.py": "scripts/budget_evaluation.py",
     "scripts/b_model_adapter.py": "scripts/b_model_adapter.py",
     "scripts/opencode_go_provider.py": "scripts/opencode_go_provider.py",
     "scripts/patient_identity_binding.py": "scripts/patient_identity_binding.py",

@@ -28,7 +28,7 @@ ENTRY_CONFIG_PATH = ROOT / "profiles" / "evaluation-entry.json"
 ENTRY_RUNTIME_SOURCE_FILES = (
     "scripts/evaluation_entry.py", "scripts/evaluation_bundle.py", "scripts/b_live_preflight.py",
     "scripts/b_execution_policy.py", "scripts/b_provider_profile.py", "scripts/b_provider_transport.py",
-    "scripts/model_runner_adapter.py", "scripts/b_model_adapter.py",
+    "scripts/model_runner_adapter.py", "scripts/budget_evaluation.py", "scripts/b_model_adapter.py",
     "profiles/evaluation-entry.json", "profiles/deepseek-flash-prepared.json",
 )
 ENTRY_CONFIG_EXPECTED = {

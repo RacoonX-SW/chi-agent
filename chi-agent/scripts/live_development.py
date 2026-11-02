@@ -251,7 +251,7 @@ def _execution_identity(*, k: bool = False) -> dict[str, Any]:
         sdk = expected
     files = ("scripts/live_development.py", "scripts/b_provider_transport.py",
              "scripts/pdf_resource_reader.py",
-             "scripts/model_runner_adapter.py", "scripts/b_provider_profile.py",
+             "scripts/model_runner_adapter.py", "scripts/budget_evaluation.py", "scripts/b_provider_profile.py",
              "scripts/a_environment.py", "scripts/b_execution_policy.py",
              "scripts/b_live_preflight.py", "scripts/b_model_adapter.py",
              "profiles/deepseek-flash-prepared.json", "profiles/local-development-policy.json",

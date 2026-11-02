@@ -30,7 +30,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SYNTHETIC_RUNS = ROOT / "runs" / "b-provider-preflight" / "synthetic"
 EVALUATION_RUNS = ROOT / "runs" / "evaluation-policy-rehearsal"
 APPLICATION_SOURCE_FILES = (
-    "scripts/model_runner_adapter.py", "scripts/b_provider_profile.py", "scripts/b_execution_policy.py",
+    "scripts/model_runner_adapter.py", "scripts/budget_evaluation.py", "scripts/b_provider_profile.py", "scripts/b_execution_policy.py",
     "scripts/b_provider_transport.py", "scripts/b_live_preflight.py", "profiles/local-development-policy.json",
 )
 FIXTURE_SCENARIOS = (

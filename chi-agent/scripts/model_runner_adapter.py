@@ -325,7 +325,7 @@ def _mark_unknown_usage(ledger: Ledger) -> None:
 
 
 def _budget_check(ledger: Ledger, request_body: dict[str, Any]) -> int:
-    from run_baseline import evaluate_budget
+    from budget_evaluation import evaluate_budget
 
     _validate_accounting_state(ledger)
 
