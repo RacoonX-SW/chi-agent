@@ -134,7 +134,7 @@ def source_identity() -> dict:
     _, profile_hash = load_profile()
     paths = ("scripts/opencode_go_provider.py", "profiles/opencode-go-deepseek.json", "requirements-model.lock",
              "scripts/b_provider_profile.py", "scripts/b_provider_transport.py", "scripts/b_execution_policy.py",
-             "scripts/model_runner_adapter.py", "scripts/b_model_adapter.py")
+             "scripts/model_runner_adapter.py", "scripts/budget_evaluation.py", "scripts/b_model_adapter.py")
     try:
         sdk = {name: importlib.metadata.version(name) for name in ("openai-agents", "openai", "httpx")}
         if sdk != {"openai-agents": "0.13.6", "openai": "2.36.0", "httpx": "0.28.1"}:

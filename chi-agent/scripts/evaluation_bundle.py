@@ -29,6 +29,7 @@ PACKAGE_FILES: dict[str, str] = {
     "scripts/b_provider_profile.py": "scripts/b_provider_profile.py",
     "scripts/b_provider_transport.py": "scripts/b_provider_transport.py",
     "scripts/model_runner_adapter.py": "scripts/model_runner_adapter.py",
+    "scripts/budget_evaluation.py": "scripts/budget_evaluation.py",
     "scripts/b_model_adapter.py": "scripts/b_model_adapter.py",
     "scripts/install_model_dependencies.sh": "scripts/install_model_dependencies.sh",
     "profiles/evaluation-entry.json": "profiles/evaluation-entry.json",

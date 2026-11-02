@@ -87,16 +87,15 @@ class SyntheticTreeTests(unittest.TestCase):
 
 
 class RealTreeTests(unittest.TestCase):
-    def test_real_tree_reports_known_run_baseline_gap(self):
+    def test_real_tree_has_no_packaged_closure_gaps(self):
         result = import_inventory.inventory(import_inventory.ROOT)
         self.assertGreaterEqual(result["packaged_count"], 30)
-        self.assertIn({"module": "model_runner_adapter", "imports": "run_baseline"},
-                      result["closure_gaps"])
+        self.assertEqual(result["closure_gaps"], [])
         self.assertEqual(result["unknown_imports"], [])
         unlocked = {name for item in result["unlocked_externals"] for name in item["imports"]}
         self.assertLessEqual(unlocked, {"docker", "docker.types", "huggingface_hub"})
 
-    def test_isolated_package_reports_missing_module(self):
+    def test_isolated_package_has_budget_dependency(self):
         source = import_inventory.ROOT
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -105,11 +104,16 @@ class RealTreeTests(unittest.TestCase):
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source / origin, target)
             result = import_inventory.inventory(root)
-            names = {entry["module"] for entry in result["unknown_imports"]}
-            self.assertIn("model_runner_adapter", names)
-            unknown = next(item for item in result["unknown_imports"]
+            unknown = next((item for item in result["unknown_imports"]
+                            if item["module"] == "model_runner_adapter"), None)
+            self.assertTrue(unknown is None or "budget_evaluation" not in unknown["imports"])
+            self.assertNotIn({"module": "model_runner_adapter", "imports": "budget_evaluation"},
+                             result["closure_gaps"])
+            (root / "scripts/budget_evaluation.py").unlink()
+            missing = import_inventory.inventory(root)
+            unknown = next(item for item in missing["unknown_imports"]
                            if item["module"] == "model_runner_adapter")
-            self.assertIn("run_baseline", unknown["imports"])
+            self.assertIn("budget_evaluation", unknown["imports"])
 
 
 if __name__ == "__main__":
