@@ -8,7 +8,7 @@
 
 交付：`docs/module-map.md` + 只读工具 `scripts/import_inventory.py`。
 
-- 59 个自有模块逐个登记：分类（runtime/guard/capability/tools/build/devop/devsim/legacy）、是否进包、行数、用途、直接导入者。
+- 60 个自有模块逐个登记：分类（runtime/guard/capability/tools/build/devop/devsim/legacy）、是否进包、行数、用途、直接导入者。
 - 三个边界分开写明：内层 `PACKAGE_FILES`（31 个 .py）、外层 release（`package/` + 3 个文件）、供应检查。
 - 边界穿越事实：包内→包外只有 `model_runner_adapter` 函数内导入 `run_baseline`；包外→包内为正常复用；`live_development`/`b_provider_transport`/`model_runner_adapter` 仍被调用，**未整体判废**。
 - 未移动目录、未改 allowlist。
@@ -22,8 +22,9 @@
 - 当前真实结果：
 
 ```
-modules=59 packaged=31
+modules=60 packaged=31
 GAP model_runner_adapter -> run_baseline
+UNLOCKED a_environment: docker, huggingface_hub
 UNLOCKED go_chi_operator: docker.types
 UNLOCKED role_operator: docker.types
 ```
@@ -52,9 +53,17 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
   /opt/venv/bin/python -m unittest discover -s tests
 ```
 
-- 全量：**507 tests**，2 个既有环境错误（缺 `anthropic`），11 skipped；无新增失败。
+- 全量：**509 tests**，2 个既有环境错误（缺 `anthropic`），11 skipped；无新增失败。
 - 定向：`tests.test_import_inventory` 7 OK；`tests.test_make_role_manifest` 11 OK；`tests.test_config_limits_consistency` 4 OK。
 - 身份：用 `go_chi_bundle.build_bundle` 重建，manifest `7206012ac6715c5c8dc803dffd2108db23245afd1db65a63fca9906a0671f19d`，与 release-v7 内层包一致 → 本包**未改变 runtime 身份**（仍需在合并后按实际 manifest 复核）。
+
+## 复审修复（Gemini 阻断项）
+
+- `import_inventory._module_imports` 原先只遍历模块顶层 `FunctionDef`，**漏掉类方法内的 import**；修复为递归遍历，类体透明、方法仍算函数上下文，嵌套函数单独归名。
+- 影响：`go_chi_mcp` 方法内导入的 `referral_field_guidance`、`patient_identity_binding` 之前未被登记为调用者；`docs/module-map.md` 已按新结果重生成（60 个模块，新增 `import_inventory`/`make_role_manifest` 两个包外工具）。
+- 新增测试：类方法 import、嵌套函数 import、相对导入不计 unknown。
+- 非阻断建议一并处理：模块表注明 58+2 口径；相对导入归为 `relative`，不再落入 unknown。
+- 复跑：定向 `tests.test_import_inventory` 9 OK；全量 **509 tests**，2 个既有环境错误、11 skipped。
 
 ## 失败与限制
 

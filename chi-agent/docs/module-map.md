@@ -15,6 +15,7 @@
 ## 2. 分类
 
 - **runtime**：参赛包执行链
+- **tool**：包外可靠性工具（不进包）
 - **guard**：发送前校验、账目、证据、时间策略
 - **capability**：F1–F6 自有能力（状态/指导/检索/上下文/本地工具）
 - **tools**：MCP 工具面、路径、实体、PDF
@@ -23,7 +24,7 @@
 - **devsim**：开发患者模拟（不进入参赛包）
 - **legacy**：旧入口或兼容模块；**只要仍被导入就不算废弃**
 
-## 3. 全量模块表（58 个）
+## 3. 全量模块表（60 个：58 个业务/平台模块 + 2 个包外可靠性工具）
 
 | 模块 | 分类 | 进包 | 行数 | 用途 | 被谁导入 |
 | --- | --- | --- | ---: | --- | --- |
@@ -70,18 +71,20 @@
 | `go_chi_search` | capability | 是 | 154 | 有界文本检索 | go_chi_tools |
 | `go_chi_state` | capability | 是 | 571 | 有界任务状态与校验 | go_chi_mcp, go_chi_runtime, go_chi_tools |
 | `go_chi_tools` | capability | 是 | 512 | 本地工具面（fs/state/guidance/completion） | go_chi_runtime |
+| `import_inventory` | tool | 否 | 220 | 包外导入/打包边界清单 | — |
 | `live_development` | legacy | 否 | 2718 | 旧开发主循环（2718 行） | development_review, go_chi_operator, role_operator… |
+| `make_role_manifest` | tool | 否 | 209 | 包外资源 manifest 生成 | — |
 | `model_runner_adapter` | legacy | 是 | 1205 | 旧 SDK 适配；Go 复用兼容补丁 | b_live_preflight, go_chi_entry, go_chi_runtime… |
 | `opencode_go_provider` | runtime | 是 | 817 | Go provider 常量/传输/账本原语 | go_chi_auxiliary, go_chi_entry, go_chi_evidence… |
-| `patient_identity_binding` | tools | 是 | 401 | provider 患者实体绑定 | go_chi_runtime, go_chi_tools, live_development |
+| `patient_identity_binding` | tools | 是 | 401 | provider 患者实体绑定 | b_provider_transport, go_chi_mcp, go_chi_runtime… |
 | `payer_evidence` | tools | 是 | 457 | payer 证据影子原型 | go_chi_tools |
 | `pdf_resource_reader` | tools | 是 | 85 | PDF 受限读取 | go_chi_entry, go_chi_tools, live_development |
 | `provider_task_resources` | devop | 否 | 67 | provider 任务资源选择 | development_review, live_development |
-| `referral_field_guidance` | capability | 是 | 37 | 转诊字段提示 | live_development |
-| `request_budget` | guard | 是 | 41 | 剩余请求/预算反馈 | go_chi_contract, go_chi_runtime, live_development |
+| `referral_field_guidance` | capability | 是 | 37 | 转诊字段提示 | go_chi_mcp, live_development |
+| `request_budget` | guard | 是 | 41 | 剩余请求/预算反馈 | b_provider_transport, go_chi_contract, go_chi_runtime… |
 | `role_cm_capture` | devop | 否 | 119 | CM 世界产物捕获 | role_operator, role_world_preflight |
 | `role_operator` | devop | 否 | 303 | 开发运行编排（world+runner） | — |
-| `role_resource_preflight` | devop | 否 | 105 | 角色资源 manifest 校验 | role_operator, role_world_preflight |
+| `role_resource_preflight` | devop | 否 | 105 | 角色资源 manifest 校验 | make_role_manifest, role_operator, role_world_preflight |
 | `role_runner` | devop | 否 | 122 | 开发 runner 包装（broker/能力开关） | — |
 | `role_world_preflight` | devop | 否 | 189 | world/资源预检 | — |
 | `run_baseline` | legacy | 否 | 871 | 旧单任务 baseline 入口 | b_model_probe, c_run_control, check_readiness… |
@@ -104,13 +107,14 @@
 当前运行结果（2026-11-02）：
 
 ```
-modules=59 packaged=31
+modules=60 packaged=31
 GAP model_runner_adapter -> run_baseline
+UNLOCKED a_environment: docker, huggingface_hub
 UNLOCKED go_chi_operator: docker.types
 UNLOCKED role_operator: docker.types
 ```
 
-`docker` SDK 不在任何 `requirements*.lock` 中，只在 controller 镜像里安装；`huggingface_hub` 同样未锁。这两项属环境漂移风险，登记给 C4/负责人，不在 M1 修复。
+`docker` SDK 不在任何 `requirements*.lock` 中，只在 controller 镜像里安装；`huggingface_hub` 同样未锁（`a_environment` 使用）。这两项属环境漂移风险，登记给 C4/负责人，不在 M1 修复。
 
 ## 6. 未做
 

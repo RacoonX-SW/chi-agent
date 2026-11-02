@@ -59,6 +59,27 @@ class SyntheticTreeTests(unittest.TestCase):
         self.assertEqual(result["modules"]["a"]["dynamic"], ["run:__import__"])
         self.assertEqual(result["unknown_imports"], [{"module": "a", "imports": ["mystery_pkg"]}])
 
+    def test_class_method_and_nested_function_imports_are_nested(self):
+        write(self.root / "scripts/a.py",
+              "class A:\n    def run(self):\n        import b\n"
+              "def outer():\n    def inner():\n        from c import thing\n")
+        write(self.root / "scripts/b.py", "")
+        write(self.root / "scripts/c.py", "thing = 1\n")
+        result = import_inventory.inventory(self.root)
+        self.assertEqual({(gap["module"], gap["imports"]) for gap in result["closure_gaps"]},
+                         {("a", "b"), ("a", "c")})
+        self.assertIn("a", result["modules"]["b"]["importers"])
+        self.assertIn("a", result["modules"]["c"]["importers"])
+        nested = result["modules"]["a"]["nested"]
+        self.assertTrue(any("run:b" in entry for entry in nested), nested)
+        self.assertTrue(any("inner:c" in entry for entry in nested), nested)
+
+    def test_relative_import_is_not_unknown(self):
+        write(self.root / "scripts/a.py", "from . import b\n")
+        write(self.root / "scripts/b.py", "")
+        result = import_inventory.inventory(self.root)
+        self.assertEqual(result["unknown_imports"], [])
+
     def test_missing_scripts_directory_fails(self):
         with tempfile.TemporaryDirectory() as empty:
             with self.assertRaises(SystemExit):

@@ -61,6 +61,8 @@ def _normalize(name: str) -> str:
 
 
 def _classify(name: str, self_modules: set[str], locked: set[str]) -> str:
+    if name.startswith("."):
+        return "relative"
     top = name.split(".")[0]
     if not top:
         return "unknown"
@@ -78,26 +80,35 @@ def _classify(name: str, self_modules: set[str], locked: set[str]) -> str:
 
 
 def _module_imports(tree: ast.AST) -> tuple[list[str], list[tuple[str, str]], list[tuple[str, str]]]:
+    """Collect module-level and function/method-level imports.
+
+    Class bodies are transparent: a method is still a function context, so an
+    import inside ``class X: def run(...)`` is reported as nested under ``run``.
+    """
     top: list[str] = []
     nested: list[tuple[str, str]] = []
     dynamic: list[tuple[str, str]] = []
-    for node in getattr(tree, "body", []):
-        if isinstance(node, ast.Import):
-            top.extend(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom):
-            prefix = "." * node.level
-            top.append(prefix + (node.module or ""))
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for sub in ast.walk(node):
-                if isinstance(sub, ast.Import):
-                    nested.extend((node.name, alias.name) for alias in sub.names)
-                elif isinstance(sub, ast.ImportFrom):
-                    prefix = "." * sub.level
-                    nested.append((node.name, prefix + (sub.module or "")))
-                elif isinstance(sub, ast.Call):
-                    target = getattr(sub.func, "id", None) or getattr(sub.func, "attr", None)
-                    if target in {"import_module", "__import__"}:
-                        dynamic.append((node.name, target))
+
+    def visit(node: ast.AST, function: str | None) -> None:
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.Import, ast.ImportFrom)):
+                names = ([alias.name for alias in child.names] if isinstance(child, ast.Import)
+                         else ["." * child.level + (child.module or "")])
+                if function is None:
+                    top.extend(names)
+                else:
+                    nested.extend((function, name) for name in names)
+                continue
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                visit(child, child.name)
+                continue
+            if isinstance(child, ast.Call) and function is not None:
+                target = getattr(child.func, "id", None) or getattr(child.func, "attr", None)
+                if target in {"import_module", "__import__"}:
+                    dynamic.append((function, target))
+            visit(child, function)
+
+    visit(tree, None)
     return [name for name in top if name], sorted(set(nested)), sorted(set(dynamic))
 
 
