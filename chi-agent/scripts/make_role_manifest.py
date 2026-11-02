@@ -19,10 +19,12 @@ ROLE_MAP = {
     "prior_auth_um": ("payer", "payer"),
     "care_management": ("care_manager", "cm"),
 }
-PA_WORLDS = ("prior_auth_provider/shared/worlds/healthverse-pa-v2-payer.json",
-             "prior_auth_provider/shared/worlds/healthverse-pa-v2-provider.json")
+PA_PAYER_WORLD = "prior_auth_provider/shared/worlds/healthverse-pa-v2-payer.json"
+PA_PROVIDER_WORLD = "prior_auth_provider/shared/worlds/healthverse-pa-v2-provider.json"
+PA_WORLDS = (PA_PAYER_WORLD, PA_PROVIDER_WORLD)
 CM_WORLD = "care_management/shared/worlds/healthverse-cm-curated25-v1.json"
 CM_REF = "care_management/shared/tool_reference.md"
+PRIMARY_WORLD = {"provider": PA_PROVIDER_WORLD, "payer": PA_PAYER_WORLD, "cm": CM_WORLD}
 VISIBILITY = {"public", "world_only"}
 
 
@@ -81,6 +83,8 @@ def build_manifest(dataset: Path, family: str, task_id: str, revision: str | Non
         task_files = ("instruction.md", "task.toml", "fixtures/manifest.json",
                       "fixtures/expectations.json")
     else:
+        # Both PA worlds stay in the frozen file list (preflight requires the
+        # pair), but only the role's own world may be the primary `world`.
         world_paths = PA_WORLDS
         task_files = ("instruction.md", "task.toml", "tool_reference.md",
                       "fixtures/manifest.json", "fixtures/expectations.json")
@@ -107,6 +111,9 @@ def build_manifest(dataset: Path, family: str, task_id: str, revision: str | Non
     if role == "cm":
         files.append(_entry(dataset / CM_REF, dataset, "public"))
     _reject_unexpected(task, dataset, files)
+    primary_world = PRIMARY_WORLD[role]
+    if primary_world not in {item["path"] for item in files}:
+        raise ManifestError("manifest_world_missing")
     manifest = {
         "schema": "chi-role-resources-v1",
         "actor": actor,
@@ -117,8 +124,8 @@ def build_manifest(dataset: Path, family: str, task_id: str, revision: str | Non
         "task_path": task_path,
         "instruction_path": f"{task_path}/instruction.md",
         "tool_reference_path": CM_REF if role == "cm" else f"{task_path}/tool_reference.md",
-        "world": {"path": world_paths[0],
-                  "sha256": next(item["sha256"] for item in files if item["path"] == world_paths[0]),
+        "world": {"path": primary_world,
+                  "sha256": next(item["sha256"] for item in files if item["path"] == primary_world),
                   "source": "shared"},
         "files": sorted(files, key=lambda item: item["path"]),
     }
@@ -165,7 +172,17 @@ def write_manifest(manifest: dict, output: Path, dataset: Path,
         digest = hashlib.sha256(payload).hexdigest()
         if preflight is not None:
             preflight(dataset, Path(temp), digest)
-        os.replace(temp, output)
+        # Atomic no-overwrite commit: link(2) fails with EEXIST if any file or
+        # symlink appeared after the early check, so a racing writer can never be
+        # replaced. A second exists() call would still be racy.
+        try:
+            os.link(temp, output)
+        except FileExistsError:
+            raise ManifestError("manifest_output_exists") from None
+        except OSError:
+            raise ManifestError("manifest_write_failed") from None
+        os.unlink(temp)
+        _fsync_dir(directory)
     except BaseException:
         try:
             os.unlink(temp)
@@ -173,6 +190,17 @@ def write_manifest(manifest: dict, output: Path, dataset: Path,
             pass
         raise
     return digest
+
+
+def _fsync_dir(directory: Path) -> None:
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def _preflight_import():

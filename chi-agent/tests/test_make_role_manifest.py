@@ -104,6 +104,40 @@ class ManifestTests(unittest.TestCase):
         with self.assertRaises(gen.ManifestError):
             gen.build_manifest(self.root, "prior_auth_um", "pa_missing")
 
+    def _provider_task(self, world_id: str = "healthverse-pa-v2-provider") -> str:
+        task_id = "pa_provider_synthetic"
+        base = self.root / "prior_auth_provider/tasks" / task_id
+        write(base / "instruction.md", "instruction")
+        write(base / "task.toml", "version = '1.0'\n")
+        write(base / "tool_reference.md", "tool ref")
+        write(base / "fixtures/manifest.json", json.dumps({"world_id": world_id}))
+        write(base / "fixtures/expectations.json", json.dumps({"hidden": True}))
+        return task_id
+
+    def test_provider_uses_provider_world_and_passes_preflight(self):
+        task_id = self._provider_task()
+        manifest = gen.build_manifest(self.root, "prior_auth_provider", task_id)
+        self.assertEqual(manifest["world"]["path"],
+                         "prior_auth_provider/shared/worlds/healthverse-pa-v2-provider.json")
+        self.assertEqual(len(manifest["files"]), 7)
+        gen.write_manifest(manifest, self.root / "out/provider.json", self.root,
+                           preflight=role_resource_preflight.validate)
+
+    def test_payer_uses_payer_world_and_passes_preflight(self):
+        manifest = gen.build_manifest(self.root, "prior_auth_um", self.payer)
+        self.assertEqual(manifest["world"]["path"],
+                         "prior_auth_provider/shared/worlds/healthverse-pa-v2-payer.json")
+        gen.write_manifest(manifest, self.root / "out/payer-world.json", self.root,
+                           preflight=role_resource_preflight.validate)
+
+    def test_world_id_mismatch_is_refused_by_original_preflight(self):
+        task_id = self._provider_task(world_id="healthverse-pa-v2-payer")
+        manifest = gen.build_manifest(self.root, "prior_auth_provider", task_id)
+        with self.assertRaises(ValueError):
+            gen.write_manifest(manifest, self.root / "out/mismatch.json", self.root,
+                               preflight=role_resource_preflight.validate)
+        self.assertFalse((self.root / "out/mismatch.json").exists())
+
     def test_cm_manifest_uses_shared_world_and_reference(self):
         manifest = gen.build_manifest(self.root, "care_management", self.cm)
         paths = {item["path"] for item in manifest["files"]}
@@ -120,6 +154,41 @@ class ManifestTests(unittest.TestCase):
             gen.write_manifest(manifest, self.root / "out/bad.json", self.root,
                                preflight=role_resource_preflight.validate)
         self.assertFalse((self.root / "out/bad.json").exists())
+
+    def test_racing_writer_wins_and_keeps_original_bytes(self):
+        manifest = gen.build_manifest(self.root, "prior_auth_um", self.payer)
+        target = self.root / "out/race.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+
+        def preflight(dataset, path, digest):
+            role_resource_preflight.validate(dataset, path, digest)
+            write(target, "created-by-another-writer")
+
+        with self.assertRaises(gen.ManifestError):
+            gen.write_manifest(manifest, target, self.root, preflight=preflight)
+        self.assertEqual(target.read_text(), "created-by-another-writer")
+        self.assertEqual(list(target.parent.glob(".manifest-*")), [])
+
+    def test_existing_symlink_is_not_replaced(self):
+        manifest = gen.build_manifest(self.root, "prior_auth_um", self.payer)
+        target = self.root / "out/link.json"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(self.root / "care_management/shared/tool_reference.md")
+        with self.assertRaises(gen.ManifestError):
+            gen.write_manifest(manifest, target, self.root)
+        self.assertTrue(target.is_symlink())
+        self.assertEqual((self.root / "care_management/shared/tool_reference.md").read_text(), "ref")
+
+    def test_write_failure_leaves_no_temp_or_output(self):
+        from unittest.mock import patch
+        manifest = gen.build_manifest(self.root, "prior_auth_um", self.payer)
+        target = self.root / "out/fail.json"
+        with patch("make_role_manifest.os.link", side_effect=OSError("boom")):
+            with self.assertRaises(gen.ManifestError) as caught:
+                gen.write_manifest(manifest, target, self.root)
+        self.assertEqual(caught.exception.code, "manifest_write_failed")
+        self.assertFalse(target.exists())
+        self.assertEqual(list(target.parent.glob(".manifest-*")), [])
 
     def test_missing_revision_is_refused(self):
         (self.root / "REVISION").unlink()

@@ -65,6 +65,42 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 - 非阻断建议一并处理：模块表注明 58+2 口径；相对导入归为 `relative`，不再落入 unknown。
 - 复跑：定向 `tests.test_import_inventory` 9 OK；全量 **509 tests**，2 个既有环境错误、11 skipped。
 
+## Codex 复审 R1/R2 修复（2026-11-02）
+
+### R1：provider 主 world 选错
+
+`build_manifest` 原先对 provider/payer 都用 `PA_WORLDS[0]`（payer world），合法 provider 任务会被原 preflight 判 `world_invalid`。
+
+修复：新增 `PRIMARY_WORLD`，按 role 选主 world（provider→provider、payer→payer、cm→cm），两个 PA world 仍完整进入 `files`；主 world 必须出现在文件清单中，否则拒绝。原 preflight 未改、未放宽。
+
+验证：
+
+- 合成 provider 正常路径：主 world = `healthverse-pa-v2-provider.json`，7 项，原 preflight 通过；
+- payer 正常路径：主 world = payer，11 项，通过；
+- CM 正常路径：主 world = curated25，6 项，通过；
+- 反例：provider 任务的 fixture world_id 写成 payer → 原 preflight `world_invalid`，且不落盘；
+- 真实数据：`pa_t032` provider 任务生成 7 项、主 world 为 provider，通过原 preflight。
+
+### R2：最终落盘非原子不可覆盖
+
+`write_manifest` 原先是 `exists()` 检查后 `os.replace`，竞争创建的最终文件会被覆盖。
+
+修复：临时文件写入并通过 preflight 后，用 `os.link(temp, output)` 原子提交；目标已存在（常规文件或符号链接）时内核返回 `EEXIST`，映射为 `manifest_output_exists`，原字节不变；成功后删除临时文件并 fsync 目录；其他 `OSError` 映射为 `manifest_write_failed`。
+
+验证：
+
+- 竞争创建：preflight 回调期间由另一写入者创建目标 → 拒绝，目标字节保持 `created-by-another-writer`，无 `.manifest-*` 残留；
+- 已存在文件：拒绝且字节不变；
+- 已存在符号链接：拒绝，链接与目标均不变；
+- 预检失败：不产生最终文件，临时文件清理；
+- `os.link` 抛 `OSError`：`manifest_write_failed`，无输出、无临时文件。
+
+### 复跑
+
+- 24 项原定向集扩为 **30 tests**（9 + 17 + 4），全部 OK；
+- 全量：**515 tests**，2 个既有环境错误（缺 `anthropic`）、11 skipped，无新增失败；
+- 未改 runtime/guard/journal/contract，未跑真实模型或 B/C。
+
 ## 失败与限制
 
 - `model_runner_adapter -> run_baseline` 闭包缺口**保留未修**，交 C3；`test_real_tree_reports_known_run_baseline_gap` 显式断言该现状，修复后需同步更新。
