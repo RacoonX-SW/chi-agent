@@ -139,6 +139,8 @@ DeepSeek负责实现不意味着其任务不重要；划分依据是是否触及
 
 因此输出侧待讨论的首选顺序为：先按推理/文字/工具参数分类并核实耗尽的预算，再评估主循环更高输出上限（32768只是候选，须同步输入预留、guard/journal/profile及身份/时间验证）；仍截断时是否允许纯文字的有限续写另定。工具批次截断保持整批不执行，不执行看似完整的前半批；任何重生成都会新增请求并改变零自动重试规则，需显式限定已知结算、零工具派发、同账总限额和次数。传输/用量未知保持停止，不能套用已知length恢复。上述选择尚未冻结或实现。
 
+后续用户澄清DeepSeek原建议为带purpose/预算/工具合法性校验的受控接续，并要求写入实施方案。新首版以[输出恢复实施契约](../openspec/changes/project-completion/output-recovery.md)为准：保留现有单次上限，不接流式；无工具时接续合法上下文，含工具时整批零执行并重新生成；新对话由Sol/high规划审核和唯一Terra/high子代理实现。前段“优先提高上限”保留为讨论过程，不再作为首版默认；实现及真实协议证据尚未产生。
+
 ## 16. DeepSeek 可靠性工具候选：Codex 独立核对
 
 2026-11-02。固定候选 [`f4162d7`](https://github.com/xsw932187210-cell/chi-agent/tree/f4162d74efeb61da5832364ad99d88a9d231f37b)；基线 `fc7d678`。差异为7个工具/测试/文档文件，未改runtime。远端核对时PR39为既有文档规划PR；DeepSeek的`codex/reliability-boundaries`已推送但未查到对应open PR。结论：暂缓将该实现候选合入main，以下两项交DeepSeek修复后固定新候选再复审。不修改当前代码。作者交付及其自测来源见[固定版本交付报告](https://github.com/xsw932187210-cell/chi-agent/blob/f4162d74efeb61da5832364ad99d88a9d231f37b/chi-agent/reviews/reliability-boundaries-review.md)，不将作者记录写成Codex执行结果。
