@@ -132,3 +132,39 @@ DeepSeek负责实现不意味着其任务不重要；划分依据是是否触及
 用户要求完成本次文档后再讨论；这里不冻结方案、不授权实现或真实请求。下一次先核对一次原length响应的reasoning/content/tool_calls构成、预算及usage是否已结算，再讨论：保持停止并调整输出预算；仅普通文字的有界续写；工具调用截断的安全拒绝/重新生成策略。残缺tool_calls/JSON不得拼接后执行。
 
 若最终选择续写，还须明确同attempt/账目、历史关联、每次发送前准入、总请求与次数、取消/超时/未知处理、完成判据及禁止重复旧工具。不能把“最多2次、新purpose”当成已经由用户决定的方案，也不能只加一条“继续”提示就宣称可恢复。
+
+后续用户要求同时考虑输入增长，并认可借鉴Codex/Harness的分层视图、同步摘要与检查点原则。详细方案/来源/实施关口集中在[输入治理设计](../openspec/changes/project-completion/input-context.md)；此处保留输出选项的未决状态，不把输入原则的认可扩大成输出续写或真实请求授权。
+
+本轮补读当前profile/guard：主循环上限8192、确认32768、coding-B1024；guard收到可信usage先留证/结算，再校验响应，主响应length报chi_output_truncated，确认length交本地确认逻辑处理但不代表绑定成功。历史[独立开发评审](../reviews/deepseek-development-review.md)出现8192个completion全部为reasoning、content为空的length；之后该评审用途改用32768，下一笔完成。这不是当前主循环的同条件对照，不能证明仅扩大上限就能解决它的截断。[真实批次报告](../reviews/real-external-batch-a-review.md#31-round-17-的提供方记录2026-11-01-补核)也记provider输出8192且reasoning8192，但其原响应未收全，不能仅凭用量推断finish_reason。
+
+因此输出侧待讨论的首选顺序为：先按推理/文字/工具参数分类并核实耗尽的预算，再评估主循环更高输出上限（32768只是候选，须同步输入预留、guard/journal/profile及身份/时间验证）；仍截断时是否允许纯文字的有限续写另定。工具批次截断保持整批不执行，不执行看似完整的前半批；任何重生成都会新增请求并改变零自动重试规则，需显式限定已知结算、零工具派发、同账总限额和次数。传输/用量未知保持停止，不能套用已知length恢复。上述选择尚未冻结或实现。
+
+## 16. DeepSeek 可靠性工具候选：Codex 独立核对
+
+2026-11-02。固定候选 [`f4162d7`](https://github.com/xsw932187210-cell/chi-agent/tree/f4162d74efeb61da5832364ad99d88a9d231f37b)；基线 `fc7d678`。差异为7个工具/测试/文档文件，未改runtime。远端核对时PR39为既有文档规划PR；DeepSeek的`codex/reliability-boundaries`已推送但未查到对应open PR。结论：暂缓将该实现候选合入main，以下两项交DeepSeek修复后固定新候选再复审。不修改当前代码。作者交付及其自测来源见[固定版本交付报告](https://github.com/xsw932187210-cell/chi-agent/blob/f4162d74efeb61da5832364ad99d88a9d231f37b/chi-agent/reviews/reliability-boundaries-review.md)，不将作者记录写成Codex执行结果。
+
+核对环境：通过`git archive f4162d7 chi-agent`在`/tmp/chi-reliability-review-bxJTT1`取得不可变源码快照；容器`chi-agent-dev:latest`，实际Python3.12.15，`--network none --read-only --tmpfs /tmp`，只读挂载该快照及既有model/pdf依赖卷；未挂Key、world、真实账目。定向命令`/opt/venv/bin/python -m unittest tests.test_import_inventory tests.test_make_role_manifest tests.test_config_limits_consistency`：24 tests，OK，退出0。未重跑全量；作者报告的2个anthropic环境错误/11 skip仍为作者证据，不改为本轮全绿。
+
+### R1：provider正常输入选错world（P1，阻断M2）
+
+[`make_role_manifest.py`第120行](https://github.com/xsw932187210-cell/chi-agent/blob/f4162d74efeb61da5832364ad99d88a9d231f37b/chi-agent/scripts/make_role_manifest.py#L120)无论provider/payer都使用`world_paths[0]`构造主world，而PA_WORLDS将payer排在首位。合成一个合法provider任务，fixture manifest的world_id为healthverse-pa-v2-provider，生成结果仍指定healthverse-pa-v2-payer；调用原`role_resource_preflight.validate`得到`world_invalid`。这不是当前已有运行代码的故障，影响新增三角色manifest工具的正常provider路径。
+
+Docker复现：复用`tests.test_make_role_manifest.ManifestTests`临时fixture，将payer任务复制为`prior_auth_provider/tasks/pa_provider_synthetic`，移除request目录，将fixture manifest改为provider world_id；调用build_manifest与带原preflight的write_manifest。实际输出：
+
+```
+python=3.12.15
+provider_selected_world=prior_auth_provider/shared/worlds/healthverse-pa-v2-payer.json
+provider_preflight=REFUSED:world_invalid
+```
+
+DeepSeek修复与验收：按实际任务fixture/公开资源契约选择并校验主world，保留原要求的完整world-only清单，不改原preflight放行。补provider/payer/cm三个正常路径，补任务world_id与所选world不匹配的拒绝反例；三个角色均须经过原preflight，不能只断言生成JSON的字段。
+
+### R2：最终落盘不是原子的不可覆盖（P2，阻断M2契约）
+
+[`write_manifest()`第156–168行](https://github.com/xsw932187210-cell/chi-agent/blob/f4162d74efeb61da5832364ad99d88a9d231f37b/chi-agent/scripts/make_role_manifest.py#L156)先检查`output.exists()`，最终使用`os.replace(temp, output)`。mkstemp只保护临时文件，不能保护最终路径；检查后其他写入者创建的最终文件会被覆盖。实现/交付说明中的O_EXCL不可覆盖承诺未覆盖实际最终写入。
+
+Docker确定性复现：输出最初不存在；使用preflight回调先运行原validate，然后向最终路径写入`created-by-another-writer`；回调返回后write_manifest成功并覆盖该文件。实际`concurrent_output_overwritten=True`。仅使用容器/tmp合成文件，没有覆盖项目或真实manifest。
+
+DeepSeek修复与验收：最终提交必须具有原子不覆盖语义，不能只加第二次exists检查；已有/竞争创建的文件与链接保持原字节，失败清理临时文件，预检失败不留下最终产物。保留确定性、大小/hash、权限分类和原preflight。补竞争创建、正常写入、预检失败及写失败测试；不扩大到runtime/账或目录迁移。
+
+修复完成后重跑新增反例及上述24项相关回归，说明实际Python/容器/退出码和新候选SHA，再独立核对。暂不要求为这两项运行真实模型或重新收费B/C；不得顺带修C1/C2/C3/C4或pending。M1/M3已跑定向检查不等于整包验收通过，既有run_baseline闭包缺口及未锁依赖仍单列。
