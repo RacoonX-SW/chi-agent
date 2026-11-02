@@ -1,6 +1,6 @@
 # 模块、调用与发布边界地图（M1）
 
-建立：2026-11-02。只读分析 + 包外工具 `scripts/import_inventory.py` 生成；源树为 `codex/reliability-refactor-plan` `04cf1a8`（PR39）。本图不移动文件、不改包、不把旧模块整体判废。
+建立：2026-11-02。只读分析 + 包外工具 `scripts/import_inventory.py` 生成；基线 `origin/main` `fc7d678`；分析时另核对了 PR39 文档树 `04cf1a8`。本图不移动文件、不改包、不把旧模块整体判废。
 
 ## 1. 三个发布边界
 
