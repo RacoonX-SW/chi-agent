@@ -104,7 +104,7 @@
 - 发现缺口或未分类导入时退出码 1；
 - 不导入项目模块（用 AST 读 `PACKAGE_FILES`），不写文件、不读凭据。
 
-当前运行结果（2026-11-02）：
+M1建立时运行结果（2026-11-02；后续C3修复见第7节）：
 
 ```
 modules=60 packaged=31
@@ -118,6 +118,18 @@ UNLOCKED role_operator: docker.types
 
 ## 6. 未做
 
+以下为M1建立时边界，C3后续变更见第7节；旧清单/行数不冒充新版本全量再生成结果。
+
 - 未移动任何目录，未改 `PACKAGE_FILES`，未修 `run_baseline` 闭包；
 - 未把 legacy 模块标为废弃（多个仍被 dev 路径导入）；
 - 未做运行时导入对称性验证（M3 的隔离包检查负责）。
+
+## 7. C3最小闭包修正
+
+`model_runner_adapter._budget_check()`改为局部导入`budget_evaluation.evaluate_budget`，`run_baseline`从同一纯模块重导出原函数。新模块只依赖标准库`decimal`，同时列入Go和旧evaluation的`PACKAGE_FILES`及相关显式源码身份清单；没有把`run_baseline`或`d0_gate_policy`打进包。
+
+| 模块 | 分类 | Go进包 | 用途 | 被谁导入 |
+| --- | --- | --- | --- | --- |
+| `budget_evaluation` | legacy/guard | 是 | 原CNY预算纯函数，保留拒绝语义及签名 | model_runner_adapter（局部）, run_baseline（重导出） |
+
+当前静态检查Go包自有Python模块33个，`closure_gaps=[]`、`unknown_imports=[]`；C2另已加入`go_chi_recovery`。上面的M1模块表保留原快照，原“包内→包外”缺口现已关闭。`docker`/`huggingface_hub`未锁风险不在C3处理。隔离包实际调用、失败反例、真实身份及历史限制见[C1/C3阶段报告](../reviews/c1-c3-admission-package-review.md)。

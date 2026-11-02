@@ -113,9 +113,13 @@
 
 DeepSeek负责实现不意味着其任务不重要；划分依据是是否触及核算、工具历史、业务解释及安全边界，以及是否已有可冻结的局部验收。实现与独立复审保留；同一工作区仍只有一个写入者。
 
+2026-11-02后续C3已在隔离包实际触发上述局部导入失败，并以纯函数提取补齐闭包；Go主循环并未因此被证明发生过故障。两种导出包、函数行为/签名及身份链的独立证据见[C1/C3阶段报告](../reviews/c1-c3-admission-package-review.md)。表中是初核时判断，其余项不随C3完成而关闭。
+
 ## 14. 两项必须保留的不确定性
 
 ### 未结算请求与新state
+
+2026-11-02后续只读核查已完成，事实、来源和结论见[C1/C3阶段报告](../reviews/c1-c3-admission-package-review.md)：确认旧pending仍在时切换了state和evaluation；所选证据未闭合未知处置与特定后继授权，不能据此恢复真实准入。下面保留初核问题及原来源，不改原账或未合并报告。
 
 [未合并批次报告来源](https://github.com/xsw932187210-cell/chi-agent/blob/0ca0d45/chi-agent/reviews/real-external-batch-a-review.md)第14节记：`payer-010` transport错误、旧state仍pending，后用新state；同节称“无换账根”。需要比较实际evaluation/root/identity、用户决定、后继准入和全局累计，不能仅凭这些文字判定已经违规，也不能认定未结算没有影响。
 
