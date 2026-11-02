@@ -9,6 +9,7 @@
 | 当前阶段、授权、验收身份、PR 与下一步 | [审核接续状态](reviews/REVIEW_STATE.md) |
 | 代理分工与文档职责 | [共同协作约定](../COLLABORATION.md) |
 | 环境、Python 版本目标与容器边界 | [Docker 工作流](docs/docker-workflow.md) |
+| 模块职责、发布边界与重构建议 | [架构评审第12节起的模块导航、分工与核对结论](docs/architecture-review.md)；实际进包集合以构包allowlist为准 |
 | 分支、PR 与上传范围 | [GitHub 工作流](docs/github-workflow.md) |
 | 教学方式、理解进度与下一学习点 | [学习约定](docs/learning-agreement.md) |
 | 参赛路线与当前变更范围 | [参赛路线](openspec/competition-route.md)、[代表角色与开发患者模拟](openspec/changes/representative-role-baseline/proposal.md)、[历史 bootstrap-baseline](openspec/changes/bootstrap-baseline/proposal.md) |

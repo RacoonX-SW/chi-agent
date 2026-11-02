@@ -119,6 +119,10 @@
 
 ## 下一次从哪里继续
 
+2026-11-02接续[输入治理设计](../openspec/changes/project-completion/input-context.md)：已讲解并记录Codex/Harness借鉴边界、完整证据与活跃视图、实际请求计量/输出预留、来源保护及同步摘要检查点；用户认可方向并要求落文档，没有压缩实现或用户实践证据。下一步讨论输出截断：先辨认推理/文字/工具参数的截断及结算，再决定预算与受控恢复，不默认续写次数/purpose，不默认小测。
+
+可靠性讨论入口仍为[架构评审第12节起](architecture-review.md)和[工作包](../openspec/changes/project-completion/design.md#15-可靠性治理与分阶段重构)。本轮通过合成反例说明作者测试通过与契约覆盖完整是两件事，实际候选核对证据集中在架构评审第16节；不把Codex执行记作用户亲自测试或已掌握。
+
 新的项目推进入口为[全项目收尾计划](../openspec/changes/project-completion/design.md)：把“正式输入→包/依赖供应→Harbor→runner→工具/状态→终态/清理→实验与交付”串成整条链，结合每包的真实证据解释哪些能力已验证、哪些仍依赖外部条件。当前仅制定计划，没有新实现、实验或用户实践；既有 Y/W 等源码带读入口继续保留。
 
 功能建设按[F0–F7计划](../openspec/changes/project-completion/capabilities.md)补齐，尤其区分journal执行账与业务工作记忆、claim与公开效果核验、完整历史校验与合法上下文重建。用户本轮指出剩余功能被概括过度；这说明其在审查计划范围，不据此增加源码/压缩/恢复的掌握记录。

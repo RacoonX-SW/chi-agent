@@ -2,6 +2,8 @@
 
 ## 当前收尾规划（2026-10-31）
 
+2026-11-02新增[可靠性治理/重构分工及验收](changes/project-completion/design.md#15-可靠性治理与分阶段重构)，初核事实与模块导航见[架构评审](../docs/architecture-review.md)。当前仅记录讨论结论：先补边界/检查，再做获准的有界修正；整体目录/journal/身份改造延后评估，截断方案留待用户下一轮讨论。实际进度/权限仍只查REVIEW_STATE，不因本规划恢复实现或真实调用。
+
 用户要求扩大为整个剩余项目的连续计划，目标11/6冻结候选、11/8完成内部验收及交付材料，详见[Z0–Z8设计](changes/project-completion/design.md)、[完成契约](changes/project-completion/specs/project-closeout/spec.md)与[任务](changes/project-completion/tasks.md)。覆盖规则/用途核对、正式配送、Y去留、三角色收口、有界真实开发、未见集、干净包复现、累计审核和材料/交付。日期为内部目标，不保证外部条件满足；不以阶段数量推算已完成1/3。
 
 按用户追问补全[F0–F7功能建设](changes/project-completion/capabilities.md)：任务家族范围、带来源状态记忆、角色规划、规则定位、上下文组织/压缩可行性、完成前核验、未知写效果/停滞处理及实验汇总。Z3不得仅按角色接线或小修复验收；实验/未见集规模以修订计划为准，仍未启动。
