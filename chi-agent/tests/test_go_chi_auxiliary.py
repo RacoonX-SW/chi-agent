@@ -160,3 +160,33 @@ async def _cancelled_auxiliary():
         with pytest.raises(asyncio.CancelledError): await task
         assert j.state['pending'] == {'run': 'r', 'round': 1} and transport.error == 'chi_aux_cancelled'
         j.finish('failed'); j.close()
+
+
+def test_patient_context_budget_records_actual_wire_and_blocks_before_send():
+    async def exercise():
+        from go_chi_context import DEFAULT_BUDGET
+        with tempfile.TemporaryDirectory() as d:
+            j = ChiJournal(Path(d), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',
+                           kind='patient_probe', launch={'aux_contract': 'patient-simulator-v1'})
+            sent, metrics, wires = [], [], []
+            async def reply(req):
+                sent.append(req)
+                return httpx.Response(200, request=req, json={'usage': USAGE, 'model': 'deepseek-v4.1-flash',
+                    'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': 'hello'}}]})
+            transport = AuxiliaryTransport(j, SECRET, SESSION, httpx.MockTransport(reply), asyncio.Lock(), lambda: None,
+                context_recorder=lambda metric, purpose: metrics.append((metric, purpose)),
+                wire_recorder=lambda item: wires.append(dict(item)))
+            req = request()
+            await transport.handle_async_request(req)
+            assert metrics[0][1] == 'patient_simulator'
+            assert metrics[0][0]['raw_bytes'] == len(req.content)
+            assert metrics[0][0]['effective_output_reserve_tokens'] == 8192
+            assert len(sent) == 1
+            assert len(wires) == 1 and wires[0]['purpose'] == 'patient_simulator' and wires[0]['status'] == 'settled'
+            blocked = AuxiliaryTransport(j, SECRET, SESSION, httpx.MockTransport(reply), asyncio.Lock(), lambda: None,
+                context_limit=dict(DEFAULT_BUDGET, max_estimated_tokens=8192))
+            with pytest.raises(GoFailure, match='chi_context_budget_exceeded'):
+                await blocked.handle_async_request(request())
+            assert len(sent) == 1 and len(j.run['requests']) == 1
+            j.finish('failed'); j.close()
+    asyncio.run(exercise())

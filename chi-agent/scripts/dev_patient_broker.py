@@ -29,6 +29,9 @@ class PatientBroker:
         self.sessions = {}
         self.fatal = None
         self.busy = False
+        self.context_recorder = None
+        self.wire_recorder = None
+        self.context_limit = None
 
     def begin(self, call_id, tool, args):
         if (self.parent is not None or self.fatal or tool != 'cm_outreach.send_message' or type(args) is not dict
@@ -49,7 +52,10 @@ class PatientBroker:
         if patient_session not in self.sessions:
             session = 'chi-' + uuid.uuid4().hex
             transport = AuxiliaryTransport(self.journal, self.secret, session, self.lower_factory(), self.billing_lock,
-                lambda: self.parent[0] if self.parent else None)
+                lambda: self.parent[0] if self.parent else None,
+                **({"context_limit": self.context_limit, "context_recorder": self.context_recorder,
+                    "wire_recorder": self.wire_recorder}
+                   if self.context_limit is not None else {}))
             client = AsyncOpenAI(api_key=self.secret, base_url='https://opencode.ai/inference/go/openai/v1', max_retries=0,
                 default_headers={'User-Agent': 'chi-agent', 'X-OpenCode-Session': session},
                 http_client=httpx.AsyncClient(transport=transport, trust_env=False, follow_redirects=False))

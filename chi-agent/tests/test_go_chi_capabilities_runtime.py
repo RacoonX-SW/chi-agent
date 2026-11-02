@@ -129,7 +129,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(log["task_state_version"], state["version"])
         self.assertRegex(log["guidance_sha256"], r"^[0-9a-f]{64}$")
         self.assertRegex(log["task_state_sha256"], r"^[0-9a-f]{64}$")
-        self.assertEqual(log["context_budget"], "chi-context-budget-v1")
+        self.assertEqual(log["context_budget"], "chi-context-budget-v2")
         context_lines = (self.root / "logs" / "context.jsonl").read_text().splitlines()
         self.assertEqual(len(context_lines), log["context_requests"])
         self.assertGreater(log["context_max_chars"], 0)
@@ -264,7 +264,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("ERROR: search_unreadable", results["call_1"])
 
     async def test_context_budget_exceeded_stops_before_send(self):
-        tiny = {"schema": "chi-context-budget-v1", "max_chars": 10,
+        tiny = {"schema": "chi-context-budget-v2", "max_chars": 10,
                 "max_estimated_tokens": 10, "output_reserve_tokens": 1, "basis": "test"}
         output, observed, server, _ = await self.exercise(
             [completion()], expect_failure=True, context_budget=tiny)

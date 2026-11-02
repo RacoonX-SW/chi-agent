@@ -27,6 +27,7 @@ PACKAGE_FILES: dict[str, str] = {
     "scripts/go_chi_bundle.py": "scripts/go_chi_bundle.py",
     "scripts/go_chi_contract.py": "scripts/go_chi_contract.py",
     "scripts/go_chi_context.py": "scripts/go_chi_context.py",
+    "scripts/go_chi_recovery.py": "scripts/go_chi_recovery.py",
     "scripts/go_chi_guidance.py": "scripts/go_chi_guidance.py",
     "scripts/go_chi_guard.py": "scripts/go_chi_guard.py",
     "scripts/go_chi_search.py": "scripts/go_chi_search.py",

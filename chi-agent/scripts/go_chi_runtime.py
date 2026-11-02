@@ -9,8 +9,8 @@ from opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as 
                                   SCHEMAS as B_SCHEMAS, DESCRIPTIONS as B_DESCRIPTIONS,
                                   _matches_patch, _same_route_reasoning)
 from model_runner_adapter import _patch_empty_history_compatibility
-from go_chi_context import DEFAULT_BUDGET, check_budget
-from go_chi_policy import TIME_POLICY
+from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
+from go_chi_policy import TIME_POLICY, RECOVERY_POLICY
 from go_chi_guidance import digest as guidance_digest
 from go_chi_state import TaskState
 
@@ -125,12 +125,21 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         raise GoFailure("chi_transport_missing")
     if capabilities not in {None, "f0-f3-v1"}:
         raise GoFailure("chi_capabilities_invalid")
-    if context_budget is not None and check_budget(
-            {"total_chars": 0, "estimated_tokens": 0}, context_budget) == "chi_context_budget_invalid":
+    if check_budget(measure_request({"messages": [], "max_tokens": 8192}), context_budget) == "chi_context_budget_invalid":
         raise GoFailure("chi_context_budget_invalid")
     logs_dir = __import__("pathlib").Path(logs_dir)
     logs_dir.mkdir(mode=0o700, parents=False, exist_ok=False)
     context_metrics = []
+    wire_path = logs_dir / "wire-trace.jsonl"
+    recovery_path = logs_dir / "recovery-trace.jsonl"
+    try:
+        for path in (wire_path, recovery_path):
+            with path.open("x", encoding="utf-8") as handle:
+                handle.flush(); os.fsync(handle.fileno())
+    except OSError:
+        raise GoFailure("chi_log_persistence_failed") from None
+    logical_steps = [0]
+    wire_counts = {purpose: 0 for purpose in ('main', 'confirmation', 'continuation', 'patient_simulator')}
     context_path = logs_dir / "context.jsonl"
 
     def record_context(metric, purpose):
@@ -144,6 +153,35 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                 os.fsync(handle.fileno())
         except OSError:
             raise GoFailure("chi_context_persistence_failed") from None
+    def record_wire(item):
+        wire_counts[item['purpose']] += 1
+        from go_chi_evidence import verify
+        recovery = next((event for event in journal.run.get("recovery_events", [])
+                         if event["parent_round"] == item["round"] or event["continuation_round"] == item["round"]), None)
+        mode = None
+        if recovery is not None:
+            permit = verify(journal.root, journal.run_id, recovery["parent_round"], "recovery", recovery["permit_sha256"])
+            mode = permit["mode"]
+        response_sha = None
+        if item["response_evidence_sha256"] is not None:
+            response_sha = verify(journal.root, journal.run_id, item["round"], "response", item["response_evidence_sha256"])["raw_sha256"]
+        value = {"schema": "chi-wire-trace-v1", "round": item["round"], "purpose": item["purpose"],
+                 "status": item["status"], "request_sha256": item["request_sha256"],
+                 "request_evidence_sha256": item["request_evidence_sha256"], "response_sha256": response_sha,
+                 "response_evidence_sha256": item["response_evidence_sha256"],
+                 "diagnostic_evidence_sha256": item["diagnostic_evidence_sha256"],
+                 "policy": journal.run["launch"].get("output_recovery"),
+                 "root_round": recovery["parent_round"] if recovery else None,
+                 "parent_round": recovery["parent_round"] if recovery else None,
+                 "mode": mode, "decision": "issued" if recovery else None,
+                 "result": item["status"]}
+        with wire_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(value, sort_keys=True, allow_nan=False) + "\n")
+            handle.flush(); os.fsync(handle.fileno())
+    if auxiliary is not None:
+        auxiliary.context_limit = context_budget
+        auxiliary.context_recorder = record_context
+        auxiliary.wire_recorder = record_wire
     run_started = time.monotonic()
     context = contextvars.ContextVar("chi_confirmation", default=None)
     holder, exchanges = {}, []
@@ -170,6 +208,19 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             definitions = [Converter.tool_to_openai(tool) for tool in tools]
             if len({tool.name for tool in tools}) != len(tools):
                 raise GoFailure("chi_tool_name_collision")
+
+            canonical_tools = {tool.name: tool.name for tool in local}
+            canonical_tools.update({name: value[1] for name, value in bridge.raw_names.items()})
+            if journal.run['launch'].get('output_recovery') == RECOVERY_POLICY['version']:
+                if (set(canonical_tools) != {tool.name for tool in tools}
+                        or len(set(canonical_tools.values())) != len(canonical_tools)):
+                    raise GoFailure("chi_recovery_invalid")
+
+            def recovery_blocker():
+                return bool((auxiliary and auxiliary.fatal) or (binding and binding.poisoned)
+                    or (state is not None and (state.data.get("claim_violation")
+                        or (journal.run["claim_done"] != (state.data["claim"] is not None))
+                        or any(item["status"] == "open" for item in state.data["unknowns"]))))
 
             def before_batch(calls):
                 if any(call["name"] == "local-confirm-patient" for call in calls) and len(calls) != 1:
@@ -207,7 +258,9 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                              confirmation=context.get, before_batch=before_batch, observed_request=observed_request,
                              run_started=run_started, billing_lock=auxiliary.billing_lock if auxiliary else None,
                              fatal_getter=(lambda: auxiliary.fatal) if auxiliary else None,
-                             context_recorder=record_context, context_limit=context_budget)
+                             context_recorder=record_context, context_limit=context_budget,
+                             recovery_blocker=recovery_blocker, canonical_tools=canonical_tools,
+                             wire_recorder=record_wire)
             holder["guard"] = guard
             bridge.guard = guard
             client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",
@@ -218,6 +271,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             holder["client"] = client
             class BudgetModel(OpenAIChatCompletionsModel):
                 async def get_response(self, system_instructions, *args, **kwargs):
+                    logical_steps[0] += 1
                     if system_instructions != official.SYSTEM_PROMPT:
                         raise GoFailure("chi_system_prompt_invalid")
                     try:
@@ -255,6 +309,33 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             except Exception:
                 failure = failure or "chi_cleanup_failed"
         try:
+            from go_chi_evidence import verify
+            with recovery_path.open("a", encoding="utf-8") as handle:
+                for event in journal.run.get("recovery_events", []):
+                    permit = verify(journal.root, journal.run_id, event['parent_round'], 'recovery', event['permit_sha256'])
+                    number = event['continuation_round']
+                    result = 'not_sent' if number is None else journal.run['requests'][number - 1]['status']
+                    stop_code = failure if number is None else None
+                    if number is not None:
+                        item = journal.run['requests'][number - 1]
+                        if item['diagnostic_evidence_sha256'] is not None:
+                            diagnostic = verify(journal.root, journal.run_id, number, 'diagnostic', item['diagnostic_evidence_sha256'])
+                            code = diagnostic.get('code')
+                            if code != 'ok':
+                                stop_code = code
+                                if result == 'settled': result = 'failed'
+                        elif result == 'settled':
+                            result = 'failed'
+                    value = {'schema':'chi-recovery-trace-v1', 'policy':permit['policy'],
+                             'root_round':permit['root_round'], 'parent_round':event['parent_round'],
+                             'mode':permit['mode'], 'permit_sha256':event['permit_sha256'],
+                             'continuation_round':number, 'decision':'consumed', 'result':result,
+                             'safe_stop_code':stop_code if type(stop_code) is str and re.fullmatch(r'[a-z0-9_]{1,64}', stop_code) else None}
+                    handle.write(json.dumps(value, sort_keys=True, allow_nan=False) + "\n")
+                handle.flush(); os.fsync(handle.fileno())
+        except Exception:
+            failure = failure or "chi_log_persistence_failed"
+        try:
             agent_requests = [item for item in journal.run['requests'] if item['purpose'] != 'patient_simulator']
             settled = [item for item in agent_requests if item["status"] == "settled"]
             input_tokens = sum(item["usage"]["input_tokens"] for item in settled)
@@ -275,6 +356,15 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         try:
             summary = {"status": "incomplete" if failure else "complete", "safe_error_code": failure,
                        "provider_requests": len(agent_requests),
+                       "physical_requests": dict(wire_counts),
+                       "logical_model_steps": logical_steps[0],
+                       "recovery_policy": journal.run['launch'].get('output_recovery'),
+                       "recovery_permits_consumed": len(journal.run.get('recovery_events', [])),
+                       "recovery_limits": {"per_chain": 1, "per_run": 2, "shared_requests": 50},
+                       "journal_usage": journal.usage_totals(),
+                       "journal_usage_scope": "account_namespace",
+                       "current_run_agent_usage": {"input_tokens_known": input_tokens, "output_tokens_known": output_tokens,
+                                                   "complete": len(settled) == len(agent_requests)},
                        "tool_events": len(journal.run["tool_events"]),
                        "elapsed_ms": int((time.monotonic() - run_started) * 1000), "official_reward": None}
             if state is not None:

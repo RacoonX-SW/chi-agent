@@ -8,16 +8,19 @@ import time
 
 import httpx
 
+from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
 from b_provider_transport import GuardedTransport
 from opencode_go_provider import GoFailure, _contains_secret, _unique
 
 
 class AuxiliaryTransport(httpx.AsyncBaseTransport):
     """One journal owner and one billing lock shared with the main guard."""
-    def __init__(self, journal, secret, session, lower, lock, parent_getter):
+    def __init__(self, journal, secret, session, lower, lock, parent_getter, *, context_limit=DEFAULT_BUDGET, context_recorder=None, wire_recorder=None):
         self.journal, self.secret, self.session = journal, secret, session
         self.lower, self.lock, self.parent_getter = lower, lock, parent_getter
         self.error = None
+        self.context_limit, self.context_recorder = context_limit, context_recorder
+        self.wire_recorder = wire_recorder
 
     async def handle_async_request(self, request):
         async with self.lock:
@@ -25,6 +28,7 @@ class AuxiliaryTransport(httpx.AsyncBaseTransport):
                 raise GoFailure(self.error)
             start = time.monotonic()
             reserved = False
+            dispatched = False
             try:
                 raw = request.content
                 url = request.url
@@ -46,6 +50,10 @@ class AuxiliaryTransport(httpx.AsyncBaseTransport):
                         or any(m['role'] == 'system' for m in body['messages'][1:])
                         or _contains_secret(body, self.secret, self.session)):
                     raise GoFailure('chi_aux_request_invalid')
+                metric = measure_request(body, raw)
+                blocked = check_budget(metric, self.context_limit)
+                if blocked is not None: raise GoFailure(blocked)
+                if self.context_recorder is not None: self.context_recorder(metric, "patient_simulator")
                 parent = self.parent_getter()
                 dispatch = {'version': 'chi-go-dispatch-v1', 'purpose': 'patient_simulator',
                             'session_sha256': hashlib.sha256(self.session.encode()).hexdigest(),
@@ -55,6 +63,7 @@ class AuxiliaryTransport(httpx.AsyncBaseTransport):
                 reserved = True
                 request.extensions['timeout'] = {'connect': 10, 'read': 360, 'write': 60, 'pool': 60}
                 async with asyncio.timeout(420):
+                    dispatched = True
                     response = await self.lower.handle_async_request(request)
                     payload_bytes = await response.aread()
                 payload = None
@@ -89,6 +98,14 @@ class AuxiliaryTransport(httpx.AsyncBaseTransport):
                     except Exception: self.error = 'chi_evidence_persistence_failed'
                 if isinstance(exc, asyncio.CancelledError): raise
                 raise GoFailure(self.error) from None
+            finally:
+                if dispatched and self.wire_recorder is not None:
+                    original_error = __import__("sys").exc_info()[1]
+                    try: self.wire_recorder(self.journal.run["requests"][-1])
+                    except Exception:
+                        self.error = self.error or 'chi_log_persistence_failed'
+                        if not isinstance(original_error, asyncio.CancelledError):
+                            raise GoFailure(self.error) from None
 
     async def aclose(self):
         await self.lower.aclose()
