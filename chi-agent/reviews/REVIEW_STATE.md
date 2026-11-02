@@ -19,7 +19,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | C4固定快照独立真实配置/SDK/guard/journal/context及混合用途回归通过，基线与候选两包manifest实际相同；无源码checkout包的真实身份/合法重新打包后的配置变异及精确byte边界通过。作者错误预期、主代理脚本映射失败及skip保留，数量只见C4报告；外部role编排计时仅源码核对，未动态验收 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR42/PR43已由用户合并；本轮C4 PR待创建，主代理不合并/启用auto-merge。后续离线入口C5公开P2P实际链核查；真实新B/探针须先闭合历史处置及具体授权。C2/C4调用链已讲解，输入摘要仍独立包、不默认小测 |
+| PR 与下一步 | PR42/PR43已由用户合并；[C4 PR44](https://github.com/xsw932187210-cell/chi-agent/pull/44)为base=main/open，主代理不合并/启用auto-merge。后续离线入口C5公开P2P实际链核查；真实新B/探针须先闭合历史处置及具体授权。C2/C4调用链已讲解，输入摘要仍独立包、不默认小测 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 结构/可靠性判断 | C3局部依赖闭合保持；C4当前用途一致性限定离线核对通过，无数值漂移修复或常量归并。未锁环境依赖、外部编排动态计时及C5业务解释仍未关闭；[架构评审](../docs/architecture-review.md)保留初核及后续指针，不搬目录/拆journal |
