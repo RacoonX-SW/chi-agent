@@ -4,18 +4,18 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 用户要求继续，完成C5两次t027实际P2P/最终来源的只读核查与公开服务合成回归，限定离线通过；机械完成链已证实，模型声称讨论已举行缺少会话佐证，原false及业务未验证保持。详细证据集中在[C5报告](c5-p2p-public-path-review.md)。不改生产Agent/上游/verifier；C1未知、摘要/M2及旧pending保持 |
+| 当前任务 | 用户明确启动输入自动摘要连续离线开发，已按[实施契约](../openspec/changes/project-completion/input-summary.md)冻结首版字段/保护/一次共享额度/组合互斥，唯一Terra实现中，尚未固定候选或独立验收。默认关闭，无真实摘要请求；C1未知、C5交流佐证缺口及DeepSeek M2保持 |
 | 协作 | 本轮按用户指定由主代理规格/拆分/独立审核/Git，一个显式gpt-6.1-terra/high、fork_turns=none实现及Docker自测；使用隔离worktree/证据目录，原DeepSeek目录不动。其他收尾专项安排保持，用户最终验收/合并 |
 | 最新独立审核 | C5已审/限定离线通过测试候选`9a8e0be3db4ec49a58e473b7cdfc4dd342062d68`；主代理固定快照公开服务/工具/SDK回归、真实目标记录的公开来源解析回放及原证据hash核对通过。C4 `9fc41ca…`及C1–C3历史通过范围保留原报告，不扩大为交流真实/临床/官方评分通过 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 核实PR44已合并，最新origin/main=`3a83f18`；从其新建`codex/c5-p2p-audit`。复用隔离worktree及独立测试资源，原目录DeepSeek分支/未合并报告/旧证据不动，不merge/push main |
+| 当前分支与接手改动 | 核实PR45已合并，最新origin/main=`21ec34c`；从其新建`codex/input-summary`。复用隔离worktree及独立测试资源，原目录DeepSeek分支/旧证据不动，不merge/push main |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap及原锁/未知门禁不变。C1确认payer-010旧pending与后继state/evaluation切换，所选来源不能闭合其处置/授权；旧账字节不变，不做清账或真实准入。旧S/external超时对账保持历史含义；可信token费用缺项留null/warning，新结果/token未知仍停止，零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
-| 付费验证范围 | 本轮只完成C5只读/合成检查、独立复验、文档及PR；真实请求0，不读Key、不启动world/真实B/C/Trial/判分。原规划/旧审批历史不改，payer-010处置与特定后继授权仍待补齐，不用新账根绕阻断 |
+| 付费验证范围 | 本轮仅授权输入摘要连续离线实现、Docker自测/独立复验、返工、文档和PR；真实模型/摘要/续写请求0，不读Key、不启动world/真实B/C/Trial/判分。默认关闭，原unknown/授权缺口不改，不用新账根绕阻断 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | C5固定快照真实公开服务preflight及工具/SDK回归通过；原工具参数/结果与wire恢复hash匹配，两个原root和选定导出不变。作者返回快照假设失败/warning及主代理投影/编码失败保留，数量/命令只见C5报告；未跑新世界完整finalize持久化或交流效果。两种包manifest与基线相同 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
