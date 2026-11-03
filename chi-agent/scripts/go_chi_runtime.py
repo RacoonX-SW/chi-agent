@@ -110,6 +110,10 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
 
     if journal.run["kind"] != "chi" or role not in {"provider", "payer", "cm"}:
         raise GoFailure("chi_run_contract_invalid")
+    if journal.run['launch'].get('input_summary') is not None and (
+            journal.run['launch'].get('input_summary') != 'chi-input-summary-v1'
+            or journal.run['launch'].get('output_recovery') is not None or evidence_shadow == 'shadow'):
+        raise GoFailure('chi_summary_configuration_invalid')
     if auxiliary is not None and (role != 'cm' or auxiliary.journal is not journal
             or journal.run['launch'].get('aux_contract') != 'patient-simulator-v1'):
         raise GoFailure('chi_run_contract_invalid')
@@ -132,14 +136,20 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     context_metrics = []
     wire_path = logs_dir / "wire-trace.jsonl"
     recovery_path = logs_dir / "recovery-trace.jsonl"
+    summary_path = logs_dir / "summary-trace.jsonl"
     try:
-        for path in (wire_path, recovery_path):
+        paths = [wire_path, recovery_path]
+        if journal.run['launch'].get('input_summary') == 'chi-input-summary-v1':
+            paths.append(summary_path)
+        for path in paths:
             with path.open("x", encoding="utf-8") as handle:
                 handle.flush(); os.fsync(handle.fileno())
     except OSError:
         raise GoFailure("chi_log_persistence_failed") from None
     logical_steps = [0]
     wire_counts = {purpose: 0 for purpose in ('main', 'confirmation', 'continuation', 'patient_simulator')}
+    if journal.run['launch'].get('input_summary') == 'chi-input-summary-v1':
+        wire_counts['summary'] = 0
     context_path = logs_dir / "context.jsonl"
 
     def record_context(metric, purpose):
@@ -170,7 +180,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                  "request_evidence_sha256": item["request_evidence_sha256"], "response_sha256": response_sha,
                  "response_evidence_sha256": item["response_evidence_sha256"],
                  "diagnostic_evidence_sha256": item["diagnostic_evidence_sha256"],
-                 "policy": journal.run["launch"].get("output_recovery"),
+                 "policy": journal.run["launch"].get("output_recovery") or journal.run["launch"].get('input_summary'),
                  "root_round": recovery["parent_round"] if recovery else None,
                  "parent_round": recovery["parent_round"] if recovery else None,
                  "mode": mode, "decision": "issued" if recovery else None,
@@ -211,7 +221,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
 
             canonical_tools = {tool.name: tool.name for tool in local}
             canonical_tools.update({name: value[1] for name, value in bridge.raw_names.items()})
-            if journal.run['launch'].get('output_recovery') == RECOVERY_POLICY['version']:
+            if (journal.run['launch'].get('output_recovery') == RECOVERY_POLICY['version']
+                    or journal.run['launch'].get('input_summary') == 'chi-input-summary-v1'):
                 if (set(canonical_tools) != {tool.name for tool in tools}
                         or len(set(canonical_tools.values())) != len(canonical_tools)):
                     raise GoFailure("chi_recovery_invalid")
@@ -253,6 +264,11 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                                               "result": content, "observed_at_request_round": used})
 
             session = "chi-" + uuid.uuid4().hex
+            def summary_snapshot():
+                from copy import deepcopy
+                from go_chi_summary import binding_snapshot
+                return binding_snapshot(binding), deepcopy(state.data) if state is not None else None
+
             guard = ChiGuard(journal, secret, session, lower, tools=definitions, system=official.SYSTEM_PROMPT,
                              instruction=instruction, claimed=lambda: journal.run["claim_done"],
                              confirmation=context.get, before_batch=before_batch, observed_request=observed_request,
@@ -260,7 +276,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                              fatal_getter=(lambda: auxiliary.fatal) if auxiliary else None,
                              context_recorder=record_context, context_limit=context_budget,
                              recovery_blocker=recovery_blocker, canonical_tools=canonical_tools,
-                             wire_recorder=record_wire)
+                             wire_recorder=record_wire, summary_snapshot=summary_snapshot)
             holder["guard"] = guard
             bridge.guard = guard
             client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",
@@ -336,6 +352,19 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         except Exception:
             failure = failure or "chi_log_persistence_failed"
         try:
+            if journal.run['launch'].get('input_summary') == 'chi-input-summary-v1':
+                with summary_path.open('a', encoding='utf-8') as handle:
+                    for event in journal.run.get('summary_events', []):
+                        value = {'schema': 'chi-summary-trace-v1', 'policy': 'chi-input-summary-v1',
+                                 'selection_sha256': event['selection_sha256'], 'summary_round': event['summary_round'],
+                                 'candidate_sha256': event['candidate_sha256'], 'checkpoint_sha256': event['checkpoint_sha256'],
+                                 'status': event['status'], 'projections': event['projections'],
+                                 'safe_stop_code': failure if type(failure) is str and re.fullmatch(r'[a-z0-9_]{1,64}', failure) else None}
+                        handle.write(json.dumps(value, sort_keys=True, allow_nan=False) + '\n')
+                    handle.flush(); os.fsync(handle.fileno())
+        except Exception:
+            failure = failure or 'chi_log_persistence_failed'
+        try:
             agent_requests = [item for item in journal.run['requests'] if item['purpose'] != 'patient_simulator']
             settled = [item for item in agent_requests if item["status"] == "settled"]
             input_tokens = sum(item["usage"]["input_tokens"] for item in settled)
@@ -367,6 +396,9 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                                                    "complete": len(settled) == len(agent_requests)},
                        "tool_events": len(journal.run["tool_events"]),
                        "elapsed_ms": int((time.monotonic() - run_started) * 1000), "official_reward": None}
+            if journal.run['launch'].get('input_summary') == 'chi-input-summary-v1':
+                summary.update({'input_summary_policy': 'chi-input-summary-v1',
+                                'summary_events': len(journal.run['summary_events'])})
             if state is not None:
                 summary.update({
                     "capabilities": capabilities,

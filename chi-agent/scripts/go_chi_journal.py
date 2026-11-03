@@ -27,6 +27,7 @@ ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MAX_STATE_BYTES = 32 * 1024 * 1024
 RECOVERY_POLICY = "chi-output-recovery-v1"
+SUMMARY_POLICY = "chi-input-summary-v1"
 
 
 def _recovery_enabled(launch: dict, kind: str) -> bool:
@@ -39,6 +40,18 @@ def _recovery_enabled(launch: dict, kind: str) -> bool:
     if (kind != "chi" or type(launch["output_recovery"]) is not str
             or launch["output_recovery"] != RECOVERY_POLICY):
         raise GoFailure("chi_identity_invalid")
+    return True
+
+
+def _summary_enabled(launch: dict, kind: str) -> bool:
+    if type(launch) is not dict or kind not in {"chi", "coding_b", "patient_probe"}:
+        raise GoFailure("chi_summary_configuration_invalid")
+    if "input_summary" not in launch:
+        return False
+    if (kind != "chi" or type(launch['input_summary']) is not str
+            or launch['input_summary'] != SUMMARY_POLICY or 'output_recovery' in launch
+            or launch.get('evidence_shadow') == 'shadow'):
+        raise GoFailure("chi_summary_configuration_invalid")
     return True
 
 
@@ -253,6 +266,18 @@ def inspect_history(root: Path, expected_identity: str, expected_sha256: str) ->
                   'acknowledged_unsettled': [{'run': e['run'], 'round': e['round'], 'request_sha256': e['request_sha256'],
                                                'status': 'unsettled'} for e in _acknowledged(root, state).values()],
                   'reconciled_provider_timeouts': []}
+        summary_runs = [attempt for attempt in state['attempts'] if 'summary_events' in attempt]
+        if summary_runs:
+            result['input_summaries'] = [{'run': attempt['run'], 'status': (attempt['summary_events'][0]['status']
+                                         if attempt['summary_events'] else 'not_started'),
+                                         'summary_round': (attempt['summary_events'][0]['summary_round']
+                                                           if attempt['summary_events'] else None),
+                                         'projected_views': (len(attempt['summary_events'][0]['projections'])
+                                                             if attempt['summary_events'] else 0),
+                                         'reserved_main_requests': (sum(ref['round'] <= len(attempt['requests'])
+                                             for ref in attempt['summary_events'][0]['projections'])
+                                             if attempt['summary_events'] else 0)}
+                                        for attempt in summary_runs]
         for index, ref in enumerate(state.get('reconciliations', []), 1):
             event_path = root / 'reconciliations' / f'{index:04d}-event-{ref["event_sha256"]}.json'
             event = json.loads(_read_regular_bounded(event_path, 1024 * 1024, 'chi_history_invalid'))
@@ -503,6 +528,7 @@ class ChiJournal:
                        for x in (evaluation, task, attempt, run))):
             raise GoFailure("chi_identity_invalid")
         recovery_enabled = _recovery_enabled(launch if launch is not None else {}, kind)
+        summary_enabled = _summary_enabled(launch if launch is not None else {}, kind)
         if launch is not None and 'aux_contract' in launch:
             if (launch['aux_contract'] != 'patient-simulator-v1' or kind not in {'chi', 'patient_probe'}
                     or (kind == 'chi' and launch.get('role') != 'cm')):
@@ -560,6 +586,8 @@ class ChiJournal:
                         "launch": launch or {}}
             if recovery_enabled:
                 self.run["recovery_events"] = []
+            if summary_enabled:
+                self.run["summary_events"] = []
             self.run_doc = self.run
             self.state["attempts"].append(self.run)
             self._persist()
@@ -696,11 +724,15 @@ class ChiJournal:
                 if type(a) is not dict:
                     raise ValueError
                 recovery_enabled = _recovery_enabled(a.get("launch"), a.get("kind"))
+                summary_enabled = _summary_enabled(a.get("launch"), a.get("kind"))
                 run_keys = {"evaluation", "task", "attempt", "run", "kind", "status", "requests", "patient_binding_events", "claim_done", "tool_events", "safe_error_code", "launch"}
                 if recovery_enabled:
                     run_keys.add("recovery_events")
+                if summary_enabled:
+                    run_keys.add("summary_events")
                 if (set(a) != run_keys
                         or (recovery_enabled and (type(a["recovery_events"]) is not list or len(a["recovery_events"]) > 2))
+                        or (summary_enabled and (type(a['summary_events']) is not list or len(a['summary_events']) > 1))
                         or any(type(a[k]) is not str or not ID.fullmatch(a[k]) for k in ("evaluation", "task", "attempt", "run"))
                         or a["kind"] not in {"chi", "coding_b", "patient_probe"}
                         or type(a["patient_binding_events"]) is not list
@@ -719,7 +751,7 @@ class ChiJournal:
                 if aux_enabled and (a['kind'] not in {'chi', 'patient_probe'}
                         or (a['kind'] == 'chi' and a['launch'].get('role') != 'cm')): raise ValueError
                 if a['kind'] == 'patient_probe' and not aux_enabled: raise ValueError
-                if sum(r.get('purpose') in {'main', 'confirmation', 'continuation'} for r in a['requests']) > (6 if a['kind'] == 'coding_b' else 50): raise ValueError
+                if sum(r.get('purpose') in {'main', 'confirmation', 'continuation', 'summary'} for r in a['requests']) > (6 if a['kind'] == 'coding_b' else 50): raise ValueError
                 if sum(r.get('purpose') == 'patient_simulator' for r in a['requests']) > (2 if a['kind'] == 'patient_probe' else 10 if aux_enabled else 0): raise ValueError
                 fee_policy = a['launch'].get('fee_policy')
                 if fee_policy not in (None, FEE_POLICY): raise ValueError
@@ -794,7 +826,7 @@ class ChiJournal:
                 for index, item in enumerate(a["requests"], 1):
                     effective_fee_stop = None
                     if (type(item) is not dict or item.get("round") != index
-                            or item.get("purpose") not in ({"main", "confirmation"} | ({"patient_simulator"} if aux_enabled else set()) | ({"continuation"} if recovery_enabled else set()))
+                            or item.get("purpose") not in ({"main", "confirmation"} | ({"patient_simulator"} if aux_enabled else set()) | ({"continuation"} if recovery_enabled else set()) | ({"summary"} if summary_enabled else set()))
                             or (a["kind"] == "coding_b" and item.get("purpose") != "main")
                             or (a['kind'] == 'patient_probe' and item.get('purpose') != 'patient_simulator')
                             or item.get("max_tokens") != (1024 if a["kind"] == "coding_b" else 32768 if item.get("purpose") == "confirmation" else 8192)
@@ -930,6 +962,8 @@ class ChiJournal:
                         expected_evidence.add((a["run"], f"{number:03d}-recovery.json"))
                     if bound_rounds != {item["round"] for item in a["requests"] if item["purpose"] == "continuation"}:
                         raise ValueError
+                if summary_enabled:
+                    self._validate_summary_history(a, run_identities.get(a['run'], identity), expected_evidence)
             if (used_acknowledgements != set(acknowledged) or used_reconciliations != reconciled
                     or pending != s["pending"] or halt != s["halted"]):
                 raise ValueError
@@ -986,6 +1020,152 @@ class ChiJournal:
     def record_claim(self) -> None:
         self.run["claim_done"] = True
         self._persist()
+
+    def _validate_summary_history(self, run, identity, expected_evidence):
+        from go_chi_summary import (candidate_from_response, canonical_sha, derive_view, select_closed,
+                                    summary_request, validate_saved_source)
+        events = run['summary_events']
+        summary_rounds = [item['round'] for item in run['requests'] if item['purpose'] == 'summary']
+        if not events:
+            if summary_rounds: raise ValueError
+            return
+        event = events[0]
+        fields = {'selection_sha256', 'summary_round', 'candidate_sha256', 'checkpoint_sha256', 'status', 'projections'}
+        if (type(event) is not dict or set(event) != fields
+                or type(event['selection_sha256']) is not str or not DIGEST.fullmatch(event['selection_sha256'])
+                or event['status'] not in {'selected', 'requested', 'candidate', 'installed', 'rejected', 'failed'}
+                or type(event['projections']) is not list):
+            raise ValueError
+        number = event['summary_round']
+        if number is None:
+            if event['status'] != 'selected' or summary_rounds or run['status'] == 'complete': raise ValueError
+            number = len(run['requests']) + 1
+        elif (type(number) is not int or number < 1 or number > len(run['requests'])
+              or summary_rounds != [number] or event['status'] == 'selected'):
+            raise ValueError
+        if event['status'] != 'installed' and event['summary_round'] is not None and len(run['requests']) != number:
+            raise ValueError
+        if (event['status'] == 'installed' and len(run['requests']) > number
+                and run['requests'][number]['purpose'] != 'main'):
+            raise ValueError
+        selection = verify_evidence(self.root, run['run'], number, 'summary-selection', event['selection_sha256'])
+        selection_fields = {'schema', 'identity', 'run', 'source_body', 'source_sha256', 'source_raw', 'source_raw_sha256', 'source_used', 'claimed',
+                            'selection', 'selection_sha256', 'protected', 'protected_sha256', 'canonical_tools',
+                            'summary_body', 'summary_sha256'}
+        if (set(selection) != selection_fields or selection['schema'] != 'chi-summary-selection-v1'
+                or selection['identity'] != identity or selection['run'] != run['run']
+                or type(selection['source_used']) is not int or type(selection['claimed']) is not bool
+                or type(selection['source_raw']) is not str
+                or hashlib.sha256(selection['source_raw'].encode()).hexdigest() != selection['source_raw_sha256']
+                or canonical_sha(json.loads(selection['source_raw'], object_pairs_hook=_unique)) != selection['source_sha256']
+                or selection['source_sha256'] != canonical_sha(selection['source_body'])
+                or selection['selection_sha256'] != canonical_sha(selection['selection'])
+                or selection['protected_sha256'] != canonical_sha(selection['protected'])
+                or selection['summary_sha256'] != canonical_sha(selection['summary_body'])
+                or selection['selection_sha256'] != canonical_sha(select_closed(selection['source_body']['messages']))
+                or selection['summary_sha256'] != canonical_sha(summary_request(selection['source_body'], selection['selection'], selection['protected']))):
+            raise ValueError
+        scoped = copy.deepcopy(run)
+        scoped['requests'] = scoped['requests'][:number - 1]
+        validate_saved_source(root=self.root, run=scoped, identity=identity, body=selection['source_body'],
+                              used=selection['source_used'], claimed=selection['claimed'],
+                              canonical_tools=selection['canonical_tools'], protected=selection['protected'])
+        expected_evidence.add((run['run'], f'{number:03d}-summary-selection.json'))
+        if event['summary_round'] is not None:
+            request = run['requests'][number - 1]
+            doc = verify_evidence(self.root, run['run'], number, 'request', request['request_evidence_sha256'])
+            if (doc['redaction'] is not None or type(doc['body_utf8']) is not str
+                    or canonical_sha(json.loads(doc['body_utf8'], object_pairs_hook=_unique)) != selection['summary_sha256']):
+                raise ValueError
+        candidate_ref, checkpoint_ref = event['candidate_sha256'], event['checkpoint_sha256']
+        if candidate_ref is not None:
+            if type(candidate_ref) is not str or not DIGEST.fullmatch(candidate_ref): raise ValueError
+            candidate_doc = verify_evidence(self.root, run['run'], number, 'summary-candidate', candidate_ref)
+            if (set(candidate_doc) != {'schema', 'selection_sha256', 'response_sha256', 'candidate', 'candidate_sha256'}
+                    or candidate_doc['schema'] != 'chi-summary-candidate-evidence-v1'
+                    or candidate_doc['selection_sha256'] != event['selection_sha256']
+                    or candidate_doc['candidate_sha256'] != canonical_sha(candidate_doc['candidate'])):
+                raise ValueError
+            item = run['requests'][number - 1]
+            if item['status'] != 'settled': raise ValueError
+            response = verify_evidence(self.root, run['run'], number, 'response', item['response_evidence_sha256'])
+            diagnostic = verify_evidence(self.root, run['run'], number, 'diagnostic', item['diagnostic_evidence_sha256'])
+            if (response['raw_sha256'] != candidate_doc['response_sha256'] or response['http_status'] != 200
+                    or response['redaction'] is not None or type(response['body_utf8']) is not str
+                    or diagnostic['code'] != 'ok'):
+                raise ValueError
+            payload = json.loads(response['body_utf8'], object_pairs_hook=_unique)
+            candidate = candidate_from_response(payload, selection_sha256=selection['selection_sha256'],
+                                                protected_sha256=selection['protected_sha256'], sources=selection['selection']['sources'])
+            if canonical_sha(candidate) != candidate_doc['candidate_sha256']: raise ValueError
+            expected_evidence.add((run['run'], f'{number:03d}-summary-candidate.json'))
+        if checkpoint_ref is not None:
+            if type(checkpoint_ref) is not str or not DIGEST.fullmatch(checkpoint_ref) or candidate_ref is None: raise ValueError
+            checkpoint = verify_evidence(self.root, run['run'], number, 'summary-checkpoint', checkpoint_ref)
+            if checkpoint != {'schema': 'chi-summary-checkpoint-v1', 'selection_sha256': event['selection_sha256'],
+                              'candidate_sha256': candidate_ref, 'candidate_protected_sha256': selection['protected_sha256'],
+                              'selection_value_sha256': selection['selection_sha256']}:
+                raise ValueError
+            expected_evidence.add((run['run'], f'{number:03d}-summary-checkpoint.json'))
+        if ((event['status'] == 'candidate') != (candidate_ref is not None and checkpoint_ref is None)
+                or (event['status'] == 'installed') != (checkpoint_ref is not None)
+                or (event['status'] in {'selected', 'requested', 'rejected', 'failed'} and candidate_ref is not None)
+                or (event['projections'] and event['status'] != 'installed')):
+            raise ValueError
+        if run['status'] == 'complete' and (event['status'] != 'installed' or not event['projections']):
+            raise ValueError
+        previous_round = number
+        for index, ref in enumerate(event['projections']):
+            if (type(ref) is not dict or set(ref) != {'round', 'projection_sha256'}
+                    or type(ref['round']) is not int or ref['round'] <= previous_round
+                    or ref['round'] > len(run['requests']) + 1
+                    or type(ref['projection_sha256']) is not str or not DIGEST.fullmatch(ref['projection_sha256'])):
+                raise ValueError
+            target = ref['round']
+            previous_round = target
+            projection = verify_evidence(self.root, run['run'], target, 'summary-projection', ref['projection_sha256'])
+            keys = {'schema', 'checkpoint_sha256', 'source_raw', 'source_raw_sha256', 'source_body', 'source_sha256',
+                    'source_used', 'claimed', 'protected', 'protected_sha256', 'summary_was_sent', 'wire_sha256'}
+            if (set(projection) != keys or projection['schema'] != 'chi-summary-projection-v1'
+                    or projection['checkpoint_sha256'] != checkpoint_ref
+                    or type(projection['source_raw']) is not str
+                    or hashlib.sha256(projection['source_raw'].encode()).hexdigest() != projection['source_raw_sha256']
+                    or canonical_sha(json.loads(projection['source_raw'], object_pairs_hook=_unique)) != projection['source_sha256']
+                    or projection['source_sha256'] != canonical_sha(projection['source_body'])
+                    or projection['protected_sha256'] != canonical_sha(projection['protected'])
+                    or type(projection['source_used']) is not int or type(projection['claimed']) is not bool
+                    or type(projection['summary_was_sent']) is not bool or projection['summary_was_sent'] != (index == 0)):
+                raise ValueError
+            if index == 0 and (target != number + 1 or projection['protected_sha256'] != selection['protected_sha256']):
+                raise ValueError
+            scoped = copy.deepcopy(run)
+            scoped['requests'] = scoped['requests'][:target - 1]
+            if index == 0:
+                scoped['requests'].pop()
+            validate_saved_source(root=self.root, run=scoped, identity=identity, body=projection['source_body'],
+                                  used=projection['source_used'], claimed=projection['claimed'],
+                                  canonical_tools=selection['canonical_tools'], protected=projection['protected'])
+            view = derive_view(projection['source_body'], used=projection['source_used'], claimed=projection['claimed'],
+                               selection=selection['selection'], protected=projection['protected'],
+                               candidate=candidate_doc['candidate'], candidate_protected_sha256=selection['protected_sha256'],
+                               summary_was_sent=index == 0)
+            wire = json.dumps(view, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
+            if (canonical_sha(view) != projection['wire_sha256']
+                    or len(projection['source_raw'].encode()) - len(wire) < 1024):
+                raise ValueError
+            if target <= len(run['requests']):
+                item = run['requests'][target - 1]
+                request = verify_evidence(self.root, run['run'], target, 'request', item['request_evidence_sha256'])
+                if (item['purpose'] != 'main' or request['redaction'] is not None
+                        or type(request['body_utf8']) is not str
+                        or canonical_sha(json.loads(request['body_utf8'], object_pairs_hook=_unique)) != projection['wire_sha256']):
+                    raise ValueError
+            elif index != len(event['projections']) - 1 or run['status'] == 'complete':
+                raise ValueError
+            expected_evidence.add((run['run'], f'{target:03d}-summary-projection.json'))
+        main_after_summary = {item['round'] for item in run['requests'] if item['purpose'] == 'main' and item['round'] > number}
+        if main_after_summary != {ref['round'] for ref in event['projections'] if ref['round'] <= len(run['requests'])}:
+            raise ValueError
 
     def start_tool(self, call_id: str, name: str, arguments: dict) -> None:
         if (type(name) is not str or not re.fullmatch(r"[A-Za-z0-9_.-]{1,128}", name)
@@ -1100,27 +1280,263 @@ class ChiJournal:
         return len(events) - 1
 
     def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
-                parent_call_id=None, recovery_permit=None) -> None:
+                parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None) -> None:
         try:
             self._reserve(raw, purpose, secrets=secrets, dispatch=dispatch, parent_call_id=parent_call_id,
-                          recovery_permit=recovery_permit)
+                          recovery_permit=recovery_permit, summary_permit=summary_permit,
+                          summary_projection=summary_projection)
         except BaseException:
             if purpose == "continuation": self._recovery_persistence_failed = True
+            if purpose == "summary": self._summary_persistence_failed = True
+            if summary_projection is not None: self._summary_persistence_failed = True
             raise
 
+    def select_summary(self, source_body, protected, canonical_tools, *, source_raw, secrets=()):
+        """Persist the one-shot source selection before any summary request."""
+        from go_chi_summary import (canonical_sha, protected_snapshot, select_closed,
+                                    summary_request, validate_source)
+        if (getattr(self, '_summary_persistence_failed', False)
+                or not _summary_enabled(self.run['launch'], self.run['kind'])
+                or self.run['summary_events'] or self.state['pending'] is not None
+                or self.state['halted'] is not None or self.run['status'] != 'started'):
+            raise GoFailure('chi_summary_unavailable')
+        used = sum(item['purpose'] != 'patient_simulator' for item in self.run['requests'])
+        if used >= 49:
+            raise GoFailure('chi_summary_limit')
+        try:
+            if (type(source_raw) is not bytes or _contains_secret(source_body, *secrets)
+                    or _contains_secret(protected, *secrets)
+                    or canonical_sha(json.loads(source_raw, object_pairs_hook=_unique)) != canonical_sha(source_body)
+                    or any(secret.encode() in source_raw for secret in secrets if secret)):
+                raise ValueError
+            contract, actions = validate_source(root=self.root, run=self.run, body=source_body, used=used,
+                                                claimed=self.run['claim_done'], canonical_tools=canonical_tools)
+            if (type(canonical_tools) is not dict or set(canonical_tools) != set(contract.schemas)
+                    or any(type(value) is not str for value in canonical_tools.values())
+                    or len(set(canonical_tools.values())) != len(canonical_tools)):
+                raise ValueError
+            expected = protected_snapshot(journal=self, contract=contract, canonical_tools=canonical_tools,
+                role=self.run['launch']['role'], instruction=source_body['messages'][1]['content'],
+                system=source_body['messages'][0]['content'][:-len(__import__('request_budget').feedback(used, self.run['claim_done'])[0])],
+                patient_binding=protected['patient_binding'], task_state=protected['task_state'])
+            if canonical_sha(expected) != canonical_sha(protected) or actions != expected['tool_actions']:
+                raise ValueError
+            selection = select_closed(source_body['messages'])
+            if selection is None:
+                raise ValueError
+            request = summary_request(source_body, selection, protected)
+            number = len(self.run['requests']) + 1
+            doc = {'schema': 'chi-summary-selection-v1', 'identity': self.state['identity'],
+                   'run': self.run_id, 'source_body': source_body, 'source_sha256': canonical_sha(source_body),
+                   'source_raw': source_raw.decode('utf-8'), 'source_raw_sha256': hashlib.sha256(source_raw).hexdigest(),
+                   'source_used': used, 'claimed': self.run['claim_done'], 'selection': selection,
+                   'selection_sha256': canonical_sha(selection), 'protected': protected,
+                   'protected_sha256': canonical_sha(protected), 'canonical_tools': canonical_tools,
+                   'summary_body': request, 'summary_sha256': canonical_sha(request)}
+        except Exception:
+            raise GoFailure('chi_summary_source_changed') from None
+        try:
+            reference = write_evidence(self.root, self.run_id, number, 'summary-selection', doc)
+            self.run['summary_events'].append({'selection_sha256': reference, 'summary_round': None,
+                                               'candidate_sha256': None, 'checkpoint_sha256': None,
+                                               'status': 'selected', 'projections': []})
+            self._persist()
+            return 0, request
+        except Exception:
+            self._summary_persistence_failed = True
+            raise GoFailure('chi_summary_persistence_failed') from None
+
+    def install_summary(self, current_protected, *, context_limit, secrets=()):
+        """Persist candidate and checkpoint before exposing an active view."""
+        from go_chi_context import check_budget, measure_request
+        from go_chi_summary import candidate_from_response, canonical_sha, derive_view
+        try:
+            if (getattr(self, '_summary_persistence_failed', False)
+                    or not _summary_enabled(self.run['launch'], self.run['kind'])
+                    or len(self.run['summary_events']) != 1):
+                raise ValueError
+            event = self.run['summary_events'][0]
+            number = event['summary_round']
+            if (event['status'] != 'requested' or type(number) is not int
+                    or number != len(self.run['requests']) or self.state['pending'] is not None
+                    or self.state['halted'] is not None):
+                raise ValueError
+            item = self.run['requests'][number - 1]
+            if item['purpose'] != 'summary' or item['status'] != 'settled':
+                raise ValueError
+            selection = verify_evidence(self.root, self.run_id, number, 'summary-selection', event['selection_sha256'])
+            response = verify_evidence(self.root, self.run_id, number, 'response', item['response_evidence_sha256'])
+            diagnostic = verify_evidence(self.root, self.run_id, number, 'diagnostic', item['diagnostic_evidence_sha256'])
+            if (response['http_status'] != 200 or response['redaction'] is not None
+                    or type(response['body_utf8']) is not str or diagnostic['code'] != 'ok'
+                    or canonical_sha(current_protected) != selection['protected_sha256']
+                    or _contains_secret(current_protected, *secrets)):
+                raise ValueError
+            payload = json.loads(response['body_utf8'], object_pairs_hook=_unique,
+                                 parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+            candidate = candidate_from_response(payload, selection_sha256=selection['selection_sha256'],
+                                                protected_sha256=selection['protected_sha256'], sources=selection['selection']['sources'])
+            if _contains_secret(candidate, *secrets):
+                raise ValueError
+            view = derive_view(selection['source_body'], used=selection['source_used'], claimed=selection['claimed'],
+                               selection=selection['selection'], protected=current_protected, candidate=candidate,
+                               candidate_protected_sha256=selection['protected_sha256'], summary_was_sent=True)
+            raw = json.dumps(view, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
+            full = selection['source_raw'].encode()
+            if len(full) - len(raw) < 1024 or check_budget(measure_request(view, raw), context_limit) is not None:
+                raise ValueError
+            candidate_doc = {'schema': 'chi-summary-candidate-evidence-v1', 'selection_sha256': event['selection_sha256'],
+                             'response_sha256': response['raw_sha256'], 'candidate': candidate,
+                             'candidate_sha256': canonical_sha(candidate)}
+        except Exception:
+            if 'event' in locals() and event.get('status') == 'requested':
+                try:
+                    event['status'] = 'rejected'
+                    self._persist()
+                except Exception:
+                    self._summary_persistence_failed = True
+                    raise GoFailure('chi_summary_persistence_failed') from None
+            raise GoFailure('chi_summary_invalid') from None
+        try:
+            event['candidate_sha256'] = write_evidence(self.root, self.run_id, number, 'summary-candidate', candidate_doc)
+            event['status'] = 'candidate'
+            self._persist()
+            checkpoint = {'schema': 'chi-summary-checkpoint-v1', 'selection_sha256': event['selection_sha256'],
+                          'candidate_sha256': event['candidate_sha256'], 'candidate_protected_sha256': selection['protected_sha256'],
+                          'selection_value_sha256': selection['selection_sha256']}
+            event['checkpoint_sha256'] = write_evidence(self.root, self.run_id, number, 'summary-checkpoint', checkpoint)
+            event['status'] = 'installed'
+            self._persist()
+            return view
+        except Exception:
+            self._summary_persistence_failed = True
+            raise GoFailure('chi_summary_persistence_failed') from None
+
+    def project_summary(self, source_body, source_raw, current_protected, *, source_used,
+                        context_limit, secrets=()):
+        """Persist a derived view and its complete independently verifiable source."""
+        from go_chi_context import check_budget, measure_request
+        from go_chi_summary import canonical_sha, derive_view, validate_saved_source
+        try:
+            if (getattr(self, '_summary_persistence_failed', False)
+                    or not _summary_enabled(self.run['launch'], self.run['kind'])
+                    or len(self.run['summary_events']) != 1 or self.run['summary_events'][0]['status'] != 'installed'
+                    or self.state['pending'] is not None or self.state['halted'] is not None
+                    or type(source_used) is not int or type(source_raw) is not bytes):
+                raise ValueError
+            event = self.run['summary_events'][0]
+            number = len(self.run['requests']) + 1
+            if any(item['round'] == number for item in event['projections']):
+                raise ValueError
+            actual_used = sum(item['purpose'] != 'patient_simulator' for item in self.run['requests'])
+            first = not event['projections']
+            if source_used + int(first) != actual_used:
+                raise ValueError
+            selection = verify_evidence(self.root, self.run_id, event['summary_round'], 'summary-selection', event['selection_sha256'])
+            candidate_doc = verify_evidence(self.root, self.run_id, event['summary_round'], 'summary-candidate', event['candidate_sha256'])
+            if first and canonical_sha(current_protected) != selection['protected_sha256']:
+                raise ValueError
+            scoped = copy.deepcopy(self.run)
+            if first:
+                if event['summary_round'] != len(scoped['requests']): raise ValueError
+                scoped['requests'].pop()
+            validate_saved_source(root=self.root, run=scoped, identity=self.state['identity'], body=source_body,
+                                  used=source_used, claimed=self.run['claim_done'],
+                                  canonical_tools=selection['canonical_tools'], protected=current_protected)
+            if (canonical_sha(json.loads(source_raw, object_pairs_hook=_unique)) != canonical_sha(source_body)
+                    or _contains_secret(source_body, *secrets) or _contains_secret(current_protected, *secrets)
+                    or any(secret.encode() in source_raw for secret in secrets if secret)):
+                raise ValueError
+            view = derive_view(source_body, used=source_used, claimed=self.run['claim_done'],
+                               selection=selection['selection'], protected=current_protected,
+                               candidate=candidate_doc['candidate'], candidate_protected_sha256=selection['protected_sha256'],
+                               summary_was_sent=first)
+            wire = json.dumps(view, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
+            if len(source_raw) - len(wire) < 1024 or check_budget(measure_request(view, wire), context_limit):
+                raise ValueError
+            doc = {'schema': 'chi-summary-projection-v1', 'checkpoint_sha256': event['checkpoint_sha256'],
+                   'source_raw': source_raw.decode(), 'source_raw_sha256': hashlib.sha256(source_raw).hexdigest(),
+                   'source_body': source_body, 'source_sha256': canonical_sha(source_body), 'source_used': source_used,
+                   'claimed': self.run['claim_done'], 'protected': current_protected,
+                   'protected_sha256': canonical_sha(current_protected), 'summary_was_sent': first,
+                   'wire_sha256': canonical_sha(view)}
+        except Exception:
+            raise GoFailure('chi_summary_source_changed') from None
+        try:
+            reference = write_evidence(self.root, self.run_id, number, 'summary-projection', doc)
+            event['projections'].append({'round': number, 'projection_sha256': reference})
+            self._persist()
+            return len(event['projections']) - 1, wire
+        except Exception:
+            self._summary_persistence_failed = True
+            raise GoFailure('chi_summary_persistence_failed') from None
+
     def _reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
-                 parent_call_id=None, recovery_permit=None) -> None:
+                 parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None) -> None:
         if getattr(self, "_recovery_persistence_failed", False):
             raise GoFailure("chi_recovery_persistence_failed")
         if self.state["pending"] is not None or self.state["halted"] is not None:
             raise GoFailure("chi_usage_unknown")
         aux = self.run['launch'].get('aux_contract') == 'patient-simulator-v1'
         enabled = _recovery_enabled(self.run['launch'], self.run['kind'])
-        purposes = {"main", "confirmation"} | ({"patient_simulator"} if aux else set()) | ({"continuation"} if enabled else set())
+        summary_enabled = _summary_enabled(self.run['launch'], self.run['kind'])
+        purposes = ({"main", "confirmation"} | ({"patient_simulator"} if aux else set())
+                    | ({"continuation"} if enabled else set()) | ({"summary"} if summary_enabled else set()))
         if purpose not in purposes or type(raw) is not bytes:
             raise GoFailure("chi_reservation_invalid")
         if purpose != "continuation" and recovery_permit is not None:
             raise GoFailure("chi_reservation_invalid")
+        if purpose != 'summary' and summary_permit is not None:
+            raise GoFailure('chi_reservation_invalid')
+        if purpose != 'main' and summary_projection is not None:
+            raise GoFailure('chi_reservation_invalid')
+        if getattr(self, '_summary_persistence_failed', False):
+            raise GoFailure('chi_summary_persistence_failed')
+        summary_event = None
+        if summary_enabled and self.run['summary_events']:
+            summary_event = self.run['summary_events'][0]
+            if summary_event['status'] in {'selected', 'requested', 'candidate', 'rejected', 'failed'} and purpose != 'summary':
+                raise GoFailure('chi_summary_unavailable')
+            projections = summary_event['projections']
+            if summary_event['status'] == 'installed' and not projections and purpose != 'main':
+                raise GoFailure('chi_summary_unavailable')
+            if projections and projections[-1]['round'] > len(self.run['requests']) and purpose != 'main':
+                raise GoFailure('chi_summary_unavailable')
+            if summary_event['status'] == 'installed' and purpose == 'main':
+                from go_chi_summary import canonical_sha
+                if (type(summary_projection) is not int or not 0 <= summary_projection < len(projections)
+                        or summary_projection != len(projections) - 1
+                        or projections[-1]['round'] != len(self.run['requests']) + 1):
+                    raise GoFailure('chi_summary_unavailable')
+                try:
+                    projection = verify_evidence(self.root, self.run_id, projections[-1]['round'],
+                                                 'summary-projection', projections[-1]['projection_sha256'])
+                    body = json.loads(raw, object_pairs_hook=_unique,
+                                      parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                    if canonical_sha(body) != projection['wire_sha256']:
+                        raise ValueError
+                except Exception:
+                    raise GoFailure('chi_summary_source_changed') from None
+        if summary_projection is not None and (summary_event is None or summary_event['status'] != 'installed'):
+            raise GoFailure('chi_summary_unavailable')
+        if purpose == 'summary':
+            from go_chi_summary import canonical_sha
+            if (type(summary_permit) is not int or summary_permit != 0 or summary_event is None
+                    or summary_event['status'] != 'selected' or summary_event['summary_round'] is not None):
+                raise GoFailure('chi_summary_unavailable')
+            number = len(self.run['requests']) + 1
+            try:
+                selection_doc = verify_evidence(self.root, self.run_id, number, 'summary-selection',
+                                                summary_event['selection_sha256'])
+                body = json.loads(raw, object_pairs_hook=_unique,
+                                  parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                if (canonical_sha(body) != selection_doc['summary_sha256']
+                        or selection_doc['source_used'] != sum(item['purpose'] != 'patient_simulator' for item in self.run['requests'])
+                        or self.run['claim_done'] != selection_doc['claimed']
+                        or envelope(raw, kind='request', secrets=secrets)['redaction'] is not None):
+                    raise ValueError
+            except Exception:
+                raise GoFailure('chi_summary_source_changed') from None
         if enabled and purpose != "continuation" and any(e["continuation_round"] is None for e in self.run["recovery_events"]):
             raise GoFailure("chi_recovery_invalid")
         selected = None
@@ -1183,6 +1599,9 @@ class ChiJournal:
         self.run["requests"].append(entry)
         if selected is not None:
             selected["continuation_round"] = entry["round"]
+        if purpose == 'summary':
+            summary_event['summary_round'] = entry['round']
+            summary_event['status'] = 'requested'
         self.state["pending"] = {"run": self.run["run"], "round": entry["round"]}
         self._persist()
 
@@ -1230,6 +1649,10 @@ class ChiJournal:
             raise GoFailure("chi_status_invalid")
         if status == "complete" and any(event["continuation_round"] is None for event in self.run.get("recovery_events", [])):
             raise GoFailure("chi_recovery_invalid")
+        if status == 'complete' and any(event['status'] != 'installed' or not event['projections']
+                                        or event['projections'][-1]['round'] > len(self.run['requests'])
+                                        for event in self.run.get('summary_events', [])):
+            raise GoFailure('chi_summary_unavailable')
         if error is not None and (type(error) is not str or not re.fullmatch(r"[a-z0-9_]{1,64}", error)):
             raise GoFailure("chi_status_invalid")
         self._mark_tool_inflight("__run_finalize__")

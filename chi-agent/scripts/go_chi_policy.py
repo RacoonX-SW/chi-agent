@@ -17,3 +17,8 @@ RECOVERY_POLICY = {"version": "chi-output-recovery-v1", "default_enabled": False
                    "max_per_chain": 1, "max_per_run": 2, "max_output_tokens": 8192,
                    "shared_max_requests": 50, "instruction_version": "chi-recovery-instruction-v1",
                    "view_version": "chi-recovery-view-v1"}
+
+SUMMARY_POLICY = {"version": "chi-input-summary-v1", "default_enabled": False,
+                  "max_per_run": 1, "max_output_tokens": 8192, "shared_max_requests": 50,
+                  "trigger_numerator": 4, "trigger_denominator": 5, "retained_batches": 2,
+                  "minimum_reduction_bytes": 1024}
