@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import go_chi_run_summary as summary
 from go_chi_journal import ChiJournal
@@ -99,6 +100,25 @@ class SummaryTests(unittest.TestCase):
             self.assertEqual(purposes["main"]["requests"], 1)
             self.assertEqual(purposes["patient_simulator"]["requests"], 1)
             self.assertEqual(result["totals"]["requests"], 2)
+
+    def test_snapshot_change_between_inspection_and_projection_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal = ChiJournal(root, identity=IDENTITY, evaluation="e", task="t", attempt="a", run="r")
+            journal.reserve(b"{}", "main"); settle(journal); journal.finish("complete"); journal.close()
+            digest = self.digest(root)
+            original = summary.inspect_history
+
+            def racing(target, identity, sha):
+                result = original(target, identity, sha)
+                state = target / "chi-accounting.json"
+                state.write_bytes(state.read_bytes() + b"\n")
+                return result
+
+            with patch("go_chi_run_summary.inspect_history", side_effect=racing):
+                with self.assertRaises(summary.SummaryError) as caught:
+                    summary.summarize(root, IDENTITY, digest)
+            self.assertEqual(caught.exception.code, "summary_snapshot_changed")
 
     def test_wrong_identity_hash_and_corrupt_state_fail(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -9,6 +9,7 @@ import time
 import httpx
 
 from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
+from go_chi_diagnostics import cause_for_code
 from b_provider_transport import GuardedTransport
 from opencode_go_provider import GoFailure, _contains_secret, _unique
 

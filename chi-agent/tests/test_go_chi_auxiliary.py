@@ -190,3 +190,52 @@ def test_patient_context_budget_records_actual_wire_and_blocks_before_send():
             assert len(sent) == 1 and len(j.run['requests']) == 1
             j.finish('failed'); j.close()
     asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("mode", ["cancelled", "network", "unknown_usage", "invalid_response"])
+def test_auxiliary_failures_keep_code_cause_and_diagnostic(mode):
+    asyncio.run(_auxiliary_failure(mode))
+
+
+async def _auxiliary_failure(mode):
+    import json
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        j = ChiJournal(root, identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',
+                       kind='patient_probe', launch={'aux_contract': 'patient-simulator-v1'})
+        if mode == 'cancelled':
+            async def lower(_request):
+                raise asyncio.CancelledError()
+        elif mode == 'network':
+            async def lower(_request):
+                raise httpx.ConnectError("synthetic")
+        elif mode == 'unknown_usage':
+            async def lower(req):
+                return httpx.Response(200, request=req, json={'model': 'deepseek-v4.1-flash',
+                    'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': 'hi'}}]})
+        else:
+            async def lower(req):
+                return httpx.Response(200, request=req, json={'usage': USAGE, 'model': 'deepseek-v4.1-flash',
+                    'choices': [{'finish_reason': 'length', 'message': {'role': 'assistant', 'content': 'hi'}}]})
+        transport = AuxiliaryTransport(j, SECRET, SESSION, httpx.MockTransport(lower), asyncio.Lock(), lambda: None)
+        expected = {'cancelled': 'chi_aux_cancelled', 'network': 'chi_aux_transport_error',
+                    'unknown_usage': 'chi_usage_unknown', 'invalid_response': 'chi_aux_response_invalid'}[mode]
+        with pytest.raises(BaseException):
+            await transport.handle_async_request(request())
+        assert transport.error == expected, transport.error
+        doc = json.loads((root / 'wire-evidence/r/001-diagnostic.json').read_text())
+        assert doc['schema'] == 'chi-go-diagnostic-v2'
+        assert doc['code'] == expected
+        assert doc['cause']['schema'] == 'chi-safe-cause-v1'
+        if mode == 'cancelled':
+            assert doc['cause'] == {'schema': 'chi-safe-cause-v1', 'stage': 'transport', 'reason': 'cancelled'}
+        elif mode == 'network':
+            assert doc['cause']['reason'] == 'request_error'
+        elif mode == 'unknown_usage':
+            assert doc['cause'] == {'schema': 'chi-safe-cause-v1', 'stage': 'usage', 'reason': 'unknown'}
+        else:
+            assert doc['cause'] == {'schema': 'chi-safe-cause-v1', 'stage': 'response', 'reason': 'shape_invalid'}
+        entry = j.run['requests'][0]
+        assert entry['status'] == ('settled' if mode == 'invalid_response' else 'pending')
+        assert (j.state['pending'] is not None) == (mode != 'invalid_response')
+        j.finish('failed', expected); j.close()
