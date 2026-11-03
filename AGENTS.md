@@ -17,7 +17,7 @@
 - 本次全项目收尾采用[连续执行计划](chi-agent/openspec/changes/project-completion/design.md)：用户启动该范围后由 DeepSeek 协调/实现、Gemini 独立审查及有条件的 Docker 复验，GPT 负责规划及后续累计审核，用户最终验收/合并；在该范围内覆盖下条默认模型分工，不逐包等待 GPT。当前规划本身不启动功能编码、项目真实调用或发布；权限仍只查 REVIEW_STATE。
 - 默认 **一个 `gpt-6.1-terra` / `high` 实现子代理 + 主代理独立审核**。主代理负责规格、任务边界、审核、教学和 GitHub；子代理负责实现及 Docker 内自测。只有已授权开发中存在明确可独立并行的工作、预期收益足够时，主代理先说明第二个代理的职责与收益，再按需启用；不固定凑两个、不递归扩增、不静默换模型。普通问答、纯文档和 Git 管理由主代理直接处理。
 - 同一工作区同一时段一个实现写入者；真正并行写入须隔离工作区及测试资源。实现停止并固定候选后，主代理按差异和必要调用代码独立复验；自测、commit 或 push 不等于验收。
-- 写入前核对分支。代码、规格、学习及审核文档均先从最新 `origin/main` 建 `codex/<任务名>` 分支，显式暂存/提交/推送并创建 base=main 的 PR，由用户审核决定合并；主代理不直接开发/推送 main，不自行 merge 或启用 auto-merge。详见 [GitHub 工作流](chi-agent/docs/github-workflow.md)。
+- 写入前核对分支。代码、规格、学习及审核文档均先从最新 `origin/main` 建 `<实现方>/<任务名>` 分支（DeepSeek 用 `deepseek/`，历史 `codex/` 分支保留、不追溯重命名），显式暂存/提交/推送并创建 base=main 的 PR，由用户审核决定合并；主代理不直接开发/推送 main，不自行 merge 或启用 auto-merge。详见 [GitHub 工作流](chi-agent/docs/github-workflow.md)。
 - 安装、下载、调试、测试和运行均在 Docker；宿主机用于编辑、Git 和 Docker。开发/调度 Python 的目标主次版本对齐固定官方任务环境（当前 3.12），迁移要单独验证；修改约定不表示现有镜像/依赖锁已经迁移。详见 [Docker 工作流](chi-agent/docs/docker-workflow.md)。
 - 文档按 [COLLABORATION.md](COLLABORATION.md) 的职责分配维护，状态只在 `REVIEW_STATE.md` 保存一份短摘要，详细结果只在一份阶段报告。README 写怎么运行，OpenSpec 写做什么，学习账本只记关键讲解、疑问与取舍；不把相同状态、SHA、测试数量复制到各入口，不为日常问答新增交接文件。
 - 历史 Luna（包括 D0/A 双代理）和 Python 3.13 记录保留其证据意义，不改写成 Terra，也不作为后续默认配置；当前规则以本文件及协作约定为准。开发子代理模型与参赛运行时模型分别配置；改变协作/环境约定不自动恢复下一开发阶段、模型 API、判分或付费运行，实际授权见审核接续状态。

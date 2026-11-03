@@ -108,3 +108,44 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 - M4（诊断 cause）未做，等 Codex 冻结 schema。
 - 未做 Input 压缩、Output 续写、pending 处置、账根/模型/目录变更、journal 拆分。
 - PR39 未合并，本分支未包含其 §15 文档；合并后如文档冲突，只需取并集，不涉及代码。
+
+## M5 文档/状态一致性（2026-11-03）
+
+- `REVIEW_STATE.md` 同步：M1–M3 随 PR41 合并、输入摘要随 PR46 合并且默认关闭、M4 仍待 schema、M5–M6 候选待复审；`origin/main` 更新为 `4ac9c0c`，当前分支改为 `deepseek/m5-m6-closeout`。
+- `tasks.md`：M1/M2/M3（PR41）与 M5/M6（本 PR）勾选；M4 保持未实施。
+- `input-context.md`：把“概念流程（尚未实现）”改为“S0–S3 已实现并默认关闭”，链到输入摘要报告；F4 旧结论与历史失败未改写。
+- 分支约定：`AGENTS.md`、`COLLABORATION.md`、`docs/github-workflow.md` 由固定 `codex/<任务名>` 改为 `<实现方>/<任务名>`（DeepSeek 用 `deepseek/`，历史 `codex/` 分支保留、不追溯重命名）。
+- README 增加包外只读汇总的用法、输出字段与退出码。
+- 未把已合并写成独立验收通过；C1 unknown、C5 交流佐证、M4 等仍保留。
+
+## M6 包外只读 run 摘要（2026-11-03）
+
+新增 `scripts/go_chi_run_summary.py`，**不进入** `PACKAGE_FILES`/release allowlist。
+
+调用链：显式 `--root/--identity/--accounting-sha256` → 既有 `inspect_history`（严格身份/hash/证据校验，`execution_allowed=false`）→ 同一 `_state_object` 解析已校验账本 → 只投影白名单字段（run/task/role/status/error、请求 round/purpose/status/max_tokens、已知 token、三项 USD 与来源、pending/halted/missing、reconciled/acknowledged/input_summaries）。
+
+- 不遍历 runs/账户目录；`--run` 不存在时返回 `summary_run_missing`，不静默选择“最新成功”。
+- 按 purpose 分组（main/confirmation/patient_simulator/summary/continuation），主共享与患者辅助分列。
+- 缺费用保持 `null` 且 `complete=false`；未结算请求 token 为 `null`，`unknown_tokens` 单独计数，不补零。
+- 错误码与退出码：0 成功；1 `chi_inspect_invalid`/`chi_history_invalid`/`chi_inspect_hash_mismatch`/`summary_root_invalid`/`summary_run_missing`/`summary_billing_invalid`/`summary_lock_unavailable`，JSON 写 stderr；2 参数错误。
+- 只读：不 reserve/settle/ack/rebind/reconcile；`inspect_history` 只读打开 `.lock`；测试比较读取前后文件集合与 SHA256 完全一致。
+
+测试 `tests/test_go_chi_run_summary.py`（8 项）：完整运行稳定性与只读、pending/unknown 不记零、已知 token 但费用缺失且 halted、main+patient 分组、错误身份/hash/坏 JSON、无效 run 选择、CLI 退出码与 stdout/stderr、旧账缺少新字段仍可汇总。
+
+## M5/M6 检查记录
+
+Docker `chi-agent-dev:latest`，Python 3.12：
+
+```
+python -m unittest tests.test_go_chi_run_summary        # 8 tests OK
+python -m unittest discover -s tests                    # 539 tests, 2 个既有 anthropic 错误, 11 skipped
+```
+
+- 包身份：分别从 `origin/main` 快照与当前候选构建内层 bundle，manifest 相同（工具不在 allowlist）；详见下节实际值。
+- 未跑真实模型/摘要/续写/B/C/world；未改 runtime/guard/journal/contract；未处理 pending 或账根。
+
+### 限制
+
+- `summary`/`continuation` 用途只做分组与字段透传，未合成新历史；其真实端点与收益仍未验证。
+- 患者辅助请求在测试中用 `cm_outreach.send_message` 的 started 事件合成，未启动 broker。
+- 旧账/新账的语义差异由既有 `inspect_history` 判定，本工具不重算身份或修复旧文件。

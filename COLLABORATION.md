@@ -8,7 +8,7 @@
 - **2026-10-31 全项目收尾专项**：用户要求扩大规划，由 DeepSeek/Gemini 连续推进剩余项目、GPT 在额度刷新后检查累计方向。本次先交付[收尾计划](chi-agent/openspec/changes/project-completion/design.md)及[验收契约](chi-agent/openspec/changes/project-completion/specs/project-closeout/spec.md)，不启动编码/真实调用。用户启动该范围后，DeepSeek V4.1 Flash High/Max 为执行协调者和唯一实现写入者，Gemini 3.8 Flash High 独立审查、在有工具且实际执行时提供 Docker 复验，GPT 负责规划和后续累计审核，用户最终验收/合并。规格内日常拆解、修复和已授权工作包衔接无需等 GPT；本专项覆盖下条默认模型分工，不更换参赛运行时模型、不自动恢复项目调用/判分/发布。详细执行/实验边界只在计划和 REVIEW_STATE，旧阶段历史不改写。
 - **默认一个实现子代理，主代理独立审核**：实现代理显式使用 GPT-6.1 Terra（`gpt-6.1-terra`）/ `high`，承担有界实现及 Docker 自测；主代理负责规格、协调、独立复验、教学与 GitHub。普通问答、纯文档和 Git 管理由主代理直接完成。只有已授权开发中存在明确可独立并行的工作且预期收益足够，主代理先说明职责、文件所有权与收益，再启用第二个代理；不凑固定人数、不递归扩增、不静默换模型。历史 Luna 实际派发记录保留；本项不更换参赛运行时模型。详见 [实现与独立审核](chi-agent/docs/subagent-workflow.md)。
 - **固定候选后审核**：共享目录只有一个实现写入者；真正并行写入需隔离工作区和结果目录。实现停止后，主代理先看基线/候选差异，再补读相关入口、调用者和必要测试，独立验证受影响行为。子代理自测、commit 或 push 不等于验收。
-- **工作分支与用户合并**：所有代码及文档在写入前从最新 `origin/main` 建 `codex/<任务名>` 分支；主代理检查、显式暂存/提交/推送并创建 base=main 的 PR，用户审核决定合并。具体返工、同步及上传范围只维护在 [GitHub 工作流](chi-agent/docs/github-workflow.md)。
+- **工作分支与用户合并**：所有代码及文档在写入前从最新 `origin/main` 建 `<实现方>/<任务名>` 分支（DeepSeek 用 `deepseek/`，历史 `codex/` 分支保留、不追溯重命名）；主代理检查、显式暂存/提交/推送并创建 base=main 的 PR，用户审核决定合并。具体返工、同步及上传范围只维护在 [GitHub 工作流](chi-agent/docs/github-workflow.md)。
 - **Docker 与 Python**：安装、下载、调试、测试和运行都在 Docker；开发/调度 Python 目标对齐固定官方任务环境，当前目标为 3.12。现有镜像迁移须另行验证，修改约定不表示迁移完成。详见 [Docker 工作流](chi-agent/docs/docker-workflow.md)。
 - **学习嵌入开发**：默认按 B/C 阶段的方式完整讲解项目开发，把阶段目标、设计取舍、代码流程和验证结果串起来；不默认安排小题或逐轮测验。保留用户关键疑问和理解证据，教学不作为继续开发的门槛。具体方式与进度只维护在 [学习约定](chi-agent/docs/learning-agreement.md)。
 - **范围与费用按当前授权**：阶段状态、预算和未决问题只查 [REVIEW_STATE](chi-agent/reviews/REVIEW_STATE.md)，协作方式变更不恢复新阶段、模型 API、判分或付费运行。不操作或监控 Antigravity，不设置后台轮询或自动唤醒。

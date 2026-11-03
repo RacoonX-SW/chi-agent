@@ -8,7 +8,7 @@
 
 - 私有仓库：[xsw932187210-cell/chi-agent](https://github.com/xsw932187210-cell/chi-agent)。Git 根为 `/Users/asaki/Documents/ChatGPT/Kaggle`，项目在 `chi-agent/`，不另建嵌套仓库。
 - 沿用 `origin` 的已有 SSH 认证，不创建或提交新密钥。
-- 主代理只开发/推送 `codex/<任务名>` 分支并创建 base=main 的 PR；用户审核决定合并。主代理不直接开发或 push main，不 merge、不启用 auto-merge。
+- 主代理只开发/推送 `<实现方>/<任务名>` 分支（DeepSeek 用 `deepseek/`；历史 `codex/` 分支保留、不追溯重命名）并创建 base=main 的 PR；用户审核决定合并。主代理不直接开发或 push main，不 merge、不启用 auto-merge。
 
 ## 一轮变更
 
