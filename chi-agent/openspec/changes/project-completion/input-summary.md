@@ -22,7 +22,7 @@
 - 回放边界：首次TaskState/PatientBinding真值由可信runtime捕获并写入journal内不可覆盖快照证据；reader验证固定schema/类型、journal身份/role/claim/actions及各前缀/快照/检查点关联，不从未绑定的外部logs_dir重演首次内存状态，也不声称抵抗全部证据/seal被一起重写。role必须与launch一致，TaskState的run/role/version和unknown/claim结构、binding固定关系字段均严格核对；模型不能提供或覆盖这些值。
 - system、instruction、schema、保护状态及近期批次本身已经超限时，先拒绝，不能截掉任务要求或先发摘要模型。保留现有有来源的分页/片段读取，不对保单/临床资料统一首尾截断。
 
-摘要模型只收到固定system与一个user JSON载荷；无业务tools或工具执行通道。载荷包含`schema=chi-summary-input-v1,selection_sha256,protected_sha256,protected,source_messages,sources`。sources只列选区中原文已观察的`call_id,result_sha256`；模型文字不会成为新observation或Y来源，不提升来源权限、不接触隐藏expectations/world-only资料。
+摘要模型只收到固定system与一个user JSON载荷；无业务tools或工具执行通道。载荷精确包含`schema=chi-summary-input-v1,output_schema,selection_sha256,protected_sha256,protected,instruction,source_messages,sources`。output_schema是程序给定的完整候选JSON Schema（固定字段、额外字段拒绝、类型/长度/数量/引用结构），实际提供给模型而非只写在测试中；总UTF-8字节及可用来源/echo hash仍由程序验证。instruction与原始任务字符串逐字一致，按保护hash核对，作为JSON数据提供而非新的system；实际summary输入预算包含schema与原文。sources只列选区中原文已观察的`call_id,result_sha256`；模型文字不会成为新observation或Y来源，不提升来源权限、不接触隐藏expectations/world-only资料。
 
 候选精确字段：`schema=chi-summary-candidate-v1,selection_sha256,protected_sha256,goal,facts,uncertainties,actions,gaps,current_work,next_steps`。goal/current_work为非空字符串≤2000字符；next_steps为≤8个非空字符串、各≤1000字符；facts至少1项，facts/uncertainties/actions/gaps各≤16项，每项精确`text,sources`（text非空≤1000字符，sources为1–8个不重复选区引用，引用精确call_id/result_sha256）。候选总UTF-8≤32768字节。它是模型陈述/关联/计划，不是程序保护事实或来源原文，不能新增pending/费用/授权/绑定等字段。
 
