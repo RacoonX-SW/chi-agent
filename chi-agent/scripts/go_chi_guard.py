@@ -12,6 +12,7 @@ import httpx
 
 from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
 from go_chi_contract import ToolContract, ContractFailure
+from go_chi_diagnostics import build_cause, cause_for_code
 from opencode_go_provider import (GoFailure, _contains_secret, _unique,
                                   SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
                                   SCHEMAS as B_SCHEMAS, DESCRIPTIONS as B_DESCRIPTIONS)
@@ -70,6 +71,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self.before_batch = before_batch
         self.observed_request = observed_request
         self.error = None
+        self.safe_cause = None
         self.billing_lock = billing_lock or asyncio.Lock()
         self.fatal_getter = fatal_getter or (lambda: None)
         self.run_started = time.monotonic() if run_started is None else run_started
@@ -95,7 +97,9 @@ class ChiGuard(httpx.AsyncBaseTransport):
             raise GoFailure("chi_headers_invalid")
         used = sum(item['purpose'] != 'patient_simulator' for item in self.journal.run['requests'])
         if used >= (6 if self.journal.run["kind"] == "coding_b" else 50):
-            raise GoFailure("chi_request_limit")
+            failure = GoFailure("chi_request_limit")
+            failure.cause = cause_for_code("chi_request_limit")
+            raise failure
         try:
             body = json.loads(raw, object_pairs_hook=_unique,
                               parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
@@ -148,9 +152,14 @@ class ChiGuard(httpx.AsyncBaseTransport):
                             or canonical_sha(body) != active["view_sha256"]):
                         raise GoFailure("chi_recovery_history_changed")
                     messages = messages[:active["history_length"]]
-                self.contract.validate_history(messages, system=self.system, instruction=self.instruction,
-                                               used=source_used, claimed=self.claimed(),
-                                               coding_probe=coding_b)
+                try:
+                    self.contract.validate_history(messages, system=self.system, instruction=self.instruction,
+                                                   used=source_used, claimed=self.claimed(),
+                                                   coding_probe=coding_b)
+                except ContractFailure:
+                    failure = GoFailure("chi_request_invalid")
+                    failure.cause = build_cause("request", "history_invalid")
+                    raise failure from None
                 if self.observed_request is not None and not source_only:
                     observed = (body['messages'][:2] + body['messages'][3:]
                                 if summary is not None and summary['kind'] == 'main' else messages)
@@ -158,7 +167,9 @@ class ChiGuard(httpx.AsyncBaseTransport):
             metric = measure_request(body, raw)
             blocked = check_budget(metric, self.context_limit)
             if blocked is not None and not source_only:
-                raise GoFailure(blocked)
+                failure = GoFailure(blocked)
+                failure.cause = build_cause("request", "budget_exceeded")
+                raise failure
             if self.context_recorder is not None and not source_only:
                 self.context_recorder(metric, purpose)
             return purpose
@@ -253,8 +264,10 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 parsed = self.contract.accept_batch(clean)
                 if self.before_batch is not None:
                     self.before_batch(parsed)
-            except ContractFailure:
-                raise GoFailure("chi_tool_batch_invalid") from None
+            except ContractFailure as failure:
+                error = GoFailure("chi_tool_batch_invalid")
+                error.cause = getattr(failure, "cause", None)
+                raise error from None
         else:
             raise GoFailure("chi_response_invalid")
 
@@ -469,6 +482,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                                      and self._active_summary is not None else None))
         except Exception as exc:
             self.error = exc.code if isinstance(exc, GoFailure) else "chi_persistence_failed"
+            self.safe_cause = getattr(exc, "cause", None) or cause_for_code(self.error)
             raise GoFailure(self.error) from None
         start = time.monotonic()
         persistence_failed = False
@@ -525,6 +539,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                     or payload["usage"]["completion_tokens"] > (1024 if self.journal.run["kind"] == "coding_b" else 32768 if purpose == "confirmation" else 8192)):
                 raise GoFailure("chi_usage_over_limit")
             recoverable = self._response(payload, purpose)
+            self.safe_cause = None
             try:
                 self.journal.record_diagnostic("ok", int((time.monotonic() - start) * 1000))
             except Exception:
@@ -536,9 +551,11 @@ class ChiGuard(httpx.AsyncBaseTransport):
                           exc.code if isinstance(exc, GoFailure) else
                           "chi_timeout" if isinstance(exc, (httpx.TimeoutException, TimeoutError)) else
                           "chi_transport_error" if isinstance(exc, httpx.RequestError) else "chi_transport_unknown")
+            self.safe_cause = getattr(exc, "cause", None) or cause_for_code(self.error)
             if not persistence_failed:
                 try:
-                    self.journal.record_diagnostic(self.error, int((time.monotonic() - start) * 1000))
+                    self.journal.record_diagnostic(self.error, int((time.monotonic() - start) * 1000),
+                                                   cause=self.safe_cause)
                 except Exception:
                     self.error = "chi_evidence_persistence_failed"
             if isinstance(exc, asyncio.CancelledError):

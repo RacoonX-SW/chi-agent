@@ -149,3 +149,39 @@ python -m unittest discover -s tests                    # 539 tests, 2 个既有
 - `summary`/`continuation` 用途只做分组与字段透传，未合成新历史；其真实端点与收益仍未验证。
 - 患者辅助请求在测试中用 `cm_outreach.send_message` 的 started 事件合成，未启动 broker。
 - 旧账/新账的语义差异由既有 `inspect_history` 判定，本工具不重算身份或修复旧文件。
+
+## M4 安全诊断 cause（2026-11-03）
+
+按 PR48 `safe-diagnostics.md` D0–D3 实现。对外安全码、整批零派发、可信 usage 先结算、未知阻断和持久化失败停止均未改变。
+
+### 实现
+
+- 新增纯模块 `scripts/go_chi_diagnostics.py`（仅标准库）：`chi-safe-cause-v1` 白名单（9 stage）、`chi-go-diagnostic-v2` 精确五字段校验、v1 原规则校验、固定 code→cause 映射；cause JSON ≤256 字节，未知字段/枚举/类型拒绝。
+- `go_chi_contract.ToolContract.accept_batch`：在原拒绝点区分 9 种批错误（`assistant_shape`、`unfinished_batch`、`call_shape`、`call_id_invalid`、`call_id_reused`、`function_shape`、`tool_unknown`、`arguments_json`、`arguments_schema`），`ContractFailure` 增加受控 `cause`；接受集合与“整批提交前验证、失败不落盘”不变。
+- `go_chi_guard`：保留 `chi_tool_batch_invalid` 顶层码；请求路径区分 `route/body/history/budget/time`，响应/usage/transport/persistence 走固定映射；每次请求重置 `safe_cause`；成功写 `ok`+`cause=null`。
+- `go_chi_auxiliary` 使用同一 v2 写入与传输/响应/usage cause。
+- `go_chi_journal`：`record_diagnostic(code, elapsed, *, cause=None)` 写 v2；`ok` 带 cause、非法对象、缺字段均 `chi_diagnostic_invalid`，不静默替换；恢复点接受 v1/v2 的 `ok`。
+- 读取接点：`_validate` 接受 v1/v2；`_recovery_source`、`go_chi_summary` 安装/回放接受 v2；`inspect_history` 仅在历史含 v2 时增加 `diagnostic_causes`（run/round/code/cause）。
+- `go_chi_runtime` 的 run_log 新增 `safe_cause`（guard 捕获的主失败，否则 null）；顶层 `safe_error_code` 不变。
+- 包接线：`go_chi_diagnostics.py` 进入 `PACKAGE_FILES` 与 entry preflight 模块清单；evaluation 包未变。
+
+### 验证
+
+Docker `chi-agent-dev:latest`，Python 3.12，禁网、无 Key、无 world：
+
+```
+python -m unittest tests.test_go_chi_diagnostics tests.test_go_chi_diagnostic_causes   # 14 tests OK
+python -m unittest discover -s tests                                                  # 553 tests, 2 个既有 anthropic 错误, 11 skipped
+```
+
+覆盖：9 类批错误与一好一坏整批零提交、恶意参数/患者值/Key 文本不进 cause、可信 usage 先 settle 后拒绝且 lower 仅一次、工具零派发、reserve 前拒绝不造请求行、cause 额外字段/未知枚举/错类型/bool/超长/`ok` 带 cause 拒绝、v1 旧格式接受、inspect 输出 v2 causes。
+
+- **旧账兼容（实物）**：对 `runs/real-external/state-v7` 执行只读汇总，v1 历史正常读取且不新增 `diagnostic_causes`；整个目录读取前后 SHA256 集合不变。
+- **包身份**：Go 内层 bundle 由 `d99a49f0…` 变为 **`8cb711fe77eb7a346fe71f64a005a52e979f97643de3e13aff12e461f01c9f0b`**，runtime identity **`b4741cce241291d68c6c2761c12f892da95f9057487b06e8bb68dd7faafd202a`**；旧 evaluation 包仍为 `a6a69d7d…`。
+- **隔离包**：仅挂载 `package/` 与固定依赖，无 Key preflight `identity_verified`；在包内用 MockTransport 跑坏工具批，得到 `chi_tool_batch_invalid` + `tool_unknown`，请求先 settled。
+
+### 限制
+
+- 未用 v1 合成夹具单独跑 `_validate` 的单元路径；v1 兼容由真实旧账只读读取证明。
+- 未同时启用 summary 与 output recovery 的真实 SDK length 组合；两者共用同一 v2 校验，分别由既有回归覆盖。
+- 未跑真实模型/B/C/Trial/判分；新身份需新 B 才能用于真实运行。
