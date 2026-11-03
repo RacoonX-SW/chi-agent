@@ -4,22 +4,22 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 累计初审 R1/R2 已由 DeepSeek 修复候选：辅助错误路径补齐 cause 导入（原安全码与诊断恢复），M6 汇总校验后重读同快照并比对 hash（`summary_snapshot_changed`）。M1–M6 均已合并；本返工待 Gemini 复审、GPT 复验关闭阻断。C1未知、C5交流佐证及真实摘要/续写未验证保持；详见[可靠性边界报告](reliability-boundaries-review.md) |
-| 协作 | 本轮GPT独立累计审核，不新增实现代理、不重复M5/M6原包验收；DeepSeek负责有证据的R1/R2返工，Gemini按既定方式复审，用户最终合并。隔离worktree及只读固定候选，原目录不动 |
-| 最新独立审核 | 固定主线`0a8449ea410aafa74001141360c51f7d85c060d5`累计初审未通过冻结；广泛离线回归检出R1，独立反例证实R1/R2，隔离包/SDK及旧v1证据通过仅限报告范围。输入摘要`3e42042…`及C1–C5历史通过范围保留，不回写成新主线整体通过 |
+| 当前任务 | R1/R2修复候选`83e0ceb`已由GPT限定离线复审通过，关闭本次累计阻断，待用户合并；[复审证据](project-cumulative-review.md#6-r1r2独立复审2026-11-04)。C1未知、C5交流佐证及真实摘要/续写未验证保持，不扩大为正式项目验收 |
+| 协作 | 用户本轮明确由GPT直接复审、不再交Gemini；不新增实现代理，不重复此前整包验收。DeepSeek实现固定后由GPT独立复验及Git提交，用户最终合并；隔离worktree及只读固定候选，原目录不动 |
+| 最新独立审核 | 已审/限定离线通过`83e0ceb22f79c88699d6e44fdbfc85290e2445fa`，base=`4d43ec7`；辅助原码/v2 cause/次数/结算及快照一致性、测试实际结果、新包身份和文档历史核对通过。原`0a8449e`初审未通过结论原样保留，不以新通过回写旧候选 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 核实PR49/PR50已合并，最新origin/main=`4d43ec7`；返工分支`deepseek/m4-r1-r2-repair`。Codex隔离worktree仅审核/文档，不接管生产实现；不merge/push main |
+| 当前分支与接手改动 | 核实PR50已合并，origin/main=`4d43ec7`；隔离worktree从其新建`codex/r1-r2-reviewed`，快进采用原作者提交`83e0ceb`并追加审核文档，生产/测试字节不改。原DeepSeek分支/目录保持，不merge/push main |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap及原锁/未知门禁不变。C1确认payer-010旧pending与后继state/evaluation切换，所选来源不能闭合其处置/授权；旧账字节不变，不做清账或真实准入。旧S/external超时对账保持历史含义；可信token费用缺项留null/warning，新结果/token未知仍停止，零自动重试/回退、Extra Usage关闭 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本轮仅累计离线审核及文档/PR，真实模型/摘要/续写请求0，不读Key、不启动world/真实B/C/Trial/判分。默认关闭，原unknown/授权缺口不改，不用新账根绕阻断 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | 适用 pytest（排除 2 个缺 `anthropic` 模块）**885 passed、11 skipped、259 subtests**；unittest 兼容 554 tests（2 个既有环境错误、11 skipped）。辅助取消/网络/未知 usage/非法响应均断言原码+v2 cause+诊断+settle/pending；汇总并发改写返回 `summary_snapshot_changed`。Go identity `c9b1571d…`（bundle `de326a26…`），旧 evaluation `a6a69d7d…` 不变；数量/命令只见可靠性报告，skip 不算通过 |
+| 本轮验证 | GPT独立复现作者适用pytest结果，unittest实际执行但仍有2个原环境错误，不写全绿。自有辅助失败/正常/写故障矩阵、合法并发写入/重写/不可变读取后追加、CLI无混合输出、隔离包实际身份及辅助路径通过；数量/命令/限制只见累计报告第6节，skip不算通过 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR42–PR50 已由用户合并；R1/R2 返工候选为 base=main 的 PR（待创建/用户验收），主代理不合并/启用 auto-merge。下一步 Gemini 复审本返工，再由 GPT 复验差异关闭累计阻断并决定冻结。新 identity 需新 B 才能真实运行；摘要端点/收益仍需历史处置和具体授权，不默认小测 |
+| PR 与下一步 | PR42–PR50已由用户合并；R1/R2返工与GPT独立审核准备base=main PR供用户合并，主代理不合并/启用auto-merge。本次阻断关闭后可固定新候选为离线基线；新身份真实B/摘要端点/收益仍需历史处置和具体授权，不默认小测 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 结构/可靠性判断 | C3闭包/C4用途核对保持；C5已核对completed/outcome→解析推荐→最终决定，原MD字段不单独证明绕过。会话支持/临床充分性、未锁环境依赖和外部编排动态计时未关闭；[架构评审](../docs/architecture-review.md)保留历史及后续指针，不搬目录/拆journal |

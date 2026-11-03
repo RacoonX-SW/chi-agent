@@ -99,3 +99,25 @@ python -m pytest -q -p no:cacheprovider \
 | 正式交付前 | Z4/Z5所需效果与分母、Z6真实Harbor配送/Trial/清理、Z8 Writeup/技术报告/复现材料 | 尚未全部完成；不能用代码包已合并代替正式可复现交付或官方评分 |
 
 Y shadow采用效果、C5交流陈述来源、provider/payer业务充分性、摘要忠实度/净费用、依赖未锁、真实Harbor/控制器硬故障等维持既有未验证边界。默认off保持；不为勾完旧任务无条件启动全部可选实验。没有把用户个人实践/掌握或官方reward升级。
+
+## 6. R1/R2独立复审（2026-11-04）
+
+按用户本轮明确要求由GPT直接复审，不再经过Gemini。固定候选`83e0ceb22f79c88699d6e44fdbfc85290e2445fa`、base=`4d43ec769e006a0590daef1ead751c3bb89f1077`；**上述初审R1/R2在这一候选的限定离线范围关闭，没有发现新增阻断，可提交PR。** 原`0a8449e`初审未通过、失败日志及全部历史结论保持；本次不冒充正式配送、临床或真实模型验收。
+
+### 五项复审结论
+
+| 项目 | 独立证据与结论 |
+| --- | --- |
+| ①辅助错误路径 | 生产改动仅补`cause_for_code`导入。主代理自有MockTransport验证真实任务取消、ConnectError、ReadTimeout、无usage、可信usage+length、正常响应及真实诊断写失败7场景；每场lower=1、requests=1，错误后再次调用被sticky阻止，未重试。取消/网络/未知保持pending，可信usage先settle，合法诊断均为v2并可strict inspect；真实写失败仍报持久化错误、不补造诊断 |
+| ②同快照 | 第二次读取的**同一raw bytes**先按requested SHA256比对，再从该raw严格JSON解析投影。真实inspect后，由真实ChiJournal合法追加run，CLI exit1、stdout为空、stderr=`summary_snapshot_changed`；仅改写空白也拒绝。稳定读取hash/集合不变。若写入发生在raw已取回之后，返回完整旧快照及匹配旧hash，是一致的时点视图，没有旧hash+新内容；不宣称任意后续写入均应失败或执行多进程压测 |
+| ③实际测试 | 固定快照pytest：**885 passed、11 skipped、259 subtests passed**，18.70s，exit0；明确排除两个缺anthropic模块。unittest实际**Ran 554 tests、errors=2、skipped=11**，exit1，10.171s；两个错误仍为原anthropic导入，不能写全绿。7+4个独立场景与套件重叠，数量不相加 |
+| ④包与身份 | 独立构建Go 41文件，manifest=`de326a26e20c6b6b29ea11c50805d2679143f7bc3eb62ad4035f4a56cf8a30bb`，隔离真实_identity=`c9b1571d217e8ad4a58b80123db6643ba228850ed0399e47a70fff22509ab559`；旧evaluation 14文件manifest=`a6a69d7d23ae5197eff00fadb198e2cf743f74aae600b65ae2f5e36e3085abfc`，实际_runtime_identity通过。无工作区源码挂载的Go包又执行7个辅助反例/正常场景，断言生产模块均来自/package，结果通过 |
+| ⑤文档事实 | 作者REVIEW_STATE只改当前任务、分支、当轮验证、PR/下一步4行；原独立历史候选、W通过身份、旧unknown/费用/业务/评分等行未改。作者可靠性报告只追加返工事实，原正文保持。随后主代理仅追加本节和更新当前状态，注明用户取消Gemini复审；未把旧失败回写成功 |
+
+本轮只检查用户列出的五项及必要调用接点，不重做C1–C5、M1–M6整包或历史付费运行。源码审查确认不改变辅助parent/上限、原错误分类、结算时机或M6输出schema。M6包外修复未修改journal；Go身份变化来自辅助导入行，旧B不可冒充新身份验证。
+
+环境沿用本报告第3节固定Docker/Python3.12及只读overlay/vendor，禁网、无Key/world/真实请求。新证据集中忽略目录`runs/r1-r2-review-20261104/`：`evidence/pytest.log`、`unittest.log`、`independent.log`、`isolated-auxiliary.log`、`packages.log`、`isolated-go.log`、`isolated-evaluation.log`；`audit/independent.py`保存主代理独立反例。
+
+复验使用第4节同一Docker限制/Python路径，pytest忽略相同2模块，另运行`python -m unittest discover -s tests`及`python /audit/independent.py`。隔离辅助检查以`AUX_ONLY=1`、`PYTHONPATH=/package/scripts:/model-deps:/pdf-deps`运行相同脚本，不挂项目源码。原有两项环境错误/11个skip、真实端点兼容与收益、C1/C5证据缺口、Z4–Z8剩余边界保持。
+
+后续可合并本返工和审核记录，固定新候选作为后续工作的离线基线；真实新B/协议探针、正式Harbor和交付仍按原准入/具体授权，不因R1/R2关闭自动启动。
