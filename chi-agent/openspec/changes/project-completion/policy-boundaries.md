@@ -18,6 +18,7 @@
 | CHI主循环 | 8192 | main/confirmation/continuation共享50次 | entry配置、`go_chi_runtime.run_chi`、request_budget | guard最终wire和usage；journal reserve及load |
 | 患者确认 | 32768 | 最多2次，计入共享50 | entry配置、`patient_identity_binding.CONFIRM_MAX_OUTPUT_TOKENS`及`go_chi_tools`调用 | guard可信确认context；journal确认子限额及load |
 | length continuation | 8192 | 默认关闭；每链最多1次、每run最多2次，计共享50 | RECOVERY_POLICY及`go_chi_recovery`派生视图 | guard一次性许可；journal许可、reserve、load |
+| input summary（后续独立包） | 8192 | 默认关闭；每run最多1次，计共享50并留1次main；不与continuation/Y shadow组合 | SUMMARY_POLICY及[摘要契约](input-summary.md) | guard保护快照/整批重放门禁；journal许可、检查点、投影和load |
 | 嵌套患者模拟 | 8192 | 独立辅助最多10次；不挤占/扩大共享50，最多合计60 | dev_patient_broker请求构造 | AuxiliaryTransport；journal parent/用途/辅助计数及load |
 | 独立患者probe | 8192 | 同一probe最多2次，不是主共享50 | dev_patient_probe请求构造 | AuxiliaryTransport；journal patient_probe分支 |
 | 旧SDK合成预算路径 | 128 | 3轮；离线CNY预算 | model_runner_adapter常量及budget_evaluation | 原合成适配器校验；不与Go参数同步 |
@@ -36,7 +37,7 @@
 | 响应用量输入安全界 | 1,048,576 | guard/auxiliary/journal独立usage检查，不与1,000,000估计门限混为同一用途 |
 | wire请求/响应字节界 | 8 MiB / 4 MiB | guard/auxiliary/evidence约束，与token估计分别检查 |
 
-完整实际wire中的结构、schema、工具参数、reasoning、中文均计入；以`max(canonical UTF-8 bytes, raw bytes)`作输入估计，不能仅数可见文字。旧v1证据按原版本规则读取，不能用v2核对结果回写旧历史。计量/预留不表示自动摘要已实现；本包不新增摘要用途或请求。
+完整实际wire中的结构、schema、工具参数、reasoning、中文均计入；以`max(canonical UTF-8 bytes, raw bytes)`作输入估计，不能仅数可见文字。旧v1证据按原版本规则读取，不能用v2核对结果回写旧历史。C4原验收未实现摘要；后续摘要包独立增加summary用途，实际摘要输入与投影也重新计量，不能用计量通过冒充摘要收益。
 
 ## 4. 时间用途
 
@@ -44,6 +45,7 @@
 | --- | ---: | --- |
 | connect / write / pool | 10 / 60 / 60 | TIME_POLICY；guard最终request.extensions覆盖 |
 | main/B/continuation read / 单次总IO | 240 / 300 | TIME_POLICY；read为socket等待，IO是整次异步wall timeout |
+| input summary read / 单次总IO | 240 / 300 | 后续摘要用途沿主请求时间策略，不扩大CHI准入窗口 |
 | confirmation read / 单次总IO | 360 / 420 | TIME_POLICY；最终用途决定，不能沿用SDK客户端main默认值 |
 | patient simulator read / 单次总IO | 360 / 420 | AuxiliaryTransport当前独立硬边界；恰与确认相等，不共享额度/确认语义 |
 | B / CHI请求准入窗口 | 180 / 900 | TIME_POLICY；新请求派发前检查，不是保证全程在此时刻完成 |

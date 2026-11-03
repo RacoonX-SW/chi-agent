@@ -133,3 +133,7 @@ UNLOCKED role_operator: docker.types
 | `budget_evaluation` | legacy/guard | 是 | 原CNY预算纯函数，保留拒绝语义及签名 | model_runner_adapter（局部）, run_baseline（重导出） |
 
 当前静态检查Go包自有Python模块33个，`closure_gaps=[]`、`unknown_imports=[]`；C2另已加入`go_chi_recovery`。上面的M1模块表保留原快照，原“包内→包外”缺口现已关闭。`docker`/`huggingface_hub`未锁风险不在C3处理。隔离包实际调用、失败反例、真实身份及历史限制见[C1/C3阶段报告](../reviews/c1-c3-admission-package-review.md)。
+
+## 8. 输入摘要增量
+
+`go_chi_summary`为进Go包的guard纯模块，负责保护快照、闭合选区、候选schema/来源与wire投影，由guard和journal调用；不进入旧evaluation包。runtime保留完整SDK历史和ToolContract记录，entry仅显式开启，journal持久化一次性许可/候选/检查点及每次投影，inspect复核关联。上面M1/M3数量保留历史快照；新包及隔离SDK行为见[摘要阶段报告](../reviews/input-summary-review.md)，未迁移目录或拆分journal。

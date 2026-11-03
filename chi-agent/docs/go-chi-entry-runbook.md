@@ -18,7 +18,9 @@ Agent 可见资源只包括公开 instruction/工具参考、已授权的 manage
 
 HTTP 连接/写入/连接池等待分别为 10/60/60 秒；主请求及 continuation 读取超时 240 秒，确认 360 秒。Guard 对完整发送与读取再施加主请求及 continuation 300 秒、确认 420 秒绝对上限。B 的新请求只在开始后 180 秒内准入，C 为 900 秒；恢复不重置起点或总截止。窗口内已发出的请求可以继续至其自身上限。控制器配置 `timeout_seconds` 的范围为 B 360–3600 秒、C 1380–3600 秒。这里沿用现有 TIME_POLICY 数值；超时不触发自动重试，未知用量仍阻断后续调用。
 
-输入按最终实际发送的完整 JSON 计量，覆盖 reasoning、工具定义、参数、结果、中文及结构，记录原始 wire 字节；`chi-context-v2` 的 UTF-8 字节估算不是精确 tokenizer，容量依据仍标为 configured_unverified。本次输出预留取配置基础预留与实际 max_tokens 的较大值，未知容量、坏配置和超限在发送前拒绝。没有自动摘要或输入压缩。
+输入按最终实际发送的完整 JSON 计量，覆盖 reasoning、工具定义、参数、结果、中文及结构，记录原始 wire 字节；`chi-context-v2` 的 UTF-8 字节估算不是精确 tokenizer，容量依据仍标为 configured_unverified。本次输出预留取配置基础预留与实际 max_tokens 的较大值，未知容量、坏配置和超限在发送前拒绝。
+
+输入摘要默认关闭，仅 CHI `live` 可显式选择 `--input-summary chi-input-summary-v1`；不可同时启用输出恢复或 payer evidence shadow。摘要每 run 最多一次，计入共享 50，保留后续 main 额度；固定保留最近两个完整工具批次。SDK 历史仍完整，程序仅对实际 wire 构造检查点，保护状态以程序记录为准。摘要请求无工具通道，失败、未知用量或持久化异常停止，不自动重发；真实端点兼容性和摘要语义忠实度尚未验证，启用仍须对应真实请求授权及新候选准入。
 
 输出恢复默认关闭。仅 CHI `live` 入口支持显式选项 `--output-recovery chi-output-recovery-v1`，版本写入 launch；启用必须另有对应真实请求授权及新候选准入。可信 length 先留证结算，程序再消耗一次性许可；每链最多一次、每运行最多两次追加，全部计入共享 50。无工具的 length 精确保留同源部分正文/reasoning 后接续；含工具的 length 整批零执行，从最后合法历史重新生成。新工具仍经过原批次、实体、角色、路径、claim 门禁及已完成写指纹检查。不拼接工具参数、不造 tool 结果；再次 length、取消、网络、未知或持久化失败停止，不跨进程自动续发。
 
