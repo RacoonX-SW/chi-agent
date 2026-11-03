@@ -553,6 +553,23 @@ python scripts/go_chi_entry.py reconcile-provider \
 
 工具校验 Console 200/session SHA/body bytes/时间/tokens/cost，保存原 accounting/provider/event 三份副本；request 仍为 pending/unknown、attempt 仍 failed、run seal 不变。`execution_allowed=false`、`request_retry_allowed=false`，只有 `admission_cleared=true` 表示该 pending 不再阻断新 attempt；原请求不可重发。设计见 [对账契约](openspec/changes/provider-timeout-reconciliation/design.md)。
 
+## 包外只读 run 汇总（M6）
+
+`scripts/go_chi_run_summary.py` 对**调用方显式指定**的一份账根输出 JSON 摘要，不遍历 `runs/`、不写回、不 reserve/settle/ack/rebind，也不进入参赛包。它先调用既有 `inspect_history` 做身份/hash/证据校验，再投影允许字段：
+
+```bash
+python scripts/go_chi_run_summary.py \
+  --root <state 目录> \
+  --identity <bundle identity> \
+  --accounting-sha256 <chi-accounting.json SHA> \
+  [--run <run id>]
+```
+
+- 省略 `--run` 时汇总全部 attempt；指定不存在的 run 返回 `summary_run_missing`，不静默挑“最新成功”。
+- 输出 `schema=chi-go-run-summary-v1`、`execution_allowed=false`、逐 run 与按 purpose（`main`/`confirmation`/`patient_simulator`/`summary`/`continuation`）的请求数、settled/unknown、已知 token 和三项 USD；缺费用保持 `null` 且 `complete=false`，未知 token 不记 0。
+- 退出码：0 成功；1 校验/身份/hash/输入错误，stderr 输出 `{"status":"failed","code":...}`；2 参数错误。
+- 只读：读取前后原文件集合与 hash 不变；不输出模型正文、工具参数、患者数据或 Key。
+
 ## Go CHI 独立包入口
 
 `scripts/go_chi_entry.py` 接收外部 instruction、一个角色 MCP、日志目录和 evaluation/task/attempt/run 身份；它只在经过 manifest 校验的导出包内运行。原 `opencode_go_provider.py` 继续是固定 coding 探针，原 `evaluation_entry.py` 的 live 拒绝保持。实际已验证范围、固定候选和限制只查 [审核状态](reviews/REVIEW_STATE.md)。
