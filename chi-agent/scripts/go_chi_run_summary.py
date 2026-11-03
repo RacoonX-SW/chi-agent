@@ -7,13 +7,15 @@ by the existing strict readers; this module only projects allowlisted fields.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from decimal import Decimal
 from pathlib import Path
 
-from go_chi_journal import _state_object, inspect_history
-from opencode_go_provider import GoFailure
+from evaluation_bundle import _read_regular_bounded
+from go_chi_journal import MAX_STATE_BYTES, inspect_history
+from opencode_go_provider import GoFailure, _unique
 
 SCHEMA = "chi-go-run-summary-v1"
 CURRENCY = "USD"
@@ -160,7 +162,20 @@ def summarize(root: Path, identity: str, accounting_sha256: str,
     if not root.is_dir():
         raise SummaryError("summary_root_invalid")
     inspection = inspect_history(root, identity, accounting_sha256)
-    state = _state_object(root / "chi-accounting.json")
+    # Re-read once and require the same hash the inspection just validated. A
+    # concurrent writer either leaves identical bytes (hash matches) or the
+    # snapshot changed and the caller gets an explicit error instead of an old
+    # hash paired with new content.
+    raw = _read_regular_bounded(root / "chi-accounting.json", MAX_STATE_BYTES, "chi_history_invalid")
+    if hashlib.sha256(raw).hexdigest() != accounting_sha256:
+        raise SummaryError("summary_snapshot_changed")
+    try:
+        state = json.loads(raw, object_pairs_hook=_unique,
+                           parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+    except Exception:
+        raise SummaryError("summary_snapshot_changed") from None
+    if type(state) is not dict:
+        raise SummaryError("summary_snapshot_changed")
     return _project(inspection, state, selected)
 
 

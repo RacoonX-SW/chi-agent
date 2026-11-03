@@ -567,7 +567,7 @@ python scripts/go_chi_run_summary.py \
 
 - 省略 `--run` 时汇总全部 attempt；指定不存在的 run 返回 `summary_run_missing`，不静默挑“最新成功”。
 - 输出 `schema=chi-go-run-summary-v1`、`execution_allowed=false`、逐 run 与按 purpose（`main`/`confirmation`/`patient_simulator`/`summary`/`continuation`）的请求数、settled/unknown、已知 token 和三项 USD；缺费用保持 `null` 且 `complete=false`，未知 token 不记 0。
-- 退出码：0 成功；1 校验/身份/hash/输入错误，stderr 输出 `{"status":"failed","code":...}`；2 参数错误。
+- 退出码：0 成功；1 校验/身份/hash/输入错误，stderr 输出 `{"status":"failed","code":...}`；2 参数错误。并发写入导致校验后快照变化时返回 `summary_snapshot_changed`，不会输出“旧 hash + 新内容”。
 - 只读：读取前后原文件集合与 hash 不变；不输出模型正文、工具参数、患者数据或 Key。
 
 ## Go CHI 独立包入口

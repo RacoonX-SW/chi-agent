@@ -185,3 +185,38 @@ python -m unittest discover -s tests                                            
 - 未用 v1 合成夹具单独跑 `_validate` 的单元路径；v1 兼容由真实旧账只读读取证明。
 - 未同时启用 summary 与 output recovery 的真实 SDK length 组合；两者共用同一 v2 校验，分别由既有回归覆盖。
 - 未跑真实模型/B/C/Trial/判分；新身份需新 B 才能用于真实运行。
+
+## 累计初审核查返工 R1/R2（2026-11-04）
+
+按 `project-cumulative-review.md`（PR50）修复两项已复现问题；只改辅助诊断导入、只读汇总快照与文档，不扩展功能。
+
+### R1 辅助错误路径缺少导入
+
+- `scripts/go_chi_auxiliary.py` 补 `from go_chi_diagnostics import cause_for_code`。此前错误路径 `NameError` 被同层 except 覆盖为 `chi_evidence_persistence_failed`，原安全码丢失且不写诊断。
+- 新增参数化覆盖：辅助取消、网络错误、未知 usage、可信 usage + 非法响应，断言原码（`chi_aux_cancelled`/`chi_aux_transport_error`/`chi_usage_unknown`/`chi_aux_response_invalid`）、v2 有限 cause、diagnostic 留证、settle/pending 状态。
+- 复跑：`pytest tests/test_go_chi_auxiliary.py` 15 passed；原失败用例 `test_cancelled_auxiliary_keeps_pending` 通过。
+
+### R2 只读汇总快照不一致
+
+- `scripts/go_chi_run_summary.py` 在 `inspect_history` 校验后**重读同一账本并再次比对 requested SHA256**；不一致返回 `summary_snapshot_changed`，不再把旧 hash 与新内容拼在一起。解析同一份已校验字节（严格 JSON、重复键/非有限值拒绝），不新增宽松账本解析器。
+- 新增回归：模拟 inspect 后并发改写账本 → 明确失败；正常路径仍稳定、读取前后字节不变。
+- README 记录该错误码。
+
+### R3 验证命令与短状态
+
+- 本轮以 pytest 运行适用集合（排除两个缺 `anthropic` 的收集错误模块）：
+  `885 passed, 11 skipped, 259 subtests passed`。
+- `unittest discover` 兼容复跑：554 tests，2 个既有 `anthropic` 环境错误、11 skipped。
+- `REVIEW_STATE.md` 已更正：PR49/PR50 已合并、main=`4d43ec7`、M4 已实现并进入返工复审；旧报告结论不改写。
+
+### 身份
+
+- Go bundle：`de326a26e20c6b6b29ea11c50805d2679143f7bc3eb62ad4035f4a56cf8a30bb`
+- runtime identity：`c9b1571d217e8ad4a58b80123db6643ba228850ed0399e47a70fff22509ab559`
+- 旧 evaluation 包：`a6a69d7d…`（不变）
+- 新身份不能复用旧 B；未跑真实模型/B/C/Trial。
+
+### 限制
+
+- 并发快照测试为受控注入，不是多进程压测。
+- 辅助四种失败均使用 MockTransport；未启动真实 broker/world。
