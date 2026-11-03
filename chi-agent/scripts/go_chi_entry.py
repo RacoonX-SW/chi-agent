@@ -240,7 +240,7 @@ def main(argv=None, *, development=None):
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
             import importlib
-            for module in ("go_chi_context", "go_chi_recovery", "go_chi_summary", "go_chi_guidance", "go_chi_search", "go_chi_state",
+            for module in ("go_chi_diagnostics", "go_chi_context", "go_chi_recovery", "go_chi_summary", "go_chi_guidance", "go_chi_search", "go_chi_state",
                            "go_chi_guard", "go_chi_mcp", "go_chi_tools", "go_chi_runtime"):
                 loaded = importlib.import_module(module)
                 path = Path(getattr(loaded, "__file__", "")).resolve()

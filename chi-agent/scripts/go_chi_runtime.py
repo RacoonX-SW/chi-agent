@@ -383,7 +383,9 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         except Exception:
             failure = failure or "chi_log_persistence_failed"
         try:
+            guard_ref = holder.get("guard")
             summary = {"status": "incomplete" if failure else "complete", "safe_error_code": failure,
+                       "safe_cause": getattr(guard_ref, "safe_cause", None),
                        "provider_requests": len(agent_requests),
                        "physical_requests": dict(wire_counts),
                        "logical_model_steps": logical_steps[0],

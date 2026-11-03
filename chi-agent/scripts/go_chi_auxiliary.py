@@ -94,7 +94,8 @@ class AuxiliaryTransport(httpx.AsyncBaseTransport):
             except BaseException as exc:
                 self.error = exc.code if isinstance(exc, GoFailure) else 'chi_aux_cancelled' if isinstance(exc, asyncio.CancelledError) else 'chi_aux_transport_error'
                 if reserved:
-                    try: self.journal.record_diagnostic(self.error, int((time.monotonic() - start) * 1000))
+                    try: self.journal.record_diagnostic(self.error, int((time.monotonic() - start) * 1000),
+                                                        cause=cause_for_code(self.error))
                     except Exception: self.error = 'chi_evidence_persistence_failed'
                 if isinstance(exc, asyncio.CancelledError): raise
                 raise GoFailure(self.error) from None

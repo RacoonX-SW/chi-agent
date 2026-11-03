@@ -18,6 +18,7 @@ from pathlib import Path
 
 from opencode_go_provider import GoFailure, _atomic, _billing, _object, _unique, _contains_secret
 from b_provider_transport import _reject_symlink_ancestors
+from go_chi_diagnostics import (SCHEMA_V2, build_cause, validate_cause, validate_v1, validate_v2)
 from go_chi_evidence import (envelope, write as write_evidence, verify as verify_evidence,
                              write_tool, verify_tool)
 from evaluation_bundle import _read_regular_bounded, _write_exclusive, _fsync_dir
@@ -292,6 +293,18 @@ def inspect_history(root: Path, expected_identity: str, expected_sha256: str) ->
                     for field in ('charged_usd', 'billing_source', 'list_cost_usd', 'allowance_usd'):
                         if item['billing'][field] is None and field not in result['missing']:
                             result['missing'].append(field)
+        causes = []
+        for attempt in state['attempts']:
+            for index, item in enumerate(attempt['requests'], 1):
+                if item.get('diagnostic_evidence_sha256') is None:
+                    continue
+                doc = verify_evidence(root, attempt['run'], index, 'diagnostic',
+                                      item['diagnostic_evidence_sha256'])
+                if doc.get('schema') == SCHEMA_V2:
+                    causes.append({'run': attempt['run'], 'round': index,
+                                   'code': doc.get('code'), 'cause': doc.get('cause')})
+        if causes:
+            result['diagnostic_causes'] = causes
         if pending is not None:
             attempt = next(a for a in state['attempts'] if a['run'] == pending['run'])
             request = attempt['requests'][pending['round'] - 1]
@@ -474,7 +487,7 @@ def _recovery_source(root: Path, run: dict, parent_round: int):
             for kind in ("request", "response", "diagnostic")]
     request, response, diagnostic = docs
     if (request.get("kind") != "request" or response.get("kind") != "response"
-            or diagnostic.get("schema") != "chi-go-diagnostic-v1"
+            or not (validate_v1(diagnostic) or validate_v2(diagnostic))
             or diagnostic.get("kind") != "diagnostic" or diagnostic.get("code") != "ok"
             or response.get("http_status") != 200
             or any(doc.get("schema") != "chi-go-wire-evidence-v1" or doc.get("redaction") is not None
@@ -887,9 +900,7 @@ class ChiJournal:
                                     billed, billing_error, effective_fee_stop = _fee_decision(usage, fee_policy)
                                     if billed != item["billing"] or billing_error != item["billing_error"]:
                                         raise ValueError
-                            elif (evidence.get("schema") != "chi-go-diagnostic-v1"
-                                  or type(evidence.get("code")) is not str or not re.fullmatch(r"[a-z0-9_]{1,64}", evidence["code"])
-                                  or type(evidence.get("elapsed_ms")) is not int or evidence["elapsed_ms"] < 0):
+                            elif not (validate_v1(evidence) or validate_v2(evidence)):
                                 raise ValueError
                             expected_evidence.add((a["run"], f"{index:03d}-{kind}.json"))
                     if item["status"] == "settled" and (item["response_evidence_sha256"] is None
@@ -1613,13 +1624,25 @@ class ChiJournal:
         entry["response_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "response", doc)
         self._persist()
 
-    def record_diagnostic(self, code: str, elapsed_ms: int) -> None:
-        if type(code) is not str or not re.fullmatch(r"[a-z0-9_]{1,64}", code):
+    def record_diagnostic(self, code: str, elapsed_ms: int, *, cause=None) -> None:
+        if (type(code) is not str or not re.fullmatch(r"[a-z0-9_]{1,64}", code)
+                or type(elapsed_ms) is not int or isinstance(elapsed_ms, bool) or elapsed_ms < 0):
+            raise GoFailure("chi_diagnostic_invalid")
+        if code == "ok":
+            if cause is not None:
+                raise GoFailure("chi_diagnostic_invalid")
+            final_cause = None
+        elif cause is None:
+            final_cause = build_cause("other", "unspecified")
+        elif validate_cause(cause):
+            final_cause = {key: cause[key] for key in ("schema", "stage", "reason")}
+        else:
             raise GoFailure("chi_diagnostic_invalid")
         entry = self.run["requests"][-1]
         if entry["diagnostic_evidence_sha256"] is not None:
             raise GoFailure("chi_diagnostic_invalid")
-        doc = {"schema": "chi-go-diagnostic-v1", "kind": "diagnostic", "code": code, "elapsed_ms": elapsed_ms}
+        doc = {"schema": SCHEMA_V2, "kind": "diagnostic", "code": code,
+               "elapsed_ms": elapsed_ms, "cause": final_cause}
         entry["diagnostic_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "diagnostic", doc)
         self._persist()
         self._clear_tool_inflight(f"__wire_{entry['round']:03d}")

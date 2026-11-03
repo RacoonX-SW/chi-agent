@@ -12,6 +12,7 @@ import re
 from typing import Any
 
 from jsonschema import Draft202012Validator
+from go_chi_diagnostics import build_cause
 from request_budget import feedback
 
 CALL_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -123,33 +124,57 @@ class ToolContract:
             raise ContractFailure("tool_definitions_invalid") from None
 
     def accept_batch(self, message: dict) -> list[dict]:
-        """Validate all IDs and arguments before committing any batch record."""
+        """Validate all IDs and arguments before committing any batch record.
+
+        The first proven failure determines the finite diagnostic cause; the
+        accepted set and the no-partial-commit rule are unchanged.
+        """
+        def fail(reason: str):
+            failure = ContractFailure("tool_batch_invalid")
+            failure.cause = build_cause("tool_batch", reason)
+            raise failure
+
         try:
             if (type(message) is not dict or message.get("role") != "assistant"
                     or ("reasoning_content" in message and type(message["reasoning_content"]) is not str)
                     or message.get("content") is not None and type(message["content"]) is not str
                     or type(message.get("tool_calls")) is not list or not message["tool_calls"]):
-                raise ValueError
+                fail("assistant_shape")
             if any(record["result"] is None for record in self.records):
-                raise ValueError
+                fail("unfinished_batch")
+            try:
+                canonical = _canonical_calls(message["tool_calls"])
+            except ValueError:
+                fail("call_shape")
             calls, ids = [], set()
-            canonical = _canonical_calls(message["tool_calls"])
             for call in canonical:
                 if set(call) != {"id", "type", "function"} or call["type"] != "function":
-                    raise ValueError
+                    fail("call_shape")
                 call_id, fn = call["id"], call["function"]
-                if (type(call_id) is not str or not CALL_ID.fullmatch(call_id)
-                        or call_id in ids or call_id in self.seen or type(fn) is not dict
-                        or set(fn) != {"name", "arguments"} or fn["name"] not in self.schemas
-                        or type(fn["arguments"]) is not str):
-                    raise ValueError
-                arguments = _parse(fn["arguments"])
+                if type(fn) is not dict or set(fn) != {"name", "arguments"}:
+                    fail("function_shape")
+                if type(call_id) is not str or not CALL_ID.fullmatch(call_id):
+                    fail("call_id_invalid")
+                if call_id in ids or call_id in self.seen:
+                    fail("call_id_reused")
+                if fn["name"] not in self.schemas:
+                    fail("tool_unknown")
+                if type(fn["arguments"]) is not str:
+                    fail("arguments_json")
+                try:
+                    arguments = _parse(fn["arguments"])
+                except Exception:
+                    fail("arguments_json")
                 if not Draft202012Validator(self.schemas[fn["name"]]).is_valid(arguments):
-                    raise ValueError
+                    fail("arguments_schema")
                 ids.add(call_id)
                 calls.append({"id": call_id, "name": fn["name"], "arguments": arguments, "result": None})
+        except ContractFailure:
+            raise
         except Exception:
-            raise ContractFailure("tool_batch_invalid") from None
+            failure = ContractFailure("tool_batch_invalid")
+            failure.cause = build_cause("other", "unspecified")
+            raise failure from None
         self.seen.update(ids)
         self.records.extend(calls)
         stored = {key: copy.deepcopy(value) for key, value in message.items() if key != "tool_calls"}

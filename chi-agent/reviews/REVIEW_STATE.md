@@ -17,7 +17,7 @@
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本轮仅授权输入摘要连续离线实现、Docker自测/独立复验、返工、文档和PR；真实模型/摘要/续写请求0，不读Key、不启动world/真实B/C/Trial/判分。默认关闭，原unknown/授权缺口不改，不用新账根绕阻断 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | M6 定向 8 tests + 全量 539 tests（2 个缺 `anthropic` 的既有错误、11 skipped）；M6 读取前后文件集合/hash 不变，包外工具不改变 Go 包 manifest。M5 只改文档/状态与分支约定，未改 runtime。数量/命令/失败只见可靠性报告；跳过项不算通过 |
+| 本轮验证 | M4 定向 14 tests + 全量 553 tests（2 个缺 `anthropic` 的既有错误、11 skipped）；v1 旧账只读读取且字节不变；Go 新 identity `b4741cce…`（bundle `8cb711fe…`），旧 evaluation 包 `a6a69d7d…` 不变；隔离包坏批/正常路径通过。数量/命令/失败只见可靠性报告；跳过项不算通过 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
 | PR 与下一步 | PR42–PR47已由用户合并；[M4契约PR48](https://github.com/xsw932187210-cell/chi-agent/pull/48)为base=main/open，仅规格。DeepSeek按契约D0–D3连续离线实施、交Gemini复审，规格内不逐包等GPT。用户最终合并，随后GPT全项目累计审核。真实新B/摘要端点/收益验证仍需历史处置和具体授权；不默认小测 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；运行边界见[审批草案](../openspec/changes/real-run-approval/proposal.md) |

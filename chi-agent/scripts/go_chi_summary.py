@@ -82,6 +82,7 @@ def verify_tool_actions(records, events, canonical_tools, *, root, run):
     No result or arguments are inferred from a model summary. Unfinished and
     failed actions, and mutation errors with uncertain effects, fail closed.
     """
+    from go_chi_diagnostics import validate_v1, validate_v2
     from go_chi_evidence import verify_tool
     from go_chi_recovery import classify
     if (type(records) is not list or type(events) is not list or type(canonical_tools) is not dict
@@ -366,6 +367,7 @@ def validate_source(*, root, run, body, used, claimed, canonical_tools):
     batch must appear in a prior main response and match the tool evidence.
     """
     from go_chi_contract import ToolContract, _canonical_calls, _same_assistant
+    from go_chi_diagnostics import validate_v1, validate_v2
     from go_chi_evidence import verify
     if (type(run) is not dict or type(body) is not dict or type(body.get('messages')) is not list
             or type(used) is not int or used < 0 or type(claimed) is not bool
@@ -404,7 +406,9 @@ def validate_source(*, root, run, body, used, claimed, canonical_tools):
             evidence = verify(root, run['run'], item['round'], 'response', item['response_evidence_sha256'])
             diagnostic = verify(root, run['run'], item['round'], 'diagnostic', item['diagnostic_evidence_sha256'])
             if (evidence['http_status'] != 200 or evidence['redaction'] is not None
-                    or type(evidence['body_utf8']) is not str or diagnostic.get('code') != 'ok'):
+                    or type(evidence['body_utf8']) is not str
+                    or not (validate_v1(diagnostic) or validate_v2(diagnostic))
+                    or diagnostic.get('code') != 'ok'):
                 raise ValueError
             response = json.loads(evidence['body_utf8'], object_pairs_hook=_object,
                                   parse_constant=lambda _: _fail())
