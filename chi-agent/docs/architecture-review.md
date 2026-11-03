@@ -129,6 +129,8 @@ C4随后按[用途边界契约](../openspec/changes/project-completion/policy-bo
 
 ### t027的合法路径
 
+2026-11-03后续[C5核查](../reviews/c5-p2p-public-path-review.md)已关联旧工具结果和导出：两次均先record_outcome取得completed/uphold，再get_summary推荐deny，以overridden=false完成denied；原MD仍p2p_review/unsigned不等于跳过P2P。但get_context无活动会话、目标session为空，模型note声称讨论已举行缺少会话支持。故机械依赖链已核对，交流/业务充分性未验证，原21/22与false不改。以下保留初核时未决问题及来源。
+
 本轮已读固定vendor `services/review.py::submit_md_case_decision` 与 `services/determination.py::_resolve_source_state/finalize_determination`：P2P决策可不签核，待完成P2P会阻止finalize，完成的P2P结果可导向最终决定。原运行是否走过相应完成链、是否有override、最终依据是否一致仍未独立核实。
 
 因此既不能从“两个工具都允许调用”推出任意组合合法，也不能从一个false推出所有P2P都必须签核。此前报告的“仅期望选择差异”是待核对解释，原21/22结果保留，不据此修改官方检查或给Agent注入隐藏期望。
