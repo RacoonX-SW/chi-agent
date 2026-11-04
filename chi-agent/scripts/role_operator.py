@@ -54,11 +54,17 @@ def _config(path, expected):
     keys = {'schema', 'run_id', 'evaluation_id', 'task_id', 'attempt_id', 'role', 'bundle_relative',
             'bundle_sha256', 'runtime_identity', 'runner_image_id', 'world_image_id', 'dataset_relative',
             'manifest_relative', 'manifest_sha256', 'output_relative', 'dev_sha256', 'operator_timeout_seconds'}
-    optional = {'history_mode', 'state_relative', 'local_q_root'}
+    optional = {'history_mode', 'state_relative', 'local_q_root', 'input_summary', 'output_recovery'}
     if (type(c) is not dict or not keys <= set(c) <= keys | optional
             or c['schema'] != 'chi-role-operator-v1'):
         raise ValueError('config_invalid')
     if c.get('history_mode', 'local') not in {'local', 'external'}:
+        raise ValueError('config_invalid')
+    for field, version in (('input_summary', 'chi-input-summary-v1'),
+                           ('output_recovery', 'chi-output-recovery-v1')):
+        if field in c and (type(c[field]) is not str or c[field] != version):
+            raise ValueError('config_invalid')
+    if 'input_summary' in c and 'output_recovery' in c:
         raise ValueError('config_invalid')
     if c['role'] not in PORTS or any(type(c[k]) is not str or not ID.fullmatch(c[k]) for k in ('run_id', 'evaluation_id', 'task_id', 'attempt_id')): raise ValueError('config_invalid')
     if any(type(c[k]) is not str or not SHA.fullmatch(c[k]) for k in ('bundle_sha256', 'runtime_identity', 'manifest_sha256')): raise ValueError('config_invalid')
@@ -91,6 +97,15 @@ def _payer_projection(artifacts, manifest):
                 or path.stat().st_size != item['size'] or _sha(path) != item['sha256']):
             raise ValueError('payer_projection_invalid')
     return {'status': 'ready', 'count': len(found)}
+
+
+def _validation_flags(c):
+    flags = []
+    if c.get('input_summary') is not None:
+        flags += ['--input-summary', c['input_summary']]
+    if c.get('output_recovery') is not None:
+        flags += ['--output-recovery', c['output_recovery']]
+    return flags
 
 
 def main(argv=None):
@@ -220,7 +235,7 @@ def main(argv=None):
                    '--evaluation-id', c['evaluation_id'], '--task-id', c['task_id'], '--attempt-id', c['attempt_id'], '--run-id', c['run_id'],
                    '--logs-dir', '/runner-logs/result'] + history_args + [
                    '--role', c['role'], '--instruction-file', '/input/instruction.md', '--mcp-url', f'http://{names["world"]}:{PORTS[c["role"]]}/mcp',
-                   '--workspace-root', '/logs/artifacts/workspaces', '--handbook-root', '/workspace/skills/managed-care-operations-handbook', '--tool-reference', '/input/tool_reference.md']
+                   '--workspace-root', '/logs/artifacts/workspaces', '--handbook-root', '/workspace/skills/managed-care-operations-handbook', '--tool-reference', '/input/tool_reference.md'] + _validation_flags(c)
         for alias in ('healthverse-task-assets', 'chi-bench-task-assets'):
             command += ['--tool-reference', f'/opt/{alias}/tool_reference.md']
         runner = client.containers.create(image=runner_image.id, name=names['runner'], command=command, environment=runner_env, volumes=volumes,

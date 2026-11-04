@@ -18,6 +18,14 @@ from go_chi_entry import main
 
 STATUS_PATH = Path('/runner-logs/lifecycle.json')
 CAPABILITY_PATH = Path('/run/chi-capability')
+SHADOW_FLAGS = ('--input-summary', '--output-recovery')
+
+
+def reject_shadow_with_validation_flags(argv, env=None):
+    """Y shadow and the two context policies stay mutually exclusive."""
+    env = os.environ if env is None else env
+    if env.get('CHI_DEV_EVIDENCE_SHADOW') == 'shadow' and any(flag in argv for flag in SHADOW_FLAGS):
+        raise RuntimeError('evidence_shadow_exclusive')
 
 
 class TrackedServer:
@@ -119,4 +127,5 @@ async def development(journal, secret, run_chi, kwargs):
 
 if __name__ == '__main__':
     import sys
+    reject_shadow_with_validation_flags(sys.argv[1:])
     raise SystemExit(main(sys.argv[1:], development=development))

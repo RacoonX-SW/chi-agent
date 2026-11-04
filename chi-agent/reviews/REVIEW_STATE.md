@@ -4,22 +4,22 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 用户批准的唯一`vprep-b-001`真实coding-B已完成并只读核验、清理，当前候选取得新B收据，详见[本次B报告](validation-coding-b-review.md)。摘要/恢复/业务C/Harbor/判分均未启动，正式交付边界保持 |
+| 当前任务 | PR53 已合并；包外 `role_operator` 已接线 `input_summary`/`output_recovery`（精确版本、互斥、缺省关闭、shadow 在 runner 拒绝），离线候选待 GPT 定向审核。两项探针草稿已生成但**未授权执行**；真实端点/触发/收益仍待验证。C1未知、C5交流佐证保持。详见[接线报告](validation-probe-wiring-review.md) |
 | 协作 | GPT按本次明确授权直接执行一次B、审计与Git记录，不派实现代理/不重复Gemini审核，不修改生产代码；包外开关接线仍留后续DeepSeek，用户最终验收/合并 |
 | 最新独立审核 | 已审/限定离线通过`83e0ceb22f79c88699d6e44fdbfc85290e2445fa`，base=`4d43ec7`；辅助原码/v2 cause/次数/结算及快照一致性、测试实际结果、新包身份和文档历史核对通过。原`0a8449e`初审未通过结论原样保留，不以新通过回写旧候选 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
 | 存储与验收身份 | 按用户要求上次通过实现身份仍保留上列W；Y限定离线通过单列，PR30已合并仅说明进入主线，不扩大为真实模型准入/业务或官方验收。文档/PR/合并提交不代替实现验收，见 [GitHub 工作流](../docs/github-workflow.md) |
-| 当前分支与接手改动 | 核实PR52已合并、origin/main=`7103877`，从其新建`codex/validation-coding-b`记录本次B；执行仍用原封存候选，生产/测试/profile不改。旧准备分支及隔离worktree保留，不merge/push main |
+| 当前分支与接手改动 | 核实PR53已合并，最新origin/main=`1f5c580`；从其新建`deepseek/validation-probe-wiring`。其他 worktree/旧分支保留，不merge/push main |
 | 环境目标与实际 | W复用Python3.12、V三角色固定资源、原world/dev/controller及SDK/PDF/U overlay，无新依赖安装/升级或G/H重做。SDK/源码/PDF/vendor逐字段与V一致；开发操作者/患者模拟器排除参赛包，官方Anthropic默认保留 |
 | 本地开发预算 | record_only/null cap、原锁/未知门禁不变。本次用户明确保留payer-010 unknown/旧pending、不核销重发，并特定允许eval-vprep-20261104的一次B；此后继许可已使用，不回写eval-abl-on2历史授权佐证或旧未知结算。旧账hash未变；可信token费用缺项仍可null/warning，新未知停止，零重试/回退，Extra Usage沿既有关闭决定 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本次仅按用户明确消息允许冻结候选的一次coding-B/最多6模型HTTP；现已完成并耗尽该次许可。只使用专用Go凭据，不读完整.env，不做其他真实运行。草案/PR不是后继调用许可；摘要/恢复/业务C/患者/Harbor/判分/发布仍未获准 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | 执行前禁网无Key复核封存包及SDK身份，真实B正常退出，独立禁网核对实际wire/用量/工具/receipt/seal和完整新账；旧指定accounting不变、产物无Key、唯一真实容器已删除。具体次数/费用/hash只见本次B报告；未重跑全量，既有环境错误/skip保留 |
+| 本轮验证 | 适用 pytest **889 passed、13 skipped、261 subtests**；controller 下 operator 配置 5 tests、接线 4 tests。入口侧用真实 state 副本证明 `launch.input_summary`/`output_recovery` 写入且零请求/无 pending；Go bundle `de326a26…` 与 runtime `c9b1571d…` 不变。数量/命令/失败只见接线报告；skip 不算通过 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR42–PR52已由用户合并；[本次B记录PR53](https://github.com/xsw932187210-cell/chi-agent/pull/53)为base=main/open，交用户审核，不merge/auto-merge。下一步包外operator开关透传离线任务，再分别固定摘要/恢复config及真实许可；已有新B不自动开放业务C/Harbor/Z4–Z8 |
+| PR 与下一步 | PR42–PR53 已由用户合并；接线候选为本地提交（未 push/未开 PR），交 GPT 定向审核后由用户决定。两项探针仍需独立授权与新候选准入；已有新B不自动开放业务C/Harbor/Z4–Z8 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；旧审批包保留历史，[新草案](../openspec/changes/validation-preparation/proposal.md)仅作准入方案，本次B明确授权/执行另见新报告，其他真实运行仍未获准 |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 结构/可靠性判断 | C3闭包/C4用途核对保持；C5已核对completed/outcome→解析推荐→最终决定，原MD字段不单独证明绕过。会话支持/临床充分性、未锁环境依赖和外部编排动态计时未关闭；[架构评审](../docs/architecture-review.md)保留历史及后续指针，不搬目录/拆journal |
