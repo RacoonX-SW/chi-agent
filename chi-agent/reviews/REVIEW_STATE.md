@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | PR53 已合并；包外 `role_operator` 已接线 `input_summary`/`output_recovery`（精确版本、互斥、缺省关闭、shadow 在 runner 拒绝），离线候选待 GPT 定向审核。两项探针草稿已生成但**未授权执行**；真实端点/触发/收益仍待验证。C1未知、C5交流佐证保持。详见[接线报告](validation-probe-wiring-review.md) |
+| 当前任务 | 接线候选 6ffc6ca 初审 R1/R2 已返工：恢复分发 runbook 字节使内包/runtime 回到冻结身份，runner 按 argparse 语义拒绝 shadow 与两能力的全部合法写法。返工候选待 GPT 定向复审；两项探针草稿已更新但仍**未授权执行**。C1未知、C5交流佐证保持。详见[接线报告](validation-probe-wiring-review.md) |
 | 协作 | GPT按本次明确授权直接执行一次B、审计与Git记录，不派实现代理/不重复Gemini审核，不修改生产代码；包外开关接线仍留后续DeepSeek，用户最终验收/合并 |
 | 最新独立审核 | 已审/限定离线通过`83e0ceb22f79c88699d6e44fdbfc85290e2445fa`，base=`4d43ec7`；辅助原码/v2 cause/次数/结算及快照一致性、测试实际结果、新包身份和文档历史核对通过。原`0a8449e`初审未通过结论原样保留，不以新通过回写旧候选 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
@@ -17,7 +17,7 @@
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
 | 付费验证范围 | 本次仅按用户明确消息允许冻结候选的一次coding-B/最多6模型HTTP；现已完成并耗尽该次许可。只使用专用Go凭据，不读完整.env，不做其他真实运行。草案/PR不是后继调用许可；摘要/恢复/业务C/患者/Harbor/判分/发布仍未获准 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | 适用 pytest **889 passed、13 skipped、261 subtests**；controller 下 operator 配置 5 tests、接线 4 tests。入口侧用真实 state 副本证明 `launch.input_summary`/`output_recovery` 写入且零请求/无 pending；Go bundle `de326a26…` 与 runtime `c9b1571d…` 不变。数量/命令/失败只见接线报告；skip 不算通过 |
+| 本轮验证 | 返工后适用 pytest **892 passed、13 skipped、275 subtests**；controller 配置/接线 12 tests OK。6ffc6ca 曾改变 `RUN_CHI_GO.md`（bundle `0d2a1c84…`）；`afb9dff` 恢复原字节后 41 成员逐项相同，bundle `de326a26…`、runtime `c9b1571d…` 由隔离包无 Key preflight 复核；重建 release `5d2d2d6f…`（source `afb9dff`）。数量/命令/失败只见接线报告；skip 不算通过 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
 | PR 与下一步 | PR42–PR53 已由用户合并；接线候选为本地提交（未 push/未开 PR），交 GPT 定向审核后由用户决定。两项探针仍需独立授权与新候选准入；已有新B不自动开放业务C/Harbor/Z4–Z8 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；旧审批包保留历史，[新草案](../openspec/changes/validation-preparation/proposal.md)仅作准入方案，本次B明确授权/执行另见新报告，其他真实运行仍未获准 |
