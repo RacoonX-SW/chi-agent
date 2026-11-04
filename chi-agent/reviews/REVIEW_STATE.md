@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | PR54已合并；用户单独批准并补充具体端点/载荷授权的一次摘要探针`vprep-s-001`已失败收口：摘要length、无最终正文，未安装checkpoint；端到端兼容未通过。完整用量/清理及后续有界Prompt见[本次报告](summary-endpoint-probe-review.md)；旧C1、C5及正式交付缺口保留 |
+| 当前任务 | `vprep-s-001` 第20笔 summary 失败已做离线诊断：HTTP200 但 length、reasoning 用尽 8192、content 空；固定 guard `chi_summary_invalid` 拒绝正确，20 笔 settled、pending=null、无 checkpoint/后继 main。缺口是固定 high+8192 下的大选区容量问题，不是 schema/选区错误；候选方案见[诊断报告](summary-failure-diagnosis.md)。未实施生产修改，默认关闭；摘要端点兼容、忠实度与收益仍未验证 |
 | 协作 | DeepSeek接线/返工及GPT独立离线复审历史保留。本轮由GPT直接执行唯一获准S、禁网核验、记录及Git交付，不新增生产实现/测试/依赖；用户最终审核/合并，不merge/auto-merge |
 | 最新独立审核 | 已审/限定离线通过`9d36c54426131e97fdc6bf370c27a63e348288b4`（生产`afb9dff85de9599196f89c7c81a1f6b1d9691eee`，base=`1f5c580`）；包成员/实际身份恢复、argparse边界、B门禁及草稿核查通过。`6ffc6ca`/`0a8449e`初审失败及`83e0ceb`等历史通过保留，不回写旧候选 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
