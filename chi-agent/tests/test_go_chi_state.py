@@ -14,14 +14,21 @@ class Binding:
         self.bound = bound
 
 
-def read_call(state, call_id="call_1", case_id="CASE-A"):
-    return state.observe(call_id=call_id, tool="chart.get_patient_chart_by_patient", kind="mcp",
-                         arguments={"case_id": case_id}, result={"ok": True})
+def read_call(state, call_id="call_1", case_id="CASE-A", tool="triage.get", event="returned"):
+    return state.observe(call_id=call_id, tool=tool, kind="mcp",
+                         arguments={"case_id": case_id}, result={"ok": True}, event=event)
 
 
 def write_call(state, call_id="call_w1", case_id="CASE-A", event="returned"):
-    return state.observe(call_id=call_id, tool="auth.submit_authorization", kind="mcp",
+    return state.observe(call_id=call_id, tool="triage.set_disposition", kind="mcp",
                          arguments={"case_id": case_id}, result={"ok": True}, event=event)
+
+
+def file_call(state, call_id="call_f1", *, event="returned", tool="local-fs-write",
+              scope="case:CASE-A", path="/workspace/CASE-A/payer/letter.md"):
+    return state.observe(call_id=call_id, tool=tool, kind="local",
+                         arguments={"path": path}, result="workspace file written",
+                         event=event, scope=scope)
 
 
 class StateTests(unittest.TestCase):
@@ -255,10 +262,156 @@ class StateTests(unittest.TestCase):
         read_call(state)
         state.propose({"plans": ["first"]})
         summary = state.summary()
-        self.assertEqual(summary["schema"], "chi-task-state-v1")
+        self.assertEqual(summary["schema"], "chi-task-state-v2")
+        self.assertEqual(summary["observations"][0]["source_kind"], "business_status")
         self.assertNotIn("result", summary["observations"][0])
         self.assertLessEqual(len(summary["observations"]), LIMITS["observations_in_summary"])
         self.assertLess(len(json.dumps(summary).encode()), MAX_STATE_BYTES)
+
+    def test_file_write_after_business_readback_does_not_require_another(self):
+        state = self.state()
+        write_call(state)
+        read_call(state, "call_2")
+        state.propose({"target": {"case_id": "CASE-A"},
+                       "latest_business_status": {"text": "accepted", "source_call_id": "call_2"}})
+        self.assertTrue(state.can_claim()[0])
+        file_call(state)
+        allowed, reason = state.can_claim()
+        self.assertTrue(allowed, reason)
+        report = state.completion_report()
+        self.assertEqual(report["schema"], "chi-completion-v2")
+        self.assertEqual(report["verification"], "mechanical_pass")
+        self.assertEqual(report["last_business_mutation"]["call_id"], "call_w1")
+        self.assertEqual(report["last_file_mutation"]["call_id"], "call_f1")
+        self.assertIsNone(report["required_readback"])
+        self.assertEqual(state.record_claim()["status"], "recorded")
+
+    def test_file_policy_and_patient_reads_cannot_become_business_status(self):
+        state = self.state()
+        read_call(state, "call_1", "CASE-A")
+        state.propose({"target": {"case_id": "CASE-A"}})
+        cases = [
+            ("file", dict(tool="local-fs-read", scope="case:CASE-A",
+                          path="/workspace/CASE-A/payer/letter.md")),
+            ("policy", dict(tool="local-fs-read", scope="shared_public",
+                            path="/handbook/policy.md")),
+            ("patient", dict(tool="local-read-patient-observation", scope="unattributed",
+                             path="/workspace/CASE-A/payer/observation")),
+            ("chart", dict(tool="chart.get_patient_chart_by_patient", scope="case:CASE-A",
+                           path="/workspace/CASE-A/payer/chart")),
+        ]
+        for index, (name, values) in enumerate(cases, start=1):
+            with self.subTest(source=name):
+                call_id = "call_x" + str(index)
+                state.observe(call_id=call_id, tool=values["tool"], kind="local"
+                              if values["tool"].startswith("local-") else "mcp",
+                              arguments={"path": values["path"]}, result="observed",
+                              scope=values["scope"])
+                with self.assertRaises(StateRefusal) as caught:
+                    state.propose({"latest_business_status": {"text": "done", "source_call_id": call_id}})
+                self.assertEqual(caught.exception.code, "chi_state_source_not_business")
+        for event in ("returned_error", "refused"):
+            with self.subTest(event=event):
+                call_id = "call_" + event
+                read_call(state, call_id, event=event)
+                with self.assertRaises(StateRefusal) as caught:
+                    state.propose({"latest_business_status": {"text": "done", "source_call_id": call_id}})
+                self.assertEqual(caught.exception.code, "chi_state_source_not_read")
+        self.assertIsNone(state.data["latest_business_status"])
+
+    def test_file_write_failure_still_blocks_completion(self):
+        state = self.state()
+        file_call(state, event="returned_error")
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_file_write_failed:"))
+        report = state.completion_report()
+        self.assertEqual(report["verification"], "blocked")
+        self.assertEqual(report["required_readback"], "file_delivery")
+
+    def test_refused_file_write_is_not_a_failed_delivery(self):
+        state = self.state()
+        file_call(state, event="refused")
+        allowed, reason = state.can_claim()
+        self.assertTrue(allowed, reason)
+        self.assertEqual(state.completion_report()["verification"], "not_applicable")
+
+    def test_failed_file_write_registers_unknown_and_blocks_claim(self):
+        state = self.state()
+        file_call(state, event="failed")
+        self.assertEqual(state.data["unknowns"][0]["status"], "open")
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_blocked_unknown:"))
+
+    def test_refused_business_write_does_not_require_readback(self):
+        state = self.state()
+        write_call(state, event="refused")
+        allowed, reason = state.can_claim()
+        self.assertTrue(allowed, reason)
+        self.assertEqual(state.completion_report()["verification"], "not_applicable")
+
+    def test_claim_and_report_share_the_same_blocked_reason(self):
+        state = self.state()
+        write_call(state)
+        state.propose({"target": {"case_id": "CASE-A"}})
+        allowed, reason = state.can_claim()
+        report = state.completion_report()
+        self.assertFalse(allowed)
+        self.assertEqual(report["reason"], reason)
+        self.assertEqual(report["verification"], "blocked")
+        self.assertEqual(report["required_readback"], "business_status")
+        self.assertIn("final_text_without_claim_not_blocked", report["remaining_limitations"])
+
+    def test_claim_violation_blocks_claim_and_report(self):
+        state = self.state()
+        read_call(state)
+        state.propose({"target": {"case_id": "CASE-A"}})
+        state.record_claim()
+        state.block_mutation("triage.set_disposition", "mcp")
+        allowed, reason = state.can_claim()
+        report = state.completion_report()
+        self.assertFalse(allowed)
+        self.assertEqual(reason, "completion_blocked_claim_violation")
+        self.assertEqual(report["reason"], reason)
+        self.assertEqual(report["business_effect"], "violation")
+
+    def test_business_status_read_must_match_target_case(self):
+        state = self.state()
+        read_call(state, "call_1", "CASE-A")
+        read_call(state, "call_2", "CASE-B")
+        state.propose({"target": {"case_id": "CASE-A"}})
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"latest_business_status": {"text": "wrong", "source_call_id": "call_2"}})
+        self.assertEqual(caught.exception.code, "chi_state_case_mismatch")
+
+    def test_unknown_resolution_requires_matching_evidence_kind(self):
+        state = self.state()
+        write_call(state, event="failed")
+        file_call(state, "call_f2", tool="local-fs-read", path="/workspace/CASE-A/payer/letter.md")
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"resolve_unknown": [{"unknown_id": "u1", "source_call_id": "call_f2",
+                                                "note": "file read"}]})
+        self.assertEqual(caught.exception.code, "chi_state_source_not_read")
+        read_call(state, "call_2")
+        state.propose({"resolve_unknown": [{"unknown_id": "u1", "source_call_id": "call_2",
+                                            "note": "status observed"}]})
+        self.assertEqual(state.data["unknowns"][0]["status"], "resolved")
+
+    def test_business_status_reads_are_exact_public_canonical_names(self):
+        from go_chi_state import BUSINESS_STATUS_READS
+        from go_chi_mcp import role_allowlists
+        expected = {
+            "provider": {"cases.get_case", "auth.check_status"},
+            "payer": {"payer_intake_hub.get_intake_case", "triage.get",
+                      "review.get_nurse_review_data", "review.get_md_review_data",
+                      "determination.get_summary", "p2p.list", "payer_letter_center.list"},
+            "cm": {"cm_chart.get_chart_data"},
+        }
+        self.assertEqual({role: set(names) for role, names in BUSINESS_STATUS_READS.items()}, expected)
+        allowed = role_allowlists()
+        for role, names in expected.items():
+            self.assertTrue(names <= allowed[role], (role, names - allowed[role]))
 
 
 if __name__ == "__main__":

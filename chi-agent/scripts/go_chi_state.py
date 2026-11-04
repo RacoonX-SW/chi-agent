@@ -1,4 +1,4 @@
-"""Bounded per-run business state for Go CHI (chi-task-state-v1).
+"""Bounded per-run business state for Go CHI (chi-task-state-v2).
 
 The state records what this run actually observed, what the model claims or
 plans, what is still missing, and which write effects are unknown. It is run
@@ -8,6 +8,12 @@ never rewrites journal bytes.
 Only the program registers observations (from real tool calls). The model may
 submit facts/plans/gaps/status updates through a validated payload, always
 citing an observation registered earlier in this run.
+
+v2 distinguishes business-status reads, policy/handbook evidence, patient
+evidence and file deliverables. A file read cannot establish a business status;
+a successful deliverable write after a business readback does not require a
+second business readback. Legacy v1 states keep their original meaning and are
+never rewritten or re-graded by this module.
 """
 from __future__ import annotations
 
@@ -21,8 +27,10 @@ from pathlib import Path
 
 from opencode_go_provider import GoFailure
 
-SCHEMA = "chi-task-state-v1"
-VERSION = "chi-task-state-v1"
+SCHEMA = "chi-task-state-v2"
+VERSION = "chi-task-state-v2"
+LEGACY_SCHEMAS = frozenset({"chi-task-state-v1"})
+COMPLETION_SCHEMA = "chi-completion-v2"
 MAX_STATE_BYTES = 65536
 MAX_TEXT = 800
 LIMITS = {
@@ -53,6 +61,33 @@ LOCAL_EFFECTS = {
 }
 UPDATE_KEYS = {"facts", "plans", "gaps", "target", "latest_business_status",
                "next_candidates", "resolve_unknown"}
+
+# Canonical public MCP reads that expose the target case/resource state. The
+# list is program-owned and exact; a model cannot nominate a new status source.
+# Names come from the pinned public catalog (`provider_tool_names`,
+# `payer_agent_tool_names` and `cm_server`), not from hidden implementations.
+BUSINESS_STATUS_READS = {
+    "provider": frozenset({
+        "cases.get_case",
+        "auth.check_status",
+    }),
+    "payer": frozenset({
+        "payer_intake_hub.get_intake_case",
+        "triage.get",
+        "review.get_nurse_review_data",
+        "review.get_md_review_data",
+        "determination.get_summary",
+        "p2p.list",
+        "payer_letter_center.list",
+    }),
+    "cm": frozenset({
+        "cm_chart.get_chart_data",
+    }),
+}
+FILE_READ_TOOLS = frozenset({"local-fs-read", "local-fs-list", "local-fs-search"})
+FILE_WRITE_TOOLS = frozenset({"local-fs-write", "local-fs-edit"})
+NEUTRAL_LOCAL = frozenset({"local-task-state", "local-role-guidance", "local-state-update",
+                           "local-confirm-patient", "local-claim_done"})
 
 
 class StateRefusal(ValueError):
@@ -91,6 +126,46 @@ def effect_for(tool: str, kind: str) -> str:
     name = tool.rsplit(".", 1)[-1]
     verb = name.split("_", 1)[0]
     return "read" if verb in READ_VERBS else "mutation"
+
+
+def tool_kind(tool: str) -> str:
+    """Infer the observation kind for a stored tool name."""
+    if type(tool) is not str or not tool:
+        raise StateRefusal("chi_state_update_invalid")
+    return "local" if tool.startswith("local-") or tool in LOCAL_EFFECTS else "mcp"
+
+
+def source_kind_for(role: str, tool: str, kind: str, scope: str, effect: str | None = None) -> str:
+    """Classify an observation for completion: business status vs other evidence.
+
+    Only a returned, case-scoped read from BUSINESS_STATUS_READS can establish a
+    business status. File, policy/handbook, patient and general business reads
+    stay evidence and cannot be promoted to a terminal status by the model.
+    """
+    if role not in BUSINESS_STATUS_READS:
+        raise StateRefusal("chi_state_update_invalid")
+    effect = effect_for(tool, kind) if effect is None else effect
+    if kind == "local":
+        if tool in FILE_WRITE_TOOLS:
+            return "file_deliverable"
+        if tool in FILE_READ_TOOLS:
+            if type(scope) is str and scope.startswith("case:"):
+                return "file_evidence"
+            if scope == "shared_public":
+                return "policy_evidence"
+            return "other_evidence"
+        if tool == "local-read-patient-observation":
+            return "patient_evidence"
+        if tool in NEUTRAL_LOCAL:
+            return "neutral"
+        return "unknown_mutation" if effect == "mutation" else "other_evidence"
+    if kind != "mcp":
+        raise StateRefusal("chi_state_update_invalid")
+    if effect == "mutation":
+        return "business_mutation"
+    if tool in BUSINESS_STATUS_READS[role]:
+        return "business_status"
+    return "business_evidence"
 
 
 def _atomic_write(path: Path, payload: dict) -> None:
@@ -200,6 +275,7 @@ class TaskState:
             "tool": tool,
             "kind": kind,
             "effect": effect,
+            "source_kind": source_kind_for(self.data["role"], tool, kind, scope, effect),
             "scope": scope,
             "arguments_sha256": _sha(arguments if arguments is not None else {}),
             "result_sha256": _sha(result if result is not None else ""),
@@ -367,7 +443,13 @@ class TaskState:
         source = self._observation(payload["source_call_id"])
         if source["effect"] != "read" or source["event"] != "returned":
             raise StateRefusal("chi_state_source_not_read")
+        if source.get("source_kind") != "business_status":
+            # File, policy, patient and general business evidence cannot become
+            # the terminal status just because the model cites it.
+            raise StateRefusal("chi_state_source_not_business")
         self._check_source_scope(source)
+        if self.data["target"]["case_id"] is None:
+            raise StateRefusal("chi_state_target_required")
         current = self.data["latest_business_status"]
         if current is not None and source["seq"] < current["source_seq"]:
             raise StateRefusal("chi_state_stale")
@@ -392,6 +474,17 @@ class TaskState:
             source = self._observation(item["source_call_id"])
             if source["effect"] != "read" or source["event"] != "returned" \
                     or source["seq"] <= unknown["seq"]:
+                raise StateRefusal("chi_state_source_not_read")
+            unknown_kind = source_kind_for(self.data["role"], unknown["tool"],
+                                           tool_kind(unknown["tool"]), unknown["scope"])
+            allowed = ({"file_evidence"} if unknown_kind == "file_deliverable"
+                       else {"business_status"} if unknown_kind in {"business_mutation", "unknown_mutation"}
+                       else {"business_status", "business_evidence", "file_evidence",
+                             "policy_evidence", "patient_evidence"})
+            if source.get("source_kind") not in allowed:
+                # A failed business write cannot be resolved by reading a file
+                # or policy, and a failed file write cannot be resolved by a
+                # business-status read.
                 raise StateRefusal("chi_state_source_not_read")
             if unknown["scope"] not in {"unattributed", source["scope"]}:
                 raise StateRefusal("chi_state_case_mismatch")
@@ -485,48 +578,92 @@ class TaskState:
                 return "repeated_write_forbidden"
         return None
 
-    def can_claim(self) -> tuple[bool, str | None]:
+    def _business_mutations(self) -> list[dict]:
+        return [item for item in self.data["observations"]
+                if item.get("source_kind") in {"business_mutation", "unknown_mutation"}
+                and item["event"] != "refused"]
+
+    def _file_mutations(self) -> list[dict]:
+        return [item for item in self.data["observations"]
+                if item.get("source_kind") == "file_deliverable"]
+
+    def _completion(self) -> tuple[bool, str | None, str, str, str | None]:
+        """One shared completion evaluation for claim feedback and reports."""
+        if self.data.get("claim_violation"):
+            return False, "completion_blocked_claim_violation", "blocked", "violation", None
         open_unknowns = [item for item in self.data["unknowns"] if item["status"] == "open"]
         if open_unknowns:
-            return False, "completion_blocked_unknown:" + open_unknowns[0]["id"]
-        mutations = [item for item in self.data["observations"] if item["effect"] == "mutation"]
-        if mutations:
-            last = mutations[-1]
-            status = self.data["latest_business_status"]
-            if status is None or status["source_seq"] < last["seq"]:
-                return False, "completion_readback_required:" + last["call_id"]
-        return True, None
+            return False, "completion_blocked_unknown:" + open_unknowns[0]["id"], "blocked", "unknown", None
+        failed_files = [item for item in self._file_mutations()
+                        if item["event"] in {"failed", "returned_error"}]
+        if failed_files:
+            return (False, "completion_file_write_failed:" + failed_files[-1]["call_id"],
+                    "blocked", "not_verified", "file_delivery")
+        status = self.data["latest_business_status"]
+        business = self._business_mutations()
+        if business:
+            last = business[-1]
+            if status is None or status["source_seq"] <= last["seq"]:
+                return (False, "completion_readback_required:" + last["call_id"],
+                        "blocked", "not_verified", "business_status")
+        if status is None:
+            return True, None, "not_applicable", "not_observed", None
+        return True, None, "mechanical_pass", "observed", None
+
+    def can_claim(self) -> tuple[bool, str | None]:
+        allowed, reason, _verification, _effect, _missing = self._completion()
+        return allowed, reason
 
     def completion_report(self) -> dict:
         """Mechanical completion evidence, not a business or official verdict."""
-        allowed, reason = self.can_claim()
+        allowed, reason, verification, effect, required = self._completion()
         status = self.data["latest_business_status"]
-        mutations = [item for item in self.data["observations"] if item["effect"] == "mutation"]
-        last = mutations[-1] if mutations else None
+        status_view = None
+        if status is not None:
+            source = next((item for item in self.data["observations"]
+                           if item["call_id"] == status["source_call_id"]), None)
+            status_view = dict(status)
+            status_view.update({
+                "source_tool": source["tool"] if source else None,
+                "source_kind": source.get("source_kind") if source else None,
+                "source_scope": source["scope"] if source else None,
+                "source_event": source["event"] if source else None,
+            })
+        business = self._business_mutations()
+        files = self._file_mutations()
+        last_business = business[-1] if business else None
+        last_file = files[-1] if files else None
         open_unknowns = [item["id"] for item in self.data["unknowns"] if item["status"] == "open"]
-        if self.data.get("claim_violation"):
-            verification, effect = "blocked", "violation"
-        elif open_unknowns:
-            verification, effect = "blocked", "unknown"
-        elif not allowed:
-            verification, effect = "blocked", "not_verified"
-        elif status is None:
-            verification, effect = "not_applicable", "not_observed"
-        else:
-            verification, effect = "mechanical_pass", "observed"
+
+        def reference(item):
+            return None if item is None else {
+                "call_id": item["call_id"], "tool": item["tool"],
+                "seq": item["seq"], "event": item["event"],
+            }
+
+        limitations = []
+        if self.data["claim"] is None:
+            limitations.append("final_text_without_claim_not_blocked")
         return {
-            "schema": "chi-completion-v1",
+            "schema": COMPLETION_SCHEMA,
             "verification": verification,
             "business_effect": effect,
             "reason": reason,
             "target": dict(self.data["target"]),
             "claim": self.data["claim"],
-            "latest_business_status": status,
-            "last_mutation_call_id": last["call_id"] if last else None,
+            "claim_policy": "optional_final_text",
+            "latest_business_status": status_view,
+            "last_business_mutation": reference(last_business),
+            "last_file_mutation": reference(last_file),
+            "last_mutation_call_id": last_business["call_id"] if last_business else None,
+            "required_readback": required,
             "open_unknowns": open_unknowns,
             "claim_violation": bool(self.data.get("claim_violation")),
             "stagnation": self.data.get("stagnation"),
-            "note": "mechanical/source check only; not a clinical or official verdict",
+            "remaining_limitations": limitations,
+            "note": ("mechanical/source check only; not a clinical or official verdict; "
+                     "a successful file write after a business readback does not require "
+                     "another business readback, while failed file writes still block"),
         }
 
     def record_claim(self) -> dict:
@@ -563,7 +700,8 @@ class TaskState:
             "claim_violation": data.get("claim_violation", False),
             "stagnation": data.get("stagnation"),
             "observations": [
-                {key: item[key] for key in ("seq", "call_id", "tool", "effect", "scope", "event")}
+                {key: item[key] for key in ("seq", "call_id", "tool", "effect",
+                                            "source_kind", "scope", "event")}
                 for item in observations
             ],
             "observation_count": len(data["observations"]),

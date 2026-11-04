@@ -5,7 +5,7 @@ from go_chi_guidance import VERSION, digest, guidance
 
 class GuidanceTests(unittest.TestCase):
     def test_versioned_roles_and_digest(self):
-        self.assertEqual(VERSION, "chi-role-guidance-v1")
+        self.assertEqual(VERSION, "chi-role-guidance-v2")
         self.assertRegex(digest(), r"^[0-9a-f]{64}$")
         for role in ("provider", "payer", "cm"):
             value = guidance(role)
@@ -52,6 +52,14 @@ class GuidanceTests(unittest.TestCase):
             invariants = " ".join(guidance(role)["invariants"]).lower()
             self.assertIn("<case_id>/<role>/", invariants)
             self.assertIn("exact role id", invariants)
+
+    def test_business_status_source_and_file_write_rules_are_delivered(self):
+        for role in ("provider", "payer", "cm"):
+            invariants = " ".join(guidance(role)["invariants"]).lower()
+            self.assertIn("latest-business-status update", invariants)
+            self.assertIn("evidence only", invariants)
+            self.assertIn("does not require another business readback", invariants)
+            self.assertIn("failed file write still blocks", invariants)
 
     def test_digest_covers_the_delivered_workspace_invariant(self):
         import hashlib
