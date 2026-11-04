@@ -12,6 +12,7 @@ from urllib.parse import urlsplit
 
 from chi_bench.experiment.agents.openai_agents_harness import OpenAIAgentsHarness
 from evaluation_bundle import _check_components, _read_regular_bounded
+from go_chi_delivery import FORBIDDEN_ENV
 
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 
@@ -188,9 +189,9 @@ class GoChiHarness(OpenAIAgentsHarness):
         # The official Docker backend forwards these host credentials at start.
         # Inspect names only; do not read their values.
         host_env = getattr(environment, "_host_env", {})
-        if any(name in host_env for name in (
-                "CLAUDE_CODE_OAUTH_TOKEN", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
-                "GEMINI_API_KEY", "GROK_API_KEY", "XAI_API_KEY", "OPENROUTER_API_KEY")):
+        # Keep this list identical to the delivery plan: the direct DeepSeek
+        # key is as forbidden as the other provider credentials.
+        if any(name in host_env for name in FORBIDDEN_ENV):
             raise RuntimeError("chi_harness_environment_invalid")
         preflight = shlex.join(["python", values["CHI_GO_BUNDLE_ROOT"] + "/scripts/go_chi_entry.py",
                                 "preflight", "--bundle-sha256", values["CHI_GO_BUNDLE_SHA256"]])
