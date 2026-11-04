@@ -9,6 +9,7 @@
 - [x] 隔离构建Go/evaluation/release，真实identity/profile/preflight及新旧包差异核对，不mock核心校验。
 - [x] 原v1/S只读严格校验与原hash集合保留，默认/用途上限/零额外请求/未知停止反例。
 - [x] 单一[阶段报告](../../../reviews/summary-generation-budget-review.md)和REVIEW_STATE短状态、文档/暂存边界检查。
-- [ ] 提交/push/base=main PR，用户最终合并；PR存在及合并状态以GitHub和REVIEW_STATE为准。
+- [x] 提交/push/base=main [PR58](https://github.com/xsw932187210-cell/chi-agent/pull/58)，不merge/auto-merge。
+- [ ] 用户最终合并；PR存在及合并状态以GitHub和REVIEW_STATE为准。
 
 真实新B/摘要兼容/忠实度/费用收益/九题/Harbor/患者/judge/发布均未在本轮获准；不重跑原S、不迁移旧账或pending。
