@@ -53,6 +53,28 @@ class RoleOperatorConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check(value)
 
+    def test_validation_toggles_default_and_accept_exact_versions(self):
+        self.assertEqual(role_operator._validation_flags(self.check(dict(self.base))), [])
+        for field, version in (("input_summary", "chi-input-summary-v1"),
+                               ("output_recovery", "chi-output-recovery-v1")):
+            with self.subTest(field=field):
+                value = dict(self.base); value[field] = version
+                config = self.check(value)
+                self.assertEqual(role_operator._validation_flags(config), ["--" + field.replace("_", "-"), version])
+
+    def test_validation_toggles_reject_invalid_values_and_both(self):
+        for field in ("input_summary", "output_recovery"):
+            for bad in (None, True, 1, [], "", "chi-other-v1", "CHI-INPUT-SUMMARY-V1"):
+                with self.subTest(field=field, bad=bad):
+                    value = dict(self.base); value[field] = bad
+                    with self.assertRaises(ValueError):
+                        self.check(value)
+        both = dict(self.base)
+        both["input_summary"] = "chi-input-summary-v1"
+        both["output_recovery"] = "chi-output-recovery-v1"
+        with self.assertRaises(ValueError):
+            self.check(both)
+
     def test_local_rejects_state_relative(self):
         value = dict(self.base); value["history_mode"] = "local"
         value["state_relative"] = "runs/external-state"
