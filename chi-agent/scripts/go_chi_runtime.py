@@ -10,7 +10,7 @@ from opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as 
                                   _matches_patch, _same_route_reasoning)
 from model_runner_adapter import _patch_empty_history_compatibility
 from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
-from go_chi_policy import TIME_POLICY, RECOVERY_POLICY
+from go_chi_policy import TIME_POLICY, RECOVERY_POLICY, SUMMARY_VERSIONS
 from go_chi_guidance import digest as guidance_digest
 from go_chi_state import TaskState
 
@@ -111,7 +111,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     if journal.run["kind"] != "chi" or role not in {"provider", "payer", "cm"}:
         raise GoFailure("chi_run_contract_invalid")
     if journal.run['launch'].get('input_summary') is not None and (
-            journal.run['launch'].get('input_summary') != 'chi-input-summary-v1'
+            journal.run['launch'].get('input_summary') not in SUMMARY_VERSIONS
             or journal.run['launch'].get('output_recovery') is not None or evidence_shadow == 'shadow'):
         raise GoFailure('chi_summary_configuration_invalid')
     if auxiliary is not None and (role != 'cm' or auxiliary.journal is not journal
@@ -139,7 +139,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     summary_path = logs_dir / "summary-trace.jsonl"
     try:
         paths = [wire_path, recovery_path]
-        if journal.run['launch'].get('input_summary') == 'chi-input-summary-v1':
+        if journal.run['launch'].get('input_summary') in SUMMARY_VERSIONS:
             paths.append(summary_path)
         for path in paths:
             with path.open("x", encoding="utf-8") as handle:
@@ -148,7 +148,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         raise GoFailure("chi_log_persistence_failed") from None
     logical_steps = [0]
     wire_counts = {purpose: 0 for purpose in ('main', 'confirmation', 'continuation', 'patient_simulator')}
-    if journal.run['launch'].get('input_summary') == 'chi-input-summary-v1':
+    if journal.run['launch'].get('input_summary') in SUMMARY_VERSIONS:
         wire_counts['summary'] = 0
     context_path = logs_dir / "context.jsonl"
 
@@ -222,7 +222,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             canonical_tools = {tool.name: tool.name for tool in local}
             canonical_tools.update({name: value[1] for name, value in bridge.raw_names.items()})
             if (journal.run['launch'].get('output_recovery') == RECOVERY_POLICY['version']
-                    or journal.run['launch'].get('input_summary') == 'chi-input-summary-v1'):
+                    or journal.run['launch'].get('input_summary') in SUMMARY_VERSIONS):
                 if (set(canonical_tools) != {tool.name for tool in tools}
                         or len(set(canonical_tools.values())) != len(canonical_tools)):
                     raise GoFailure("chi_recovery_invalid")
@@ -352,10 +352,10 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         except Exception:
             failure = failure or "chi_log_persistence_failed"
         try:
-            if journal.run['launch'].get('input_summary') == 'chi-input-summary-v1':
+            if journal.run['launch'].get('input_summary') in SUMMARY_VERSIONS:
                 with summary_path.open('a', encoding='utf-8') as handle:
                     for event in journal.run.get('summary_events', []):
-                        value = {'schema': 'chi-summary-trace-v1', 'policy': 'chi-input-summary-v1',
+                        value = {'schema': 'chi-summary-trace-v1', 'policy': journal.run['launch']['input_summary'],
                                  'selection_sha256': event['selection_sha256'], 'summary_round': event['summary_round'],
                                  'candidate_sha256': event['candidate_sha256'], 'checkpoint_sha256': event['checkpoint_sha256'],
                                  'status': event['status'], 'projections': event['projections'],
@@ -398,8 +398,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                                                    "complete": len(settled) == len(agent_requests)},
                        "tool_events": len(journal.run["tool_events"]),
                        "elapsed_ms": int((time.monotonic() - run_started) * 1000), "official_reward": None}
-            if journal.run['launch'].get('input_summary') == 'chi-input-summary-v1':
-                summary.update({'input_summary_policy': 'chi-input-summary-v1',
+            if journal.run['launch'].get('input_summary') in SUMMARY_VERSIONS:
+                summary.update({'input_summary_policy': journal.run['launch']['input_summary'],
                                 'summary_events': len(journal.run['summary_events'])})
             if state is not None:
                 summary.update({

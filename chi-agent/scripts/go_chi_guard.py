@@ -17,7 +17,7 @@ from opencode_go_provider import (GoFailure, _contains_secret, _unique,
                                   SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
                                   SCHEMAS as B_SCHEMAS, DESCRIPTIONS as B_DESCRIPTIONS)
 from b_provider_transport import GuardedTransport
-from go_chi_policy import TIME_POLICY
+from go_chi_policy import TIME_POLICY, SUMMARY_VERSIONS, output_limit
 
 
 class ChiGuard(httpx.AsyncBaseTransport):
@@ -58,7 +58,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self._active_summary = None
         self.summary_snapshot = summary_snapshot
         if journal.run['launch'].get('input_summary') is not None:
-            if (journal.run['launch'].get('input_summary') != 'chi-input-summary-v1'
+            if (journal.run['launch'].get('input_summary') not in SUMMARY_VERSIONS
                     or journal.run['kind'] != 'chi' or journal.run['launch'].get('output_recovery') is not None
                     or not callable(summary_snapshot)):
                 raise GoFailure('chi_summary_configuration_invalid')
@@ -121,7 +121,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             keys = {"model", "messages", "max_tokens", "reasoning_effort", "thinking"}
             keys |= {"response_format"} if context is not None else set() if purpose == 'summary' else {"tools"}
             if (type(body) is not dict or set(body) != keys or body["model"] != "deepseek-v4.1-flash"
-                    or type(body["max_tokens"]) is not int or body["max_tokens"] != (1024 if coding_b else 32768 if context is not None else 8192)
+                    or type(body["max_tokens"]) is not int or body["max_tokens"] != output_limit(self.journal.run['kind'], purpose, self.journal.run['launch'].get('input_summary'))
                     or body["thinking"] != {"type": "enabled"} or body["reasoning_effort"] != "high"
                     or _contains_secret(body, self.secret, self.session)):
                 raise ValueError
@@ -323,7 +323,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
 
     async def _handle_input_summary(self, request):
         from go_chi_summary import canonical_sha, select_closed, summary_request, NOTICE
-        if self.journal.run['launch'].get('input_summary') != 'chi-input-summary-v1' or self.confirmation() is not None:
+        if self.journal.run['launch'].get('input_summary') not in SUMMARY_VERSIONS or self.confirmation() is not None:
             return False, None
         try:
             async with self.billing_lock:
@@ -357,7 +357,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 self._summary_check(request=request, raw_hash=raw_hash, contract_hash=snapshot,
                                     protected_hash=protected_hash, used=used)
                 if not events:
-                    candidate_request = summary_request(body, selection, protected)
+                    candidate_request = summary_request(body, selection, protected, self.journal.run['launch']['input_summary'])
                     summary_raw = json.dumps(candidate_request, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
                     minimal = copy.deepcopy(body)
                     minimal['messages'] = body['messages'][:2] + [{'role': 'user', 'content': json.dumps(
@@ -536,7 +536,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             if _contains_secret(payload, self.secret, self.session):
                 raise GoFailure("chi_secret_in_body")
             if (payload["usage"]["prompt_tokens"] > 1048576
-                    or payload["usage"]["completion_tokens"] > (1024 if self.journal.run["kind"] == "coding_b" else 32768 if purpose == "confirmation" else 8192)):
+                    or payload["usage"]["completion_tokens"] > output_limit(self.journal.run['kind'], purpose, self.journal.run['launch'].get('input_summary'))):
                 raise GoFailure("chi_usage_over_limit")
             recoverable = self._response(payload, purpose)
             self.safe_cause = None

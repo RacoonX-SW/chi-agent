@@ -23,7 +23,7 @@ from evaluation_bundle import BundleFailure, _check_components, _read_regular_bo
 from go_chi_bundle import validate_bundle
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
-from go_chi_policy import TIME_POLICY, FEE_POLICY, RECOVERY_POLICY, SUMMARY_POLICY
+from go_chi_policy import TIME_POLICY, FEE_POLICY, RECOVERY_POLICY, SUMMARY_POLICY, SUMMARY_VERSIONS, summary_policy
 from opencode_go_provider import GoFailure, INSTRUCTION, SYSTEM, load_profile
 
 CONFIG = {"schema": "chi-go-evaluation-entry-v1", "provider_profile_id": "opencode-go-deepseek-v4.1-flash-v1",
@@ -31,7 +31,8 @@ CONFIG = {"schema": "chi-go-evaluation-entry-v1", "provider_profile_id": "openco
           "chi_max_output_tokens": 8192, "confirmation_max_requests": 2,
           "confirmation_max_output_tokens": 32768, "coding_b_max_requests": 6,
           "coding_b_max_output_tokens": 1024, "automatic_retries": 0, "time_policy": TIME_POLICY, "fee_policy": FEE_POLICY,
-          "output_recovery_policy": RECOVERY_POLICY, "input_summary_policy": SUMMARY_POLICY}
+          "output_recovery_policy": RECOVERY_POLICY, "input_summary_policy": SUMMARY_POLICY,
+          "input_summary_policy_v2": summary_policy('chi-input-summary-v2')}
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -193,7 +194,7 @@ def _parser():
     parser.add_argument("--expected-request-sha256")
     parser.add_argument("--acknowledgement-reason")
     parser.add_argument("--output-recovery", choices=(RECOVERY_POLICY["version"],), default=None)
-    parser.add_argument("--input-summary", choices=(SUMMARY_POLICY["version"],), default=None)
+    parser.add_argument("--input-summary", choices=SUMMARY_VERSIONS, default=None)
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
     parser.add_argument("--mcp-url")

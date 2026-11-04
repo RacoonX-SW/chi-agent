@@ -60,9 +60,9 @@ def _config(path, expected):
         raise ValueError('config_invalid')
     if c.get('history_mode', 'local') not in {'local', 'external'}:
         raise ValueError('config_invalid')
-    for field, version in (('input_summary', 'chi-input-summary-v1'),
-                           ('output_recovery', 'chi-output-recovery-v1')):
-        if field in c and (type(c[field]) is not str or c[field] != version):
+    for field, versions in (('input_summary', ('chi-input-summary-v1', 'chi-input-summary-v2')),
+                            ('output_recovery', ('chi-output-recovery-v1',))):
+        if field in c and (type(c[field]) is not str or c[field] not in versions):
             raise ValueError('config_invalid')
     if 'input_summary' in c and 'output_recovery' in c:
         raise ValueError('config_invalid')

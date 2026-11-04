@@ -22,7 +22,7 @@ from go_chi_diagnostics import (SCHEMA_V2, build_cause, validate_cause, validate
 from go_chi_evidence import (envelope, write as write_evidence, verify as verify_evidence,
                              write_tool, verify_tool)
 from evaluation_bundle import _read_regular_bounded, _write_exclusive, _fsync_dir
-from go_chi_policy import FEE_POLICY
+from go_chi_policy import FEE_POLICY, SUMMARY_VERSIONS, output_limit
 
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -50,7 +50,7 @@ def _summary_enabled(launch: dict, kind: str) -> bool:
     if "input_summary" not in launch:
         return False
     if (kind != "chi" or type(launch['input_summary']) is not str
-            or launch['input_summary'] != SUMMARY_POLICY or 'output_recovery' in launch
+            or launch['input_summary'] not in SUMMARY_VERSIONS or 'output_recovery' in launch
             or launch.get('evidence_shadow') == 'shadow'):
         raise GoFailure("chi_summary_configuration_invalid")
     return True
@@ -842,7 +842,7 @@ class ChiJournal:
                             or item.get("purpose") not in ({"main", "confirmation"} | ({"patient_simulator"} if aux_enabled else set()) | ({"continuation"} if recovery_enabled else set()) | ({"summary"} if summary_enabled else set()))
                             or (a["kind"] == "coding_b" and item.get("purpose") != "main")
                             or (a['kind'] == 'patient_probe' and item.get('purpose') != 'patient_simulator')
-                            or item.get("max_tokens") != (1024 if a["kind"] == "coding_b" else 32768 if item.get("purpose") == "confirmation" else 8192)
+                            or item.get("max_tokens") != output_limit(a['kind'], item.get('purpose'), a['launch'].get('input_summary'))
                             or type(item.get("request_sha256")) is not str or not DIGEST.fullmatch(item["request_sha256"])):
                         raise ValueError
                     required = {"round", "purpose", "max_tokens", "request_sha256", "status",
@@ -1074,7 +1074,7 @@ class ChiJournal:
                 or selection['protected_sha256'] != canonical_sha(selection['protected'])
                 or selection['summary_sha256'] != canonical_sha(selection['summary_body'])
                 or selection['selection_sha256'] != canonical_sha(select_closed(selection['source_body']['messages']))
-                or selection['summary_sha256'] != canonical_sha(summary_request(selection['source_body'], selection['selection'], selection['protected']))):
+                or selection['summary_sha256'] != canonical_sha(summary_request(selection['source_body'], selection['selection'], selection['protected'], run['launch']['input_summary']))):
             raise ValueError
         scoped = copy.deepcopy(run)
         scoped['requests'] = scoped['requests'][:number - 1]
@@ -1335,7 +1335,7 @@ class ChiJournal:
             selection = select_closed(source_body['messages'])
             if selection is None:
                 raise ValueError
-            request = summary_request(source_body, selection, protected)
+            request = summary_request(source_body, selection, protected, self.run['launch']['input_summary'])
             number = len(self.run['requests']) + 1
             doc = {'schema': 'chi-summary-selection-v1', 'identity': self.state['identity'],
                    'run': self.run_id, 'source_body': source_body, 'source_sha256': canonical_sha(source_body),
@@ -1599,7 +1599,7 @@ class ChiJournal:
             raise GoFailure('chi_reservation_invalid')
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
         entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
-                 "max_tokens": 1024 if self.run["kind"] == "coding_b" else 32768 if purpose == "confirmation" else 8192,
+                 "max_tokens": output_limit(self.run['kind'], purpose, self.run['launch'].get('input_summary')),
                  "request_sha256": hashlib.sha256(raw).hexdigest(), "status": "pending",
                  "request_evidence_sha256": None, "response_evidence_sha256": None,
                  "diagnostic_evidence_sha256": None}

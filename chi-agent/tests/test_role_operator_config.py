@@ -56,6 +56,7 @@ class RoleOperatorConfigTests(unittest.TestCase):
     def test_validation_toggles_default_and_accept_exact_versions(self):
         self.assertEqual(role_operator._validation_flags(self.check(dict(self.base))), [])
         for field, version in (("input_summary", "chi-input-summary-v1"),
+                               ("input_summary", "chi-input-summary-v2"),
                                ("output_recovery", "chi-output-recovery-v1")):
             with self.subTest(field=field):
                 value = dict(self.base); value[field] = version
