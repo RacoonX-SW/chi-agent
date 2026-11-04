@@ -430,7 +430,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
              "Return the versioned role stage guide with legal branches, preconditions, readbacks and stop conditions. It contains no task answers or expected outcomes; decide from public observations.",
              empty, role_guidance_tool),
             ("local-fs-search",
-             "Search an allowlisted public directory or fixed reference file for a literal string. Returns bounded line hits with path, line, byte offset, file hash and truncation flags. Re-read the original context with local-fs-read before citing it.",
+             "Search an allowlisted handbook/public directory, fixed reference file, or the target case's role "
+             "workspace for a literal string. Returns bounded line hits with path, line, byte offset, file hash "
+             "and truncation flags. Re-read the original context with local-fs-read before citing it. Search "
+             "hits are evidence, not a business-status readback.",
              search_schema, fs_search),
         ])
     if evidence_shadow == "shadow":
