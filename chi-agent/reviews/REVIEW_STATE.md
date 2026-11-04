@@ -4,8 +4,8 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | 用户要求将计分讨论落为DeepSeek修改/验收文档，并追加希望处理摘要截断；本轮GPT只交付[最终验证前A–E离线加固规格](../openspec/changes/score-readiness-hardening/proposal.md)，未实施或启动运行。A–D覆盖完成语义、工具/条件性P0、配送、诊断/余量；E新增默认off的摘要v2最多一次有界接续。新清单硬门禁、选区方案B、加额度暂缓；原S失败及未隔离原因保持，E不证明真实改善 |
-| 协作 | 本轮GPT直接写规划文档及Git；用户随后交办DeepSeek后，由其作为唯一实施写入者按A–E离线自测并固定SHA，GPT独立复审；不重复派Gemini。文档合并不自动实施，用户最终验收/合并，不merge/auto-merge |
+| 当前任务 | 用户最新要求从PR57删除E摘要接续，保留[DeepSeek后续A–D离线规格](../openspec/changes/score-readiness-hardening/proposal.md)；GPT另用一个Terra/high子代理处理摘要专用生成预算，独立测试/复审并另开PR。不新增接续/用途或真实请求，不改主请求8192/high；原S失败、旧unknown及已用许可保留 |
+| 协作 | GPT直接维护PR57范围与Git；摘要预算由一个Terra/high子代理实施/Docker自测，GPT固定候选独立复审。A–D待用户后续交办DeepSeek，不在本轮启动；单写入者或隔离资源，用户最终合并，不merge/auto-merge |
 | 最新独立审核 | 已审/限定离线通过`9d36c54426131e97fdc6bf370c27a63e348288b4`（生产`afb9dff85de9599196f89c7c81a1f6b1d9691eee`，base=`1f5c580`）；包成员/实际身份恢复、argparse边界、B门禁及草稿核查通过。`6ffc6ca`/`0a8449e`初审失败及`83e0ceb`等历史通过保留，不回写旧候选 |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
 | 上次通过的实现提交 | W `ad2569937e0afe649807669c70f86da97c708e86` 仅在统一本地操作者、同账CM、失败/终态/清理及固定一次开发运行范围通过；payer业务不符原样保留。不能扩大为临床批准/官方成绩，official_reward=null |
@@ -19,7 +19,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | 本轮仅文档差异、链接和源码/参数引用核对，不做功能测试或真实运行。S既有禁网/严格reader/结算/失败seal/清理证据见对应报告，仍失败；既有离线通过、skip/anthropic环境缺项及旧候选意义不变 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR42–PR56已由用户合并；本轮A–E规格走base=main文档PR，由用户决定合并及给DeepSeek的离线实施启动。新包必要B及九题/最多16C只是规划；摘要v2真实请求另批，独立CHI探针计入16C且须明确调整九题优先计划。不自行调参、重跑S、转跑R或启动真实Harbor/判分/发布 |
+| PR 与下一步 | PR42–PR56已由用户合并；PR57仅保留A–D规划，原E按用户要求撤销，摘要预算专项另开base=main PR。用户合并预算修正后再交办DeepSeek其余任务。新包必要B/九题/摘要真实请求另批，独立CHI探针计入16C且明确调整九题优先顺序；不重跑S或启动真实Harbor/判分/发布 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；旧审批包保留历史，[新草案](../openspec/changes/validation-preparation/proposal.md)本身不授权，B/S各自具体批准及执行以对应报告为准，其他真实运行仍未获准 |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 结构/可靠性判断 | C3闭包/C4用途核对保持；C5已核对completed/outcome→解析推荐→最终决定，原MD字段不单独证明绕过。会话支持/临床充分性、未锁环境依赖和外部编排动态计时未关闭；[架构评审](../docs/architecture-review.md)保留历史及后续指针，不搬目录/拆journal |

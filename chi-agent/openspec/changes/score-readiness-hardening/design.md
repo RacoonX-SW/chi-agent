@@ -70,14 +70,14 @@ P0先核实错误实际发生层：协议结构/调用ID/参数schema→guard整
 
 正式包不含开发operator/患者broker、旧账、Key、受限手册/数据副本或调参轨迹。CM正式患者供应与开发Go模拟器分列；不能据CM004的10次辅助用量提高正式患者额度或宣称官方模拟器兼容。已有干净包/组件证据可以按实际身份复用，不为填表重复重建所有旧环境。
 
-最终开关默认保持off。E明确补齐摘要v2的包内/开发/正式透传与版本/互斥检查，但不默认启用；不能把包外接线当正式适配已完成。**除E明确规定的摘要开关外，本卡不新增其他能力开关。** 主请求输出恢复的正式接线仍在未来拟采用时另立任务，本卡记录其现状。
+最终开关默认保持off。正式harness缺少摘要/恢复透传仅在拟采用时才是待补缺口，本卡先列一致性清单及最小接线建议，不新增能力开关或改变默认值。摘要生成预算由GPT/Terra独立专项处理，不属于本卡；不能把包外接线当正式适配已完成。
 
 ### 怎么验收
 
 - Docker/Python3.12禁网、无Key的隔离包preflight真实返回身份；真实identity/profile不能打桩绕过，不挂旧源码/runs冒充干净供应。
 - 用真实Harbor组件的假environment/MockTransport离线走到实际entry参数或明确缺供给停止：三role各有正常装配与关键缺项反例；无真实world/Trial启动或请求。
 - 缺/错task-role、MCP工具面、公开reference、可写state/log或依赖按明确阶段报错；缺凭据的负例不得从宿主env搜索其他Key。
-- 最终off配置的正式/开发入口一致；E支持的v2透传实际到达launch及guard，未支持的主恢复开关如实列出；如果包外controller依赖尚未锁定，写明重现缺口及最小补齐建议，不全面升级依赖。
+- 最终off配置的正式/开发入口一致，未支持的摘要/恢复正式开关如实列出；如果包外controller依赖尚未锁定，写明重现缺口及最小补齐建议，不全面升级依赖。
 - 包manifest逐成员、runtime、旧evaluation及release wrapper的source_commit变化分别比较；不把wrapper改变混成内包改变。
 - 固定SDK/Harbor输入、结果/trajectory/context、失败传播与owned资源命名/清理的离线证据；真实兼容、取消在途和官方成绩仍未验证。
 
@@ -106,61 +106,9 @@ entry在runtime已写有效run_log时，保留已有受支持版本、有限安�
 
 既有输出恢复适用CHI主请求，默认关闭；仅在可信完整length响应、usage已结算、工具未派发且历史/预算满足时生成许可。无工具保留合法部分上下文再请求，有工具整批零接受/派发并从闭合历史重新生成；每链≤1、每run≤2，均占50，不保证模型语义连续。摘要用途明确排除，且首版与input_summary互斥。S探针只开摘要，故不能据本次失败判断恢复无效。[固定恢复契约](../project-completion/output-recovery.md)及[摘要观测](../../../reviews/summary-failure-diagnosis.md)保留各自含义。
 
-方案B是限制送去摘要的选区体量，尚未实施；缩小输入不保证减少reasoning或得到正文，仍不在本轮。用户后续要求处理摘要截断，故增加下节E独立冻结摘要接续契约；它复用有界恢复思路，不直接打开现有主请求恢复器，不降high或提高8192，不因剩余额度追加探针。
+方案B是限制送去摘要的选区体量，尚未实施；缩小输入不保证减少reasoning或得到正文，不在A–D范围。用户后续明确撤销本PR原E摘要接续卡，改由GPT主代理和一个Terra/high子代理另做摘要专用生成预算修正；A–D不实施接续、不增加用途或额外请求，也不修改该独立预算策略。旧S失败及已用许可不回写，不因剩余额度追加探针。
 
-## 7. E：摘要v2的最多一次有界接续（用户追加范围）
-
-### 7.1 目标、版本和请求数
-
-这是新增能力，不是修复v1在设计范围内的length停止。`chi-input-summary-v1`及已有S失败保持原义；新增显式版本`chi-input-summary-v2`，默认关闭，仍与`chi-output-recovery-v1`、Y shadow互斥。主请求恢复的旧mode/用途/次数不变，不把summary交给它的普通工具恢复分支。
-
-v2每run最多1条摘要链，根请求内部`purpose=summary`最多1次；根可信length时，内部`purpose=summary_continuation`最多1次。用途只用于程序许可、journal和trace，不往外部API加任意purpose字段。传输重试仍0；这次派生请求是明确披露的程序恢复，不宣称“无任何自动追加”。
-
-所有主/确认/主恢复/摘要/摘要接续物理请求合计≤50，辅助仍≤10，确认≤2；主恢复因互斥在v2 run中为0。两次摘要相关请求各自max_tokens=8192，模型/端点/thinking/high不变。总共可能生成最多两次8192，不是把一次上限暗改成16384，失败和未采用请求全部计入usage/费用。
-
-进入v2根摘要前，至少剩3个共享名额：根摘要、可能的接续及至少1次后继main；即已用共享请求≤47。无法预留时在发根摘要前按明确限额错误停止，不先发再追加超额名额。未触发摘要的原main路径不受这项预留影响。此保守规则可能比v1更早停止，需作为新增取舍披露。预留1次main只证明有一次后继机会，不保证整题有足够剩余轮次。
-
-### 7.2 唯一接续条件和派生wire
-
-根摘要响应必须同时满足：正确route/model/assistant结构、HTTP200、完整可信JSON、usage先成功settle、`finish_reason=length`、无tool_calls/function_call及其他不受支持的内容；content或reasoning至少有一个合法非空字符串，可作为未完成上下文。未知usage/结果、网络错误、取消、持久化失败、任何工具调用或不可解析响应均不接续，沿原门禁停止。两者都无内容不发空白恢复。
-
-程序在首个length被可恢复分支识别时进入v2状态机，不能先设置fatal再清除guard.error。现有v1仍原样拒绝。恢复前后再次检查源历史、selection/protected、程序工具记录/claim/case绑定及原run截止；期间不派发业务工具，不换source、模型、选区或阈值。
-
-接续body由程序确定性派生：原根摘要的system和user（含原source、schema、selection/protected hash与允许引用）保持字节/规范化绑定；追加真实根响应的合法assistant部分reasoning/正文表示，再追加固定程序指令，要求完成推理后**返回一份完整的新候选JSON对象**。不得让模型直接拼接JSON后缀；部分正文可作为未完成上下文，但根正文与子正文不拼接成安装候选。不得把reasoning当最终摘要，也不宣称恢复模型内部思考状态。
-
-固定接续指令应明确：旧source/保护真值/引用范围仍权威；部分内容不证明任何行动完成；不调用工具、不新增授权；仅返回原输出schema要求的完整对象。精确常量及body派生算法进入新版本身份，源引用与格式均可由严格reader独立重建；不从模型响应中接收新指令。继承route与合法请求头，不带失效content-length；不增加tools、response_format或API私有控制字段。
-
-接续wire重新计量并按用途预留8192，不能只检查根摘要体量；源历史与部分reasoning一起超出原context预算即停止，不截字、不缩选区重试。总截止沿用原run起点；length不是超时重发的理由。
-
-### 7.3 候选安装、证据及失败收口
-
-根若正常stop且完整有效，沿正常v2校验安装，不发接续；根若stop但候选schema/引用/保护/hash/节省量不合法，直接停止，不借接续修复任意坏JSON。只有上述可信length允许接续。
-
-接续必须正常stop、完整独立候选通过原schema/echo/来源引用及保护真值检查；最终派生main视图仍须节省≥1024 bytes、通过原context预算、保留最近闭合批次及完整SDK历史/工具保护。候选只作为不可信任务上下文，不升级语义忠实度。接续再length、空正文、tool_calls、非法候选/费用来源、unknown或落盘失败均立即停止；没有第二次接续、重新选区、原题重启或静默回退到无摘要main。
-
-新增一次性permit与v2 event/evidence：至少绑定contract、run/identity、根round及原request/response evidence hash、selection/protected、派生wire hash、child round、采用的最终response round/hash和消费状态；准备→reserve/消费→settle→候选→checkpoint→后继main的顺序可严格审计。reserve前未消费许可，reserve后即使失败也不可重用。v1的`summary_round`单响应含义不重解释；v2明确root、optional child、candidate response及projection关联。主恢复permit不能用作摘要permit，反之亦然。
-
-strict inspect、seal、包外run-summary及trace都须识别v2与新用途，逐笔计数/费用分列（main、confirmation、summary、summary_continuation），未知不能补零。原始body/evidence不修改。中断/已settled但无安装等状态仍可检查；不能只为让inspector通过改账。原v1 S证据用只读原hash核验、完整集合不变；新identity不能复用旧B。
-
-### 7.4 开关接线和有限实现边界
-
-包内entry接受显式v1/v2，不给旧profile版本静默升级；保留v1规则/常量及旧记录读法，新策略版本单列。包外operator与runner接受精确版本、默认不传，仍拒绝与主恢复/Y的组合。正式harness新增可选`CHI_GO_INPUT_SUMMARY`，缺省不传，只接受两个精确版本；在读取凭据及模型派发前拒绝空值/未知值，向entry仅透传一次。harness不转发Y，不顺带新增主请求恢复正式开关。
-
-实施涉及原summary/guard/journal/runtime/entry/profile、strict reader/summary工具及必要外部接线；允许复用纯计量/派生/证据原语，但不统一重构所有恢复状态机。精确event字段及有限错误码在E的首个规格提交/实现自测中固定，遵守上述绑定和验收，无需逐字段问用户；不得把语义不清留给真实探针试错。
-
-### 7.5 必须独立验收的正负例
-
-- 根stop合法→0接续→安装→真实SDK下一次MockTransport main含checkpoint；根stop坏候选→停止、0接续。
-- 根为本次S形态（reasoning-only length）→已settle→1接续→子stop完整候选→安装→main；另测length+部分正文但子返回完整对象，禁止拼接后缀。仅用自造候选证明协议路径，不冒充原真实失败已被修好。
-- 根/子带工具、错model/角色、非法字段、缺usage、取消/网络/超时、无内容、source/protected变化、坏hash/引用、子length/空正文/坏schema、落盘故障：无额外工具派发、无第二接续、无错误checkpoint；未知pending按原规则保留。
-- 直接调用/重复使用/跨run或跨用途permit、错父/root/response/wire、消费后的再次reserve等均拒绝；recovery与summary的permit不可互换。
-- used=47可至多根48/子49/main50，used=48时触发摘要前不发根；完整wire超预算或时间余量不足不发送；未触发摘要不扣虚构请求，正常stop根不占子名额。
-- SDK逻辑step与物理用途分别计数；根和子失败费用都在50分母内。合法tool历史及protected/claim状态不受接续影响，子响应不得直接成为业务工具批次。
-- 实际operator配置/runner/entry/journal.launch与正式harness→entry的禁网接缝：精确v1/v2各透传一次、默认off、未知/空值/双开/shadow在凭据/模型派发前拒绝；不能只断言配置对象。正式entry使用临时合成B/state或明确无B负例，原state不写。
-- 原v1摘要、主恢复的两mode及旧inspect/receipt/seal测试继续通过；原S120文件的只读集合/hash不变。新包真实identity/preflight/profile一致性及包成员比较，不mock核心校验。
-- 原S响应可只读回放证明旧v1仍按原规则失败，以及v2进入允许的length分类；未实际请求端点，不能写“恢复成功”。真实兼容、摘要忠实度和净费用收益分别保持未验，未触发的真实探针也不得追加到触发。
-
-## 8. 固定候选、独立审核和完成标准
+## 7. 固定候选、独立审核和完成标准
 
 每卡：现状反例→最小改动或不改理由→必要Docker/Python3.12禁网测试→固定提交。原始证据只读/本地保留；测试用自造case/文档/响应，不能拷贝隐藏期待结果。对低影响纯文档变更不新增镜像或镜像实现的测试。
 
@@ -168,4 +116,4 @@ strict inspect、seal、包外run-summary及trace都须识别v2与新用途，�
 
 各卡适用检查通过后才跑一次必要受影响集成回归；新增失败/修改才重复相关检查，不默认每卡重跑全历史。已知anthropic环境缺项和skip单列，不写全绿。GPT对固定SHA按本契约复审；DeepSeek自测、commit、push或PR不等于通过。
 
-完成必须有：A–E各项处理结论、实际测试证据、默认off与固定参数证明、v2新增用途/一次额外请求如实披露、内包/外层身份及旧B适用性结论、旧证据原样保留、未解决项/启用能力的额外准入；不要求凭本轮证明临床/官方得分或摘要/恢复真实兼容。最终候选真实B/九题的输入、状态、资源、费用和停止条件另行具体批准；离线通过不能自动启动。
+完成必须有：A–D各项处理结论、实际测试证据、默认off与实施基线参数不变证明、内包/外层身份及旧B适用性结论、旧证据原样保留、未解决项/启用能力的额外准入；不要求凭本轮证明临床/官方得分或摘要/恢复真实兼容。最终候选真实B/九题的输入、状态、资源、费用和停止条件另行具体批准；离线通过不能自动启动。
