@@ -80,3 +80,69 @@ release wrapper 因 source_commit 变化产生新 hash；内包 manifest/runtime
 - 两项探针的真实端点兼容、触发/未触发、取消/未知、费用/额度仍未验证；本轮零模型请求。
 - shadow 只在 runner 接缝拒绝；operator 不转发该 env，组合无法经 operator 开启，但未做容器级验证。
 - operator/controller 的未锁依赖（docker SDK 等）保持既有风险，未重构。
+
+## 7. GPT独立复审与交付记录（2026-11-04）
+
+固定复审候选 **`9d36c54426131e97fdc6bf370c27a63e348288b4`**，生产实现 **`afb9dff85de9599196f89c7c81a1f6b1d9691eee`**，base=`1f5c580218aff88175f095e13a6bec8fa7a59ad8`。**R1/R2在本次限定离线范围关闭，未发现新增阻断，可push/开PR；用户最终验收/合并。** 原`6ffc6ca`初审失败及原`0a8449e`累计初审失败保留，不以新通过回写旧候选，也不扩大为真实端点或正式交付通过。
+
+复审阶段严格只读；随后用户明确授权更新审核记录、push并创建base=main PR，保持零真实调用、不merge、不auto-merge。本次新增记录只改审核文档，生产/测试/profile字节与上述已审候选相同。没有派实现代理或要求Gemini重复审核。
+
+### 独立环境、命令与证据
+
+从上述三个固定Git提交分别`git archive`导出到仓库外，原工作区不作为可写测试目录。所有Python均在Docker/Python3.12、Linux arm64；`--pull=never --network none --read-only --tmpfs /tmp`，`PYTHONDONTWRITEBYTECODE=1`，无Key、`.env`或Docker socket挂载。固定vendor/SDK/PDF卷只读复用，实际环境与冻结身份一致，没有安装或升级依赖。
+
+- dev镜像：`sha256:b22f7c664bf5da8994d7199f1482536b0b4ab36d0d522ae121c4a0562ed044b3`，`/opt/venv/bin/python`。
+- controller镜像：`sha256:24bef2e2c7e30bb972667b29afd0ed80d6fb79ae735210b8e3167ee5013b0bf3`，`/opt/a-venv/bin/python`。
+- 依赖卷：`chi-h-root-model-deps-20261027-v1`、`chi-k-pdf-deps-20261027-v1`。
+
+独立原始证据集中 `/private/tmp/chi-review-9d36c54/`，`audit/`为复现脚本、`evidence/`为日志、`exports/`为新导出包；不上传这些原始产物。第一轮失败审查仍保留在 `/private/tmp/chi-review-6ffc6ca/`。
+
+| 固定对象/检查 | GPT实际执行结果 | evidence文件 |
+| --- | --- | --- |
+| 最终9d36c54适用pytest | **892 passed、13 skipped、275 subtests**，18.00s、exit0 | `pytest.log` |
+| controller配置/接线 | **12 tests OK**（5+7），exit0 | `controller-tests.log` |
+| base/实现/文档候选各自新导出Go/evaluation/release | 三组Go 41成员与冻结包逐项相同；release验证通过 | `build.log` |
+| 最终新Go导出包真实CLI preflight | `identity_verified`，manifest/runtime恢复冻结值 | `preflight.json` |
+| 最终新evaluation包真实运行身份 | `_runtime_identity()`通过 | `identity-evaluation.json` |
+| 自有argparse差分/实际runner子进程 | 36种合法前缀形式、重复/分隔边界；指定8种子进程均在entry前拒绝，3种非组合保留entry解析 | `argparse-repro.json` |
+| 新包+返工runner的入口/B门禁反例 | 两项有B均止于缺凭据、零请求；无B均拒绝且无attempt；原15文件不变 | `entry-repro.log` |
+| 两草稿SHA/dev hash/资源/原state核查 | 均匹配；原state仅一次B，无probe attempt，输出目录不存在 | `drafts.log` |
+
+实际测试命令均在上述Docker限制中，源码只读、`/workspace/runs`仅绑定仓库外测试输出：
+
+```text
+python -m pytest tests --ignore=tests/test_dev_patient_adapter.py --ignore=tests/test_dev_patient_network.py -q -rs -p no:cacheprovider
+python -m unittest tests.test_role_operator_config tests.test_role_validation_wiring -v
+python /audit/build.py
+python /package/scripts/go_chi_entry.py preflight --bundle-sha256 de326a26e20c6b6b29ea11c50805d2679143f7bc3eb62ad4035f4a56cf8a30bb
+python /audit/identity.py（KIND=evaluation）
+python /audit/argparse_repro.py
+python /audit/entry_repro.py
+python /audit/drafts.py
+```
+
+pytest明确忽略两个缺`anthropic`的收集模块，不称完整全绿。13个skip为5项Harbor overlay、3项旧Docker operator、5项role operator配置；后5项在controller独立执行。各组结果有重叠，不相加。
+
+### R1独立关闭
+
+base与最终候选的分发runbook Git blob均为`141095ade204a6eaa01c2ab2ca1721d03c70d2a6`。从base、`afb9dff`、`9d36c54`分别重建，三组41成员的hash/大小均与原冻结包相同；不是仅复查旧导出目录。Go manifest为`de326a26…`，最终新导出包真实CLI得到runtime `c9b1571d…`；旧evaluation manifest与实际运行身份不变。
+
+独立重建的生产实现release manifest为`5d2d2d6f…`，source_commit=`afb9dff…`；与作者指定release的manifest及SHA256SUMS原始字节一致。三组wrapper JSON去掉source_commit后相同；若以文档候选`9d36c54`作source_commit，wrapper manifest为`427840b4c05b7c86f3e4d8347572a49c60b11fdf3cd0afa6d2b8000543affd10`。后者属于文档HEAD重建，不替代生产实现release记录。
+
+原冻结候选清单、原封存release manifest及原B收据hash均未变；原B state的15文件与B阶段原始hash清单逐项相同。旧失败提交/审查报告保留，没有修改旧收据、身份算法或allowlist来消除差异，也没有重复真实B。
+
+### R2独立关闭
+
+自有脚本以包内真实`_parser()`的解析结果为基准，枚举两能力全部被接受的无歧义前缀及分离/等号形式，共36种合法形式；均正确识别并在shadow下拒绝。每种形式另检查重复参数、能力参数在`--`之前而mode在其后的合法边界；混合两能力也拒绝。普通参数通过等号绑定的“形似能力开关”的值没有被误判。
+
+当前parser没有能力短选项别名；单横线伪选项、歧义`--output-r`、能力位于`--`后的非法额外参数均由真实parser拒绝，未发现当前合法语法绕过。指定8种形式均另以实际`role_runner.py`子进程验证：stdout为空、`evidence_shadow_exclusive`发生在包内entry parser之前，未打桩entry制造结果。无shadow、shadow=off、shadow无能力参数三种实际子进程保留entry原有参数解析行为。
+
+本结论限当前固定parser和CLI接缝；实现仍自行扫描token，未来parser增加alias/nargs时需重新核查。建议保留这些差分边界测试，不要求为本次交付扩大重构。
+
+### 入口证据、草稿及剩余边界
+
+使用本次新Go包、实际返工runner及原B state的仓库外临时副本，无Key/禁网执行入口。两项合法开关均进入`journal.launch`后止于`chi_credential_missing`，requests=0、pending=null；无B负例均为`chi_b_receipt_missing`、attempts=[]。原state只读挂载，15文件与原始清单及审查前后均相同。**这只证明入口元数据及B门禁，不证明能力已经执行、端点兼容或账户前史已结清。**
+
+两份草稿的实际SHA与第5节一致，dev_sha256对应当前包外脚本，资源manifest/角色/任务/选定冻结包匹配，输出目录尚未创建；所选真实state仍只有原一次B。它们没有产生真实journal/attempt/world/请求，仍须分别取得G0后继处置范围及具体config/hash/用途/次数的明确许可。
+
+完整operator→容器→world链、真实摘要/恢复触发、取消/未知处理、摘要忠实度/净费用、官方Harbor/judge和controller未锁依赖仍未验证。本次独立复审及本轮文档/Git交付均为零真实模型/摘要/续写/B/C请求，无world/Trial/judge或发布；PR和合并均不自动恢复这些权限。
