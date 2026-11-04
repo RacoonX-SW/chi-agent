@@ -8,9 +8,10 @@ from test_go_chi_summary_review import Flow
 
 class PersistenceMatrix(unittest.TestCase):
     def test_checkpoint_boundaries_are_sticky_and_never_retry(self):
+      for version in ('chi-input-summary-v1', 'chi-input-summary-v2'):
         for kind in ('summary-selection','summary-candidate','summary-checkpoint','summary-projection'):
-            with self.subTest(kind=kind),tempfile.TemporaryDirectory() as d:
-                f=Flow(Path(d),'valid');original=journal_module.write_evidence;hits=[]
+            with self.subTest(version=version,kind=kind),tempfile.TemporaryDirectory() as d:
+                f=Flow(Path(d),'valid',version);original=journal_module.write_evidence;hits=[]
                 def fail(root,run,number,selected,value):
                     if selected==kind:
                         hits.append(selected);raise OSError('synthetic fsync/write failure')

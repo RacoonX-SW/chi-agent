@@ -339,7 +339,8 @@ def select_closed(messages, *, end=None):
     return {'start': 2, 'end': end, 'source_messages': copy.deepcopy(messages[2:end]), 'sources': sources}
 
 
-def summary_request(source_body, selection, protected):
+def summary_request(source_body, selection, protected, version):
+    from go_chi_policy import summary_policy
     """Create a fixed no-tools request; caller validates and reserves it."""
     if (type(source_body) is not dict or source_body.get('model') != 'deepseek-v4.1-flash'
             or source_body.get('reasoning_effort') != 'high'
@@ -351,7 +352,7 @@ def summary_request(source_body, selection, protected):
                'instruction': source_body['messages'][1]['content'],
                'source_messages': copy.deepcopy(selection['source_messages']),
                'sources': copy.deepcopy(selection['sources'])}
-    return {'model': source_body['model'], 'max_tokens': 8192,
+    return {'model': source_body['model'], 'max_tokens': summary_policy(version)['max_output_tokens'],
             'reasoning_effort': 'high', 'thinking': {'type': 'enabled'},
             'messages': [{'role': 'system', 'content': SYSTEM},
                          {'role': 'user', 'content': json.dumps(content, ensure_ascii=False,

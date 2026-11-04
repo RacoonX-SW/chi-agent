@@ -14,7 +14,11 @@ Agent 可见资源只包括公开 instruction/工具参考、已授权的 manage
 
 运行模型固定 `deepseek-v4.1-flash`，SDK base URL 为 `https://opencode.ai/inference/go/openai/v1`，thinking/high，不追加 `[1m]`。文档标称上下文不等于实测百万 token；自有 User-Agent、每对话稳定 session、TLS、禁用代理/redirect/自动重试均是接点的一部分。
 
-自主任务的 SDK turns 上限为 50；main、患者确认与 continuation 共享最多 50 次 provider 请求，患者模拟保持原独立计数。患者确认最多两次。主请求及 continuation 输出上限 8192，确认 32768。可信剩余次数按实际已发送数刷新；一次 SDK 模型步可包含主响应与一次 continuation，工具次数也不等于模型请求数。coding B 仍是独立固定探针合约，最多 6 次/1024 输出，不进入恢复器，不作为临床业务成功证据。
+自主任务的 SDK turns 上限为 50；main、患者确认、summary 与 continuation 共享最多 50 次 provider 请求，患者模拟保持原独立计数。患者确认最多两次。主请求及 continuation 输出上限 8192，确认 32768。可信剩余次数按实际已发送数刷新；一次 SDK 模型步可能包含摘要子请求或受控 continuation，工具次数也不等于模型请求数。coding B 仍是独立固定探针合约，最多 6 次/1024 输出，不进入恢复器，不作为临床业务成功证据。
+
+可选输入摘要默认关闭。包内 `live --input-summary chi-input-summary-v1` 保留旧单次生成上限 8192；显式 `chi-input-summary-v2` 的单次 summary 生成上限为 32768，thinking/high、选区、候选结构和时间窗口不变。两版本都每 run 最多一次 summary，计入共享50且须留后继 main；仍与输出恢复/Y shadow互斥。较大生成上限包含reasoning，不要求最终摘要变长：完整候选JSON仍最多32768 UTF-8 bytes（不是32768 tokens）。length、无效候选或未知按原规则停止，不续写或重试。较大窗口可能增加耗时/费用，不保证模型真实生成成功或摘要忠实。
+
+两版本的请求/响应上限、输出预留和严格历史检查均按 launch 版本绑定，旧v1记录不按v2重解释。新包须使用自己的identity和适用B收据，不能复用旧包收据。正式 `GoChiHarness` 当前仍不透传摘要开关，保持默认off；上述是包内CLI能力，正式采用需调用方后续接线/具体授权，不能凭本说明直接发真实请求。
 
 HTTP 连接/写入/连接池等待分别为 10/60/60 秒；主请求及 continuation 读取超时 240 秒，确认 360 秒。Guard 对完整发送与读取再施加主请求及 continuation 300 秒、确认 420 秒绝对上限。B 的新请求只在开始后 180 秒内准入，C 为 900 秒；恢复不重置起点或总截止。窗口内已发出的请求可以继续至其自身上限。控制器配置 `timeout_seconds` 的范围为 B 360–3600 秒、C 1380–3600 秒。这里沿用现有 TIME_POLICY 数值；超时不触发自动重试，未知用量仍阻断后续调用。
 

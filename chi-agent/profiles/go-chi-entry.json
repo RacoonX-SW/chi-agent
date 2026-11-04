@@ -36,6 +36,17 @@
     "retained_batches": 2,
     "minimum_reduction_bytes": 1024
   },
+  "input_summary_policy_v2": {
+    "version": "chi-input-summary-v2",
+    "default_enabled": false,
+    "max_per_run": 1,
+    "max_output_tokens": 32768,
+    "shared_max_requests": 50,
+    "trigger_numerator": 4,
+    "trigger_denominator": 5,
+    "retained_batches": 2,
+    "minimum_reduction_bytes": 1024
+  },
   "output_recovery_policy": {
     "version": "chi-output-recovery-v1",
     "default_enabled": false,

@@ -22,6 +22,8 @@ class ValidationWiringTests(unittest.TestCase):
         parsed = parser.parse_args(base + ["--input-summary", "chi-input-summary-v1"])
         self.assertEqual(parsed.input_summary, "chi-input-summary-v1")
         self.assertIsNone(parsed.output_recovery)
+        parsed = parser.parse_args(base + ["--input-summary", "chi-input-summary-v2"])
+        self.assertEqual(parsed.input_summary, "chi-input-summary-v2")
         parsed = parser.parse_args(base + ["--output-recovery", "chi-output-recovery-v1"])
         self.assertEqual(parsed.output_recovery, "chi-output-recovery-v1")
         self.assertIsNone(parsed.input_summary)
@@ -31,6 +33,7 @@ class ValidationWiringTests(unittest.TestCase):
 
     FORMS = (
         ("--input-summary", "chi-input-summary-v1", "chi-input-summary-v1"),
+        ("--input-summary", "chi-input-summary-v2", "chi-input-summary-v2"),
         ("--input-summary=chi-input-summary-v1", None, "chi-input-summary-v1"),
         ("--input-s", "chi-input-summary-v1", "chi-input-summary-v1"),
         ("--input-s=chi-input-summary-v1", None, "chi-input-summary-v1"),

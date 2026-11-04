@@ -22,18 +22,18 @@ def candidate(data):
       'facts':[{'text':'Earlier observations remain historical statements.','sources':[data['sources'][0]]}],
       'uncertainties':[],'actions':[],'gaps':[],'current_work':'Continue from recent results.','next_steps':['Read current state.']}
 class Flow:
-    def __init__(self,parent,mode):
-        self.mode=mode;self.instruction='Audit synthetic case CASE-A; preserve uncertainty.'
+    def __init__(self,parent,mode,version='chi-input-summary-v1'):
+        self.mode=mode;self.version=version;self.instruction='Audit synthetic case CASE-A; preserve uncertainty.'
         self.root=parent/'ledger';self.state=TaskState(parent/'task-state',run='r',role='payer')
         self.j=ChiJournal(self.root,identity='a'*64,evaluation='e',task='synthetic',attempt='a',run='r',
-          launch={'role':'payer','input_summary':'chi-input-summary-v1','instruction_sha256':hashlib.sha256(self.instruction.encode()).hexdigest()})
+          launch={'role':'payer','input_summary':version,'instruction_sha256':hashlib.sha256(self.instruction.encode()).hexdigest()})
         self.messages=[];self.sent=[];self.views=[];self.summary_calls=0;self.main_calls=0;self.post=0
         self.originals=[];self.error=None
         self.guard=ChiGuard(self.j,SECRET,SESSION,httpx.MockTransport(self.answer),tools=TOOLS,
           system='Synthetic system',instruction=self.instruction,claimed=lambda:False,confirmation=lambda:None,
           canonical_tools={'read':'triage.get','write':'payer_intake_hub.save_auth_header'},
           summary_snapshot=lambda:(None,copy.deepcopy(self.state.data)),
-          context_limit=dict(DEFAULT_BUDGET,max_estimated_tokens=65000))
+          context_limit=dict(DEFAULT_BUDGET,max_estimated_tokens=100000 if version.endswith('v2') else 65000))
     def reply(self,req,message,finish='stop',usage=USAGE):
         value={'model':MODEL,'choices':[{'finish_reason':finish,'message':message}]}
         if usage is not None:value['usage']=usage
@@ -71,7 +71,7 @@ class Flow:
            'tool_calls':[self.call(name,'call_'+str(self.main_calls))]},'tool_calls')
     def assert_summary(self,body):
         assert set(body)=={'model','messages','max_tokens','thinking','reasoning_effort'}
-        assert body['max_tokens']==8192 and body['reasoning_effort']=='high'
+        assert body['max_tokens']==(8192 if self.version.endswith('v1') else 32768) and body['reasoning_effort']=='high'
         data=json.loads(body['messages'][1]['content'])
         schema=data['output_schema']
         assert schema['properties']['schema']['const']=='chi-summary-candidate-v1'
@@ -120,6 +120,21 @@ class Flow:
         assert result['status']=='inspected'
         assert before=={str(p.relative_to(self.root)):p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
 class IndependentSummary(unittest.TestCase):
+    def test_v2_wrong_wire_max_is_rejected_before_dispatch(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Flow(Path(d), 'valid', 'chi-input-summary-v2')
+            body = {'model': MODEL, 'messages': [], 'max_tokens': 8192,
+                    'thinking': {'type': 'enabled'}, 'reasoning_effort': 'high'}
+            req = httpx.Request('POST', URL, headers={'Authorization':'Bearer '+SECRET,
+                'User-Agent':'chi-agent', 'X-OpenCode-Session':SESSION}, json=body)
+            f.guard._active_summary = {'kind':'summary', 'request':req, 'body_sha256':'0'*64}
+            with self.assertRaises(GoFailure) as error:
+                f.guard._validate(req, req.content)
+            self.assertEqual(error.exception.code, 'chi_request_invalid')
+            self.assertEqual(f.sent, [])
+            self.assertIsNone(f.j.state['pending'])
+            f.j.close()
+
     def test_valid_original_history_survives_and_checkpoint_reuses(self):
         with tempfile.TemporaryDirectory() as d:
             f=asyncio.run(Flow(Path(d),'valid').run())
@@ -132,9 +147,12 @@ class IndependentSummary(unittest.TestCase):
             self.assertTrue(all(r['result'] is not None for r in f.guard.contract.records))
             f.close_and_audit()
     def test_rejected_candidates_never_send_a_projected_main(self):
-        for mode in ('invalid','extra','empty','duplicate','hash','ref','large','not_reduced','length','tool','changed','unknown','cancel'):
-            with self.subTest(mode=mode),tempfile.TemporaryDirectory() as d:
-                f=asyncio.run(Flow(Path(d),mode).run())
+        for version in ('chi-input-summary-v1', 'chi-input-summary-v2'):
+          for mode in ('invalid','extra','empty','duplicate','hash','ref','large','not_reduced','length','tool','changed','unknown','cancel'):
+            if version.endswith('v2') and mode == 'not_reduced':
+                continue  # This longer selection is actually reduced by the same candidate.
+            with self.subTest(version=version,mode=mode),tempfile.TemporaryDirectory() as d:
+                f=asyncio.run(Flow(Path(d),mode,version).run())
                 self.assertIsNotNone(f.error);self.assertEqual(f.summary_calls,1);self.assertEqual(f.views,[])
                 self.assertNotEqual(f.j.run['summary_events'][0]['status'],'installed')
                 self.assertEqual(f.j.state['pending'] is not None,mode in {'unknown','cancel'})
