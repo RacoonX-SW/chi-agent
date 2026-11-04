@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-VERSION = "chi-role-guidance-v2"
+VERSION = "chi-role-guidance-v3"
 
 _INVARIANTS = {
     "provider": [
@@ -153,17 +153,26 @@ def guidance(role: str, state_summary: dict | None = None) -> dict:
     summary = state_summary if type(state_summary) is dict else {}
     target = summary.get("target") if type(summary.get("target")) is dict else {}
     next_candidates = summary.get("next_candidates") if type(summary.get("next_candidates")) is list else []
+    plans = summary.get("plans") if type(summary.get("plans")) is list else []
+    gaps = summary.get("gaps") if type(summary.get("gaps")) is list else []
+    open_gaps = [item for item in gaps if type(item) is dict and item.get("status") == "open"]
+    open_unknowns = [item for item in summary.get("unknowns", [])
+                     if type(item) is dict and item.get("status") == "open"]
+    blocked = bool(open_unknowns or summary.get("claim_violation") or summary.get("stagnation"))
     return {
         "schema": VERSION,
         "role": role,
         "stages": _STAGES[role],
         "invariants": delivered_invariants()[role],
         "current_target": target,
+        "plans": plans,
+        "open_gaps": open_gaps,
         "next_candidates": next_candidates,
         "state_version": summary.get("version"),
-        "unknowns": [item for item in summary.get("unknowns", [])
-                     if type(item) is dict and item.get("status") == "open"],
-        "note": "Guidance only; decide from public observations and read back after writes.",
+        "unknowns": open_unknowns,
+        "blocked": blocked,
+        "note": ("Guidance only; decide from public observations and read back after writes. "
+                 "Optional MD, patient refusal/STOP, not-applicable and blocked branches remain legal."),
     }
 
 

@@ -21,6 +21,7 @@ sys.dont_write_bytecode = True
 
 from evaluation_bundle import BundleFailure, _check_components, _read_regular_bounded
 from go_chi_bundle import validate_bundle
+from go_chi_diagnostics import validate_cause
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
 from go_chi_policy import TIME_POLICY, FEE_POLICY, RECOVERY_POLICY, SUMMARY_POLICY, SUMMARY_VERSIONS, summary_policy
@@ -50,6 +51,173 @@ def _same(a, b):
     if isinstance(a, dict): return a.keys() == b.keys() and all(_same(a[k], b[k]) for k in a)
     if isinstance(a, list): return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
     return a == b
+
+
+RUN_LOG_SCHEMA = "chi-go-run-log-v2"
+MAX_RUN_LOG_BYTES = 1024 * 1024
+_RUN_LOG_KEYS = frozenset({
+    "schema", "status", "safe_error_code", "safe_cause", "provider_requests",
+    "physical_requests", "logical_model_steps", "recovery_policy",
+    "recovery_permits_consumed", "recovery_limits", "journal_usage",
+    "journal_usage_scope", "current_run_agent_usage", "tool_events",
+    "final_output_claimed", "elapsed_ms", "official_reward",
+    "input_summary_policy", "summary_events", "capabilities", "guidance_version",
+    "guidance_sha256", "task_state_version", "task_state_target",
+    "task_state_claim", "task_state_claim_violation", "task_state_open_unknowns",
+    "completion", "task_state_sha256", "context_budget", "context_requests",
+    "context_max_chars", "context_max_estimated_tokens", "context_prompt_tokens",
+    "patient_simulator_requests", "patient_simulator_input_tokens_known",
+    "patient_simulator_output_tokens_known", "first_error_code",
+    "outer_error_code", "cleanup_error_code", "journal_error_code",
+    "log_fallback", "log_fallback_reason",
+})
+_RUN_LOG_INTS = frozenset({
+    "provider_requests", "logical_model_steps", "recovery_permits_consumed",
+    "tool_events", "elapsed_ms", "summary_events", "task_state_version",
+    "context_requests", "context_max_chars", "context_max_estimated_tokens",
+    "context_prompt_tokens", "patient_simulator_requests",
+    "patient_simulator_input_tokens_known", "patient_simulator_output_tokens_known",
+})
+_RUN_LOG_STRINGS = frozenset({
+    "status", "safe_error_code", "recovery_policy", "journal_usage_scope",
+    "input_summary_policy", "capabilities", "guidance_version", "guidance_sha256",
+    "task_state_sha256", "context_budget", "first_error_code", "outer_error_code",
+    "cleanup_error_code", "journal_error_code", "log_fallback_reason",
+})
+_RUN_LOG_JSON = frozenset({
+    "safe_cause", "physical_requests", "recovery_limits", "journal_usage",
+    "current_run_agent_usage", "task_state_target", "task_state_claim",
+    "task_state_open_unknowns", "completion",
+})
+_SAFE_CODE = re.compile(r"^[a-z0-9_]{1,64}$")
+_SAFE_TEXT = re.compile(r"^[ -~]{0,256}$")
+
+
+def _bounded_json(value, *, depth=0):
+    """Accept only bounded JSON primitives from a runtime-produced log."""
+    if depth > 6:
+        return False
+    if value is None or type(value) in {bool, int}:
+        return True
+    if type(value) is float:
+        return value == value and value not in {float("inf"), float("-inf")}
+    if type(value) is str:
+        return len(value) <= 1024 and not any(ord(ch) < 32 for ch in value)
+    if type(value) is list:
+        return len(value) <= 256 and all(_bounded_json(item, depth=depth + 1) for item in value)
+    if type(value) is dict:
+        return (len(value) <= 64
+                and all(type(key) is str and len(key) <= 64
+                        and _bounded_json(item, depth=depth + 1)
+                        for key, item in value.items()))
+    return False
+
+
+def _read_run_log(logs_dir):
+    """Read a bounded, whitelisted run log; return None on any invalid shape."""
+    path = logs_dir / "run_log.txt"
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        raw = _read_regular_bounded(path, MAX_RUN_LOG_BYTES, "chi_run_log_invalid")
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=_pairs,
+                           parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+    except Exception:
+        return None
+    if type(value) is not dict or value.get("schema") != RUN_LOG_SCHEMA:
+        return None
+    if any(key not in _RUN_LOG_KEYS for key in value):
+        return None
+    for key, item in value.items():
+        if key in _RUN_LOG_INTS:
+            if type(item) is not int or isinstance(item, bool) or item < 0:
+                return None
+        elif key in _RUN_LOG_STRINGS:
+            if item is not None and (type(item) is not str or not _SAFE_TEXT.fullmatch(item)):
+                return None
+            if (key in {"safe_error_code", "first_error_code", "outer_error_code",
+                        "cleanup_error_code", "journal_error_code"}
+                    and item is not None and not _SAFE_CODE.fullmatch(item)):
+                return None
+            if key in {"guidance_sha256", "task_state_sha256"} and item is not None \
+                    and not DIGEST.fullmatch(item):
+                return None
+            if key == "status" and item not in {"complete", "incomplete"}:
+                return None
+        elif key in _RUN_LOG_JSON:
+            if key == "safe_cause":
+                if item is not None and not validate_cause(item):
+                    return None
+            elif not _bounded_json(item):
+                return None
+        elif key == "official_reward":
+            if item is not None:
+                return None
+        elif key == "task_state_claim_violation" or key == "final_output_claimed":
+            if type(item) is not bool:
+                return None
+        elif key == "log_fallback":
+            if type(item) is not bool:
+                return None
+    return value
+
+
+def _write_run_log(logs_dir, value):
+    path = logs_dir / "run_log.txt"
+    try:
+        if path.is_symlink():
+            return False
+        raw = json.dumps(value, sort_keys=True, allow_nan=False).encode("utf-8")
+        if len(raw) > MAX_RUN_LOG_BYTES:
+            return False
+        with path.open("w", encoding="utf-8") as handle:
+            handle.write(raw.decode("utf-8"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        return True
+    except Exception:
+        return False
+
+
+def _failure_run_log(logs_dir, *, error, journal_error=None):
+    """Preserve a valid runtime log and add the outer failure layer."""
+    existing = _read_run_log(logs_dir)
+    if existing is None:
+        value = {"schema": RUN_LOG_SCHEMA, "status": "incomplete",
+                 "safe_error_code": error, "first_error_code": error,
+                 "outer_error_code": None, "log_fallback": True,
+                 "log_fallback_reason": "invalid_or_missing_runtime_log",
+                 "official_reward": None}
+    else:
+        value = dict(existing)
+        first = existing.get("safe_error_code")
+        if type(first) is not str or not _SAFE_CODE.fullmatch(first):
+            first = error
+            outer = None
+        else:
+            outer = error if error != first else None
+        value.update({"schema": RUN_LOG_SCHEMA, "status": "incomplete",
+                      "safe_error_code": first, "first_error_code": first,
+                      "outer_error_code": outer, "log_fallback": False})
+    if journal_error is not None:
+        value["journal_error_code"] = journal_error
+    return _write_run_log(logs_dir, value)
+
+
+def _cleanup_run_log(logs_dir, code):
+    existing = _read_run_log(logs_dir)
+    if existing is None:
+        value = {"schema": RUN_LOG_SCHEMA, "status": "incomplete",
+                 "safe_error_code": code, "first_error_code": None,
+                 "outer_error_code": None, "cleanup_error_code": code,
+                 "log_fallback": True, "log_fallback_reason": "invalid_or_missing_runtime_log",
+                 "official_reward": None}
+    else:
+        value = dict(existing)
+        value.update({"status": "incomplete", "cleanup_error_code": code})
+        if not value.get("safe_error_code"):
+            value["safe_error_code"] = code
+    return _write_run_log(logs_dir, value)
 
 
 def _identity(expected):
@@ -373,9 +541,10 @@ def main(argv=None, *, development=None):
             (logs_dir / "run_result.json").write_text(json.dumps({"status": "complete", "official_reward": None,
                 "run_id": args.run_id, "requests": len(journal.run["requests"]),
                 "usage": journal.usage_totals()}, sort_keys=True), encoding="utf-8")
-            (logs_dir / "run_log.txt").write_text(json.dumps({"status": "complete", "safe_error_code": None,
+            (logs_dir / "run_log.txt").write_text(json.dumps({"schema": RUN_LOG_SCHEMA,
+                "status": "complete", "safe_error_code": None,
                 "provider_requests": len(journal.run["requests"]), "tool_events": len(journal.run["tool_events"]),
-                "official_reward": None}, sort_keys=True), encoding="utf-8")
+                "final_output_claimed": False, "official_reward": None}, sort_keys=True), encoding="utf-8")
         else:
             import httpx
             from go_chi_runtime import run_chi
@@ -402,25 +571,35 @@ def main(argv=None, *, development=None):
         if type(error) is not str or not re.fullmatch(r"[a-z0-9_]{1,64}", error):
             error = "chi_entry_failed"
         output = {"status": "incomplete" if journal is not None else "blocked", "safe_error_code": error, "official_reward": None}
+        journal_error = None
         if journal is not None:
-            try: journal.finish("failed", error)
-            except Exception: output["safe_error_code"] = "chi_persistence_failed"
             try:
-                if "logs_dir" in locals() and logs_dir.is_dir():
-                    (logs_dir / "run_error.json").write_text(json.dumps(output, sort_keys=True), encoding="utf-8")
-                    (logs_dir / "run_log.txt").write_text(json.dumps({"status": "incomplete", "safe_error_code": error,
-                        "provider_requests": len(journal.run["requests"]), "tool_events": len(journal.run["tool_events"]),
-                        "official_reward": None}, sort_keys=True), encoding="utf-8")
+                journal.finish("failed", error)
             except Exception:
-                output["safe_error_code"] = "chi_log_persistence_failed"
+                journal_error = "chi_persistence_failed"
+                output["safe_error_code"] = journal_error
+            logs = locals().get("logs_dir")
+            if logs is not None and logs.is_dir():
+                try:
+                    (logs / "run_error.json").write_text(json.dumps(output, sort_keys=True), encoding="utf-8")
+                except Exception:
+                    output["safe_error_code"] = "chi_log_persistence_failed"
+                if not _failure_run_log(logs, error=error, journal_error=journal_error):
+                    output["safe_error_code"] = "chi_log_persistence_failed"
         if isinstance(exc, KeyboardInterrupt): output["safe_error_code"] = "chi_interrupted"
     finally:
+        cleanup_error = None
         if journal is not None:
             try: journal.close()
-            except Exception: output, code = {"status": "incomplete", "safe_error_code": "chi_cleanup_failed", "official_reward": None}, 1
+            except Exception: cleanup_error = "chi_cleanup_failed"
         if q is not None:
             try: q.close()
-            except Exception: output, code = {"status": "incomplete", "safe_error_code": "chi_cleanup_failed", "official_reward": None}, 1
+            except Exception: cleanup_error = "chi_cleanup_failed"
+        if cleanup_error is not None:
+            output, code = {"status": "incomplete", "safe_error_code": cleanup_error, "official_reward": None}, 1
+            logs = locals().get("logs_dir")
+            if logs is not None and logs.is_dir():
+                _cleanup_run_log(logs, cleanup_error)
     if code == 0 and b_receipt is not None:
         try:
             publish_b_receipt(output_root, identity, b_receipt)

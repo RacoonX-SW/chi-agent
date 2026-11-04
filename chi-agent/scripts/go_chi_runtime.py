@@ -384,7 +384,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             failure = failure or "chi_log_persistence_failed"
         try:
             guard_ref = holder.get("guard")
-            summary = {"status": "incomplete" if failure else "complete", "safe_error_code": failure,
+            summary = {"schema": "chi-go-run-log-v2",
+                       "status": "incomplete" if failure else "complete", "safe_error_code": failure,
                        "safe_cause": getattr(guard_ref, "safe_cause", None),
                        "provider_requests": len(agent_requests),
                        "physical_requests": dict(wire_counts),
@@ -397,6 +398,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                        "current_run_agent_usage": {"input_tokens_known": input_tokens, "output_tokens_known": output_tokens,
                                                    "complete": len(settled) == len(agent_requests)},
                        "tool_events": len(journal.run["tool_events"]),
+                       "final_output_claimed": bool(journal.run["claim_done"]),
                        "elapsed_ms": int((time.monotonic() - run_started) * 1000), "official_reward": None}
             if journal.run['launch'].get('input_summary') in SUMMARY_VERSIONS:
                 summary.update({'input_summary_policy': journal.run['launch']['input_summary'],

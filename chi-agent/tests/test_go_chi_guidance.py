@@ -5,7 +5,7 @@ from go_chi_guidance import VERSION, digest, guidance
 
 class GuidanceTests(unittest.TestCase):
     def test_versioned_roles_and_digest(self):
-        self.assertEqual(VERSION, "chi-role-guidance-v2")
+        self.assertEqual(VERSION, "chi-role-guidance-v3")
         self.assertRegex(digest(), r"^[0-9a-f]{64}$")
         for role in ("provider", "payer", "cm"):
             value = guidance(role)
@@ -38,14 +38,21 @@ class GuidanceTests(unittest.TestCase):
 
     def test_state_context_and_open_unknowns_are_surfaced(self):
         summary = {"version": 7, "target": {"case_id": "CASE-A"},
+                   "plans": [{"text": "finish review"}],
+                   "gaps": [{"text": "missing letter", "status": "open"},
+                            {"text": "old gap", "status": "resolved"}],
                    "next_candidates": [{"text": "read status"}],
                    "unknowns": [{"id": "u1", "status": "open"},
                                 {"id": "u2", "status": "resolved"}]}
         value = guidance("payer", summary)
         self.assertEqual(value["state_version"], 7)
         self.assertEqual(value["current_target"], {"case_id": "CASE-A"})
+        self.assertEqual(value["plans"], [{"text": "finish review"}])
+        self.assertEqual([item["text"] for item in value["open_gaps"]], ["missing letter"])
         self.assertEqual(value["next_candidates"], [{"text": "read status"}])
         self.assertEqual([item["id"] for item in value["unknowns"]], ["u1"])
+        self.assertTrue(value["blocked"])
+        self.assertIn("patient refusal", value["note"])
 
     def test_workspace_convention_is_stated_for_every_role(self):
         for role in ("provider", "payer", "cm"):
