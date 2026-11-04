@@ -14,6 +14,7 @@ import httpx
 import uvicorn
 
 from dev_patient_broker import PatientBroker
+import go_chi_entry
 from go_chi_entry import main
 
 STATUS_PATH = Path('/runner-logs/lifecycle.json')
@@ -21,10 +22,32 @@ CAPABILITY_PATH = Path('/run/chi-capability')
 SHADOW_FLAGS = ('--input-summary', '--output-recovery')
 
 
+def _option_strings():
+    return {option for action in go_chi_entry._parser()._actions
+            for option in action.option_strings}
+
+
+def _resolved_option(token, options):
+    """Resolve one token the way the package argparse parser does (exact, =, abbreviation)."""
+    if type(token) is not str or not token.startswith('--'):
+        return None
+    name = token.split('=', 1)[0]
+    if name in options:
+        return name
+    matches = [option for option in options if option.startswith(name)]
+    return matches[0] if len(matches) == 1 else None
+
+
+def selected_validation_flags(argv):
+    options = _option_strings()
+    return {resolved for resolved in (_resolved_option(token, options) for token in argv)
+            if resolved in SHADOW_FLAGS}
+
+
 def reject_shadow_with_validation_flags(argv, env=None):
     """Y shadow and the two context policies stay mutually exclusive."""
     env = os.environ if env is None else env
-    if env.get('CHI_DEV_EVIDENCE_SHADOW') == 'shadow' and any(flag in argv for flag in SHADOW_FLAGS):
+    if env.get('CHI_DEV_EVIDENCE_SHADOW') == 'shadow' and selected_validation_flags(argv):
         raise RuntimeError('evidence_shadow_exclusive')
 
 

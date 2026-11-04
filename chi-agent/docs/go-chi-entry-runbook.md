@@ -20,8 +20,6 @@ HTTP 连接/写入/连接池等待分别为 10/60/60 秒；主请求及 continua
 
 输入按最终实际发送的完整 JSON 计量，覆盖 reasoning、工具定义、参数、结果、中文及结构，记录原始 wire 字节；`chi-context-v2` 的 UTF-8 字节估算不是精确 tokenizer，容量依据仍标为 configured_unverified。本次输出预留取配置基础预留与实际 max_tokens 的较大值，未知容量、坏配置和超限在发送前拒绝。
 
-开发操作者 `role_operator.py` 现在可通过配置可选字段 `input_summary` / `output_recovery` 透传对应 CLI（精确版本、二者互斥、缺省不传；与 `CHI_DEV_EVIDENCE_SHADOW=shadow` 组合在 `role_runner` 拒绝）。以下能力语义仍只由包内 live 入口执行。
-
 输入摘要默认关闭，仅 CHI `live` 可显式选择 `--input-summary chi-input-summary-v1`；不可同时启用输出恢复或 payer evidence shadow。摘要每 run 最多一次，计入共享 50，保留后续 main 额度；固定保留最近两个完整工具批次。SDK 历史仍完整，程序仅对实际 wire 构造检查点，保护状态以程序记录为准。摘要请求无工具通道，失败、未知用量或持久化异常停止，不自动重发；真实端点兼容性和摘要语义忠实度尚未验证，启用仍须对应真实请求授权及新候选准入。
 
 输出恢复默认关闭。仅 CHI `live` 入口支持显式选项 `--output-recovery chi-output-recovery-v1`，版本写入 launch；启用必须另有对应真实请求授权及新候选准入。可信 length 先留证结算，程序再消耗一次性许可；每链最多一次、每运行最多两次追加，全部计入共享 50。无工具的 length 精确保留同源部分正文/reasoning 后接续；含工具的 length 整批零执行，从最后合法历史重新生成。新工具仍经过原批次、实体、角色、路径、claim 门禁及已完成写指纹检查。不拼接工具参数、不造 tool 结果；再次 length、取消、网络、未知或持久化失败停止，不跨进程自动续发。

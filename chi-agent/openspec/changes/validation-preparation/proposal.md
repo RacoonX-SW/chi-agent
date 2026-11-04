@@ -68,7 +68,7 @@ python /package/scripts/go_chi_entry.py coding-b \
 
 ## 4. S：输入摘要端点兼容（以后单独审批）
 
-**准入依赖**：G0明确覆盖S、B成功且收据仍适用、无新pending/halt/未确认清理；先完成报告第8节DeepSeek的包外开关接线及GPT定向离线审核。当前operator不透传，**本项尚不可直接执行**。仅operator改动且内包逐字不变可沿本候选；包变则重建/新B/重绑方案，不能自动套用本许可。
+**准入依赖**：G0明确覆盖S、B成功且收据仍适用、无新pending/halt/未确认清理；先完成报告第8节DeepSeek的包外开关接线及GPT定向离线审核。包外 operator 已支持透传（精确版本、互斥、缺省关闭），但**本项仍需独立授权，尚不可直接执行**。仅operator改动且内包逐字不变可沿本候选；包变则重建/新B/重绑方案，不能自动套用本许可。
 
 **入口/资源/用途**：`role_operator.py --config <新固定配置> --config-sha256 <实际SHA>` → `role_runner.py` → 本候选 `go_chi_entry.py live --input-summary chi-input-summary-v1`。包外 `role_operator` 已支持两开关透传（精确版本、互斥、缺省关闭）；以下探针配置仍为草案，执行须另行授权。禁止填历史 tri-on2 配置假装开启。role=payer，task=`pa_t030_t030_o002_p01_triage_payer`，run=`vprep-s-001`、attempt=`summary-probe-1`，上述同evaluation/state；输出=`runs/validation-live-20261104/summary`。报告第5节的公开instruction/reference/手册/world及manifest/image hash为资源清单；Agent只见公开输入和正常工具观察，隐藏初始化资料留官方服务、不解析答案选动作。每次新world，不续用旧业务状态。
 
