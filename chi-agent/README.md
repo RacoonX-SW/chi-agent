@@ -445,10 +445,10 @@ with os.fdopen(fd, "w") as out:
 | --- | --- | --- |
 | `local-task-state` | 读取本次 run 的目标、事实/计划/缺口、未知写、最新业务状态和下一步候选 | 只读摘要，不含原始工具正文 |
 | `local-state-update` | 模型提交带来源的更新 | 事实/状态必须引用已登记 call_id；拒绝旧来源、错 case、改绑患者、把 unknown 改成成功/失败 |
-| `local-role-guidance` | 返回 `chi-role-guidance-v1` 阶段/分支/停止条件 | 不含 task ID、期望结局或隐藏答案 |
+| `local-role-guidance` | 返回 `chi-role-guidance-v3` 阶段/分支/停止条件 | 不含 task ID、期望结局或隐藏答案 |
 | `local-fs-search` | 在已授权目录/固定文件中做有界文本检索 | 不建索引、不跟随符号链接；文件/字节/结果/片段均有限制 |
 
-状态写入 `logs/task-state/`（`task-state.json` 与 `versions/`），不写 `chi-accounting.json`。`local-claim_done` 在启用时额外检查：open unknown、写后未回读、同批后续工具；被拒绝时返回具体原因，模型可在剩余预算内查证后重试。claim 之后再尝试写会被拒绝并标记 `claim_violation`，该 run 以 `chi_claim_violation` 结束为 incomplete；journal 的 claim 记录保持单调，不回写历史。`local-fs-search` 在 workspace 内只允许当前 target case；单个文件/PDF 不可读返回 `ERROR: search_unreadable`，不伪装成无匹配。`capabilities=None` 保留旧工具集和旧 claim 行为，仅用于离线基线/对照，不作为真实运行绕过开关。
+状态写入 `logs/task-state/`（`task-state.json` 与 `versions/`），不写 `chi-accounting.json`。`local-claim_done` 在启用时额外检查：open unknown、业务写后缺少业务状态回读、失败的文件写、同批后续工具；被拒绝时返回具体原因，模型可在剩余预算内查证后重试。claim 之后再尝试写会被拒绝并标记 `claim_violation`，该 run 以 `chi_claim_violation` 结束为 incomplete；journal 的 claim 记录保持单调，不回写历史。`local-fs-search` 在 workspace 内只允许当前 target case；单个文件/PDF 不可读返回 `ERROR: search_unreadable`，不伪装成无匹配。`capabilities=None` 保留旧工具集和旧 claim 行为，仅用于离线基线/对照，不作为真实运行绕过开关。
 
 这只验证合成 SDK/MCP 边界；真实模型是否使用这些工具、真实任务收益、官方评分和正式配送仍未验证。契约见 [F0–F3 设计](openspec/changes/agent-capabilities-f0-f3/design.md)，实际候选/限制见 [阶段报告](reviews/f0-f3-agent-capabilities-review.md)。
 
@@ -466,7 +466,7 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 
 `run_chi()` 默认启用 `context_budget=DEFAULT_BUDGET`（`chi-context-budget-v1`）：3.5M 字符、1M 估计 token、8192 输出预留，来源标 `configured_unverified`。每次通过 contract 的请求在 `journal.reserve()` 前测量 system/instruction/tools/history/tool_result/reasoning，写入 `logs/context.jsonl`（只含计数，不含正文）；超限在发送前返回 `chi_context_budget_exceeded`。`run_log.txt` 另记 `context_requests`、最大字符/估计 token 和已结算输入 token。自动历史压缩**未采用**：当前完整批次校验要求未满足新 contract/真实协议证据，不能靠删消息绕过。
 
-完成核验通过 `local-completion-check` 返回 `chi-completion-v1`，区分 `mechanical_pass/not_applicable/blocked` 与 `observed/not_observed/not_verified/unknown/violation`，并写入 run_log 的 `completion`；它不替代 claim，也不是临床或官方 verdict。
+完成核验通过 `local-completion-check` 返回 `chi-completion-v2`，区分 `mechanical_pass/not_applicable/blocked` 与 `observed/not_observed/not_verified/unknown/violation`，并写入 run_log 的 `completion`；它不替代 claim，也不是临床或官方 verdict。业务状态更新只能引用目标 case 的业务状态读；文件/手册/政策读只是证据。业务回读后保存交付文件不要求再次业务回读，但文件写失败和未知写效果仍阻止完成。
 
 F6 对 MCP mutation 的 dispatch 异常返回 `UNKNOWN_WRITE_EFFECT: <code>`，登记 open unknown；未知期间拒绝所有写，只能用同目标更晚只读观察 resolve；未解决结束为 `chi_unknown_write_effect` incomplete。重复读第 3 次追加 `STAGNATION`、第 5 次拒绝；重复写第 2 次拒绝；不自动重试或换模型。本地文件写异常仍按原逻辑失败。
 
