@@ -89,6 +89,8 @@
 
 本节最初为文档规划；后续实际启动和候选验收只查 REVIEW_STATE。优先级/核对证据见[架构评审](../../../docs/architecture-review.md)，完整范围/验收只见[设计第15节](design.md#15-可靠性治理与分阶段重构)及对应spec；不在本清单复制当前SHA或测试数量，作者交付不自动勾成验收完成。
 
+最终验证前的计分讨论及额外接缝已另立[有界离线加固规格](../score-readiness-hardening/proposal.md)；改法/反例见其design，执行勾选只在其tasks。该文档不改写下列历史勾选，也不启动功能实现或真实调用。
+
 ### Codex关键项
 
 - [x] C1 只读核对payer-010旧/新state、evaluation、授权、未知及后继准入关系，不修改原账；事实核查完成，未知结算/后继授权证据仍未闭合，不恢复真实准入。见[C1/C3阶段报告](../../../reviews/c1-c3-admission-package-review.md)。
