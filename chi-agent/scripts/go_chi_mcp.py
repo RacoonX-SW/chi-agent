@@ -188,15 +188,30 @@ class MCPBridge:
                 value = response.model_dump(mode="json", exclude_none=True)
                 content = getattr(response, "content", None)
                 structured = getattr(response, "structuredContent", None)
-                if (not is_error and structured is None and type(content) is list and len(content) == 1
-                        and getattr(content[0], "type", None) == "text"
-                        and type(getattr(content[0], "text", None)) is str):
+                single_text = (type(content) is list and len(content) == 1
+                               and getattr(content[0], "type", None) == "text"
+                               and type(getattr(content[0], "text", None)) is str)
+                if not is_error and single_text:
+                    # The text block is the tool's primary result.  When the
+                    # structured form carries the same payload, return the
+                    # text once instead of also serializing structuredContent
+                    # and the full model dump (which repeats it up to three
+                    # times and can push the next request past the provider's
+                    # latency budget).  binding.observe() already saw the raw
+                    # response, so patient visibility checks keep structured
+                    # content.  If the two forms differ, keep both.
                     result = content[0].text
+                    if type(structured) is dict:
+                        try:
+                            same = json.loads(result) == structured
+                        except Exception:
+                            same = False
+                        if not same:
+                            result = result + "\n" + json.dumps(structured, ensure_ascii=False, allow_nan=False)
+                elif not is_error and type(structured) is dict:
+                    result = json.dumps(structured, ensure_ascii=False, allow_nan=False)
                 else:
-                    # Keep the entire returned object and expose structured
-                    # content in readable form for patient visibility checks.
-                    prefix = json.dumps(structured, ensure_ascii=False) + "\n" if type(structured) is dict else ""
-                    result = prefix + json.dumps(value, ensure_ascii=False, allow_nan=False)
+                    result = json.dumps(value, ensure_ascii=False, allow_nan=False)
                 if warning:
                     result = result + "\n" + warning
                 self.guard.contract.record_result(selected["id"], result)
