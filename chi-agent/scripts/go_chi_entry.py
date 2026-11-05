@@ -21,7 +21,7 @@ sys.dont_write_bytecode = True
 
 from evaluation_bundle import BundleFailure, _check_components, _read_regular_bounded
 from go_chi_bundle import validate_bundle
-from go_chi_diagnostics import validate_cause
+from go_chi_diagnostics import is_safe_error_code, validate_cause
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
 from go_chi_policy import TIME_POLICY, FEE_POLICY, RECOVERY_POLICY, SUMMARY_POLICY, SUMMARY_VERSIONS, summary_policy
@@ -90,27 +90,216 @@ _RUN_LOG_JSON = frozenset({
     "task_state_open_unknowns", "completion",
 })
 _SAFE_CODE = re.compile(r"^[a-z0-9_]{1,64}$")
-_SAFE_TEXT = re.compile(r"^[ -~]{0,256}$")
 
 
-def _bounded_json(value, *, depth=0):
-    """Accept only bounded JSON primitives from a runtime-produced log."""
-    if depth > 6:
+_COMPLETION_REASON = re.compile(
+    r"^completion_(blocked_claim_violation|blocked_unknown|file_write_failed|readback_required)"
+    r"(:[A-Za-z0-9_-]{1,128})?$")
+_TARGET_KEYS = {"case_id", "patient_id"}
+_CLAIM_KEYS = {"version", "target", "verified_status_call_id", "at_utc_ms", "kind"}
+_REFERENCE_KEYS = {"call_id", "tool", "seq", "event"}
+_STATUS_KEYS = {"text", "source_call_id", "source_seq", "source_tool",
+                "source_kind", "source_scope", "source_event"}
+_COMPLETION_V2_KEYS = {
+    "schema", "verification", "business_effect", "reason", "target", "claim",
+    "claim_policy", "latest_business_status", "last_business_mutation",
+    "last_file_mutation", "last_mutation_call_id", "required_readback",
+    "open_unknowns", "claim_violation", "stagnation", "remaining_limitations", "note",
+}
+_COMPLETION_V3_KEYS = _COMPLETION_V2_KEYS | {"unresolved_file_deliveries"}
+_SOURCE_KINDS = {"business_status", "business_mutation", "business_evidence",
+                 "policy_evidence", "file_evidence", "file_deliverable",
+                 "patient_evidence", "neutral", "unknown_mutation", "other_evidence"}
+_EVENTS = {"returned", "returned_error", "refused", "failed"}
+_PHYSICAL_KEYS = {"main", "confirmation", "continuation", "patient_simulator", "summary"}
+
+
+def _is_int(value, minimum=0):
+    return type(value) is int and not isinstance(value, bool) and value >= minimum
+
+
+def _is_text(value, limit=256, *, allow_newlines=False, allow_empty=False):
+    if type(value) is not str or len(value) > limit or (not value and not allow_empty):
         return False
-    if value is None or type(value) in {bool, int}:
+    for ch in value:
+        if allow_newlines and ch in "\n\t":
+            continue
+        if ord(ch) < 32 or ord(ch) == 127:
+            return False
+    return True
+
+
+def _is_code(value, *, allow_none=True):
+    if value is None:
+        return allow_none
+    return is_safe_error_code(value)
+
+
+def _is_target(value):
+    return (type(value) is dict and set(value) == _TARGET_KEYS
+            and all(item is None or _is_text(item, 96) for item in value.values()))
+
+
+def _is_claim(value):
+    if value is None:
         return True
-    if type(value) is float:
-        return value == value and value not in {float("inf"), float("-inf")}
-    if type(value) is str:
-        return len(value) <= 1024 and not any(ord(ch) < 32 for ch in value)
-    if type(value) is list:
-        return len(value) <= 256 and all(_bounded_json(item, depth=depth + 1) for item in value)
-    if type(value) is dict:
-        return (len(value) <= 64
-                and all(type(key) is str and len(key) <= 64
-                        and _bounded_json(item, depth=depth + 1)
-                        for key, item in value.items()))
-    return False
+    return (type(value) is dict and set(value) == _CLAIM_KEYS
+            and _is_int(value["version"])
+            and _is_target(value["target"])
+            and (value["verified_status_call_id"] is None
+                 or _is_text(value["verified_status_call_id"], 128))
+            and _is_int(value["at_utc_ms"], 1)
+            and value["kind"] == "model_claim")
+
+
+def _is_reference(value):
+    if value is None:
+        return True
+    return (type(value) is dict and set(value) == _REFERENCE_KEYS
+            and _is_text(value["call_id"], 128) and _is_text(value["tool"], 128)
+            and _is_int(value["seq"], 1) and value["event"] in _EVENTS)
+
+
+def _is_status_view(value):
+    if value is None:
+        return True
+    return (type(value) is dict and set(value) == _STATUS_KEYS
+            and _is_text(value["text"], 800, allow_newlines=True)
+            and _is_text(value["source_call_id"], 128)
+            and _is_int(value["source_seq"], 1)
+            and _is_text(value["source_tool"], 128)
+            and value["source_kind"] in _SOURCE_KINDS
+            and _is_text(value["source_scope"], 128)
+            and value["source_event"] in _EVENTS)
+
+
+def _is_open_unknowns(value):
+    return (type(value) is list and len(value) <= 16
+            and all(type(item) is str and re.fullmatch(r"u[0-9]{1,3}", item)
+                    for item in value))
+
+
+def _is_completion(value):
+    if type(value) is not dict:
+        return False
+    schema = value.get("schema")
+    if schema == "chi-completion-v2":
+        keys = _COMPLETION_V2_KEYS
+    elif schema == "chi-completion-v3":
+        keys = _COMPLETION_V3_KEYS
+    else:
+        return False
+    if set(value) != keys:
+        return False
+    if value["verification"] not in {"mechanical_pass", "not_applicable", "blocked"}:
+        return False
+    if value["business_effect"] not in {"observed", "not_observed", "not_verified",
+                                         "unknown", "violation"}:
+        return False
+    reason = value["reason"]
+    if reason is not None and (type(reason) is not str
+                               or not _COMPLETION_REASON.fullmatch(reason)):
+        return False
+    if not _is_target(value["target"]) or not _is_claim(value["claim"]):
+        return False
+    if value["claim_policy"] != "optional_final_text":
+        return False
+    if not _is_status_view(value["latest_business_status"]):
+        return False
+    if not _is_reference(value["last_business_mutation"]) \
+            or not _is_reference(value["last_file_mutation"]):
+        return False
+    if value["last_mutation_call_id"] is not None \
+            and not _is_text(value["last_mutation_call_id"], 128):
+        return False
+    if value["required_readback"] not in {None, "business_status", "file_delivery"}:
+        return False
+    if not _is_open_unknowns(value["open_unknowns"]):
+        return False
+    if type(value["claim_violation"]) is not bool:
+        return False
+    stagnation = value["stagnation"]
+    if stagnation is not None:
+        if (type(stagnation) is not dict
+                or set(stagnation) != {"tool", "count", "call_id", "effect"}
+                or not _is_text(stagnation["tool"], 128)
+                or not _is_int(stagnation["count"], 1)
+                or (stagnation["call_id"] is not None
+                    and not _is_text(stagnation["call_id"], 128))
+                or not _is_text(stagnation["effect"], 64)):
+            return False
+    limitations = value["remaining_limitations"]
+    if (type(limitations) is not list
+            or any(item not in {"final_text_without_claim_not_blocked"}
+                   for item in limitations)):
+        return False
+    if not _is_text(value["note"], 1024, allow_newlines=True):
+        return False
+    if schema == "chi-completion-v3":
+        unresolved = value["unresolved_file_deliveries"]
+        if type(unresolved) is not list or len(unresolved) > 256:
+            return False
+        for item in unresolved:
+            if (type(item) is not dict
+                    or set(item) != {"call_id", "tool", "resource", "event"}
+                    or not _is_text(item["call_id"], 128)
+                    or not _is_text(item["tool"], 128)
+                    or not _is_text(item["resource"], 2048)
+                    or item["event"] not in {"failed", "returned_error"}):
+                return False
+    return True
+
+
+def _is_physical_requests(value):
+    return (type(value) is dict and set(value) <= _PHYSICAL_KEYS
+            and all(_is_int(item) for item in value.values()))
+
+
+def _is_current_usage(value):
+    return (type(value) is dict
+            and set(value) == {"input_tokens_known", "output_tokens_known", "complete"}
+            and _is_int(value["input_tokens_known"])
+            and _is_int(value["output_tokens_known"])
+            and type(value["complete"]) is bool)
+
+
+def _is_recovery_limits(value):
+    return (type(value) is dict
+            and set(value) == {"per_chain", "per_run", "shared_requests"}
+            and all(_is_int(item, 1) for item in value.values()))
+
+
+def _is_journal_usage(value):
+    if type(value) is not dict:
+        return False
+    if set(value) != {"input_tokens_known", "output_tokens_known", "usd",
+                      "account_prior_history", "billing_details_warnings",
+                      "billing_complete", "unsettled_requests"}:
+        return False
+    if not _is_int(value["input_tokens_known"]) or not _is_int(value["output_tokens_known"]):
+        return False
+    if value["account_prior_history"] != "unknown" or type(value["billing_complete"]) is not bool:
+        return False
+    if not _is_int(value["billing_details_warnings"]):
+        return False
+    usd = value["usd"]
+    if type(usd) is not dict or set(usd) != {"charged_usd", "list_cost_usd", "allowance_usd"}:
+        return False
+    for item in usd.values():
+        if (type(item) is not dict or set(item) != {"known", "complete"}
+                or type(item["complete"]) is not bool
+                or type(item["known"]) is not str or len(item["known"]) > 64
+                or not re.fullmatch(r"-?[0-9]+(?:\.[0-9]+)?(?:E[+-]?[0-9]+)?", item["known"])):
+            return False
+    unsettled = value["unsettled_requests"]
+    if type(unsettled) is not list or len(unsettled) > 256:
+        return False
+    for item in unsettled:
+        if (type(item) is not dict or set(item) != {"run", "round", "status"}
+                or not _is_text(item["run"], 64) or not _is_int(item["round"])
+                or not _is_text(item["status"], 64)):
+            return False
+    return True
 
 
 def _read_run_log(logs_dir):
@@ -128,35 +317,72 @@ def _read_run_log(logs_dir):
         return None
     if any(key not in _RUN_LOG_KEYS for key in value):
         return None
+    if value.get("log_fallback") is True:
+        required = {"schema", "status", "safe_error_code", "official_reward",
+                    "log_fallback", "log_fallback_reason"}
+        if value.get("log_fallback_reason") != "invalid_or_missing_runtime_log":
+            return None
+    else:
+        required = {"schema", "status", "safe_error_code", "provider_requests",
+                    "tool_events", "official_reward"}
+        if value.get("capabilities") == "f0-f3-v1":
+            required |= {"completion", "task_state_target", "task_state_version",
+                         "task_state_claim", "task_state_open_unknowns",
+                         "task_state_claim_violation"}
+    if not required <= set(value):
+        return None
     for key, item in value.items():
         if key in _RUN_LOG_INTS:
-            if type(item) is not int or isinstance(item, bool) or item < 0:
+            if not _is_int(item):
                 return None
         elif key in _RUN_LOG_STRINGS:
-            if item is not None and (type(item) is not str or not _SAFE_TEXT.fullmatch(item)):
+            if item is not None and not _is_text(item, 256):
                 return None
             if (key in {"safe_error_code", "first_error_code", "outer_error_code",
                         "cleanup_error_code", "journal_error_code"}
-                    and item is not None and not _SAFE_CODE.fullmatch(item)):
+                    and not _is_code(item)):
                 return None
             if key in {"guidance_sha256", "task_state_sha256"} and item is not None \
                     and not DIGEST.fullmatch(item):
                 return None
             if key == "status" and item not in {"complete", "incomplete"}:
                 return None
+            if key == "recovery_policy" and item not in {None, "chi-output-recovery-v1"}:
+                return None
+            if key == "input_summary_policy" and item not in {
+                    None, "chi-input-summary-v1", "chi-input-summary-v2"}:
+                return None
+            if key == "capabilities" and item not in {None, "f0-f3-v1"}:
+                return None
+            if key == "guidance_version" and item not in {
+                    "chi-role-guidance-v1", "chi-role-guidance-v2", "chi-role-guidance-v3"}:
+                return None
+            if key == "context_budget" and item not in {
+                    None, "chi-context-budget-v1", "chi-context-budget-v2"}:
+                return None
+            if key == "journal_usage_scope" and item not in {None, "account_namespace"}:
+                return None
+            if key == "log_fallback_reason" and item not in {
+                    None, "invalid_or_missing_runtime_log"}:
+                return None
         elif key in _RUN_LOG_JSON:
-            if key == "safe_cause":
-                if item is not None and not validate_cause(item):
-                    return None
-            elif not _bounded_json(item):
+            validators = {
+                "safe_cause": lambda item: item is None or validate_cause(item),
+                "physical_requests": _is_physical_requests,
+                "recovery_limits": _is_recovery_limits,
+                "journal_usage": _is_journal_usage,
+                "current_run_agent_usage": _is_current_usage,
+                "task_state_target": _is_target,
+                "task_state_claim": _is_claim,
+                "task_state_open_unknowns": _is_open_unknowns,
+                "completion": _is_completion,
+            }
+            if not validators[key](item):
                 return None
         elif key == "official_reward":
             if item is not None:
                 return None
-        elif key == "task_state_claim_violation" or key == "final_output_claimed":
-            if type(item) is not bool:
-                return None
-        elif key == "log_fallback":
+        elif key in {"task_state_claim_violation", "final_output_claimed", "log_fallback"}:
             if type(item) is not bool:
                 return None
     return value

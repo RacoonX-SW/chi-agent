@@ -11,17 +11,61 @@ from opencode_go_provider import GoFailure
 
 
 def rich_log():
+    completion = {
+        "schema": "chi-completion-v3",
+        "verification": "blocked",
+        "business_effect": "not_verified",
+        "reason": "completion_readback_required:call_w1",
+        "target": {"case_id": "CASE-A", "patient_id": None},
+        "claim": None,
+        "claim_policy": "optional_final_text",
+        "latest_business_status": None,
+        "last_business_mutation": {"call_id": "call_w1", "tool": "triage.set_disposition",
+                                   "seq": 1, "event": "returned"},
+        "last_file_mutation": None,
+        "last_mutation_call_id": "call_w1",
+        "required_readback": "business_status",
+        "unresolved_file_deliveries": [],
+        "open_unknowns": [],
+        "claim_violation": False,
+        "stagnation": None,
+        "remaining_limitations": ["final_text_without_claim_not_blocked"],
+        "note": "mechanical/source check only; not a clinical or official verdict",
+    }
     return {
         "schema": "chi-go-run-log-v2",
         "status": "incomplete",
         "safe_error_code": "chi_timeout",
         "safe_cause": {"schema": "chi-safe-cause-v1", "stage": "transport", "reason": "timeout"},
         "provider_requests": 3,
+        "physical_requests": {"main": 2, "confirmation": 1},
         "tool_events": 4,
-        "completion": {"schema": "chi-completion-v2", "verification": "blocked"},
+        "completion": completion,
         "context_requests": 2,
-        "journal_usage": {"input_tokens": 10},
+        "context_max_chars": 100,
+        "context_max_estimated_tokens": 25,
+        "journal_usage": {
+            "input_tokens_known": 10, "output_tokens_known": 5,
+            "usd": {"charged_usd": {"known": "0", "complete": True},
+                    "list_cost_usd": {"known": "0.1", "complete": True},
+                    "allowance_usd": {"known": "0.1", "complete": True}},
+            "account_prior_history": "unknown", "billing_details_warnings": 0,
+            "billing_complete": True, "unsettled_requests": [],
+        },
+        "current_run_agent_usage": {"input_tokens_known": 10, "output_tokens_known": 5,
+                                    "complete": True},
+        "recovery_limits": {"per_chain": 1, "per_run": 2, "shared_requests": 50},
         "task_state_target": {"case_id": "CASE-A", "patient_id": None},
+        "task_state_claim": None,
+        "task_state_claim_violation": False,
+        "task_state_open_unknowns": [],
+        "task_state_version": 1,
+        "guidance_version": "chi-role-guidance-v3",
+        "guidance_sha256": "a" * 64,
+        "task_state_sha256": "b" * 64,
+        "context_budget": "chi-context-budget-v2",
+        "capabilities": "f0-f3-v1",
+        "journal_usage_scope": "account_namespace",
         "final_output_claimed": False,
         "official_reward": None,
     }
@@ -58,6 +102,40 @@ class DiagnosticPreservationTests(unittest.TestCase):
         self.assertEqual(value["safe_error_code"], "chi_timeout")
         self.assertEqual(value["cleanup_error_code"], "chi_cleanup_failed")
         self.assertEqual(value["status"], "incomplete")
+
+    def test_structured_fields_reject_unknown_keys_bad_types_and_unknown_codes(self):
+        import copy
+        base = rich_log()
+        cases = {
+            "physical-injected": {**base, "physical_requests": {"main": 1,
+                                                                 "injected": "synthetic-secret-marker"}},
+            "completion-injected": {**base, "completion": {**copy.deepcopy(base["completion"]),
+                                                            "injected": "synthetic-secret-marker"}},
+            "safe-code": {**base, "safe_error_code": "synthetic_secret_marker"},
+            "unknown-code": {**base, "safe_error_code": "chi_made_up"},
+            "target-injected": {**base, "task_state_target": {
+                "case_id": "CASE-A", "patient_id": None, "injected": "x"}},
+            "claim-injected": {**base, "task_state_claim": {
+                "version": 1, "target": {"case_id": "CASE-A", "patient_id": None},
+                "verified_status_call_id": None, "at_utc_ms": 1,
+                "kind": "model_claim", "injected": "x"}},
+            "journal-old-shape": {**base, "journal_usage": {"input_tokens": 10}},
+            "bool-count": {**base, "provider_requests": True},
+            "negative-count": {**base, "tool_events": -1},
+            "missing-core": {"schema": "chi-go-run-log-v2", "status": "incomplete"},
+        }
+        for name, value in cases.items():
+            with self.subTest(case=name):
+                path = self.logs / "run_log.txt"
+                if path.exists() or path.is_symlink():
+                    path.unlink()
+                path.write_text(json.dumps(value), encoding="utf-8")
+                self.assertIsNone(go_chi_entry._read_run_log(self.logs))
+                self.assertTrue(go_chi_entry._failure_run_log(self.logs, error="chi_entry_failed"))
+                updated = json.loads(path.read_text())
+                self.assertTrue(updated["log_fallback"])
+                self.assertNotIn("synthetic", json.dumps(updated))
+                self.assertNotIn("injected", json.dumps(updated))
 
     def test_invalid_unknown_or_oversize_log_falls_back_without_merging_text(self):
         cases = {
