@@ -119,6 +119,6 @@ PR60 合并不改变 release source_commit；本轮使用已冻结 release，不
 ## 8. 交接
 
 - 分支：`deepseek/final-validation-execution`；资源/文档提交 `c5501fc…`，B 执行记录/文档后续提交并 push。
-- PR：[PR61](https://github.com/xsw932187210-cell/chi-agent/pull/61) 已创建，base=main；未 merge/auto-merge。
+- PR61（资源冻结/准入草案）已由用户合并，merge `0849a19…`；本轮新B记录单独提交，[PR62](https://github.com/xsw932187210-cell/chi-agent/pull/62) 已创建，base=main；未 merge/auto-merge。
 - 详细资源冻结：`reviews/nine-task-resource-freeze-20261106.json`；候选/预登记/B 计划原字节未改。
 - 本报告是执行者检查，不替代 GPT 独立复审；GPT 暂无额度不阻塞本轮离线准备，但真实 B/九题仍须用户另行明确批准。
