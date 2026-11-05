@@ -152,7 +152,7 @@ PR60 合并不改变 release source_commit；本轮使用已冻结 release，不
 ## 8. 交接
 
 - 本轮从最新 `origin/main=dd438e9…`（PR62 已合并）新建 `deepseek/final-validation-nine-task-execution`；只追加九题执行记录/文档，不改生产代码、模型、参数或依赖。
-- 执行分支提交与 PR 链接见 `REVIEW_STATE.md`；base=main，未 merge/auto-merge。
+- 执行分支 `deepseek/final-validation-nine-task-execution` 已 push；[PR63](https://github.com/xsw932187210-cell/chi-agent/pull/63) 已创建，base=main，未 merge/auto-merge。
 - 详细资源冻结：`reviews/nine-task-resource-freeze-20261106.json`；九题执行记录：`reviews/final-validation-nine-task-execution-20261106.json`；候选/预登记/B 计划原字节未改。
 - 下一步不是自动重跑：round 4 pending 需要可信提供方结算证据或用户明确决定如何保留/处置；在解除前，其余 8 题保持 `not_run / prior_request_usage_unknown`。
 - 本报告是执行者检查，不替代 GPT 独立复审；`official_reward=null`。
