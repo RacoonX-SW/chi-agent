@@ -918,5 +918,5 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 
 - 用户提供的 `request-logs-2026-11-05.json` 证明第4请求最终成功：requestID `01a1acea-2001-7aaa-9c5d-4579e72cbb13`，session SHA 与 journal 匹配，content-length 272934；总耗时 682.8s，attempt 1 `524/600048ms`、attempt 2 `200/82484ms`，input 73204 / output 1494 / reasoning 1125，cost `0.011877`。客户端 240s 已超时，账本 pending 未用该日志结算。
 - 关键区分：这不是永久停滞，也不是零发送；是客户端 240s 读超时早于提供方 600s 首试 + 82.5s 内部重试。重复序列化把 65 患者 roster 放大到 172,813 字符的工具消息、272,857 字符的第4请求，是放大器而非唯一根因。
-- 修复：`go_chi_mcp.py` 在 text 与 `structuredContent` 语义相同时只返回一份，不同时保留两份；新增回归测试；[PR64](https://github.com/xsw932187210-cell/chi-agent/pull/64)。冻结 release 包未重建，240s 策略未改。
+- 修复：`go_chi_mcp.py` 在 text 与 `structuredContent` 语义相同时只返回一份，不同时保留两份；新增回归测试；[PR64](https://github.com/xsw932187210-cell/chi-agent/pull/64)（待审）。冻结 release 包未重建，240s 策略未改。
 - 下一入口：用户决定 pending 对账/超时策略；没有明确授权不重跑、不追加同 state 运行。
