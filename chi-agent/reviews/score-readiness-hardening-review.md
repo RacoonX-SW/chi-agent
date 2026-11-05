@@ -2,6 +2,8 @@
 
 日期：2026-11-05（Asia/Shanghai）。结论：A–D 已完成有界离线实现、Docker/Python 3.12 禁网自测、隔离包身份/预检和只读余量盘点；未进行任何真实模型、摘要、续写、B/C、患者、world、Trial、judge 或发布调用。official_reward 全部为 null。本文是唯一详细证据；短状态只写 [REVIEW_STATE](REVIEW_STATE.md)。
 
+> **返工状态（2026-11-05）**：初审快照 `33e6ecabbda388f1947a96b892acef328d27c4e1` 的独立复审结论为**不通过**（2 项 P1、2 项 P2）。原候选、初审失败与旧历史保留；R1–R4 的修复、独立反例、测试和新包身份追加在第 10 节，不覆盖第 1–9 节的历史含义。
+
 ## 1. 基线、分支与提交
 
 - 开工前重新 `git fetch origin`，实际 `origin/main=6533776c4155eb2ab487d8779284c8b66f722c34`，与交接快照一致；PR57/PR58 已合并。
@@ -246,3 +248,94 @@
 6. 复核建议命令：`git diff 6533776..HEAD -- chi-agent/scripts chi-agent/tests`；按第 2 节命令重跑；用新 manifest `f70bb13d…` 重跑隔离 preflight。
 
 本 Prompt 只授权离线实施和本地提交；未 push、未开 PR、未 merge/auto-merge。等待 GPT 复审及用户决定 Git 交付和任何真实运行。
+
+## 10. 返工 R1–R4（初审不通过后追加）
+
+初审 `33e6eca` 的“不通过、2 项 P1、2 项 P2”保持原义；本节只记录返工，不把返工通过回写成初审通过。返工代码候选为 `e9c503a628bf26bef296512ecb45beec77e08a79`。
+
+| 卡 | 提交 | 主题 |
+| --- | --- | --- |
+| R1 | `f2ecd84` | 同文件合法修复后才解除交付失败；state/completion v3 |
+| R2 | `af08fe9` | runtime log 结构/嵌套键/类型/有限错误码严格校验 |
+| R4 | `e9c503a` | 状态来源描述按 role/canonical 工具精确化 |
+| R3 | 本文档提交 | 只读余量盘点 v2 与证据更正（脚本在忽略目录） |
+
+### 10.1 R1 / P1：文件交付失败后的永久 claim 阻断
+
+**独立反例（GPT 提供，已复跑）**：`local-fs-edit` 返回 `ERROR: old_string not found`，随后同一路径 `local-fs-write` 成功写成正确内容，`triage.get` 同 case 回读，`local-state-update` 更新状态，`local-claim_done`。baseline `6533776` 为 `recorded / mechanical_pass`；原候选 `33e6eca` 为 `REFUSED: completion_file_write_failed:bad_edit`，文件内容已修正。返工后恢复 `task marked as done / mechanical_pass`，6 次合成请求，无额外 HTTP。
+
+**最小修法**：
+- `TaskState` 观察新增程序拥有的 `resource`（仅 local write/edit/read 的绝对路径，最长 2048，拒绝控制字符）；匹配键为 `(scope, resource)`。
+- 保留全部失败观察；`_unresolved_file_deliveries()` 只把“最后一次失败之后没有同 `(scope, resource)` 成功 write/edit”的失败列为未解决。
+- 无关路径、其他 case/role、只在失败前成功的写、模型 note 均不能解除；后续再次失败会重新阻断。
+- `failed` 仍先登记 open unknown；unknown 解析后若没有同资源成功修复，仍阻断。`refused` 不是失败交付。claim 后写、重复写、跨 case/患者保护不变。
+- state 升 `chi-task-state-v3`，completion 升 `chi-completion-v3`，报告新增 `unresolved_file_deliveries`；旧 v1/v2 summary 只读接受，不重写历史。
+
+**验收**：`test_go_chi_state.py` 覆盖同文件修复、无关文件/其他 case/其他 role、修复后再次失败、unknown 后同资源修复；`test_go_chi_capabilities_runtime.py` 用实际 SDK+MockTransport 覆盖上述 6 请求正常路径及无关文件仍拒绝路径。全部通过。
+
+### 10.2 R2 / P1：日志保留的实际结构与有限错误码
+
+**独立反例（GPT 提供，已复跑）**：原候选接受并保留
+`physical_requests={"main":1,"injected":"synthetic-secret-marker"}`、
+`completion={"schema":"chi-completion-v2","injected":"..."}`、
+`safe_error_code="synthetic_secret_marker"`，且 `log_fallback=false`。返工后三者均 `accepted=false`、`fallback=true`、注入文本不保留。
+
+**最小修法**：
+- 为 `physical_requests`、`journal_usage`、`current_run_agent_usage`、`recovery_limits`、`task_state_target`、`task_state_claim`、`task_state_open_unknowns`、`completion`、`unresolved_file_deliveries` 定义精确键集/类型/边界；`completion` 支持 v2/v3 且校验 reason、target、claim、status view、reference、stagnation、limitations、note。
+- 计数字段只接受非 bool 的非负 int；错误码只接受 `go_chi_diagnostics.SAFE_ERROR_CODES` 的有限集合；未知嵌套键、缺核心字段、bool/负数、未知 code 均 fallback。
+- 保留正常 runtime 字段；fallback 只写白名单最小安全字段；`safe_cause` 继续严格校验；符号链接/超大/损坏/重复键/非有限值继续拒绝；first/outer/journal/cleanup 分层不变。
+- 新增实际 runtime 日志回归：`go_chi_entry._read_run_log()` 接受 `CapabilityRuntimeTests` 产生的正常日志。
+
+**验收**：`test_score_readiness_diagnostics.py` 覆盖三个原始反例、未知嵌套键、缺核心字段、bool/负数、未知错误码、正常日志保留、cleanup/写入失败和 secret 不进入保留结果；全部通过。
+
+### 10.3 R3 / P2：包外余量盘点证据更正
+
+**原分析问题（保留为历史）**：`inventory.py` 分别读取 run_log/run_result/context/trace，没有一致 hash 快照；读取间变化会混合旧 status/provider_requests 与新 input_tokens。trace 缺失时 refusal/error/unknown 仍为 0；completion 缺失时 claim_present 仍为 false。`estimated_to_actual_input_ratio` 用“最大单请求估计 / 全 run 累计 input”，不能用于判断估计准确率。
+
+**返工**：
+- 新 `inventory.py` 对每个 run 的 5 个文件各读取两次并比较状态+SHA-256；只有 `snapshot_stable=true` 才输出派生指标；变化时只输出 `snapshot_status=changed_during_read` 和空指标，不生成混合结果。
+- 输出 `source_hashes`（status/bytes/sha256）；缺失、损坏、超大、截断、空文件分别有 status；只有 `trace_status=present` 才能输出 0，`completion_status` 缺失/无效时 `claim_present=null`。
+- 删除不可配对的估计准确率指标，改为 `estimated_token_ratio=null`、`estimated_token_ratio_status=not_measured_no_same_request_usage`。
+- 旧 `inventory-v1.json` 保留；新输出 `inventory-v2.json`，不改写旧分析结论。
+
+**独立检查**：`inventory_checks.py` 实测 missing trace → `trace_refusals=null`、`claim_present=null`；corrupt trace → `trace_status=invalid`、计数 null；complete trace → 0/1 有效；读取间变化 → `snapshot_stable=false`、指标 null；真实 payer-014 → hashes 匹配、前后文件 hash 不变、`trace_refusals=4`、`claim_present=true`。真实行仍按候选/角色/任务/模拟器分组，未补零、未发布 p95/分数。
+
+### 10.4 R4 / P2：来源描述矛盾与测试覆盖表述
+
+**修法**：
+- `local-state-update` 描述改为按 role 列出精确 canonical 状态读：provider `cases.get_case`/`auth.check_status`；payer `payer_intake_hub.get_intake_case`、`triage.get`、`review.get_nurse_review_data`、`review.get_md_review_data`、`determination.get_summary`、`p2p.list`、`payer_letter_center.list`；cm `cm_chart.get_chart_data`。其他 chart/document/policy/workspace-file/error/refused 仍只是证据。
+- payer guidance 明确 `payer_letter_center.list` 是允许的 case-scoped letter-state read，`payer_letter_center.get` 及其他 letter/document/file 读只是证据；cm 明确 `cm_chart.get_chart_data` 不是 care-plan finalize 的证明。
+- 未放宽 `BUSINESS_STATUS_READS`，未新增状态来源。新增独立测试核对描述、`source_kind_for` 接受/拒绝和 guidance 文本。
+
+**测试覆盖表述更正**：原适用 pytest 的 8 个 skip 实际为 `test_go_chi_operator` 3 项 + `test_role_operator_config` 5 项。controller 的 12 项是 `test_role_operator_config` 5 项 + `test_role_validation_wiring` 7 项，**不覆盖**前 3 项。返工单独在 controller 镜像运行 `tests.test_go_chi_operator`，**3 tests OK**；证据 `runs/score-readiness-hardening-20261105/controller-operator-rework.log`。不能再只用 12 项声称覆盖全部 8 个 skip。
+
+### 10.5 返工后的测试、包与历史
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 适用全量 pytest（dev；Harbor overlay；隔离 runs） | **exit 0：948 passed、8 skipped、332 subtests passed**（27.36s） |
+| controller `test_role_operator_config` + `test_role_validation_wiring` | **exit 0：12 tests OK** |
+| controller `test_go_chi_operator` | **exit 0：3 tests OK** |
+| anthropic 两模块 | **exit 2：2 collection errors，`ModuleNotFoundError: anthropic`** |
+
+新包（代码 `e9c503a`）：
+
+| 项目 | 实测 |
+| --- | --- |
+| Go manifest | `ce34b48ef3838ed5bc24ba06cf80ad1b65d35637fcc819214d790151e8675ae5` |
+| runtime identity | `d7f6c9c5aa253804d007a6730e506e83e8556934b579f1c4964685854c306d2f` |
+| release manifest | `9ae8b0119bfe6ca53f65eb3a45d1b803901ce690b6d2732aa8ecd48eeea59bb7` |
+| release source_commit | `e9c503a628bf26bef296512ecb45beec77e08a79` |
+| 旧 evaluation manifest | `a6a69d7d23ae5197eff00fadb198e2cf743f74aae600b65ae2f5e36e3085abfc`，不变 |
+
+42 成员；相对初审包 `f70bb13d…` 无增删，变化 6 个脚本：`go_chi_diagnostics.py`、`go_chi_entry.py`、`go_chi_guidance.py`、`go_chi_state.py`、`go_chi_summary.py`、`go_chi_tools.py`；其余 36 项一致。隔离无 Key/禁网 preflight 实际 `identity_verified`、upstream clean、`official_reward=null`。新身份没有新 B；旧 B 不适用。
+
+历史保留：旧 S 账仍 `91412a231c2407fc5a32663376bd1cd2226325b18e02b4c78ba6bc4fde872c41`，`pending=null`、`halted=null`，`vprep-s-001` 仍 failed/`chi_summary_invalid`、20 settled；未核销/重发/迁移/换账根。旧 accounting/pending/receipt/seal/wire/轨迹未改。
+
+### 10.6 仍未验证
+
+- 真实模型、摘要、续写、B/C、患者、world、Trial、judge、发布仍为 0；`official_reward=null`。
+- 新包真实端点是否接受 v3 state/completion/log 校验、真实模型是否按新描述使用工具、真实 Harbor/operator/官方患者/取消/在途/清理仍未验证。
+- CM 仍没有公开 care-plan 读取工具；`cm_chart.get_chart_data` 只是机械业务资源回读，不能证明 plan finalize。
+- `final_text` 未 claim 仍不会被阻止；这是保留的既有边界。
+- 两个 anthropic 模块的 collection error 与 dev 镜像 8 个 operator skip 继续单列，不写全环境全绿。

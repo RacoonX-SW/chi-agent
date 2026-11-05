@@ -22,6 +22,16 @@
 - [x] 必要SDK MockTransport集成及包/identity/profile/旧历史兼容核验；skip/环境缺项原样列出。
 - [x] 固定最终SHA、完整diff/包身份、默认配置、未改/未验项交GPT定向只读复审；用户最终决定Git交付/合并。
 
+## 1a. 初审不通过后的定向返工（已完成本地候选，待GPT复审）
+
+- [x] R1：同文件资源合法修复后才解除交付失败；保留失败记录，无关路径/其他case/role、unknown 和后续失败仍阻断（`f2ecd84`）。
+- [x] R2：runtime log 的 physical_requests/usage/completion/target/claim 等结构、嵌套键、类型和有限错误码严格校验；非法字段明确 fallback（`af08fe9`）。
+- [x] R3：只读盘点改为同快照 SHA-256 绑定；缺失/损坏/截断/空文件与确认无事件分开，删除不可配对的估计准确率指标；旧 inventory-v1 保留，新 inventory-v2 在忽略目录。
+- [x] R4：状态来源描述按 role/canonical 工具精确化；补独立接受/拒绝测试；更正 8 个 skip 的覆盖表述（operator 3 项另跑通过）（`e9c503a`）。
+- [x] 返工后适用 pytest `948 passed/8 skipped/332 subtests`、controller `12 OK`、operator `3 OK`；anthropic 两模块 collection error 单列。
+- [x] 重建 Go/evaluation/release 并做隔离 preflight；新 manifest/runtime/release 与 source_commit 见报告第10节；旧 B 不适用。
+- [x] 旧 S 账严格只读验证保持原 hash/失败/20 settled；详细证据追加到同一报告，不覆盖初审不通过。
+
 ## 2. 明确不随本轮启动
 
 - [ ] 新候选coding-B（必要性/具体次数/状态/身份另行批准，不算入16次C）。
