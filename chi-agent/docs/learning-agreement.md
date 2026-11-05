@@ -885,3 +885,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - R2 的教训：validator 对任意有界 JSON 形状都必须返回合法/非法，不能因为 list/dict 参与 set membership 抛 TypeError。reader 的结构验证边界要接住这类异常并转为明确 fallback；fallback 不能掩盖首个 `chi_timeout`，写盘失败仍单独可见。
 - R3 的教训：`completion={}`、缺 `claim`、`claim=17`、trace 只有 `{"role":"tool"}` 或 `{}` 都是“JSON 可解析但记录不完整/无效”。只有版本、必要字段和类型完整时才能输出 `claim_present=false` 或计数 0；否则 null + invalid/incomplete。
 - 两轮都保留旧失败、旧盘点输出和旧账；返工只追加新证据。下一入口：GPT 对第二次返工候选 `36db613` 独立复审。没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-05：最终候选冻结与准入准备
+
+- 本轮只做离线冻结/准入，不启动真实运行。关键区分：包内42成员与已审`36db613`逐字节一致，但release的`source_commit`从`36db613`变为`ec1a706`；外层绑定变化不等于内包字节变化，不能混写。
+- 新B计划、九题预登记和候选清单是“可审批草案”，不是许可；payer-010旧unknown仍须用户选择“补可信结算证据”或“明确保留并仅授权隔离B”。新隔离root不结算旧历史，也不冒充账户零历史。
+- 九题只从公开索引选，忽略expected/verifier字段；当前9题资源0/9本地，必须先获取并冻结公开instruction/tool_reference/world/manifest。开发operator路径只能称开发未见验证，不能冒充正式Harbor。
+- 下一入口：GPT复审候选/计划/预登记；用户先决定G0，再分别批准B和九题。没有用户亲自操作证据，不升级为已实践。
