@@ -1,6 +1,6 @@
 # 最终候选冻结与新B/九题验证准入准备
 
-日期：2026-11-05（Asia/Shanghai）。**结论：离线冻结和准入准备完成，真实执行未授权。** 本轮没有真实模型、摘要、续写、B/C、患者、world、Trial、judge 或发布调用；`official_reward=null`。机器候选、B 计划、九题预登记和审批草案分别见 [候选](validation-candidate-20261105.json)、[B 计划](coding-b-plan-20261105.json)、[九题预登记](nine-task-preregistration-20261105.json)、[G0 决策模板](admission-decision-template-20261105.json)及[OpenSpec 草案](../openspec/changes/final-validation-admission/proposal.md)。
+准备日期：2026-11-05；GPT 独立复审收口：2026-11-06（Asia/Shanghai）。**结论：最终返工候选在第8节限定离线范围通过，真实执行未授权。** 初审有条件通过及第一次返工未通过的历史结论见第8节，不由最终通过覆盖。本轮没有真实模型、摘要、续写、B/C、患者、world、Trial、judge 或参赛发布调用；`official_reward=null`。机器候选、B 计划、九题预登记和审批草案分别见 [候选](validation-candidate-20261105.json)、[B 计划](coding-b-plan-20261105.json)、[九题预登记](nine-task-preregistration-20261105.json)、[G0 决策模板](admission-decision-template-20261105.json)及[OpenSpec 草案](../openspec/changes/final-validation-admission/proposal.md)。
 
 ## 1. 工作区与来源
 
@@ -124,3 +124,46 @@ G0 仍需用户二选一：提供 payer-010 round1 可信结算/对账证据；�
 - 草案：`openspec/changes/final-validation-admission/proposal.md`、`tasks.md`。
 - 本地证据：`runs/final-validation-20261105/{evidence,exports}`；不上传原始轨迹/账本/任务载荷。
 - 建议复核：重跑构建/preflight/定向测试；检查 42 成员与 `36db613` 逐字节一致；确认旧 S/payer-010 hash 未变；确认没有真实请求或 world/Trial。
+
+## 8. GPT 独立复审与历史结论（2026-11-06）
+
+用户授权 GPT 更新本次审核记录、push 并创建 base=main 的 PR；不 merge、不 auto-merge，保持零真实调用。Git 存储及 PR 不构成 B/C 或其他真实运行许可。
+
+### 8.1 固定候选与不可覆盖的历史
+
+| 候选 | 当时的独立结论 | 事实及后继处理 |
+| --- | --- | --- |
+| `36c2c79626677a5e1a2bf92f6464d73465c583a0` | 有条件通过：冻结及 B 草案通过，九题准入的 PDF 兼容性 P1 待补证 | 公开索引显示 t022 有5份输入 PDF，而三个开发接缝固定4份；当时未取得真实布局，不能宣称九题只差下载。该条件结论保留。 |
+| `83749ac85a06b60c8556d95e76154b3207b8cc96` | 返工未通过 | 只修末端投影；manifest 生成仍报 `manifest_request_count`，资源 preflight 仍报 `request_inputs_invalid`，实际入口先执行 preflight。7/22 项通过仅证明对应单测，未闭合完整链。另有 P2：重复文件反例残留 extra 文件，未隔离重复场景。 |
+| `bfc1d8f73495a9dd8d79d07e3ce69f39a39afb54` | 本轮包外修复及限定离线验证通过 | 三处共用 `bounded_request_count`；4/5 份完整合成链通过，前置 P1 关闭；重复 basename 反例独立且保持总数相同，P2 关闭。未发现本次范围新增阻断问题。 |
+
+复审时已 fetch，实际 `origin/main=ec1a7064b5cd0a10bd8c397c9f7f61e1946d19cf`；候选分支为 `deepseek/final-validation-admission`。当前 checkout 及另外两个 worktree 均干净，未发现并行执行或遗留容器；此为检查时点的观察，不推断所有历史时段无其他写入。先前 A–D、R1–R4、摘要失败和旧 unknown 的结论保持各自原范围。
+
+### 8.2 实际独立执行及证据
+
+GPT 从 `git archive bfc1d8f:chi-agent` 导出固定快照，另导出 `36db613:chi-agent` 作源成员比较。全部 Python 在 Docker/Python3.12 中运行：`--pull never --network none --read-only --tmpfs /tmp`；源码、vendor 和依赖只读，专属临时导出目录可写；没有 Key/.env 注入、Docker socket、真实服务或 world。
+
+使用镜像：dev `sha256:b22f7c664bf5da8994d7199f1482536b0b4ab36d0d522ae121c4a0562ed044b3`；controller `sha256:24bef2e2c7e30bb972667b29afd0ed80d6fb79ae735210b8e3167ee5013b0bf3`。依赖沿用固定 model/PDF 卷及既有只读 Harbor overlay，没有安装或升级。
+
+| 独立检查 | 容器内命令/方式 | 退出码及实际结果 |
+| --- | --- | --- |
+| manifest/preflight | `/opt/venv/bin/python -m pytest tests/test_make_role_manifest.py tests/test_role_resource_preflight.py -q -o cache_dir=/tmp/pytest-cache` | 0；24 passed，0 skipped |
+| 投影 | `/opt/a-venv/bin/python -m unittest tests.test_role_payer_projection -v` | 0；14 tests OK |
+| controller 合并回归 | `/opt/a-venv/bin/python -m unittest tests.test_role_operator_config tests.test_role_validation_wiring tests.test_go_chi_operator tests.test_role_payer_projection -v` | 0；29 tests OK，包含上列14项，不相加为43项 |
+| 独立正负例 | GPT 独立构造的 `checks/independent.py`，非调用作者测试辅助函数 | 最终0；25组检查通过 |
+| 当前树重建与包成员比较 | `go_chi_bundle.build_bundle`、43个包文件 hash、42个源成员与已审实现逐字节比较 | 0；Go manifest `c5f569e8…`，成员不变 |
+| 隔离新导出包 preflight | `/usr/local/bin/python -S /package/scripts/go_chi_entry.py preflight --bundle-sha256 c5f569e8a20439c07f020fd8776af4aba4d62da0c64e86e2da88e744cc077f0d` | 0；`identity_verified`，runtime `2a9a3271…`、identity detail 匹配、upstream clean |
+| 候选/脚本/计划引用与旧账 | 严格 JSON 解析、原始字节 hash、允许字段投影 | 0；候选 SHA `0df12589…`、8份包外文件 hash 与计划引用匹配；三份旧账 hash 匹配 |
+
+25组独立检查包括：1/4/5/20 份的 manifest→preflight→投影合成链；生成器0/21拒绝；计数类型拒绝；preflight 的缺失、额外、size、hash、可见性、重复条目、符号链接、非 PDF、嵌套路径、0/21拒绝；投影的缺失、额外、同总数重复 basename、provider scope、size、hash、符号链接拒绝。合成 world/expectations 文件仅是测试自建空内容或最小对象，未读取真实任务的隐藏材料，未启动 world。
+
+本次独立证据位于本地临时目录 `/private/tmp/chi-admission-rework-bfc1d8f.BKEkzj/`：`commands.txt`、`manifest-preflight-independent.log`、`projection-independent.log`、`controller-independent.log`、`checks/independent.py`、`independent-final.log`、`preflight.json`、`preflight-check.log`。完整 Docker 命令保存在 `commands.txt`；这些本地产物不上传。辅助脚本首次因 GPT 抄写旧 pending 账 hash 错误退出1，修正后最终退出0；首次日志 `independent.log` 保留，不归因为产品缺陷，也不省略该次失败。
+
+### 8.3 身份、历史及准入边界
+
+- 三个修改脚本均在包外；42个包成员与已审 `36db613` 逐字节一致，未改模型、端点、high、提示、额度、参数或包内算法。候选 JSON 原始 SHA 为 `0df12589c851b38423e6212997e7f4b9214912c25b7c84d7614f30e0c5f493d0`。本次审核文档提交不改变该候选 JSON 或冻结的 release source_commit。
+- 实测 Go manifest/runtime 与第2节一致。本轮最终返工复审未重跑 release/evaluation 构建、历史全量951/8/350或两个 anthropic collection errors，不将作者自测或旧结果写为本轮独立重跑。
+- 旧 S、payer-010、`state-abl-on2` 三份 accounting hash 均与第5节完整值匹配，读取前后不变；旧 S 仍 failed/`chi_summary_invalid`、20笔 settled、pending/halted null；payer-010 pending 仍为 `real-ext-payer-010` round1；后继 root 不结算旧 unknown。没有 rebind、核销、重发或清 pending，也未给所有历史忽略文件新增完整取证基线。
+- 当前九题资源仍为0/9；完整合成链不等于实际 operator→容器→world→entry 链，更不等于正式 Harbor、端点或业务/官方评分通过。未获取真实任务隐藏 expectations/solution/verifier 内容；Git 差异中没有 t022 资源删除或按结果换题，真实实体尚未取得，未对其作文件前后 hash 盘点。
+- 新 state 与 B 日志目录仍不存在，真实模型/摘要/续写/B/C/患者/world/Trial/judge/参赛发布为0。摘要/恢复/Y保持 off。
+- 允许进入本轮 Git 交付供用户审核。旧 B 收据仍不适用于本 identity；G0、一次新 B（最多6 HTTP）、九题资源获取/冻结及九题执行仍依各自明确授权，不因本次通过、push、PR或合并自动启动。
