@@ -413,11 +413,14 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
              empty, task_state),
             ("local-state-update",
              "Submit a sourced task-state update. Facts must cite a returned call_id observed in this run. "
-             "latest_business_status must cite a returned business-status read of the target case (case, "
-             "authorization, referral or review state); handbook, policy, chart/document, workspace-file, "
-             "error and refused results are evidence only and are rejected for status. The program fills "
-             "source versions and rejects stale, wrong-case, unobserved or binding-changing updates. It "
-             "cannot mark an unknown write as success or failure.",
+             "latest_business_status must cite a returned business-status read of the target case: provider "
+             "cases.get_case or auth.check_status; payer payer_intake_hub.get_intake_case, triage.get, "
+             "review.get_nurse_review_data, review.get_md_review_data, determination.get_summary, p2p.list "
+             "or payer_letter_center.list; cm cm_chart.get_chart_data. Other chart/document, policy, handbook, "
+             "workspace-file, error and refused results are evidence only and are rejected for status. For CM, "
+             "cm_chart.get_chart_data is a case-scoped business read, not proof of care-plan finalize. The "
+             "program fills source versions and rejects stale, wrong-case, unobserved or binding-changing "
+             "updates. It cannot mark an unknown write as success or failure.",
              state_update_schema, state_update),
             ("local-completion-check",
              "Report mechanical completion evidence: target, latest business status and its source kind, "

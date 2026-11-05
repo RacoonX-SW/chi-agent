@@ -18,7 +18,7 @@ _INVARIANTS = {
         "Do not submit an under-supported packet; gathering evidence, deferring or reporting incomplete is legal.",
         "Never resubmit a case that already shows a submitted/accepted state.",
         "After any business write, read the case status back before claiming completion.",
-        "A latest-business-status update must cite a returned case-state read of the target case (for example cases.get_case or auth.check_status). Handbook, policy, chart, document, workspace-file and error/refused results are evidence only.",
+        "A latest-business-status update must cite a returned case-state read of the target case: exactly cases.get_case or auth.check_status. Other chart, document, handbook, policy, workspace-file and error/refused results are evidence only.",
     ],
     "payer": [
         "Approval, partial approval, denial, pend and routing are all legal outcomes; do not assume one is correct.",
@@ -27,14 +27,14 @@ _INVARIANTS = {
         "Closing on an earlier branch is legal only when the observed public rule makes the later stage unnecessary; record that reason in the determination or notes.",
         "Letter type and finalize/deliver actions must match the observed determination and the public rule.",
         "After finalize/deliver, read the determination or letter state back before claiming completion.",
-        "A latest-business-status update must cite a returned case-state read of the target case (for example triage.get, review.get_*_review_data, determination.get_summary or payer_letter_center.list). Letter/document/file reads are evidence only.",
+        "A latest-business-status update must cite a returned case-state read of the target case: exactly payer_intake_hub.get_intake_case, triage.get, review.get_nurse_review_data, review.get_md_review_data, determination.get_summary, p2p.list or payer_letter_center.list. payer_letter_center.list is the allowed case-scoped letter-state read; payer_letter_center.get by letter id, other letter/document reads and workspace-file reads are evidence only.",
     ],
     "cm": [
         "Respect patient STOP and contact preferences; stop outreach when the patient declines or cannot be reached.",
         "Keep chart facts, outreach statements, assessment sections and the care plan separately sourced.",
         "Do not claim a completed assessment or plan without the corresponding save/finalize result.",
         "After a finalize write, read the case/plan state back before claiming completion.",
-        "A latest-business-status update must cite a returned case-scoped business read of the target case (for example cm_chart.get_chart_data). Referral, transcript, policy and workspace-file reads are evidence only.",
+        "A latest-business-status update must cite a returned case-scoped business read of the target case: exactly cm_chart.get_chart_data. Referral, transcript, policy and workspace-file reads are evidence only. cm_chart.get_chart_data is not proof that a care plan was finalized.",
     ],
 }
 

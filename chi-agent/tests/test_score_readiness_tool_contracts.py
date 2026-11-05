@@ -185,15 +185,40 @@ class LocalContractTests(unittest.IsolatedAsyncioTestCase):
         contract.state.observe(call_id="r1", tool="triage.get", kind="mcp",
                                arguments={"case_id": "CASE-A"}, result={"raw": "secret"})
         state = json.loads(await invoke(contract.tools, contract.guard, "local-task-state", {}))
-        self.assertEqual(state["schema"], "chi-task-state-v2")
+        self.assertEqual(state["schema"], "chi-task-state-v3")
         self.assertNotIn("raw", state["observations"][0])
         completion = json.loads(await invoke(contract.tools, contract.guard, "local-completion-check", {}, "c2"))
-        self.assertEqual(completion["schema"], "chi-completion-v2")
+        self.assertEqual(completion["schema"], "chi-completion-v3")
         self.assertIn("claim_policy", completion)
         with self.assertRaises(ContractFailure):
             accept(contract.guard, "local-role-guidance", {"unexpected": True}, "c3")
         guidance = json.loads(await invoke(contract.tools, contract.guard, "local-role-guidance", {}, "c4"))
         self.assertEqual(guidance["schema"], GUIDANCE_VERSION)
+
+    async def test_state_update_description_matches_actual_status_sources(self):
+        contract = Contract(self.root)
+        description = next(tool for tool in contract.tools
+                           if tool.name == "local-state-update").description
+        for name in ("cases.get_case", "auth.check_status",
+                     "payer_intake_hub.get_intake_case", "triage.get",
+                     "review.get_nurse_review_data", "review.get_md_review_data",
+                     "determination.get_summary", "p2p.list",
+                     "payer_letter_center.list", "cm_chart.get_chart_data"):
+            self.assertIn(name, description)
+        self.assertIn("not proof of care-plan finalize", description)
+        from go_chi_state import source_kind_for
+        self.assertEqual(source_kind_for("payer", "payer_letter_center.list", "mcp", "case:CASE-A"),
+                         "business_status")
+        self.assertEqual(source_kind_for("payer", "payer_letter_center.get", "mcp", "case:CASE-A"),
+                         "business_evidence")
+        self.assertEqual(source_kind_for("cm", "cm_chart.get_chart_data", "mcp", "case:CASE-A"),
+                         "business_status")
+        self.assertEqual(source_kind_for("cm", "cm_intake.get_referral", "mcp", "case:CASE-A"),
+                         "business_evidence")
+        self.assertEqual(source_kind_for("cm", "cm_outreach.get_transcript", "mcp", "case:CASE-A"),
+                         "business_evidence")
+        self.assertEqual(source_kind_for("provider", "chart.get_patient_chart_by_patient",
+                                         "mcp", "case:CASE-A"), "business_evidence")
 
     async def test_patient_tool_schemas_reject_missing_or_negative_values(self):
         binding = SimpleNamespace(bound=None)

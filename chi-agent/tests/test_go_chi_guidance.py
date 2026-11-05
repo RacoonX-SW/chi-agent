@@ -67,6 +67,19 @@ class GuidanceTests(unittest.TestCase):
             self.assertIn("evidence only", invariants)
             self.assertIn("does not require another business readback", invariants)
             self.assertIn("failed file write still blocks", invariants)
+    def test_business_status_source_names_are_role_specific(self):
+        provider = " ".join(guidance("provider")["invariants"]).lower()
+        payer = " ".join(guidance("payer")["invariants"]).lower()
+        cm = " ".join(guidance("cm")["invariants"]).lower()
+        for name in ("cases.get_case", "auth.check_status"):
+            self.assertIn(name, provider)
+        for name in ("payer_intake_hub.get_intake_case", "triage.get",
+                     "review.get_nurse_review_data", "review.get_md_review_data",
+                     "determination.get_summary", "p2p.list", "payer_letter_center.list"):
+            self.assertIn(name, payer)
+        self.assertIn("payer_letter_center.get", payer)
+        self.assertIn("cm_chart.get_chart_data", cm)
+        self.assertIn("not proof that a care plan was finalized", cm)
 
     def test_digest_covers_the_delivered_workspace_invariant(self):
         import hashlib
