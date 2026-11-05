@@ -88,7 +88,14 @@ def _config(path, expected):
 def _payer_projection(artifacts, manifest):
     expected = {Path(item['path']).name: item for item in manifest['files'] if '/fixtures/request/' in item['path']}
     found = [p for p in (artifacts / 'workspaces').rglob('*') if p.is_file() and p.parent.name == 'incoming_request']
-    if len(found) != 4 or len(expected) != 4 or {p.name for p in found} != set(expected): raise ValueError('payer_projection_invalid')
+    # The public task layout is not fixed at four request files (t022 has five).
+    # Use the frozen manifest count, but keep a bounded, exact and duplicate-free
+    # projection so missing/extra/duplicate files still fail.
+    count = len(expected)
+    if (not 1 <= count <= 20 or len(found) != count
+            or len({p.name for p in found}) != count
+            or {p.name for p in found} != set(expected)):
+        raise ValueError('payer_projection_invalid')
     for path in found:
         _check_components(path, 'payer_projection_invalid', final_may_be_missing=False)
         item = expected[path.name]

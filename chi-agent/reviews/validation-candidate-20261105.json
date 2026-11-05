@@ -20,6 +20,15 @@
     "chi-h-root-model-deps-20261027-v1",
     "chi-k-pdf-deps-20261027-v1"
   ],
+  "development_operator_compatibility": {
+    "five_file_projection_accepted": true,
+    "four_file_projection_accepted": true,
+    "legacy_request_pdfs": 4,
+    "missing_extra_duplicate_provider_symlink_wrong_hash_rejected": true,
+    "operator_change_is_package_external": true,
+    "package_identity_changed": false,
+    "t022_public_request_pdfs": 5
+  },
   "entry_configuration": {
     "automatic_retries": 0,
     "chi_max_output_tokens": 8192,
@@ -129,6 +138,12 @@
     }
   ],
   "official_reward": null,
+  "package_external_scripts": {
+    "go_chi_readiness_inventory.py": "86b7938b214735d5f7e4ee7d09e9242410b07188416f58f0b09441472320f110",
+    "role_operator.py": "3176c9761aa04dd1fd94fd65af56f4ed7543e0a267f0bca396280259c128bb0b",
+    "role_runner.py": "65f7c541513e960ff70e9320e46a0cc4ab55938fe1c6f7dbe7a2918db16d5e2d",
+    "tests/test_role_payer_projection.py": "498d911d9479b48a2a71984f88e45102a0f6a5603e4121869924f3c2d2b53e45"
+  },
   "package_file_sha256": {
     "RUN_CHI_GO.md": "12c37877e18df7700011723aec56154b74279aac8c775509aac7b6444ee7d3c6",
     "bundle-manifest.json": "780b3ee1a9d20871d59fbcdf0019522ff75f30da510612018593944edb9870dd",

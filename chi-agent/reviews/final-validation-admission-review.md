@@ -21,7 +21,7 @@
 | release source_commit | `ec1a7064b5cd0a10bd8c397c9f7f61e1946d19cf` |
 | release SHA256SUMS | `3f4d18825f12607dd91c0c8f0018a8798e6342869ccca4153c52c99b2dc463a7` |
 | evaluation manifest | `a6a69d7d23ae5197eff00fadb198e2cf743f74aae600b65ae2f5e36e3085abfc`，不变 |
-| 候选 JSON SHA-256 | `500776855474d7f55caa267563f24f68e3c7919cbfb1cfe8df98c9db6b6f3f17` |
+| 候选 JSON SHA-256 | `9ac7ba0ea90bf317eda3e074d9fed4f27a7022f0b9890441e7b9deed040fafc5` |
 
 实际命令与结果：
 
@@ -35,9 +35,17 @@
 | controller `test_role_operator_config` + `test_role_validation_wiring` + `test_go_chi_operator` | exit 0；**15 tests OK**（12 + operator 3） |
 | 候选元数据/提示/包成员 hash | exit 0；43 个包文件（42 成员 + manifest），无凭据环境 |
 
-证据（本地忽略目录 `runs/final-validation-20261105/evidence/`）：`build.log` `e273974f…`、`preflight.json`/`preflight-release.json` `93df013a…`、`targeted-tests.log` `b0c8c939…`、`controller.log` `375a4f4c…`、`inventory-tests.log`（见本地证据）、`metadata.json` `9f0a7ae1…`、`reviewed-package-diff.txt` `207c813f…`。
+证据（本地忽略目录 `runs/final-validation-20261105/evidence/`）：`build.log` `e273974f…`、`preflight.json`/`preflight-release.json` `93df013a…`、`targeted-tests.log` `b0c8c939…`、`controller.log` `375a4f4c…`、`controller-projection.log` `ff0606ec…`、`projection-tests.log` `c94bb23b…`、`inventory-tests.log` `5e373a49…`、`package-recheck.log` `73b3a708…`、`metadata.json` `9f0a7ae1…`、`reviewed-package-diff.txt` `207c813f…`。
 
 未重跑整套 A–D/历史全量；上轮已审的 951 passed/8 skipped/350 subtests、controller 12 + operator 3、两个 anthropic collection error 保持其原范围。本轮只新增/核对包外工具与当前候选，不把旧数量冒充本轮全量重跑。
+
+## 2a. t022 公开 PDF 布局与开发投影兼容性
+
+公开缓存树（`data/.cache/huggingface/trees/5ce88104….json`）和 `data/tasks.jsonl` 均显示 t022 `pa_t022_t022_o001_p01_nurse_review_payer` 有 **5** 个 `fixtures/request/*.pdf`；t023/t024 各 4 个。开发 operator 原 `_payer_projection` 固定要求 4 个 request 文件，因此 t022 会在进入 world 前被 `payer_projection_invalid` 拒绝。未删除 PDF、未换题、未读取 expectations/solution/verifier。
+
+**最小包外适配**：`scripts/role_operator.py` 的 `_payer_projection` 改为使用冻结 manifest 的 request 文件数，但保留有界、精确、无重复的校验：1–20 个；found 数必须等于 expected 数；basename 集合必须完全相等且无重复；逐文件仍检查 payer scope、provider scope 拒绝、size/hash。4 文件 legacy 路径不变，5 文件 t022 路径可用；缺文件、多文件、重复 basename、provider scope、符号链接、错 size/hash、0 或 >20 均拒绝。
+
+新增 `tests/test_role_payer_projection.py`，controller 镜像 **7 tests OK**；连同既有 15 项 controller 测试为 **22 tests OK**。`role_operator.py` 是包外文件，不在 `PACKAGE_FILES`；当前树重建 Go 包仍为 `c5f569e8…`/42 成员（`package-recheck.log`），runtime 不变。候选 JSON 记录其 SHA-256 `3176c976…` 及兼容性结论。该适配只影响开发 operator 投影检查，不改变正式包、模型/参数、任务或业务动作。
 
 ## 3. 新 coding-B 草案（未执行）
 
@@ -100,7 +108,7 @@ G0 仍需用户二选一：提供 payer-010 round1 可信结算/对账证据；�
 ## 7. GPT 复审入口
 
 - 分支：`deepseek/final-validation-admission`；候选源码 `ec1a706…`；包内实现 `36db613…`。
-- 候选：`reviews/validation-candidate-20261105.json`（SHA `50077685…`）。
+- 候选：`reviews/validation-candidate-20261105.json`（SHA `9ac7ba0e…`）。
 - B 计划：`reviews/coding-b-plan-20261105.json`（SHA `19ea22a3…`）。
 - 九题预登记：`reviews/nine-task-preregistration-20261105.json`（SHA `bb9d7930…`）。
 - G0 模板：`reviews/admission-decision-template-20261105.json`（SHA `c292d6e1…`）。
