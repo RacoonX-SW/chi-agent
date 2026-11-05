@@ -113,6 +113,7 @@ class DiagnosticPreservationTests(unittest.TestCase):
                                                             "injected": "synthetic-secret-marker"}},
             "safe-code": {**base, "safe_error_code": "synthetic_secret_marker"},
             "unknown-code": {**base, "safe_error_code": "chi_made_up"},
+            "known-non-error-literal": {**base, "safe_error_code": "chi_bench"},
             "target-injected": {**base, "task_state_target": {
                 "case_id": "CASE-A", "patient_id": None, "injected": "x"}},
             "claim-injected": {**base, "task_state_claim": {
