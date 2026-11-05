@@ -1,6 +1,6 @@
-# 九题开发验证审批草案（未授权执行）
+# 九题开发验证审批与首题执行记录（已批准；首题 pending 后停止）
 
-日期：2026-11-06（Asia/Shanghai）。**本文件是审批草案，不是运行许可。** 只有用户在对话中明确批准本文件绑定的候选、预登记、资源冻结、B 收据和具体运行范围后，才可执行九题。本轮未启动 world/MCP/患者/模型。
+日期：2026-11-06（Asia/Shanghai）。**本文件原为审批草案；用户已在对话中明确批准第6节文本。** 批准后只执行了首题 `final-c-provider-t015`：第4个 main 请求 240.022s `chi_timeout`，主账保留 `pending={本 run, round:4}`；按“任一 unknown、pending/halt 即停止”的停止条件，未执行其余8题，未重试/换题/换根。以下保留批准绑定和原文，执行结果见 `final-validation-nine-task-execution-20261106.json`。
 
 ## 1. 绑定身份
 
@@ -55,8 +55,8 @@
 - 身份/profile/资源 hash 不符、B 收据不匹配或缺失。
 - 停止后续题目；不重试、不换题、不改名、不换账根、不追加请求。
 
-## 6. 审批文本（待用户明确批准）
+## 6. 审批文本（用户已批准；保留原文）
 
 > 我确认新 identity B `final-b-001` 已成功且收据与本候选/runtime 匹配；payer-010 旧 unknown 处置按另行明确决定保留，不修改旧 pending/账目。批准按候选 SHA `0df12589…`、预登记 SHA `bb9d7930…`、资源冻结 SHA `074fd38e…` 执行 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world；provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；主/确认/患者输出 8192/32768/8192；摘要/恢复/Y off。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归。
 
-**当前状态：未授权执行。**
+**当前状态：已批准；仅执行 `final-c-provider-t015`，round4 pending 后按停止条件中止；其余8题未运行。**
