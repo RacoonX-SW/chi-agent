@@ -120,11 +120,11 @@ PR60 合并不改变 release source_commit；本轮使用已冻结 release，不
 3. **序列化重复放大了请求**：`go_chi_mcp.py` 在 `structuredContent` 存在时走 else 分支，把 compact `structuredContent`（50,030 字符）与完整 `model_dump`（122,782 字符，内含同一 roster 的 pretty text 63,820 字符和再次出现的 compact `structuredContent`）用换行拼接，导致同一 roster 在工具消息中出现 **3 次**。若只保留一份 compact 表示，第 4 请求约 150,074 字符（缩小约 45%）。该拼接结果也不是单一 JSON 文档，`go_chi_evidence.write_tool` 因此将其标为 `unparseable_escaped_body`，只保留 hash、不存 body。
 4. **不是上下文预算错误**：`chi-context-budget-v2` 的配置上限是 3,500,000 字符 / 1,000,000 估算 token；本次最大请求 272,857 字符 / 272,934 上界估算，未触发 `chi_context_budget_exceeded`。profile 的 `documented_context_tokens` 为 1,048,576，也不是 64k 级窗口。
 5. **提供方日志已确认请求最终成功，但客户端已超时**：用户提供的 `request-logs-2026-11-05.json` 中，`requestID 01a1acea-2001-7aaa-9c5d-4579e72cbb13`、session `chi-0b45f5745e7842cb97ce8bcb6617fd5f`（SHA 与 journal 的 `373a0961…` 匹配）、content-length `272934` 与本轮第 4 请求一致。`startedAt 1793902387201`、`finishedAt 1793903070009`、`durationMs 682808`、`outcome succeeded`、`statusCode 200`；attempt 1 为 `524 / inference_failed / 600048ms`，attempt 2 为 `200 / 82484ms`；usage `input 73204 / output 1494 / reasoning 1125`，cost `0.011877`。即：客户端 240s 超时后，提供方第一次尝试在 600s 以 524 失败，内部重试在 82.5s 成功；总耗时 682.8s。请求不是永久停滞，也不是零发送；但我们的账本仍保留 pending，未用该日志结算。
-6. **建议（未实施）**：修复 `go_chi_mcp.py` 的重复序列化，只向模型返回一份工具结果；评估 `search_patients` 的有界投影/上限；用证据决定是否调整 240s 读超时或增加大请求前置门禁，而不是直接重跑。若要用该日志结算，还需单独的受审对账；现有 `inspect_provider` 固定 `attemptCount=1`，与本条 `attemptCount=2` 不直接兼容。
+6. **修复与后续**：`go_chi_mcp.py` 的重复序列化已在 [PR64](https://github.com/xsw932187210-cell/chi-agent/pull/64) 修复并加回归测试（相同内容只返回一份；不同内容保留两份）；冻结 release 包未重建。`search_patients` 的有界投影/上限、240s 读超时或大请求前置门禁仍需单独决定，不应直接重跑。若要用该日志结算，还需单独的受审对账；现有 `inspect_provider` 固定 `attemptCount=1`，与本条 `attemptCount=2` 不直接兼容。
 
 **机械检查**：13 项确定性检查中 1 true（`provider_pre_submission.packet_absent`）、11 false、1 not_applicable；这是 source/state 机械检查，不是临床或官方判定。第 4 请求超时前未形成目标业务状态。
 
-证据：`runs/final-validation-20261105/c-runs/final-c-provider-t015/orchestration.json`（SHA `830752a9…`）；`state/chi-accounting.json`（SHA `14376076…`）；`state/run-seals/final-c-provider-t015.json`（SHA `96a614a8…`，run digest `984847ba…` 匹配）；机器记录 `reviews/final-validation-nine-task-execution-20261106.json`（SHA `8efc6b86…`）。
+证据：`runs/final-validation-20261105/c-runs/final-c-provider-t015/orchestration.json`（SHA `830752a9…`）；`state/chi-accounting.json`（SHA `14376076…`）；`state/run-seals/final-c-provider-t015.json`（SHA `96a614a8…`，run digest `984847ba…` 匹配）；机器记录 `reviews/final-validation-nine-task-execution-20261106.json`（SHA `e70d583d…`）。
 
 **边界**：这是开发 `role_operator` 路径，不是正式 Harbor；`official_reward=null`，不声称临床通过或官方分数。B receipt/seal 在新 attempt 追加后仍匹配；旧 payer-010 unknown、旧 S 失败和旧 B 许可未改写。
 

@@ -356,11 +356,19 @@
     },
     "unknown": "resolved on the provider side by the supplied log: attempt 1 returned 524 after 600048ms, attempt 2 returned 200 after 82484ms; the client had already timed out at 240s. The journal pending remains because no reconciliation was authorized.",
     "recommendations": [
-      "fix go_chi_mcp.py to return one tool-result representation instead of compact structuredContent plus the full model dump",
+      "implemented in PR64: go_chi_mcp.py returns one tool-result representation when text and structuredContent match, and keeps both only when they differ",
       "evaluate a bounded projection or cap for search_patients full-roster results",
       "decide with evidence whether the 240s read timeout or a large-request guard should change; do not retry without authorization",
       "if reconciling the pending, adapt inspect_provider to the observed attemptCount=2 (524 then 200) record under a separate authorization"
-    ]
+    ],
+    "fix": {
+      "status": "implemented_in_source_tree",
+      "pr": "https://github.com/xsw932187210-cell/chi-agent/pull/64",
+      "files": ["scripts/go_chi_mcp.py", "tests/test_go_chi_mcp.py"],
+      "tests": "8 MCP tests; 89 related; full suite 625 tests with 3 pre-existing import errors",
+      "frozen_release_package_unchanged": true,
+      "timeout_policy_changed": false
+    }
   },
   "state": {
     "path": "runs/final-validation-20261105/state/chi-accounting.json",

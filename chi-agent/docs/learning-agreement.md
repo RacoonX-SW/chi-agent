@@ -913,3 +913,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 证据链要同时看：orchestration 的 runner/world/network 清理与 quiescence、initial/final capture、资源前后 hash、run seal/run digest、账本 pending/halt。t015 的 provider 资源前后均 2,202 行同 hash、payer 0 行，工作区仅 materialized 标记；没有业务写工具，claim=false。
 - 可观察线索：第 4 请求前 `chart.search_patients` 返回约 192,782 字符，context 估计 272,934 tokens（UTF-8 上界估计，不是 tokenizer）；只能说明请求规模，不能据此把超时归因到提供方根因。
 - 下一入口：先处置 round 4 的未知结算（可信提供方证据或用户明确决定），再讨论剩余 8 题；未解除前不自动重跑。没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-06：t015 provider log、重复序列化与修复
+
+- 用户提供的 `request-logs-2026-11-05.json` 证明第4请求最终成功：requestID `01a1acea-2001-7aaa-9c5d-4579e72cbb13`，session SHA 与 journal 匹配，content-length 272934；总耗时 682.8s，attempt 1 `524/600048ms`、attempt 2 `200/82484ms`，input 73204 / output 1494 / reasoning 1125，cost `0.011877`。客户端 240s 已超时，账本 pending 未用该日志结算。
+- 关键区分：这不是永久停滞，也不是零发送；是客户端 240s 读超时早于提供方 600s 首试 + 82.5s 内部重试。重复序列化把 65 患者 roster 放大到 172,813 字符的工具消息、272,857 字符的第4请求，是放大器而非唯一根因。
+- 修复：`go_chi_mcp.py` 在 text 与 `structuredContent` 语义相同时只返回一份，不同时保留两份；新增回归测试；[PR64](https://github.com/xsw932187210-cell/chi-agent/pull/64)。冻结 release 包未重建，240s 策略未改。
+- 下一入口：用户决定 pending 对账/超时策略；没有明确授权不重跑、不追加同 state 运行。
