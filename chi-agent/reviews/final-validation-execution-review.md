@@ -1,6 +1,6 @@
 # 新B执行与九题验证准备（执行者检查）
 
-日期：2026-11-06（Asia/Shanghai）。**结论：PR60 已合并；九题公开资源已按冻结 revision 获取并冻结，9/9 资源 manifest 通过 preflight；真实 B/九题仍未获本 Prompt 授权，未执行任何模型、world、MCP、Trial 或 judge 请求。** 本轮自查属于“执行者检查”，不是新的独立审核；既有 GPT 独立结论保持原义。
+日期：2026-11-06（Asia/Shanghai）。**结论：PR60 已合并；九题公开资源已按冻结 revision 获取并冻结，9/9 资源 manifest 通过 preflight。用户随后明确批准一次新 coding-B，已执行 `final-b-001` 成功（3 个 provider HTTP、全部 settled、receipt/seal 有效）；九题真实执行仍未授权，未启动 world/MCP/患者/Trial/judge。** 本轮自查属于“执行者检查”，不是新的独立审核；既有 GPT 独立结论保持原义。
 
 ## 1. 基线与 Git
 
@@ -65,6 +65,29 @@ PR60 合并不改变 release source_commit；本轮使用已冻结 release，不
 
 本轮未重跑 951/8/350、24/14/29 或 release/evaluation 重建；这些保持前一轮 GPT 独立检查的原范围，不冒充本轮重跑。本轮没有真实模型/world/Trial/judge 调用。
 
+## 4a. 新 coding-B 实际执行（已获用户明确批准）
+
+用户 2026-11-06 的批准原文绑定候选 SHA `0df12589…`、B 计划 SHA `19ea22a3…`、`eval-final-20261105` 和新隔离 state；批准一次 coding-B、最多 6 个 provider HTTP，保留 payer-010 旧 unknown，不授权摘要/恢复/C/患者/world/Trial/judge/发布。
+
+| 项目 | 实际结果 |
+| --- | --- |
+| 入口/身份 | 冻结 release `package/scripts/go_chi_entry.py coding-b`；Go `c5f569e8…`、runtime `2a9a3271…`、release `4553e703…` |
+| run/attempt | `final-b-001` / `attempt-1`，evaluation `eval-final-20261105`，state `runs/final-validation-20261105/state` |
+| 结果 | exit 0；`status=complete`、`safe_error_code=null` |
+| 物理 HTTP | **3** 个 main；确认/summary/continuation/患者均 0；全部 settled |
+| 工具 | `inspect_code`/`verify_patch` started+returned；`verification:pass` |
+| usage | input 1387、output 124；`billing_complete=true`、warnings 0、unsettled [] |
+| USD | charged `0`、list `0.00016955`、allowance `0.00010173`，三项均 known/complete |
+| B receipt | `state/b-receipts/final-b-001.json`，SHA `ac6499ca…`；run digest 匹配 |
+| run seal | `state/run-seals/final-b-001.json`，SHA `6e229d76…`；run digest 匹配 |
+| pending/halted | `null` / `null`；state identity 匹配 runtime |
+| 清理 | `docker run --rm` 后无 `final-b-001` 容器；无 world/network/患者资源；state/log 可读 |
+| official_reward | `null` |
+
+证据：`runs/final-validation-20261105/evidence/b-execution.log`；`b-logs/final-b-001/{run_log.txt,run_result.json,run_output.txt}`；`state/chi-accounting.json`（SHA `51d21aed…`）。机器记录：`reviews/final-validation-b-execution-20261106.json`（SHA `d94c523b…`）。
+
+**边界**：3 个 HTTP 是实际发送数，不是 6 次 B；`charged_usd=0` 是已记录的 Go 实扣，不等于模型价目价值或套餐消耗；本 B 只证明新身份 coding 工具往返/usage/receipt/seal，不证明 CHI 业务、摘要/恢复、患者、Harbor、judge 或官方分数。
+
 ## 5. 文档与审批引用
 
 - `openspec/changes/final-validation-admission/proposal.md` 第3节残留的旧候选短 SHA `500776…` 已更正为当前 `0df12589…`；其他审批引用已核对。
@@ -74,7 +97,7 @@ PR60 合并不改变 release source_commit；本轮使用已冻结 release，不
 
 ## 6. 未执行 / 未验证
 
-- **新 B 未执行**：本 Prompt 未包含“用户另外明确批准、绑定候选和 B 计划原文”的真实调用许可；未创建真实 attempt/journal/state，未占用请求额度。
+- **新 B 已执行并成功**：见第4a节；这是用户后续明确批准的一次 B，不是本 Prompt 初始自动授权。
 - **九题未执行**：资源已到齐，但真实九题仍需另行具体批准；未启动 world/MCP/患者/模型。
 - 真实 world/MCP 检查必须放在将来获批运行启动后、首个模型请求前完成；本轮未做。
 - 正式 Harbor 供应/CLI/state/患者/清理、官方 judge、官方分数、Writeup/报告/发布仍未验证。
@@ -83,7 +106,7 @@ PR60 合并不改变 release source_commit；本轮使用已冻结 release，不
 
 ## 7. 下一项可直接批准的文本
 
-### 7.1 一次新 coding-B（仍待用户明确批准）
+### 7.1 一次新 coding-B（已获批准并执行，保留原文）
 
 > 我确认保留 `real-ext-payer-010` round1 的结果/token 未知及不完整费用，不修改旧 pending、不认定零发送或已结算；该决定只关联候选清单 SHA `0df12589c851b38423e6212997e7f4b9214912c25b7c84d7614f30e0c5f493d0`、B 计划 SHA `19ea22a3ab362af78c13c285b964b7fb95c6b22a45a34f557f9e5bb18c588672`、`eval-final-20261105` 及新隔离 state。允许执行 `final-b-001` 一次 coding-B，最多 6 个 provider HTTP，参数、用途、记录、停止和清理按该计划。暂不授权摘要/恢复、任何 CHI C、患者、world、Trial、判分或发布；旧 unknown 和旧 B 许可仍不结算、不复用。
 
@@ -95,7 +118,7 @@ PR60 合并不改变 release source_commit；本轮使用已冻结 release，不
 
 ## 8. 交接
 
-- 分支：`deepseek/final-validation-execution`；实现/文档提交 `c5501fc…`，已 push 到 origin。
-- PR：[PR61](https://github.com/xsw932187210-cell/chi-agent/pull/61) 已创建，base=main；未 merge/auto-merge。
+- 分支：`deepseek/final-validation-execution`；资源/文档提交 `c5501fc…`，B 执行记录/文档后续提交并 push。
+- PR61（资源冻结/准入草案）已由用户合并，merge `0849a19…`；本轮新B记录单独提交，[PR62](https://github.com/xsw932187210-cell/chi-agent/pull/62) 已创建，base=main；未 merge/auto-merge。
 - 详细资源冻结：`reviews/nine-task-resource-freeze-20261106.json`；候选/预登记/B 计划原字节未改。
 - 本报告是执行者检查，不替代 GPT 独立复审；GPT 暂无额度不阻塞本轮离线准备，但真实 B/九题仍须用户另行明确批准。

@@ -1,6 +1,6 @@
-# 最终候选冻结与新B/九题验证准入准备（草案、未授权执行）
+# 最终候选冻结、新B执行与九题验证准入准备（B已完成；九题未授权）
 
-日期：2026-11-05（Asia/Shanghai）。**本文件、候选清单、PR及合并均不是真实调用授权。** 本轮只完成离线冻结、配置草案和审批准备；真实模型、摘要、续写、B/C、患者、world、Trial、judge、发布均为 0，`official_reward=null`。
+日期：2026-11-05（Asia/Shanghai；2026-11-06 更新）。**本文件不是真实调用授权。** 2026-11-06 用户另行明确批准后，一次新 coding-B `final-b-001` 已执行成功（3 个 main HTTP、全部 settled、receipt/seal 有效）；九题、摘要/恢复、患者、world、Trial、judge、发布仍未授权。`official_reward=null`。
 
 ## 1. 固定候选
 
@@ -22,7 +22,7 @@
 
 包外开发准入链另做 t022 兼容适配：公开 t022 有 5 个 `fixtures/request` PDF，而 `make_role_manifest.build_manifest`、`role_resource_preflight.validate` 与 `role_operator._payer_projection` 原固定 4 个。三处统一使用 1–20 有界精确计数，保留缺/多/重复/scope/size/hash/符号链接拒绝；4 文件 legacy 路径不变，5 文件 t022 在 manifest→preflight→投影三段均通过。不删文件、不换题、不读隐藏答案。三个脚本均不在 `PACKAGE_FILES`，内包 manifest/runtime 不变。
 
-## 2. 新 coding-B：草案
+## 2. 新 coding-B：已执行（计划原文保留）
 
 - 计划文件：[coding-b-plan-20261105.json](../../../reviews/coding-b-plan-20261105.json)，SHA-256 `19ea22a3ab362af78c13c285b964b7fb95c6b22a45a34f557f9e5bb18c588672`。
 - 入口：release `package/scripts/go_chi_entry.py coding-b`；`evaluation=eval-final-20261105`、`state=runs/final-validation-20261105/state`、`run=final-b-001`、`attempt=attempt-1`、`task=synthetic-coding-b`、`history_mode=external`。
@@ -63,7 +63,7 @@ python /package/scripts/go_chi_entry.py coding-b \
 
 **九题分阶段审批草案（未授权执行）：** 详细绑定见 [nine-task-approval-draft-20261106.md](../../../reviews/nine-task-approval-draft-20261106.md)。
 
-> 9 题公开资源已按冻结 revision 获取并逐题生成/通过 manifest；待新 identity B 成功且收据适用、旧 unknown 处置明确后，建议另行批准 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world，使用候选 SHA `0df12589…` 与预登记 SHA `bb9d79…`。provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；不启用摘要/恢复/Y。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归；若走正式 Harbor 必须另满足其供应/授权条件并如实标注。本段是草案，当前未授权任何执行。
+> 9 题公开资源已按冻结 revision 获取并逐题生成/通过 manifest；新 identity B `final-b-001` 已成功且收据适用，旧 unknown 已按用户决定保留未结算；建议另行批准 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world，使用候选 SHA `0df12589…` 与预登记 SHA `bb9d79…`。provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；不启用摘要/恢复/Y。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归；若走正式 Harbor 必须另满足其供应/授权条件并如实标注。本段是草案，当前未授权任何执行。
 
 ## 4. 16C 与正式路径边界
 

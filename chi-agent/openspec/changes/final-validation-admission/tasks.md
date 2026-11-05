@@ -1,6 +1,6 @@
 # 最终候选冻结与准入准备任务清单（草案）
 
-当前状态：PR60 已合并（`856e2f2…`）；九题公开资源已冻结，真实 B/九题执行未授权。候选/审批/预登记见[proposal](proposal.md)，详细证据见[阶段报告](../../../reviews/final-validation-admission-review.md)。
+当前状态：PR60 已合并（`856e2f2…`）；九题公开资源已冻结；新B `final-b-001` 已成功；九题真实执行未授权。候选/审批/预登记见[proposal](proposal.md)，详细证据见[阶段报告](../../../reviews/final-validation-admission-review.md)。
 
 ## 0. 本轮已完成
 
@@ -18,10 +18,10 @@
 
 ## 1. 需用户另行决定/授权
 
-- [ ] G0：payer-010 round1 未知结果/token 的可信结算证据，或明确保留旧 unknown 并仅授权隔离新 B。
-- [ ] 新 B：按 `coding-b-plan-20261105.json` 的候选/evaluation/state/run/6 HTTP 精确批准；本 Prompt 未包含该真实调用批准。
+- [x] G0：用户 2026-11-06 明确选择保留 payer-010 旧 unknown/不完整费用，不修改旧 pending、不认定零发送或已结算，仅授权隔离新 B；旧 unknown 不结算。
+- [x] 新 B：用户 2026-11-06 明确批准后执行 `final-b-001`；3 个 main HTTP 全 settled、receipt/seal 有效、pending/halt null；记录见 `reviews/final-validation-b-execution-20261106.json`。
 - [x] 九题资源：按冻结 revision `5ce88104…` 获取 59 个公开文件并生成/通过 9 份 role manifest；t022 保留 5 份 request PDF、t023/t024 各 4 份。冻结结果 SHA `074fd38e…`；未解析 expectations 内容。
-- [ ] 九题执行：按预登记和分阶段审批草案另行批准；本轮未授权。
+- [ ] 九题执行：资源已 9/9 冻结，但仍需按 `nine-task-approval-draft-20261106.md` 另行明确批准；本轮未执行。
 - [ ] 正式 Harbor/官方患者/judge/发布：各自供应和授权，不由本清单勾选自动恢复。
 
 ## 2. 明确不随本轮启动
