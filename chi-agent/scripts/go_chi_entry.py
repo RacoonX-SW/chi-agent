@@ -157,7 +157,8 @@ def _is_reference(value):
         return True
     return (type(value) is dict and set(value) == _REFERENCE_KEYS
             and _is_text(value["call_id"], 128) and _is_text(value["tool"], 128)
-            and _is_int(value["seq"], 1) and value["event"] in _EVENTS)
+            and _is_int(value["seq"], 1) and type(value["event"]) is str
+            and value["event"] in _EVENTS)
 
 
 def _is_status_view(value):
@@ -168,8 +169,10 @@ def _is_status_view(value):
             and _is_text(value["source_call_id"], 128)
             and _is_int(value["source_seq"], 1)
             and _is_text(value["source_tool"], 128)
+            and type(value["source_kind"]) is str
             and value["source_kind"] in _SOURCE_KINDS
             and _is_text(value["source_scope"], 128)
+            and type(value["source_event"]) is str
             and value["source_event"] in _EVENTS)
 
 
@@ -191,10 +194,12 @@ def _is_completion(value):
         return False
     if set(value) != keys:
         return False
-    if value["verification"] not in {"mechanical_pass", "not_applicable", "blocked"}:
+    if type(value["verification"]) is not str \
+            or value["verification"] not in {"mechanical_pass", "not_applicable", "blocked"}:
         return False
-    if value["business_effect"] not in {"observed", "not_observed", "not_verified",
-                                         "unknown", "violation"}:
+    if type(value["business_effect"]) is not str \
+            or value["business_effect"] not in {"observed", "not_observed", "not_verified",
+                                                "unknown", "violation"}:
         return False
     reason = value["reason"]
     if reason is not None and (type(reason) is not str
@@ -211,6 +216,9 @@ def _is_completion(value):
         return False
     if value["last_mutation_call_id"] is not None \
             and not _is_text(value["last_mutation_call_id"], 128):
+        return False
+    if type(value["required_readback"]) is not str \
+            and value["required_readback"] is not None:
         return False
     if value["required_readback"] not in {None, "business_status", "file_delivery"}:
         return False
@@ -230,7 +238,8 @@ def _is_completion(value):
             return False
     limitations = value["remaining_limitations"]
     if (type(limitations) is not list
-            or any(item not in {"final_text_without_claim_not_blocked"}
+            or any(type(item) is not str
+                   or item not in {"final_text_without_claim_not_blocked"}
                    for item in limitations)):
         return False
     if not _is_text(value["note"], 1024, allow_newlines=True):
@@ -245,6 +254,7 @@ def _is_completion(value):
                     or not _is_text(item["call_id"], 128)
                     or not _is_text(item["tool"], 128)
                     or not _is_text(item["resource"], 2048)
+                    or type(item["event"]) is not str
                     or item["event"] not in {"failed", "returned_error"}):
                 return False
     return True
@@ -303,7 +313,15 @@ def _is_journal_usage(value):
 
 
 def _read_run_log(logs_dir):
-    """Read a bounded, whitelisted run log; return None on any invalid shape."""
+    """Read a bounded, whitelisted run log; invalid input becomes None."""
+    try:
+        return _read_run_log_checked(logs_dir)
+    except Exception:
+        # A malformed nested value must not escape the error boundary.
+        return None
+
+
+def _read_run_log_checked(logs_dir):
     path = logs_dir / "run_log.txt"
     try:
         if path.is_symlink() or not path.is_file():

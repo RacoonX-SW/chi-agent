@@ -1,4 +1,6 @@
 """D: bounded, safe diagnostic preservation and fallback at the entry boundary."""
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -138,6 +140,74 @@ class DiagnosticPreservationTests(unittest.TestCase):
                 self.assertNotIn("synthetic", json.dumps(updated))
                 self.assertNotIn("injected", json.dumps(updated))
 
+    def test_nested_wrong_types_fall_back_without_raising(self):
+        import copy
+        base = rich_log()
+        cases = {
+            "verification-list": ("verification", []),
+            "verification-dict": ("verification", {}),
+            "verification-none": ("verification", None),
+            "business-effect-list": ("business_effect", []),
+            "business-effect-dict": ("business_effect", {}),
+            "required-readback-list": ("required_readback", []),
+            "required-readback-dict": ("required_readback", {}),
+            "required-readback-int": ("required_readback", 1),
+            "limitations-object": ("remaining_limitations", [{}]),
+            "limitations-int": ("remaining_limitations", [1]),
+            "limitations-string": ("remaining_limitations", "x"),
+            "limitations-none": ("remaining_limitations", None),
+        }
+        for name, (field, value) in cases.items():
+            with self.subTest(case=name):
+                log = {**base, "completion": copy.deepcopy(base["completion"])}
+                log["completion"][field] = value
+                path = self.logs / "run_log.txt"
+                if path.exists() or path.is_symlink():
+                    path.unlink()
+                path.write_text(json.dumps(log), encoding="utf-8")
+                self.assertIsNone(go_chi_entry._read_run_log(self.logs))
+                self.assertTrue(go_chi_entry._failure_run_log(self.logs, error="chi_entry_failed"))
+                updated = json.loads(path.read_text())
+                self.assertTrue(updated["log_fallback"])
+                self.assertNotIn("synthetic", json.dumps(updated))
+
+    def test_nested_reference_and_status_types_fall_back(self):
+        import copy
+        base = rich_log()
+        cases = {
+            "reference-event-list": ("last_business_mutation", "event", []),
+            "reference-event-dict": ("last_business_mutation", "event", {}),
+            "status-kind-list": ("latest_business_status", "source_kind", []),
+            "status-event-dict": ("latest_business_status", "source_event", {}),
+            "unresolved-event-list": ("unresolved_file_deliveries", "event", []),
+        }
+        for name, (field, key, value) in cases.items():
+            with self.subTest(case=name):
+                log = {**base, "completion": copy.deepcopy(base["completion"])}
+                if field == "unresolved_file_deliveries":
+                    log["completion"][field] = [{"call_id": "c", "tool": "local-fs-write",
+                                                  "resource": "/workspace/CASE-A/payer/a",
+                                                  key: value}]
+                elif field == "latest_business_status":
+                    log["completion"][field] = {
+                        "text": "observed", "source_call_id": "c", "source_seq": 1,
+                        "source_tool": "triage.get", "source_kind": "business_status",
+                        "source_scope": "case:CASE-A", "source_event": "returned",
+                    }
+                    log["completion"][field][key] = value
+                else:
+                    log["completion"][field] = {
+                        "call_id": "c", "tool": "triage.set_disposition",
+                        "seq": 1, "event": "returned",
+                    }
+                    log["completion"][field][key] = value
+                path = self.logs / "run_log.txt"
+                if path.exists() or path.is_symlink():
+                    path.unlink()
+                path.write_text(json.dumps(log), encoding="utf-8")
+                self.assertIsNone(go_chi_entry._read_run_log(self.logs))
+                self.assertTrue(go_chi_entry._failure_run_log(self.logs, error="chi_entry_failed"))
+
     def test_invalid_unknown_or_oversize_log_falls_back_without_merging_text(self):
         cases = {
             "broken": b"{not-json",
@@ -195,6 +265,35 @@ class EntryFailurePathTests(unittest.TestCase):
             self.assertEqual(value["safe_error_code"], "chi_timeout")
             self.assertFalse(value["log_fallback"])
             self.assertTrue((logs / "run_error.json").is_file())
+
+    def test_entry_error_boundary_survives_nested_invalid_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output, logs = root / "out", root / "logs"
+            stream = io.StringIO()
+
+            def fake_run(coro):
+                coro.close()
+                value = rich_log()
+                value["completion"]["verification"] = []
+                (logs / "run_log.txt").write_text(json.dumps(value), encoding="utf-8")
+                raise GoFailure("chi_timeout")
+
+            argv = ["coding-b", "--bundle-sha256", "a" * 64, "--evaluation-id", "e",
+                    "--task-id", "synthetic-coding-b", "--attempt-id", "a", "--run-id", "r",
+                    "--output-root", str(output), "--logs-dir", str(logs), "--history-mode", "external"]
+            with mock.patch.dict(os.environ, {"OPENCODE_API_KEY": "synthetic"}), \
+                    mock.patch.object(go_chi_entry, "_identity", return_value=("a" * 64, {})), \
+                    mock.patch.object(go_chi_entry.asyncio, "run", side_effect=fake_run), \
+                    contextlib.redirect_stdout(stream):
+                code = go_chi_entry.main(argv)
+            self.assertEqual(code, 1)
+            result = json.loads(stream.getvalue())
+            self.assertEqual(result["safe_error_code"], "chi_timeout")
+            value = json.loads((logs / "run_log.txt").read_text())
+            self.assertTrue(value["log_fallback"])
+            self.assertEqual(value["safe_error_code"], "chi_timeout")
+            self.assertEqual(value["first_error_code"], "chi_timeout")
 
     def test_cleanup_failure_is_visible_without_losing_success_fields(self):
         with tempfile.TemporaryDirectory() as directory:
