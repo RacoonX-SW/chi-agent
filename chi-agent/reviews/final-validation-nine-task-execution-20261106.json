@@ -333,8 +333,10 @@
       "pretty_text_chars": 63820,
       "tool_message_chars": 172813,
       "roster_copies": 3,
-      "deduplicated_request_chars_estimate": 150074,
-      "reduction_percent": 45,
+      "compact_only_request_chars_estimate": 150074,
+      "compact_only_reduction_percent": 45,
+      "implemented_text_request_chars_estimate": 163864,
+      "implemented_text_reduction_percent": 40,
       "journal_redaction": "unparseable_escaped_body",
       "note": "compact structuredContent, the pretty content text and the structuredContent inside the full model dump all carry the same 65-patient roster"
     },
@@ -365,6 +367,7 @@
       "status": "implemented_in_source_tree",
       "pr": "https://github.com/xsw932187210-cell/chi-agent/pull/64",
       "files": ["scripts/go_chi_mcp.py", "tests/test_go_chi_mcp.py"],
+      "effect": "tool message 63820 chars; fourth request about 163864 chars (-40%)",
       "tests": "8 MCP tests; 89 related; full suite 625 tests with 3 pre-existing import errors",
       "frozen_release_package_unchanged": true,
       "timeout_policy_changed": false
