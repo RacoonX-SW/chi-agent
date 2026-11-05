@@ -27,10 +27,10 @@ from pathlib import Path
 
 from opencode_go_provider import GoFailure
 
-SCHEMA = "chi-task-state-v2"
-VERSION = "chi-task-state-v2"
-LEGACY_SCHEMAS = frozenset({"chi-task-state-v1"})
-COMPLETION_SCHEMA = "chi-completion-v2"
+SCHEMA = "chi-task-state-v3"
+VERSION = "chi-task-state-v3"
+LEGACY_SCHEMAS = frozenset({"chi-task-state-v1", "chi-task-state-v2"})
+COMPLETION_SCHEMA = "chi-completion-v3"
 MAX_STATE_BYTES = 65536
 MAX_TEXT = 800
 LIMITS = {
@@ -168,6 +168,24 @@ def source_kind_for(role: str, tool: str, kind: str, scope: str, effect: str | N
     return "business_evidence"
 
 
+def file_resource(tool: str, kind: str, arguments) -> str | None:
+    """Return a bounded program-owned file resource id for delivery evidence.
+
+    Only local file tools with an absolute path have a stable resource. The
+    model cannot supply a repair note or nominate another path as the same
+    resource; matching is by exact path plus the observation scope.
+    """
+    if kind != "local" or tool not in {"local-fs-write", "local-fs-edit", "local-fs-read"}:
+        return None
+    if type(arguments) is not dict:
+        return None
+    path = arguments.get("path")
+    if (type(path) is not str or not path.startswith("/") or len(path) > 2048
+            or "\x00" in path or any(ord(ch) < 32 for ch in path)):
+        return None
+    return path
+
+
 def _atomic_write(path: Path, payload: dict) -> None:
     raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, allow_nan=False).encode("utf-8")
     if len(raw) > MAX_STATE_BYTES:
@@ -276,6 +294,7 @@ class TaskState:
             "kind": kind,
             "effect": effect,
             "source_kind": source_kind_for(self.data["role"], tool, kind, scope, effect),
+            "resource": file_resource(tool, kind, arguments),
             "scope": scope,
             "arguments_sha256": _sha(arguments if arguments is not None else {}),
             "result_sha256": _sha(result if result is not None else ""),
@@ -587,6 +606,32 @@ class TaskState:
         return [item for item in self.data["observations"]
                 if item.get("source_kind") == "file_deliverable"]
 
+    def _unresolved_file_deliveries(self) -> list[dict]:
+        """Return only file failures not repaired by a later same-resource success.
+
+        The failure observations stay in state. A later successful write/edit
+        to the exact same path and scope is the only program-owned repair
+        evidence; unrelated paths, other cases/roles and model notes do not
+        clear the failure.
+        """
+        failures = {}
+        successes = {}
+        for item in self._file_mutations():
+            resource = item.get("resource")
+            key = (item.get("scope"), resource) if type(resource) is str else None
+            if item["event"] in {"failed", "returned_error"}:
+                if key is None:
+                    failures[("unkeyed", item["call_id"])] = item
+                else:
+                    failures[key] = item
+            elif item["event"] == "returned" and key is not None:
+                successes[key] = max(successes.get(key, 0), item["seq"])
+        unresolved = []
+        for key, failure in failures.items():
+            if key[0] == "unkeyed" or successes.get(key, 0) <= failure["seq"]:
+                unresolved.append(failure)
+        return sorted(unresolved, key=lambda item: item["seq"])
+
     def _completion(self) -> tuple[bool, str | None, str, str, str | None]:
         """One shared completion evaluation for claim feedback and reports."""
         if self.data.get("claim_violation"):
@@ -594,10 +639,9 @@ class TaskState:
         open_unknowns = [item for item in self.data["unknowns"] if item["status"] == "open"]
         if open_unknowns:
             return False, "completion_blocked_unknown:" + open_unknowns[0]["id"], "blocked", "unknown", None
-        failed_files = [item for item in self._file_mutations()
-                        if item["event"] in {"failed", "returned_error"}]
-        if failed_files:
-            return (False, "completion_file_write_failed:" + failed_files[-1]["call_id"],
+        unresolved = self._unresolved_file_deliveries()
+        if unresolved:
+            return (False, "completion_file_write_failed:" + unresolved[0]["call_id"],
                     "blocked", "not_verified", "file_delivery")
         status = self.data["latest_business_status"]
         business = self._business_mutations()
@@ -631,6 +675,7 @@ class TaskState:
             })
         business = self._business_mutations()
         files = self._file_mutations()
+        unresolved = self._unresolved_file_deliveries()
         last_business = business[-1] if business else None
         last_file = files[-1] if files else None
         open_unknowns = [item["id"] for item in self.data["unknowns"] if item["status"] == "open"]
@@ -657,13 +702,20 @@ class TaskState:
             "last_file_mutation": reference(last_file),
             "last_mutation_call_id": last_business["call_id"] if last_business else None,
             "required_readback": required,
+            "unresolved_file_deliveries": [
+                {"call_id": item["call_id"], "tool": item["tool"],
+                 "resource": item.get("resource"), "event": item["event"]}
+                for item in unresolved
+            ],
             "open_unknowns": open_unknowns,
             "claim_violation": bool(self.data.get("claim_violation")),
             "stagnation": self.data.get("stagnation"),
             "remaining_limitations": limitations,
             "note": ("mechanical/source check only; not a clinical or official verdict; "
-                     "a successful file write after a business readback does not require "
-                     "another business readback, while failed file writes still block"),
+                     "a later successful write/edit to the same path and scope repairs a "
+                     "known file-write failure, while unrelated paths, unresolved unknowns "
+                     "and failed repairs still block; a successful file write after a "
+                     "business readback does not require another business readback"),
         }
 
     def record_claim(self) -> dict:
@@ -700,8 +752,8 @@ class TaskState:
             "claim_violation": data.get("claim_violation", False),
             "stagnation": data.get("stagnation"),
             "observations": [
-                {key: item[key] for key in ("seq", "call_id", "tool", "effect",
-                                            "source_kind", "scope", "event")}
+                {key: item.get(key) for key in ("seq", "call_id", "tool", "effect",
+                                                "source_kind", "resource", "scope", "event")}
                 for item in observations
             ],
             "observation_count": len(data["observations"]),

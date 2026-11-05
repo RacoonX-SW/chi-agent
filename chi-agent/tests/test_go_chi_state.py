@@ -262,7 +262,7 @@ class StateTests(unittest.TestCase):
         read_call(state)
         state.propose({"plans": ["first"]})
         summary = state.summary()
-        self.assertEqual(summary["schema"], "chi-task-state-v2")
+        self.assertEqual(summary["schema"], "chi-task-state-v3")
         self.assertEqual(summary["observations"][0]["source_kind"], "business_status")
         self.assertNotIn("result", summary["observations"][0])
         self.assertLessEqual(len(summary["observations"]), LIMITS["observations_in_summary"])
@@ -279,7 +279,7 @@ class StateTests(unittest.TestCase):
         allowed, reason = state.can_claim()
         self.assertTrue(allowed, reason)
         report = state.completion_report()
-        self.assertEqual(report["schema"], "chi-completion-v2")
+        self.assertEqual(report["schema"], "chi-completion-v3")
         self.assertEqual(report["verification"], "mechanical_pass")
         self.assertEqual(report["last_business_mutation"]["call_id"], "call_w1")
         self.assertEqual(report["last_file_mutation"]["call_id"], "call_f1")
@@ -335,6 +335,69 @@ class StateTests(unittest.TestCase):
         allowed, reason = state.can_claim()
         self.assertTrue(allowed, reason)
         self.assertEqual(state.completion_report()["verification"], "not_applicable")
+
+    def test_repaired_same_file_delivery_clears_failure(self):
+        state = self.state()
+        write_call(state)
+        read_call(state, "call_2")
+        state.propose({"target": {"case_id": "CASE-A"},
+                       "latest_business_status": {"text": "accepted", "source_call_id": "call_2"}})
+        file_call(state, "bad_edit", tool="local-fs-edit", event="returned_error")
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_file_write_failed:bad_edit"))
+        file_call(state, "fixed_write", tool="local-fs-write", event="returned")
+        allowed, reason = state.can_claim()
+        self.assertTrue(allowed, reason)
+        report = state.completion_report()
+        self.assertEqual(report["verification"], "mechanical_pass")
+        self.assertEqual(report["unresolved_file_deliveries"], [])
+        self.assertEqual(state.record_claim()["status"], "recorded")
+
+    def test_unrelated_or_other_case_file_success_does_not_clear_failure(self):
+        state = self.state()
+        file_call(state, "bad_edit", tool="local-fs-edit", event="returned_error")
+        file_call(state, "other_file", tool="local-fs-write", event="returned",
+                  path="/workspace/CASE-A/payer/other.md")
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_file_write_failed:bad_edit"))
+        file_call(state, "other_case", tool="local-fs-write", event="returned",
+                  path="/workspace/CASE-B/payer/letter.md")
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_file_write_failed:bad_edit"))
+        file_call(state, "other_role", tool="local-fs-write", event="returned",
+                  path="/workspace/CASE-A/provider/letter.md")
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_file_write_failed:bad_edit"))
+        report = state.completion_report()
+        self.assertEqual([item["call_id"] for item in report["unresolved_file_deliveries"]],
+                         ["bad_edit"])
+
+    def test_later_failure_after_repair_blocks_again(self):
+        state = self.state()
+        file_call(state, "bad_edit", tool="local-fs-edit", event="returned_error")
+        file_call(state, "fixed_write", tool="local-fs-write", event="returned")
+        self.assertTrue(state.can_claim()[0])
+        file_call(state, "bad_again", tool="local-fs-edit", event="returned_error")
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_file_write_failed:bad_again"))
+
+    def test_unknown_file_failure_still_requires_same_resource_repair(self):
+        state = self.state()
+        file_call(state, "bad_write", tool="local-fs-write", event="failed")
+        self.assertEqual(state.data["unknowns"][0]["status"], "open")
+        file_call(state, "file_read", tool="local-fs-read", event="returned")
+        state.propose({"resolve_unknown": [{"unknown_id": "u1", "source_call_id": "file_read",
+                                            "note": "read after failure"}]})
+        allowed, reason = state.can_claim()
+        self.assertFalse(allowed)
+        self.assertTrue(reason.startswith("completion_file_write_failed:bad_write"))
+        file_call(state, "fixed_write", tool="local-fs-write", event="returned")
+        self.assertTrue(state.can_claim()[0])
 
     def test_failed_file_write_registers_unknown_and_blocks_claim(self):
         state = self.state()

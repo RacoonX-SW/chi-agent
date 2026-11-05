@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import httpx
 
+import go_chi_entry
+
 from go_chi_context import DEFAULT_BUDGET
 from go_chi_journal import ChiJournal
 from go_chi_runtime import run_chi
@@ -141,6 +143,7 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Synthetic payer instruction", "\n".join(context_lines))
         self.assertEqual(log["completion"]["verification"], "mechanical_pass")
         self.assertEqual(log["completion"]["business_effect"], "observed")
+        self.assertIsNotNone(go_chi_entry._read_run_log(self.root / "logs"))
         # The search tool returned a bounded hit from the public handbook.
         tool_messages = [message for request in observed for message in request["messages"]
                          if message.get("role") == "tool" and message.get("tool_call_id") == "call_2"]
@@ -158,6 +161,65 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(output, "done")
         self.assertEqual(server.calls, [("triage.get", {"case_id": "CASE-A"})])
         self.assertEqual(journal.run["tool_events"][0]["call_id"], "call_1")
+
+    async def test_repaired_same_file_delivery_allows_claim(self):
+        target = self.workspace / "CASE-A" / "payer" / "note.md"
+        target.write_text("old", encoding="utf-8")
+        responses = [
+            completion([("bad_edit", "local-fs-edit",
+                         {"path": str(target), "old_string": "missing", "new_string": "new"})]),
+            completion([("fixed_write", "local-fs-write",
+                         {"path": str(target), "content": "corrected"})]),
+            completion([("readback", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("status", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "observed", "source_call_id": "readback"}})]),
+            completion([("claim", "local-claim_done", {})]),
+            completion(),
+        ]
+        output, observed, _, journal = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertEqual(results["bad_edit"], "ERROR: old_string not found")
+        self.assertEqual(results["fixed_write"], "workspace file written")
+        self.assertEqual(target.read_text(encoding="utf-8"), "corrected")
+        self.assertEqual(results["claim"], "task marked as done")
+        self.assertTrue(journal.run["claim_done"])
+        self.assertEqual(len(observed), 6)
+        report = json.loads((self.root / "logs" / "run_log.txt").read_text())["completion"]
+        self.assertEqual(report["verification"], "mechanical_pass")
+        self.assertEqual(report["unresolved_file_deliveries"], [])
+
+    async def test_unrelated_file_success_does_not_clear_delivery_failure(self):
+        target = self.workspace / "CASE-A" / "payer" / "note.md"
+        other = self.workspace / "CASE-A" / "payer" / "other.md"
+        target.write_text("old", encoding="utf-8")
+        responses = [
+            completion([("bad_edit", "local-fs-edit",
+                         {"path": str(target), "old_string": "missing", "new_string": "new"})]),
+            completion([("other_write", "local-fs-write",
+                         {"path": str(other), "content": "other"})]),
+            completion([("readback", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("status", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "observed", "source_call_id": "readback"}})]),
+            completion([("claim", "local-claim_done", {})]),
+            completion(),
+        ]
+        output, observed, _, journal = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertTrue(results["claim"].startswith("REFUSED: completion_file_write_failed:bad_edit"))
+        self.assertFalse(journal.run["claim_done"])
+        self.assertEqual(target.read_text(encoding="utf-8"), "old")
+        self.assertEqual(other.read_text(encoding="utf-8"), "other")
+        report = json.loads((self.root / "logs" / "run_log.txt").read_text())["completion"]
+        self.assertEqual([item["call_id"] for item in report["unresolved_file_deliveries"]],
+                         ["bad_edit"])
 
     async def test_mcp_business_error_closes_the_batch_and_allows_the_next_read(self):
         responses = [

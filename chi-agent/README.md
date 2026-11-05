@@ -466,7 +466,7 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 
 `run_chi()` 默认启用 `context_budget=DEFAULT_BUDGET`（`chi-context-budget-v1`）：3.5M 字符、1M 估计 token、8192 输出预留，来源标 `configured_unverified`。每次通过 contract 的请求在 `journal.reserve()` 前测量 system/instruction/tools/history/tool_result/reasoning，写入 `logs/context.jsonl`（只含计数，不含正文）；超限在发送前返回 `chi_context_budget_exceeded`。`run_log.txt` 另记 `context_requests`、最大字符/估计 token 和已结算输入 token。自动历史压缩**未采用**：当前完整批次校验要求未满足新 contract/真实协议证据，不能靠删消息绕过。
 
-完成核验通过 `local-completion-check` 返回 `chi-completion-v2`，区分 `mechanical_pass/not_applicable/blocked` 与 `observed/not_observed/not_verified/unknown/violation`，并写入 run_log 的 `completion`；它不替代 claim，也不是临床或官方 verdict。业务状态更新只能引用目标 case 的业务状态读；文件/手册/政策读只是证据。业务回读后保存交付文件不要求再次业务回读，但文件写失败和未知写效果仍阻止完成。
+完成核验通过 `local-completion-check` 返回 `chi-completion-v3`，区分 `mechanical_pass/not_applicable/blocked` 与 `observed/not_observed/not_verified/unknown/violation`，并写入 run_log 的 `completion`；它不替代 claim，也不是临床或官方 verdict。业务状态更新只能引用目标 case 的业务状态读；文件/手册/政策读只是证据。业务回读后保存交付文件不要求再次业务回读，但文件写失败和未知写效果仍阻止完成。
 
 F6 对 MCP mutation 的 dispatch 异常返回 `UNKNOWN_WRITE_EFFECT: <code>`，登记 open unknown；未知期间拒绝所有写，只能用同目标更晚只读观察 resolve；未解决结束为 `chi_unknown_write_effect` incomplete。重复读第 3 次追加 `STAGNATION`、第 5 次拒绝；重复写第 2 次拒绝；不自动重试或换模型。本地文件写异常仍按原逻辑失败。
 
