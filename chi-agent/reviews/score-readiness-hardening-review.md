@@ -251,13 +251,14 @@
 
 ## 10. 返工 R1–R4（初审不通过后追加）
 
-初审 `33e6eca` 的“不通过、2 项 P1、2 项 P2”保持原义；本节只记录返工，不把返工通过回写成初审通过。返工代码候选为 `e9c503a628bf26bef296512ecb45beec77e08a79`。
+初审 `33e6eca` 的“不通过、2 项 P1、2 项 P2”保持原义；本节只记录返工，不把返工通过回写成初审通过。返工代码候选为 `e9455042a055a87d7bc3fb97ece4cbcda93618f5`。
 
 | 卡 | 提交 | 主题 |
 | --- | --- | --- |
 | R1 | `f2ecd84` | 同文件合法修复后才解除交付失败；state/completion v3 |
 | R2 | `af08fe9` | runtime log 结构/嵌套键/类型/有限错误码严格校验 |
 | R4 | `e9c503a` | 状态来源描述按 role/canonical 工具精确化 |
+| R2b | `e945504` | 收窄 safe error code 集合，排除已知但非错误字面量 |
 | R3 | 本文档提交 | 只读余量盘点 v2 与证据更正（脚本在忽略目录） |
 
 ### 10.1 R1 / P1：文件交付失败后的永久 claim 阻断
@@ -313,19 +314,19 @@
 
 | 检查 | 实际结果 |
 | --- | --- |
-| 适用全量 pytest（dev；Harbor overlay；隔离 runs） | **exit 0：948 passed、8 skipped、332 subtests passed**（27.36s） |
+| 适用全量 pytest（dev；Harbor overlay；隔离 runs） | **exit 0：948 passed、8 skipped、333 subtests passed**（27.44s） |
 | controller `test_role_operator_config` + `test_role_validation_wiring` | **exit 0：12 tests OK** |
 | controller `test_go_chi_operator` | **exit 0：3 tests OK** |
 | anthropic 两模块 | **exit 2：2 collection errors，`ModuleNotFoundError: anthropic`** |
 
-新包（代码 `e9c503a`）：
+新包（代码 `e945504`）：
 
 | 项目 | 实测 |
 | --- | --- |
-| Go manifest | `ce34b48ef3838ed5bc24ba06cf80ad1b65d35637fcc819214d790151e8675ae5` |
-| runtime identity | `d7f6c9c5aa253804d007a6730e506e83e8556934b579f1c4964685854c306d2f` |
-| release manifest | `9ae8b0119bfe6ca53f65eb3a45d1b803901ce690b6d2732aa8ecd48eeea59bb7` |
-| release source_commit | `e9c503a628bf26bef296512ecb45beec77e08a79` |
+| Go manifest | `b3d0e87bd10b30a9d2adb6af00585dbeaad92b4c2e7b5d203fbcc97c4233d8a8` |
+| runtime identity | `e339836ffc0ce6ed081f6c9a413e487faa6b6c52c7bb49160d0c8a13724298d4` |
+| release manifest | `c2f9d680fb55221b5ec25fb4998e62f5725120964c67750601f5bff8ab748ca3` |
+| release source_commit | `e9455042a055a87d7bc3fb97ece4cbcda93618f5` |
 | 旧 evaluation manifest | `a6a69d7d23ae5197eff00fadb198e2cf743f74aae600b65ae2f5e36e3085abfc`，不变 |
 
 42 成员；相对初审包 `f70bb13d…` 无增删，变化 6 个脚本：`go_chi_diagnostics.py`、`go_chi_entry.py`、`go_chi_guidance.py`、`go_chi_state.py`、`go_chi_summary.py`、`go_chi_tools.py`；其余 36 项一致。隔离无 Key/禁网 preflight 实际 `identity_verified`、upstream clean、`official_reward=null`。新身份没有新 B；旧 B 不适用。
