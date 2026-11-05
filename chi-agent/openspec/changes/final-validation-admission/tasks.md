@@ -1,9 +1,11 @@
 # 最终候选冻结与准入准备任务清单（草案）
 
-当前状态：离线准备完成，真实执行未授权。候选/审批/预登记见[proposal](proposal.md)，详细证据见[阶段报告](../../../reviews/final-validation-admission-review.md)。
+当前状态：PR60 已合并（`856e2f2…`）；九题公开资源已冻结，真实 B/九题执行未授权。候选/审批/预登记见[proposal](proposal.md)，详细证据见[阶段报告](../../../reviews/final-validation-admission-review.md)。
 
 ## 0. 本轮已完成
 
+- [x] PR60 已合并 `856e2f2…`；从最新 `origin/main` 新建 `deepseek/final-validation-execution`，未向已合并分支追加。
+- [x] 按冻结 revision 获取九题公开资源、生成 9 份 role manifest 并通过资源 preflight；真实 world/MCP/模型仍未启动。
 - [x] 从最新 `origin/main=ec1a706…` 建 `deepseek/final-validation-admission`；核对工作区、其他 worktree 和单写入者。
 - [x] 比较已审包内实现 `36db613…` 与当前树：42 个 `PACKAGE_FILES` 成员逐字节不变；新增包外 `go_chi_readiness_inventory.py`/测试单列。
 - [x] 从当前树重建 Go/release/evaluation；记录 manifest/runtime/release/source_commit。
@@ -17,8 +19,8 @@
 ## 1. 需用户另行决定/授权
 
 - [ ] G0：payer-010 round1 未知结果/token 的可信结算证据，或明确保留旧 unknown 并仅授权隔离新 B。
-- [ ] 新 B：按 `coding-b-plan-20261105.json` 的候选/evaluation/state/run/6 HTTP 精确批准。
-- [ ] 九题资源：获取并冻结 9 题公开 instruction/tool_reference/world/manifest；当前 0/9 本地存在。
+- [ ] 新 B：按 `coding-b-plan-20261105.json` 的候选/evaluation/state/run/6 HTTP 精确批准；本 Prompt 未包含该真实调用批准。
+- [x] 九题资源：按冻结 revision `5ce88104…` 获取 59 个公开文件并生成/通过 9 份 role manifest；t022 保留 5 份 request PDF、t023/t024 各 4 份。冻结结果 SHA `074fd38e…`；未解析 expectations 内容。
 - [ ] 九题执行：按预登记和分阶段审批草案另行批准；本轮未授权。
 - [ ] 正式 Harbor/官方患者/judge/发布：各自供应和授权，不由本清单勾选自动恢复。
 
