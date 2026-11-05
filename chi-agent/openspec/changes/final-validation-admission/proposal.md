@@ -8,7 +8,7 @@
 | --- | --- |
 | 生产源码 | `ec1a7064b5cd0a10bd8c397c9f7f61e1946d19cf` |
 | 已审包内实现 | `36db613358ac9d01d792ee8f0bb4d39431c02b9e` |
-| 机器候选清单 | [validation-candidate-20261105.json](../../../reviews/validation-candidate-20261105.json)，SHA-256 `9ac7ba0ea90bf317eda3e074d9fed4f27a7022f0b9890441e7b9deed040fafc5` |
+| 机器候选清单 | [validation-candidate-20261105.json](../../../reviews/validation-candidate-20261105.json)，SHA-256 `0df12589c851b38423e6212997e7f4b9214912c25b7c84d7614f30e0c5f493d0` |
 | Go bundle manifest | `c5f569e8a20439c07f020fd8776af4aba4d62da0c64e86e2da88e744cc077f0d` |
 | Go runtime identity | `2a9a32711f8e3de43eac037fe2c745c803c09851e71947dae36325d1931953fc` |
 | release manifest | `4553e703effef63cae69a9260c13b1a73973d5c51439213fa9337feef326d4e6`，source_commit `ec1a706…` |
@@ -20,7 +20,7 @@
 
 当前树相对已审包内实现只新增包外 `scripts/go_chi_readiness_inventory.py` 及其测试（`8992af1`，已在本轮前独立复审）；`PACKAGE_FILES` 42 成员逐字节不变。release 的 `source_commit` 从 `36db613` 变为 `ec1a706`，但内包 manifest/runtime 不变；这是外层 source 绑定变化，不是内包字节变化。详细证据见[阶段报告](../../../reviews/final-validation-admission-review.md)。
 
-包外开发 operator 另做 t022 兼容适配：公开 t022 有 5 个 `fixtures/request` PDF，而原 `_payer_projection` 固定 4 个；改为使用冻结 manifest 的 1–20 有界精确计数，保留缺/多/重复/scope/size/hash 拒绝。4 文件 legacy 路径不变，5 文件 t022 路径通过；不删文件、不换题、不读隐藏答案。`role_operator.py` 不在 `PACKAGE_FILES`，内包 manifest/runtime 不变。
+包外开发准入链另做 t022 兼容适配：公开 t022 有 5 个 `fixtures/request` PDF，而 `make_role_manifest.build_manifest`、`role_resource_preflight.validate` 与 `role_operator._payer_projection` 原固定 4 个。三处统一使用 1–20 有界精确计数，保留缺/多/重复/scope/size/hash/符号链接拒绝；4 文件 legacy 路径不变，5 文件 t022 在 manifest→preflight→投影三段均通过。不删文件、不换题、不读隐藏答案。三个脚本均不在 `PACKAGE_FILES`，内包 manifest/runtime 不变。
 
 ## 2. 新 coding-B：草案
 
@@ -46,7 +46,7 @@ python /package/scripts/go_chi_entry.py coding-b \
 
 **可直接批准的文本（选项 2：保留旧 unknown，仅批准本次 B）：**
 
-> 我确认保留 `real-ext-payer-010` round1 的结果/token 未知及不完整费用，不修改旧 pending、不认定零发送或已结算；该决定只关联候选清单 SHA `9ac7ba0ea90bf317eda3e074d9fed4f27a7022f0b9890441e7b9deed040fafc5`、B 计划 SHA `19ea22a3ab362af78c13c285b964b7fb95c6b22a45a34f557f9e5bb18c588672`、`eval-final-20261105` 及新隔离 state。允许执行 `final-b-001` 一次 coding-B，最多 6 个 provider HTTP，参数、用途、记录、停止和清理按该计划。暂不授权摘要/恢复、任何 CHI C、患者、world、Trial、判分或发布；旧 unknown 和旧 B 许可仍不结算、不复用。
+> 我确认保留 `real-ext-payer-010` round1 的结果/token 未知及不完整费用，不修改旧 pending、不认定零发送或已结算；该决定只关联候选清单 SHA `0df12589c851b38423e6212997e7f4b9214912c25b7c84d7614f30e0c5f493d0`、B 计划 SHA `19ea22a3ab362af78c13c285b964b7fb95c6b22a45a34f557f9e5bb18c588672`、`eval-final-20261105` 及新隔离 state。允许执行 `final-b-001` 一次 coding-B，最多 6 个 provider HTTP，参数、用途、记录、停止和清理按该计划。暂不授权摘要/恢复、任何 CHI C、患者、world、Trial、判分或发布；旧 unknown 和旧 B 许可仍不结算、不复用。
 
 若用户选择先补齐 payer-010 的可信结算/对账证据，则先走既有受审处置，不启动本 B。无答复、PR 合并或候选存在都不等于选项 2 同意。
 
@@ -56,7 +56,7 @@ python /package/scripts/go_chi_entry.py coding-b \
 - 选择方法：只读公开 `data/tasks.jsonl` 的 family/task_id/path/title/kind/actor/timeout/公开 fixture 计数/URL；**不读取** expected_target_status、expected_payer_route、verifier_contract、expectations/solution/verifier 内容。排除历史已见 base 后按 task_id 升序取前三；provider/UM base 不重叠；CM 排除已见 afib 后取前三。
 - 9 题：provider `t015/t016/t021`；UM `t022/t023/t024`；CM `cm_anorexia_hard_refuses_001`、`cm_asthma_low_coop_001`、`cm_ckd_moderate_anxious_001`。
 - 污染：历史已见/已分析 base `008/011/012/013/014/017/018/019/027/030/031/032` 与 `cm_afib_moderate_anxious_001` 排除；所选 9 题在选定仓库历史中未找到先前使用，但这不是“保证未见”，若后续发现污染必须如实标注，不能按结果换题。
-- 资源：9 题当前均不在本地离线树，需有权限的公开资源获取与逐题 instruction/tool_reference/world/manifest hash 冻结；本轮不下载、不解析隐藏材料。 t022 公开布局为 5 个 request PDF（t023/t024 为 4）；开发 operator 已改为有界 manifest 计数，4/5 文件正例及缺/多/重复/scope/symlink/hash 负例离线通过。
+- 资源：9 题当前均不在本地离线树，需有权限的公开资源获取与逐题 instruction/tool_reference/world/manifest hash 冻结；本轮不下载、不解析隐藏材料。 t022 公开布局为 5 个 request PDF（t023/t024 为 4）；manifest 生成、资源 preflight、world 后投影三处已统一为有界 manifest 计数，4/5 文件完整链正例及缺/多/重复/scope/symlink/hash 负例离线通过。
 - 路径：**推荐开发 `role_operator` 路径**，明确标为“开发未见验证”，不是正式 Harbor。若同一次运行同时满足正式 Harbor 供应/CLI/state/患者/授权条件，可合并取证，但不得把 mock/开发装配称为真实 Harbor 通过。
 - 每题一次、同一冻结候选、新 world；provider/payer 物理 HTTP 上界 50，CM 主/确认共享 50 加开发患者辅助≤10（一般≤60）；确认≤2；主输出 8192、确认 32768、患者 8192；B 单列，不藏进 16C。
 - 停止：新 unknown、pending/halt、跨 case/patient 写、越界副作用、预算/时间、取消、持久化或清理失败；不按结果替换任务、不自动重跑、不改名冒充未见。

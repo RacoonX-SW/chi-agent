@@ -10,7 +10,7 @@
 - [x] 隔离导出包无 Key 禁网 preflight；实际 `identity_verified`、runtime 匹配、upstream clean。
 - [x] 固定摘要/恢复/Y off、模型/端点/high、依赖/镜像/资源供应和共享/辅助限额。
 - [x] 生成机器候选清单、B 计划草案、G0 决策模板、九题预登记、污染/资源矩阵和审批草案。
-- [x] 核对 t022 公开 5 个 request PDF 与开发投影原固定 4 个的缺口；包外 `role_operator._payer_projection` 改为有界 manifest 计数，4/5 文件正例及缺/多/重复/scope/symlink/hash 负例通过（7 tests OK；连同既有 controller 15 项为 22 OK）。
+- [x] 核对 t022 公开 5 个 request PDF 与开发准入链原固定 4 个的缺口；`make_role_manifest`、`role_resource_preflight`、`role_operator._payer_projection` 三处统一为 1–20 有界计数，4/5 完整链正例及缺/多/重复/scope/symlink/hash 负例通过（manifest/preflight 24 passed；投影 14 OK；连同既有 controller 15 项为 29 OK）。
 - [x] 只读核对旧 S 账、payer-010 unknown/pending 和 state-abl-on2；未 rebind/迁移/核销/清 pending。
 - [x] 更新阶段报告和 REVIEW_STATE 短状态；未覆盖旧候选/旧审批/旧导出。
 

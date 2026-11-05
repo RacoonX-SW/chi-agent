@@ -21,8 +21,11 @@
     "chi-k-pdf-deps-20261027-v1"
   ],
   "development_operator_compatibility": {
+    "chain_4_and_5_file_positive": true,
+    "chain_invalid_0_21_missing_duplicate_rejected": true,
     "five_file_projection_accepted": true,
     "four_file_projection_accepted": true,
+    "front_manifest_and_preflight_bounded": true,
     "legacy_request_pdfs": 4,
     "missing_extra_duplicate_provider_symlink_wrong_hash_rejected": true,
     "operator_change_is_package_external": true,
@@ -139,10 +142,14 @@
   ],
   "official_reward": null,
   "package_external_scripts": {
-    "go_chi_readiness_inventory.py": "86b7938b214735d5f7e4ee7d09e9242410b07188416f58f0b09441472320f110",
-    "role_operator.py": "3176c9761aa04dd1fd94fd65af56f4ed7543e0a267f0bca396280259c128bb0b",
-    "role_runner.py": "65f7c541513e960ff70e9320e46a0cc4ab55938fe1c6f7dbe7a2918db16d5e2d",
-    "tests/test_role_payer_projection.py": "498d911d9479b48a2a71984f88e45102a0f6a5603e4121869924f3c2d2b53e45"
+    "scripts/go_chi_readiness_inventory.py": "86b7938b214735d5f7e4ee7d09e9242410b07188416f58f0b09441472320f110",
+    "scripts/make_role_manifest.py": "d199743fbf886e65731ef235fcf5b2c2a7719f374c670f31c590cc4d6dac83ef",
+    "scripts/role_operator.py": "1ac9deda3481b4275be167a46f4aab4e49d7c7599a1d95d54f556629b5d250f6",
+    "scripts/role_resource_preflight.py": "df9d734c95ac1bf3accc2db54a55c8de5eb420ff29503c259a79f22f91e1073e",
+    "scripts/role_runner.py": "65f7c541513e960ff70e9320e46a0cc4ab55938fe1c6f7dbe7a2918db16d5e2d",
+    "tests/test_make_role_manifest.py": "58852b6c5f5d74c1f39c0b1aba272ad188537171efb376cfa84890fbe4f46413",
+    "tests/test_role_payer_projection.py": "0763bd2ce83a4df33cdb6a3bb006d38dacb7d944aafad1eaa28f794f77bbee85",
+    "tests/test_role_resource_preflight.py": "73a3c648b06de54020840117bb3ce2b01bcb6e2579904a49ca26abf96a7ae1c1"
   },
   "package_file_sha256": {
     "RUN_CHI_GO.md": "12c37877e18df7700011723aec56154b74279aac8c775509aac7b6444ee7d3c6",

@@ -13,6 +13,12 @@ ROLE_MAP = {'prior_auth_provider': ('provider', 'provider'),
             'care_management': ('care_manager', 'cm')}
 SHA = re.compile(r'[0-9a-f]{64}')
 ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_-]{0,127}')
+REQUEST_MIN = 1
+REQUEST_MAX = 20
+
+
+def bounded_request_count(count) -> bool:
+    return type(count) is int and not isinstance(count, bool) and REQUEST_MIN <= count <= REQUEST_MAX
 
 
 def validate(dataset: Path, manifest_path: Path, expected_manifest_sha256: str) -> dict:
@@ -85,8 +91,12 @@ def validate(dataset: Path, manifest_path: Path, expected_manifest_sha256: str) 
     expected_public = {manifest['instruction_path'], manifest['tool_reference_path']}
     request_prefix = task + 'fixtures/request/'
     pdfs = [name for name in entries if name.startswith(request_prefix)]
-    if (manifest['role'] == 'payer' and (len(pdfs) != 4 or any(not n.lower().endswith('.pdf') or '/' in n[len(request_prefix):] for n in pdfs))
-            or manifest['role'] != 'payer' and pdfs): raise ValueError('request_inputs_invalid')
+    if manifest['role'] == 'payer':
+        if (not bounded_request_count(len(pdfs))
+                or any(not n.lower().endswith('.pdf') or '/' in n[len(request_prefix):] for n in pdfs)):
+            raise ValueError('request_inputs_invalid')
+    elif pdfs:
+        raise ValueError('request_inputs_invalid')
     expected_public.update(pdfs)
     base_task = {task + 'instruction.md', task + 'task.toml', task + 'fixtures/manifest.json',
                  task + 'fixtures/expectations.json'}

@@ -18,7 +18,7 @@ from evaluation_bundle import _check_components, _read_regular_bounded
 from go_chi_operator_snapshot import capture_resources
 from live_development import _capture_review_input
 from role_cm_capture import capture_cm_review_input
-from role_resource_preflight import validate
+from role_resource_preflight import bounded_request_count, validate
 from go_chi_resources import workspace_path
 from docker.types import Mount
 from chi_bench.verifier.task_runtime import collect_all_verifier_checks  # fail before world startup if verifier is unavailable
@@ -92,7 +92,7 @@ def _payer_projection(artifacts, manifest):
     # Use the frozen manifest count, but keep a bounded, exact and duplicate-free
     # projection so missing/extra/duplicate files still fail.
     count = len(expected)
-    if (not 1 <= count <= 20 or len(found) != count
+    if (not bounded_request_count(count) or len(found) != count
             or len({p.name for p in found}) != count
             or {p.name for p in found} != set(expected)):
         raise ValueError('payer_projection_invalid')
