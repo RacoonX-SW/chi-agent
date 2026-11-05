@@ -892,3 +892,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 新B计划、九题预登记和候选清单是“可审批草案”，不是许可；payer-010旧unknown仍须用户选择“补可信结算证据”或“明确保留并仅授权隔离B”。新隔离root不结算旧历史，也不冒充账户零历史。
 - 九题只从公开索引选，忽略expected/verifier字段；当前9题资源0/9本地，必须先获取并冻结公开instruction/tool_reference/world/manifest。开发operator路径只能称开发未见验证，不能冒充正式Harbor。
 - 下一入口：GPT复审候选/计划/预登记；用户先决定G0，再分别批准B和九题。没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-06：新B/九题资源准备——冻结revision、公开布局与不透明世界资产
+
+- 九题资源按预登记和冻结 revision `5ce88104…` 获取，不跟随远端 main；只取公开 instruction/tool_reference、必要 PDF、world 和 opaque expectations，不下载 judge/solution/tests。59 个文件 size/LFS hash 全匹配。
+- 用已审 `make_role_manifest` 生成 9 份 manifest 并通过 preflight；t022 保留 5 份 request PDF，t023/t024 各 4 份。资源冻结写入新 JSON，不重写原候选/预登记，避免授权身份漂移。
+- 新 B 与九题仍未执行：本 Prompt 不包含“用户另外明确批准绑定候选/B计划”的真实调用许可。执行者检查不等于独立审核；旧账/payer-010 只读保留。
+- 下一入口：用户决定 payer-010 处置并明确批准一次新 B；B 成功后再批准九题开发验证。没有用户亲自操作证据，不升级为已实践。

@@ -56,14 +56,14 @@ python /package/scripts/go_chi_entry.py coding-b \
 - 选择方法：只读公开 `data/tasks.jsonl` 的 family/task_id/path/title/kind/actor/timeout/公开 fixture 计数/URL；**不读取** expected_target_status、expected_payer_route、verifier_contract、expectations/solution/verifier 内容。排除历史已见 base 后按 task_id 升序取前三；provider/UM base 不重叠；CM 排除已见 afib 后取前三。
 - 9 题：provider `t015/t016/t021`；UM `t022/t023/t024`；CM `cm_anorexia_hard_refuses_001`、`cm_asthma_low_coop_001`、`cm_ckd_moderate_anxious_001`。
 - 污染：历史已见/已分析 base `008/011/012/013/014/017/018/019/027/030/031/032` 与 `cm_afib_moderate_anxious_001` 排除；所选 9 题在选定仓库历史中未找到先前使用，但这不是“保证未见”，若后续发现污染必须如实标注，不能按结果换题。
-- 资源：9 题当前均不在本地离线树，需有权限的公开资源获取与逐题 instruction/tool_reference/world/manifest hash 冻结；本轮不下载、不解析隐藏材料。 t022 公开布局为 5 个 request PDF（t023/t024 为 4）；manifest 生成、资源 preflight、world 后投影三处已统一为有界 manifest 计数，4/5 文件完整链正例及缺/多/重复/scope/symlink/hash 负例离线通过。
+- 资源：已按冻结 revision `5ce88104…` 获取 9 题公开 instruction/tool_reference、必要公开 PDF、world 资产和 opaque expectations；9/9 资源 manifest 由已审工具生成并通过资源 preflight。冻结结果见 [nine-task-resource-freeze-20261106.json](../../../reviews/nine-task-resource-freeze-20261106.json)（SHA-256 `074fd38e…`）。t022 保留 5 个 request PDF，t023/t024 各 4 个；未删除/漏供/重命名资源，未解析 expectations 内容。真实 world/MCP 仍未启动。
 - 路径：**推荐开发 `role_operator` 路径**，明确标为“开发未见验证”，不是正式 Harbor。若同一次运行同时满足正式 Harbor 供应/CLI/state/患者/授权条件，可合并取证，但不得把 mock/开发装配称为真实 Harbor 通过。
 - 每题一次、同一冻结候选、新 world；provider/payer 物理 HTTP 上界 50，CM 主/确认共享 50 加开发患者辅助≤10（一般≤60）；确认≤2；主输出 8192、确认 32768、患者 8192；B 单列，不藏进 16C。
 - 停止：新 unknown、pending/halt、跨 case/patient 写、越界副作用、预算/时间、取消、持久化或清理失败；不按结果替换任务、不自动重跑、不改名冒充未见。
 
-**九题分阶段审批草案（未授权执行）：**
+**九题分阶段审批草案（未授权执行）：** 详细绑定见 [nine-task-approval-draft-20261106.md](../../../reviews/nine-task-approval-draft-20261106.md)。
 
-> 待 9 题公开资源获取完成并逐题冻结 instruction/tool_reference/world/manifest hash、新 identity B 成功且收据适用、旧 unknown 处置明确后，建议另行批准 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world，使用候选 SHA `500776…` 与预登记 SHA `bb9d79…`。provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；不启用摘要/恢复/Y。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归；若走正式 Harbor 必须另满足其供应/授权条件并如实标注。本段是草案，当前未授权任何执行。
+> 9 题公开资源已按冻结 revision 获取并逐题生成/通过 manifest；待新 identity B 成功且收据适用、旧 unknown 处置明确后，建议另行批准 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world，使用候选 SHA `0df12589…` 与预登记 SHA `bb9d79…`。provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；不启用摘要/恢复/Y。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归；若走正式 Harbor 必须另满足其供应/授权条件并如实标注。本段是草案，当前未授权任何执行。
 
 ## 4. 16C 与正式路径边界
 
