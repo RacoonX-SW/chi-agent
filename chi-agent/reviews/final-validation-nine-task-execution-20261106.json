@@ -299,6 +299,40 @@
       "tool_call_requests": 1
     }
   },
+  "failure_analysis": {
+    "proximate_cause": "the fourth main request exceeded the fixed main_read_seconds=240 read timeout; no HTTP response, response body or usage was received, so the request remains pending",
+    "trigger": "chart.search_patients was called with {limit: 5000} and no filters, returning all 65 task-scope patients with full records; the tool message is 172813 chars and 63.3% of the 272857-char fourth request",
+    "serialization_duplication": {
+      "source": "go_chi_mcp.py else branch when structuredContent is present",
+      "compact_structured_chars": 50030,
+      "full_envelope_chars": 122782,
+      "pretty_text_chars": 63820,
+      "tool_message_chars": 172813,
+      "roster_copies": 3,
+      "deduplicated_request_chars_estimate": 150074,
+      "reduction_percent": 45,
+      "journal_redaction": "unparseable_escaped_body",
+      "note": "compact structuredContent, the pretty content text and the structuredContent inside the full model dump all carry the same 65-patient roster"
+    },
+    "not_causes": [
+      "context budget: configured 3500000 chars / 1000000 estimated tokens; request 272857 chars / 272934 upper estimate; no chi_context_budget_exceeded",
+      "documented model context: 1048576 tokens; the request is far below it",
+      "HTTP error, business refusal, business write, or cleanup failure: none observed"
+    ],
+    "comparison": {
+      "round1": {"prompt_tokens": 12133, "elapsed_ms": 4526},
+      "round2": {"prompt_tokens": 13923, "elapsed_ms": 2665},
+      "round3": {"prompt_tokens": 15256, "elapsed_ms": 4747},
+      "round4_estimated_prompt_tokens": 65000,
+      "round4_elapsed_ms": 240022
+    },
+    "unknown": "the evidence cannot distinguish a still-generating request from a provider queue or transport stall; there is no provider request ID or Console record for round 4",
+    "recommendations": [
+      "fix go_chi_mcp.py to return one tool-result representation instead of compact structuredContent plus the full model dump",
+      "evaluate a bounded projection or cap for search_patients full-roster results",
+      "decide with evidence whether the 240s read timeout covers the largest allowed prompts; do not retry without authorization"
+    ]
+  },
   "state": {
     "path": "runs/final-validation-20261105/state/chi-accounting.json",
     "sha256": "143760769aaa22938e45991103fc139d11b1d6bda3348f2c03c582809c7fccfd",
