@@ -899,3 +899,9 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 用已审 `make_role_manifest` 生成 9 份 manifest 并通过 preflight；t022 保留 5 份 request PDF，t023/t024 各 4 份。资源冻结写入新 JSON，不重写原候选/预登记，避免授权身份漂移。
 - 新 B 与九题仍未执行：本 Prompt 不包含“用户另外明确批准绑定候选/B计划”的真实调用许可。执行者检查不等于独立审核；旧账/payer-010 只读保留。
 - 下一入口：用户决定 payer-010 处置并明确批准一次新 B；B 成功后再批准九题开发验证。没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-06：新B成功与九题资源冻结
+
+- 用户明确批准后执行一次 `final-b-001`：3 个 main HTTP 全 settled，`inspect_code`/`verify_patch` 完成，`verification:pass`；input 1387/output 124，charged 0/list 0.00016955/allowance 0.00010173 均 known，billing_complete=true；新 identity B receipt/run seal 与 run digest 匹配，pending/halt null，容器清理。
+- 关键区分：HTTP 200/exit 0 只是传输/进程结果；成功证据是工具契约、usage、receipt/seal、账本 pending/halt 和清理同时成立。旧 payer-010 unknown 仍保留，未因新 B 结算或清零。
+- 九题资源已按冻结 revision 获取并生成 9 份 manifest，t022 5 份 PDF、t023/t024 各 4 份；九题真实执行仍未批准。下一入口：用户另行批准九题开发验证。没有用户亲自操作证据，不升级为已实践。

@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | PR60已合并（`856e2f2…`）。九题公开资源已按冻结revision获取并冻结（9/9 manifest通过preflight）；新B/九题真实执行仍未获本Prompt授权。详细证据见[本轮报告](final-validation-admission-review.md)及[资源冻结](nine-task-resource-freeze-20261106.json) |
+| 当前任务 | PR60已合并（`856e2f2…`）。九题资源9/9已冻结；用户随后明确批准的一次新B `final-b-001` 已成功（3 HTTP、全部settled、receipt/seal有效、pending/halt null）。九题真实执行仍未授权。详细证据见[执行报告](final-validation-execution-review.md)及[B记录](final-validation-b-execution-20261106.json) |
 | 协作 | DeepSeek按用户本次指令接手资源冻结/准入准备、文档及Git交付；本轮自查标为“执行者检查”，不冒充新独立审核。未push/开PR/merge，未执行真实B/C；用户最终决定后续运行 |
 | 最新独立审核 | 包外返工`bfc1d8f`在限定离线范围通过，前置计数P1及重复反例P2关闭；`36c2c79`有条件通过、`83749ac`未通过保留原义。包内`36db613`及包外`8992af1`维持旧范围，`33e6eca`/`4613fd1`失败与`50dd338`条件结论不改写。详见[报告第8节](final-validation-admission-review.md#8-gpt-独立复审与历史结论2026-11-06) |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
@@ -15,11 +15,11 @@
 | 本地开发预算 | record_only/null cap、原锁/未知门禁不变。用户明确保留payer-010 unknown/旧pending、不核销重发，特定批准同eval-vprep-20261104一次S（≤50HTTP、仅摘要）；本次许可已使用，旧B许可也已使用，不回写eval-abl-on2历史授权或旧未知结算。旧账hash未变；可信token费用缺项可null/warning，新未知停止，零重试/回退，Extra Usage沿既有关闭决定 |
 | 后续费用规划 | Go继续record_only/null cap，费用缺项与token未知分别处理，三项USD分列且不混旧CNY；W实际费用/用量只见W报告。旧累计因S未结算仍不完整，不冒充已核清账户消费/余量；不恢复t019/Claude/F.5 |
 | DeepSeek 调用时段 | [避峰约定](../../COLLABORATION.md#deepseek-api-调用时段2026-10-28)仅适用 DeepSeek 官方 API 直连；经 OpenCode 调用 DeepSeek 可全天安排已授权工作，Go较充足额度用于后续按阶段重排实验。仅文档执行，不新增程序时钟门禁或自动唤醒 |
-| 付费验证范围 | 本次唯一S许可已消耗：1逻辑run、19main+1summary，20笔全部settled，无新增unknown/pending。仅使用既有Go专用凭据，不读完整.env；未执行确认/续写/患者/Y/其他B或Trial/judge/发布。停止后不追加请求；恢复探针及其他真实运行仍未获准 |
+| 付费验证范围 | 旧S许可仍为1逻辑run、19main+1summary、20笔settled，不回写。本轮新B `final-b-001` 为另一次明确批准：3个main HTTP全settled、input1387/output124、charged0/list0.00016955/allowance0.00010173均known、billing_complete=true、pending/halt null；未执行确认/摘要/续写/患者/Y/C/Trial/judge/发布。旧unknown不结算、旧B不复用 |
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
-| 本轮验证 | 执行者检查（非独立审核）：冻结revision获取59个公开文件，size/lfs hash全匹配；9份role manifest生成并通过preflight，t022 5份PDF/t023-t024各4份；候选/预登记/包身份未改写。此前GPT独立24/14/29项及951/8/350保持原范围；本轮真实模型/world/Trial/judge调用0 |
+| 本轮验证 | 执行者检查（非独立审核）：九题资源59文件size/lfs全匹配、9/9 manifest通过preflight；随后按用户批准执行一次B，3个main HTTP全settled、1387/124 tokens、USD三项known、receipt/seal/run digest有效、pending/halt null、容器清理。此前GPT独立24/14/29项及951/8/350保持原范围；九题/world/Trial/judge/发布为0 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR42–PR60已由用户合并，PR60 merge `856e2f2…`。本轮`deepseek/final-validation-execution`已push并创建[PR61](https://github.com/xsw932187210-cell/chi-agent/pull/61)，base=main；未merge/auto-merge。九题资源9/9已冻结；新B计划`19ea22a3…`、候选`0df12589…`、预登记`bb9d7930…`仍无真实执行许可。需先决定payer-010旧unknown处置，再明确批准一次新B；九题执行另行批准。旧B/旧许可不复用 |
+| PR 与下一步 | PR42–PR60已由用户合并；[PR61](https://github.com/xsw932187210-cell/chi-agent/pull/61)为本轮资源/准入文档PR，base=main，未merge/auto-merge。新B `final-b-001` 已成功，receipt identity `2a9a3271…`；下一步是用户另行批准九题开发验证（资源9/9已冻结，t022 5份PDF、t023/t024各4份）。旧payer-010 unknown仍保留，旧B/旧许可不复用 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；旧审批包保留历史，[新草案](../openspec/changes/validation-preparation/proposal.md)本身不授权，B/S各自具体批准及执行以对应报告为准，其他真实运行仍未获准 |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 结构/可靠性判断 | C3闭包/C4用途核对保持；C5已核对completed/outcome→解析推荐→最终决定，原MD字段不单独证明绕过。会话支持/临床充分性、未锁环境依赖和外部编排动态计时未关闭；[架构评审](../docs/architecture-review.md)保留历史及后续指针，不搬目录/拆journal |
@@ -29,7 +29,7 @@
 接续材料：
 
 - [最终候选冻结与准入准备](final-validation-admission-review.md)；[机器候选](validation-candidate-20261105.json)；[B计划](coding-b-plan-20261105.json)；[九题预登记](nine-task-preregistration-20261105.json)；[G0模板](admission-decision-template-20261105.json)
-- [九题资源冻结](nine-task-resource-freeze-20261106.json)；[执行阶段报告](final-validation-execution-review.md)；[九题审批草案](nine-task-approval-draft-20261106.md)
+- [九题资源冻结](nine-task-resource-freeze-20261106.json)；[执行阶段报告](final-validation-execution-review.md)；[新B执行记录](final-validation-b-execution-20261106.json)；[九题审批草案](nine-task-approval-draft-20261106.md)
 - [本候选唯一获准输入摘要探针：失败、用量、清理及后续任务](summary-endpoint-probe-review.md)
 
 - [本候选唯一获准coding-B：执行、账目与清理](validation-coding-b-review.md)

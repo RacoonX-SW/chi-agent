@@ -11,7 +11,7 @@
 | 资源冻结 SHA-256 | `074fd38e98b7078de1f815cdf78114d64aee03d505999e1e41aa29b1d08de762` |
 | Go manifest | `c5f569e8a20439c07f020fd8776af4aba4d62da0c64e86e2da88e744cc077f0d` |
 | runtime | `2a9a32711f8e3de43eac037fe2c745c803c09851e71947dae36325d1931953fc` |
-| 新 B 收据 | 尚未产生；执行前必须成功且与本候选/runtime 匹配 |
+| 新 B 收据 | `final-b-001` 已成功；identity `2a9a3271…`，receipt SHA `ac6499ca…`，run seal SHA `6e229d76…` |
 | 模型/端点 | `deepseek-v4.1-flash` / `https://opencode.ai/inference/go/openai/v1/chat/completions` |
 | 推理/重试 | thinking enabled、reasoning_effort high、自动重试 0 |
 | 开关 | 摘要 off、输出恢复 off、Y off |
@@ -57,6 +57,6 @@
 
 ## 6. 审批文本（待用户明确批准）
 
-> 我确认新 identity B 已成功且收据与本候选/runtime 匹配；payer-010 旧 unknown 处置按另行明确决定保留，不修改旧 pending/账目。批准按候选 SHA `0df12589…`、预登记 SHA `bb9d7930…`、资源冻结 SHA `074fd38e…` 执行 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world；provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；主/确认/患者输出 8192/32768/8192；摘要/恢复/Y off。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归。
+> 我确认新 identity B `final-b-001` 已成功且收据与本候选/runtime 匹配；payer-010 旧 unknown 处置按另行明确决定保留，不修改旧 pending/账目。批准按候选 SHA `0df12589…`、预登记 SHA `bb9d7930…`、资源冻结 SHA `074fd38e…` 执行 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world；provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；主/确认/患者输出 8192/32768/8192；摘要/恢复/Y off。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归。
 
 **当前状态：未授权执行。**

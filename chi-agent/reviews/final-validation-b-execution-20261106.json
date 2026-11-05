@@ -1,0 +1,89 @@
+{
+  "schema": "chi-final-validation-b-execution-v1",
+  "date": "2026-11-06",
+  "authorization": {
+    "status": "approved",
+    "date": "2026-11-06",
+    "candidate_json_sha256": "0df12589c851b38423e6212997e7f4b9214912c25b7c84d7614f30e0c5f493d0",
+    "coding_b_plan_sha256": "19ea22a3ab362af78c13c285b964b7fb95c6b22a45a34f557f9e5bb18c588672",
+    "evaluation_id": "eval-final-20261105",
+    "scope": "one coding-B, at most six provider HTTP; old payer-010 unknown retained and not settled",
+    "excluded": ["summary", "recovery", "continuation", "patient", "CHI C", "world", "Trial", "judge", "publication"]
+  },
+  "identity": {
+    "go_bundle_manifest_sha256": "c5f569e8a20439c07f020fd8776af4aba4d62da0c64e86e2da88e744cc077f0d",
+    "runtime_identity": "2a9a32711f8e3de43eac037fe2c745c803c09851e71947dae36325d1931953fc",
+    "release_manifest_sha256": "4553e703effef63cae69a9260c13b1a73973d5c51439213fa9337feef326d4e6",
+    "release_source_commit": "ec1a7064b5cd0a10bd8c397c9f7f61e1946d19cf"
+  },
+  "run": {
+    "evaluation_id": "eval-final-20261105",
+    "task_id": "synthetic-coding-b",
+    "attempt_id": "attempt-1",
+    "run_id": "final-b-001",
+    "history_mode": "external",
+    "state_path": "runs/final-validation-20261105/state",
+    "logs_path": "runs/final-validation-20261105/b-logs/final-b-001",
+    "status": "complete",
+    "safe_error_code": null,
+    "provider_http": 3,
+    "max_provider_http_allowed": 6,
+    "purposes": {"main": 3, "confirmation": 0, "summary": 0, "continuation": 0, "patient_simulator": 0},
+    "automatic_retries": 0
+  },
+  "usage": {
+    "input_tokens_known": 1387,
+    "output_tokens_known": 124,
+    "billing_complete": true,
+    "billing_details_warnings": 0,
+    "unsettled_requests": [],
+    "usd": {
+      "charged_usd": {"known": "0", "complete": true},
+      "list_cost_usd": {"known": "0.00016955", "complete": true},
+      "allowance_usd": {"known": "0.00010173", "complete": true}
+    }
+  },
+  "tools": {
+    "inspect_code": "returned",
+    "verify_patch": "returned",
+    "verification": "pass",
+    "tool_events": ["inspect_code:started", "inspect_code:returned", "verify_patch:started", "verify_patch:returned"]
+  },
+  "receipt_and_seal": {
+    "receipt_path": "runs/final-validation-20261105/state/b-receipts/final-b-001.json",
+    "receipt_sha256": "ac6499ca4a2ec65502f3682a9a872ab3e8d41d9a819f608b8c6e506661443a0d",
+    "seal_path": "runs/final-validation-20261105/state/run-seals/final-b-001.json",
+    "seal_sha256": "6e229d7612ca49c2047866ea06d30726c83830b3ddacd767ca12f0ac22047faf",
+    "run_sha256": "84fd869a1f8f8e7a2a09ee74dc48759224ddd77f15bc3d39e881524d2e206cf5",
+    "receipt_valid": true,
+    "seal_valid": true
+  },
+  "accounting": {
+    "path": "runs/final-validation-20261105/state/chi-accounting.json",
+    "sha256": "51d21aed07c4603deaa5eb33dfeb59b18f05c8f271fac35cf4415ec5550868a9",
+    "pending": null,
+    "halted": null,
+    "all_requests_settled": true
+  },
+  "cleanup": {
+    "container_removed": true,
+    "world_created": false,
+    "network_created": false,
+    "patient_created": false,
+    "state_logs_readable": true
+  },
+  "artifacts": {
+    "run_log_sha256": "d45ffefc98c2228352c2310aab91b0ae4c9357f5dc3603f590d1a27a311ce770",
+    "run_result_sha256": "79f069fefeefbd7f54c6ecb3cdcb6d031535e19be64e4b8f5b02bbd2f10d7d7a",
+    "run_output_sha256": "6c81c99a69dd20b664594b2b9384738d566759fadc4d7d5e76c96298e615e227",
+    "execution_log_sha256": "ed2d5d308dbb56c7302f67d880dd96169719dee24fa96fb9acb769d8e927b89f"
+  },
+  "official_reward": null,
+  "real_model_requests": 3,
+  "notes": [
+    "Only the Go coding-B purpose was used; no CHI/world/MCP/patient/judge request.",
+    "The old payer-010 unknown and old S failure remain unchanged.",
+    "The three provider HTTP all settled; no pending, halt or unknown usage.",
+    "The B receipt and run seal bind the new runtime identity and run digest."
+  ]
+}
