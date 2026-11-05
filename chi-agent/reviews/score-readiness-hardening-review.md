@@ -415,3 +415,41 @@
 - CM 仍无公开 care-plan 读取工具；`cm_chart.get_chart_data` 只是机械业务资源回读，不能证明 plan finalize。
 - `final_text` 未 claim 仍不会被阻止；这是保留的既有边界。
 - anthropic 两个模块的 collection error 与 dev 镜像 8 个 operator skip 继续单列，不写全环境全绿。
+
+## 12. GPT/Terra 收口 R3 与最终独立离线结论
+
+第二轮候选 `50dd338` 的独立复审为**有条件通过**：包内 `36db613` 的 R2 通过，R1/R4 回归通过，但包外盘点仍因非字符串 schema 抛 TypeError，且错误类型的 mutation call ID / reference 被标为 present。本节追加关闭这一 P2，不覆盖 `33e6eca`、`4613fd1` 的不通过或 `50dd338` 的条件结论。
+
+### 12.1 有界实现与交付边界
+
+用户随后明确要求“直接让Terra改……改完提交pr合并”，本轮由一个显式 `gpt-6.1-terra` / `high` 实现及 Docker 自测，停止写入后 GPT 主代理独立复验、文档和 Git。仅对本 PR 按最新用户指令在检查通过后合并；不启用 auto-merge，不改变其他任务的默认用户合并流程，也不恢复真实运行许可。
+
+最终包外实现候选：`8992af1132f8e369dbfeb86542474ea7a7726c9e`。新增可审的 `scripts/go_chi_readiness_inventory.py` 与 `tests/test_go_chi_readiness_inventory.py`；工具仍不在 `PACKAGE_FILES`，没有修改 R1/R2/R4 或其他参赛包代码。将工具纳入版本控制是为了使修复随 PR 可复现交付，不上传忽略目录的旧轨迹、账本或任务载荷。
+
+- schema 查表前严格检查类型；必要字段、mutation call ID、reference、status、stagnation、unresolved 的类型/结构不合法时产生 invalid/null，不再抛 TypeError 或误报 present。
+- v1 非空业务状态按原三字段读取，v2/v3 按七字段读取；v3 未归属文件资源的 `resource=null` 保留为未解决失败元数据，不解释为已修复。主代理审查时发现并要求补齐这两处兼容反例，最终修正后才通过。
+- 保留 claim 的 null/对象/缺失/非法区分、trace 完整性、SHA 快照、变化停止及缺项不补零。畸形非标量 reward 也不会因集合操作击穿盘点；不生成官方评分结论。
+- 原 `runs/score-readiness-hardening-20261105/inventory.py` 及旧结果未改。原脚本 SHA256 仍 `00433eaac6f675fc05ef491be5b4f72571e278e9ab28694afc8ba1be3a622952`；新脚本 SHA256 为 `86b7938b214735d5f7e4ee7d09e9242410b07188416f58f0b09441472320f110`。
+
+### 12.2 主代理实际独立验证
+
+固定只读快照：`/private/tmp/chi-readiness-final.U8R4dd/snapshot/chi-agent`，与上述实现提交的两份新文件字节相同。Docker/Python3.12，dev 固定 ID `sha256:b22f7c664bf5da8994d7199f1482536b0b4ab36d0d522ae121c4a0562ed044b3`；`--pull never --network none --read-only`、`/tmp` tmpfs、源码/依赖与所选历史证据只读，仅专属导出目录可写。无安装/升级、无 Key/env 注入、无真实服务或 Docker socket 挂载。
+
+| 检查 | 实测 |
+| --- | --- |
+| `/opt/venv/bin/python -m unittest discover -s tests -p test_go_chi_readiness_inventory.py -v` | exit 0，**9 tests OK**；不是引用子代理自测 |
+| 独立原失败反例 | schema list/dict、mutation call ID=17、坏 reference 均 invalid/null；无异常 |
+| 独立合法/缺项反例 | v1/v2/v3 的 claim null/对象正常；空 completion、缺 claim、claim=17 分别 invalid/incomplete/null |
+| trace / 快照 | 缺失、空、坏 JSON、坏行、超行数有明确状态/null；完整记录才 0；读间变化不输出混合指标 |
+| 一组必要真实元数据 | 仅 payer-014，5 文件原始 hash 匹配并前后不变；refusal=4、claim=true；其余行未重新逐组盘点 |
+| 包 / 历史 | 下述 42 成员逐源字节相同；旧 S strict inspect，120 文件 hash 全同；旧脚本 hash 不变 |
+
+证据与独立脚本保存于本地忽略目录 `runs/score-readiness-hardening-20261105/final-r3-8992af1/`；原始输出不上传。检查脚本最初写于上述 `/private/tmp/chi-readiness-final.U8R4dd/`。本次不重复整套历史回归：`36db613` 已独立实测的 951 passed / 8 skipped / 350 subtests、controller 12 + operator 3、两个 anthropic collection errors 保持其限定范围；本次只新增包外工具与测试，未将旧数量冒充最终树重跑结果。
+
+### 12.3 身份、历史与最终结论
+
+逐一比较最终树 `PACKAGE_FILES` 的 42 个源文件，与已独立审核的 `36db613` 源快照全部同字节；从本轮快照重新构建 Go 包，manifest 仍为 `c5f569e8a20439c07f020fd8776af4aba4d62da0c64e86e2da88e744cc077f0d`。实际隔离包无 Key 禁网 preflight 返回 `identity_verified`，runtime 仍 `2a9a32711f8e3de43eac037fe2c745c803c09851e71947dae36325d1931953fc`。不把包外提交变化冒充内包变化；第11节 release 继续明确绑定其原 `source_commit=36db613…`，本轮未重新生成另一外层 wrapper。
+
+旧 S accounting 仍 `91412a231c2407fc5a32663376bd1cd2226325b18e02b4c78ba6bc4fde872c41`，failed/`chi_summary_invalid`、20 settled、pending/halted null；未改旧 pending/receipt/seal/wire，未核销、重发或换账根。
+
+**最终限定离线结论：通过，R1–R4 的本次有界缺陷已关闭，可交付本 PR。** 无真实模型/摘要/续写/B/C/患者、world/Trial/judge 或发布；不证明正式配送、摘要忠实度/收益、临床结果或官方分数。新候选仍无新 B；旧 B 不适用，最终候选的真实 B/九题及后续运行须另行具体批准。CM 无公开 plan 回读、final_text 未 claim 不被阻止等已明确边界仍保留。

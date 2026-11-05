@@ -42,6 +42,13 @@
 - [x] 重建 Go/evaluation/release 并隔离 preflight；新 manifest/runtime/release/source_commit 见报告第11节；旧 B 不适用。
 - [x] 旧 S 账严格只读验证保持原 hash/失败/20 settled；详细证据追加到同一报告，不覆盖前两次不通过。
 
+## 1c. GPT/Terra 收口剩余 R3（独立离线通过）
+
+- [x] 将包外分析脚本及合成测试纳入版本控制；修复 schema 非字符串及嵌套结构/类型，兼容 v1 三字段状态和 v2/v3 七字段状态、v3 未归属资源。
+- [x] 一个Terra/high实现停止后GPT独立复验；定向9 tests、独立反例/快照/一组真实元数据通过；原脚本及旧结果不覆盖。
+- [x] 核对42包成员源字节不变，重建Go身份及实际隔离preflight；旧S严格读取/120文件hash保持；详情见报告第12节。
+- [ ] 按用户最新明确指令提交/push/base=main PR，检查后合并；不auto-merge，不随交付恢复真实运行。
+
 ## 2. 明确不随本轮启动
 
 - [ ] 新候选coding-B（必要性/具体次数/状态/身份另行批准，不算入16次C）。

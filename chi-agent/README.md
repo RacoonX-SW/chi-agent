@@ -811,6 +811,12 @@ chi_live_control c-once --run-id real-c-example-001
 
 runner 保留任务结果、轨迹、stdout/stderr、逐请求账目与工具 dispatch 记录；官方 reward 始终为 null。只有官方 MCP 业务工具和受限资源文件工具提供给模型，任务由模型自主执行，人工不在试跑中代选动作或修改结果。程序退出、模型声称完成与官方判分分别判断；正式冻结、评分和其他架构另行验收。
 
+## 包外只读余量盘点
+
+在已审 Python 3.12 Docker 中禁网运行，将本项目只读挂载为 `/workspace`，工作目录设为 `/workspace`，执行 `/opt/venv/bin/python -B scripts/go_chi_readiness_inventory.py`。stdout 输出脚本 `RUNS` 中固定历史路径的元数据及来源 hash；路径缺失、记录无效或读取间变化有明确状态，不能将 null 当作零。输出如需保存，由调用方重定向到新的忽略目录文件，不覆盖旧结果。
+
+该工具不属于参赛包，不启动模型或 world，不修改账本；盘点结果不是业务或官方评分。当前使用范围与历史证据见 [阶段报告第12节](reviews/score-readiness-hardening-review.md#12-gptterra-收口-r3-与最终独立离线结论)。
+
 ## 资料来源
 
 核对日期：2026-10-19。
