@@ -1,0 +1,446 @@
+{
+  "schema": "chi-final-validation-nine-task-execution-v1",
+  "date": "2026-11-06",
+  "authorization": {
+    "status": "approved",
+    "candidate_json_sha256": "0df12589c851b38423e6212997e7f4b9214912c25b7c84d7614f30e0c5f493d0",
+    "preregistration_sha256": "bb9d79308951e89939767697f82e3525b9e0f9d166e937c4158188de4edfb209",
+    "resource_freeze_sha256": "074fd38e98b7078de1f815cdf78114d64aee03d505999e1e41aa29b1d08de762",
+    "b_receipt_identity": "2a9a32711f8e3de43eac037fe2c745c803c09851e71947dae36325d1931953fc",
+    "scope": "nine development role_operator C runs, one attempt per task, new world each; provider/payer <=50 main+confirmation HTTP per run, CM <=50 plus <=10 development patient auxiliary; confirmation <=2; main/confirmation/patient output 8192/32768/8192; thinking high; summary/recovery/Y off",
+    "excluded": [
+      "formal Harbor",
+      "official patients",
+      "judge",
+      "publication",
+      "extra seen-task regression",
+      "retry or task replacement",
+      "root switch"
+    ]
+  },
+  "execution": {
+    "status": "stopped_after_first_pending",
+    "attempted": 1,
+    "completed": 0,
+    "failed": 1,
+    "not_run": 8,
+    "stop_reason": "round 4 main request of final-c-provider-t015 remained pending with chi_timeout; the approval requires stopping subsequent tasks on any unknown/pending/halt",
+    "automatic_retries": 0,
+    "task_replacement": false,
+    "root_switch": false,
+    "remaining_tasks_executed": false
+  },
+  "task_results": [
+    {
+      "order": 1,
+      "role": "provider",
+      "task_id": "pa_t015_t015_o002_p01_new_referral_provider",
+      "run_id": "final-c-provider-t015",
+      "attempt_id": "attempt-1",
+      "config_sha256": "3307eed989264a7f5bba68f53ae454a991feb597eb2a3fae410e11b27c5ca323",
+      "manifest_sha256": "5cd655f63b6ea52bd8ae9aa8b7fceee2c39fef7a546914773e07447c42dc70f4",
+      "status": "failed",
+      "safe_error_code": "chi_timeout",
+      "executed": true
+    },
+    {
+      "order": 2,
+      "role": "provider",
+      "task_id": "pa_t016_t016_o001_p01_new_referral_provider",
+      "run_id": "final-c-provider-t016",
+      "attempt_id": "attempt-1",
+      "config_sha256": "0af76274df5b198266ed9af91f383f4edd9a63745eaa3e468e380d4d7716536e",
+      "manifest_sha256": "fde037d0b7334cb80ff4de7166d275cfe8d92778e9473203faa549eaa3b895c5",
+      "status": "not_run",
+      "reason": "prior_request_usage_unknown",
+      "executed": false
+    },
+    {
+      "order": 3,
+      "role": "provider",
+      "task_id": "pa_t021_t021_o003_p01_new_referral_provider",
+      "run_id": "final-c-provider-t021",
+      "attempt_id": "attempt-1",
+      "config_sha256": "1f578340dd04c8d106c13db49ef47a43a8d5477a4a3b28a776f6a6e5d9050220",
+      "manifest_sha256": "aa227b6956999ff8620e5a02267ee1b56d8243724b5634dc0d96d5650f5ddc3b",
+      "status": "not_run",
+      "reason": "prior_request_usage_unknown",
+      "executed": false
+    },
+    {
+      "order": 4,
+      "role": "payer",
+      "task_id": "pa_t022_t022_o001_p01_nurse_review_payer",
+      "run_id": "final-c-payer-t022",
+      "attempt_id": "attempt-1",
+      "config_sha256": "2f09128978435b4f618fcc6cb95789da6bcc10ab4ed8c2b87961897ac3f085d4",
+      "manifest_sha256": "1c10857de9f2b4992aea934969a1678036d2262d2692d0944c25c694106ed3f5",
+      "status": "not_run",
+      "reason": "prior_request_usage_unknown",
+      "executed": false
+    },
+    {
+      "order": 5,
+      "role": "payer",
+      "task_id": "pa_t023_t023_o003_p01_triage_payer",
+      "run_id": "final-c-payer-t023",
+      "attempt_id": "attempt-1",
+      "config_sha256": "4b00e5dcdc9a52aece7bc957982f4434eccf81ea075b49764459aaaa8cd856fc",
+      "manifest_sha256": "ab2f0362d3358445ec1510f744bfd807e86667be8b45790478bed544d21fc77e",
+      "status": "not_run",
+      "reason": "prior_request_usage_unknown",
+      "executed": false
+    },
+    {
+      "order": 6,
+      "role": "payer",
+      "task_id": "pa_t024_t024_o001_p01_nurse_review_payer",
+      "run_id": "final-c-payer-t024",
+      "attempt_id": "attempt-1",
+      "config_sha256": "aa399459b7badf2a27c2c4e6312e23889d4d10376067d04f067645c0b9eccb82",
+      "manifest_sha256": "f6b448c7adc2797db6820c0a3f335ccf305648424b16bdc016d49cc4665f46bf",
+      "status": "not_run",
+      "reason": "prior_request_usage_unknown",
+      "executed": false
+    },
+    {
+      "order": 7,
+      "role": "cm",
+      "task_id": "cm_anorexia_hard_refuses_001",
+      "run_id": "final-c-cm-anorexia",
+      "attempt_id": "attempt-1",
+      "config_sha256": "10a2e35b13da81b3e8635362cf482ad8a2a91df74c572f13c509d3492f57489e",
+      "manifest_sha256": "fc2c9d4badf52d0bdc9483b66cec46b6f3c98f8b783d0709b867a3a6b9fb629a",
+      "status": "not_run",
+      "reason": "prior_request_usage_unknown",
+      "executed": false
+    },
+    {
+      "order": 8,
+      "role": "cm",
+      "task_id": "cm_asthma_low_coop_001",
+      "run_id": "final-c-cm-asthma",
+      "attempt_id": "attempt-1",
+      "config_sha256": "652c0922ee1970031f1556c30b0bd62b4cc4f04f9695e218d937bf6312d57a8f",
+      "manifest_sha256": "7508e7ac84cdde5211318df4d72eaa2fe393dc7d78f8e533beffe2c544f8e54e",
+      "status": "not_run",
+      "reason": "prior_request_usage_unknown",
+      "executed": false
+    },
+    {
+      "order": 9,
+      "role": "cm",
+      "task_id": "cm_ckd_moderate_anxious_001",
+      "run_id": "final-c-cm-ckd",
+      "attempt_id": "attempt-1",
+      "config_sha256": "060dfff074f483afb44fed03a0e2cc5ffcd86c669461fe194c025a196e061670",
+      "manifest_sha256": "08bf5853781375c0c637584ef3d7f9dc9fe5fc52aabf843479cad00b609d0746",
+      "status": "not_run",
+      "reason": "prior_request_usage_unknown",
+      "executed": false
+    }
+  ],
+  "first_run": {
+    "run_id": "final-c-provider-t015",
+    "role": "provider",
+    "task_id": "pa_t015_t015_o002_p01_new_referral_provider",
+    "attempt_id": "attempt-1",
+    "evaluation_id": "eval-final-20261105",
+    "state_path": "runs/final-validation-20261105/state",
+    "output_path": "runs/final-validation-20261105/c-runs/final-c-provider-t015",
+    "status": "failed",
+    "safe_error_code": "chi_timeout",
+    "runner_exit_code": 1,
+    "operator_exit_code": 1,
+    "operator_elapsed_ms": 264216,
+    "runner_elapsed_ms": 252465,
+    "readiness_seconds": 6.679,
+    "physical_requests": {
+      "main": 4,
+      "confirmation": 0,
+      "summary": 0,
+      "continuation": 0,
+      "patient_simulator": 0
+    },
+    "settled_main_requests": 3,
+    "pending_main_requests": 1,
+    "max_tokens": 8192,
+    "timeout": {
+      "round": 4,
+      "purpose": "main",
+      "elapsed_ms": 240022,
+      "stage": "transport",
+      "response_sha256": null
+    },
+    "request_sha256_by_round": {
+      "1": "28e0732b0d15cd576483391c1f654cc3f673b5c8635bea8eec68c74db4e42d27",
+      "2": "5d77fa0517fbf9230d008628c3a6e9ca4ebe8d2661a08ae087a4a284d20b6bfc",
+      "3": "983c711eefd2d65fd35457c84ef5ee6e76dfba972ab310f17c6a277d0e503013",
+      "4": "0a35a0d3a8038ea18b5635376654741e316241de869dec5dcec9ea8a64e5e0f3"
+    },
+    "response_sha256_by_round": {
+      "1": "dbfd5d9306fa210a5965ad29432d95ad369050729d7287242fa9c110a381edf4",
+      "2": "971faa410e135e60469dbd0ea380ad7325dca149965446e1d7c4ac61ba9dca91",
+      "3": "878f67e2094377c1431b8ede1caa2c09ffe7ec7929b5088264ea04b6d977d01e",
+      "4": null
+    },
+    "tools": {
+      "distinct": [
+        "local-task-state",
+        "local-role-guidance",
+        "local-fs-read",
+        "chart.search_patients"
+      ],
+      "events": 12,
+      "business_writes": 0,
+      "claim_done": false,
+      "patient_binding_events": [
+        {
+          "tool": "chart.search_patients",
+          "event": "observation",
+          "call_id": "call_de48e3e2f95a4e7986a4e07f"
+        }
+      ]
+    },
+    "context": {
+      "requests": 4,
+      "round4_estimated_tokens": 272934,
+      "round4_total_chars": 272857,
+      "round4_request_bytes": 336024,
+      "note": "the fourth request followed a chart.search_patients observation of about 192782 tool-result chars; token estimate is an upper estimate, not a tokenizer result"
+    },
+    "usage": {
+      "current_run_agent_usage": {
+        "complete": false,
+        "input_tokens_known": 41312,
+        "output_tokens_known": 401
+      },
+      "journal_usage_scope": "account_namespace",
+      "journal_usage": {
+        "account_prior_history": "unknown",
+        "billing_complete": false,
+        "billing_details_warnings": 0,
+        "input_tokens_known": 42699,
+        "output_tokens_known": 525,
+        "unsettled_requests": [
+          {
+            "run": "final-c-provider-t015",
+            "round": 4,
+            "status": "pending"
+          }
+        ],
+        "usd": {
+          "allowance_usd": {
+            "complete": false,
+            "known": "0.00378353"
+          },
+          "charged_usd": {
+            "complete": false,
+            "known": "0"
+          },
+          "list_cost_usd": {
+            "complete": false,
+            "known": "0.00630589"
+          }
+        }
+      },
+      "journal_usage_note": "journal totals include the earlier final-b-001 (1387 input / 124 output, list 0.00016955, allowance 0.00010173); all three USD fields are incomplete because round 4 is pending"
+    },
+    "captures": {
+      "initial": {
+        "status": "ready",
+        "manifest_sha256": "8aaffa50a078b659dd65d2bd65567260fb04e282e7ae217c1ac4008b3293b87e"
+      },
+      "final": {
+        "status": "ready",
+        "manifest_sha256": "a8ddb5e2684c5c0a8d28c870a0b6827120dce6413236811c0e2d238f4d4060bf"
+      },
+      "before_resources": {
+        "provider": {
+          "count": 2202,
+          "sha256": "034519cfc35f22ae99c318c20c042a6d5ec1e1794275bcb4390f58528fd98c99",
+          "status": "ready"
+        },
+        "payer": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "status": "ready"
+        }
+      },
+      "after_resources": {
+        "provider": {
+          "count": 2202,
+          "sha256": "034519cfc35f22ae99c318c20c042a6d5ec1e1794275bcb4390f58528fd98c99",
+          "status": "ready"
+        },
+        "payer": {
+          "count": 0,
+          "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+          "status": "ready"
+        }
+      },
+      "workspace_files": [
+        "world-artifacts/workspaces/.workspace_materialized"
+      ]
+    },
+    "deterministic_checks": {
+      "status": "complete",
+      "true": 1,
+      "false": 11,
+      "not_applicable": 1,
+      "true_checks": [
+        "provider_pre_submission.packet_absent"
+      ],
+      "note": "mechanical source/state checks only; not a clinical or official verdict"
+    },
+    "world_log": {
+      "tool_call_request_at": "2026-11-05T18:13:06Z",
+      "session_terminated_at": "2026-11-05T18:17:06Z",
+      "tool_call_requests": 1
+    }
+  },
+  "failure_analysis": {
+    "proximate_cause": "the client's fixed main_read_seconds=240 read timeout fired before the provider's first attempt finished; the provider log shows attempt 1 ended with 524 after 600048ms and an internal retry returned 200 after 82484ms (total 682808ms), but the journal still records the request as pending",
+    "trigger": "chart.search_patients was called with {limit: 5000} and no filters, returning all 65 task-scope patients with full records; the tool message is 172813 chars and 63.3% of the 272857-char fourth request",
+    "provider_log": {
+      "source": "/Users/asaki/Downloads/request-logs-2026-11-05.json",
+      "request_id": "01a1acea-2001-7aaa-9c5d-4579e72cbb13",
+      "session_id": "chi-0b45f5745e7842cb97ce8bcb6617fd5f",
+      "session_sha256_matches_journal": true,
+      "content_length": 272934,
+      "started_at_ms": 1793902387201,
+      "finished_at_ms": 1793903070009,
+      "duration_ms": 682808,
+      "outcome": "succeeded",
+      "status_code": 200,
+      "attempts": [
+        {"status_code": 524, "duration_ms": 600048, "error_code": "inference_failed"},
+        {"status_code": 200, "duration_ms": 82484}
+      ],
+      "input_tokens": 73204,
+      "output_tokens": 1494,
+      "reasoning_tokens": 1125,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": "0.011877",
+      "stream": false,
+      "note": "the client timed out at 240s; the provider completed after 682.8s; the journal pending was not reconciled with this log"
+    },
+    "serialization_duplication": {
+      "source": "go_chi_mcp.py else branch when structuredContent is present",
+      "compact_structured_chars": 50030,
+      "full_envelope_chars": 122782,
+      "pretty_text_chars": 63820,
+      "tool_message_chars": 172813,
+      "roster_copies": 3,
+      "compact_only_request_chars_estimate": 150074,
+      "compact_only_reduction_percent": 45,
+      "implemented_text_request_chars_estimate": 163864,
+      "implemented_text_reduction_percent": 40,
+      "journal_redaction": "unparseable_escaped_body",
+      "note": "compact structuredContent, the pretty content text and the structuredContent inside the full model dump all carry the same 65-patient roster"
+    },
+    "not_causes": [
+      "context budget: configured 3500000 chars / 1000000 estimated tokens; request 272857 chars / 272934 upper estimate; no chi_context_budget_exceeded",
+      "documented model context: 1048576 tokens; the request is far below it",
+      "HTTP error, business refusal, business write, or cleanup failure: none observed",
+      "permanent provider stall: the provider log shows a 524 attempt at 600s followed by a 200 retry at 82.5s"
+    ],
+    "comparison": {
+      "round1": {"prompt_tokens": 12133, "elapsed_ms": 4526},
+      "round2": {"prompt_tokens": 13923, "elapsed_ms": 2665},
+      "round3": {"prompt_tokens": 15256, "elapsed_ms": 4747},
+      "round4_prompt_tokens": 73204,
+      "round4_output_tokens": 1494,
+      "round4_reasoning_tokens": 1125,
+      "round4_client_timeout_ms": 240022,
+      "round4_provider_duration_ms": 682808
+    },
+    "unknown": "resolved on the provider side by the supplied log: attempt 1 returned 524 after 600048ms, attempt 2 returned 200 after 82484ms; the client had already timed out at 240s. The journal pending remains because no reconciliation was authorized.",
+    "recommendations": [
+      "implemented in PR64: go_chi_mcp.py returns one tool-result representation when text and structuredContent match, and keeps both only when they differ",
+      "evaluate a bounded projection or cap for search_patients full-roster results",
+      "decide with evidence whether the 240s read timeout or a large-request guard should change; do not retry without authorization",
+      "if reconciling the pending, adapt inspect_provider to the observed attemptCount=2 (524 then 200) record under a separate authorization"
+    ],
+    "fix": {
+      "status": "implemented_in_source_tree",
+      "pr": "https://github.com/xsw932187210-cell/chi-agent/pull/64",
+      "files": ["scripts/go_chi_mcp.py", "tests/test_go_chi_mcp.py"],
+      "effect": "tool message 63820 chars; fourth request about 163864 chars (-40%)",
+      "tests": "8 MCP tests; 89 related; full suite 625 tests with 3 pre-existing import errors",
+      "frozen_release_package_unchanged": true,
+      "timeout_policy_changed": false
+    }
+  },
+  "state": {
+    "path": "runs/final-validation-20261105/state/chi-accounting.json",
+    "sha256": "143760769aaa22938e45991103fc139d11b1d6bda3348f2c03c582809c7fccfd",
+    "identity": "2a9a32711f8e3de43eac037fe2c745c803c09851e71947dae36325d1931953fc",
+    "pending": {
+      "run": "final-c-provider-t015",
+      "round": 4
+    },
+    "halted": null,
+    "attempts": [
+      {
+        "run": "final-b-001",
+        "status": "complete",
+        "safe_error_code": null
+      },
+      {
+        "run": "final-c-provider-t015",
+        "status": "failed",
+        "safe_error_code": "chi_timeout"
+      }
+    ],
+    "b_receipt_still_valid": true,
+    "b_seal_still_valid": true,
+    "pending_cleared": false,
+    "state_modified_after_stop": false
+  },
+  "cleanup": {
+    "runner": "removed",
+    "world": "removed",
+    "network": "removed",
+    "client": "closed",
+    "capability": null,
+    "capture_error": null,
+    "cleanup_error": null,
+    "runner_quiescent": true,
+    "world_quiescence": "confirmed",
+    "leftover_containers": 0,
+    "leftover_networks": 0
+  },
+  "artifacts": {
+    "orchestration_sha256": "830752a98dca9d070517c19ea84c7345aaf83c34baf00193edd7365f6b3cc586",
+    "runner_container_log_sha256": "e3aa3f96b0e6548f8cb04655f1426e6d7f846207b4c361420040c4180fa6d508",
+    "world_container_log_sha256": "18ade5e5b80884420ddc927a314dc36546e2bfea90b8e613e09341d8eb96a52f",
+    "lifecycle_sha256": "a1c2fce246b99b960bc7517493cccd3306bf98e1f54c77d205e65dfbc8db0d03",
+    "run_error_sha256": "9b158a93cbdd280ed170dec446ce68fa73dcdb4bab533adbe4bb346f3f3df3bd",
+    "run_log_sha256": "e73e32ef38d1297cc88e696153894180da46b6e5df85ab431586aed8d76e344e",
+    "run_result_sha256": "b589d03fcdeb618871012f63004e38c3798614c58ba5ea5891bd346347378f2a",
+    "wire_trace_sha256": "2b6176f1e78dd09e2a95c67f2ae3d818fc509b5a4d0b7e317839e55aeb10fcbb",
+    "context_sha256": "092ee605cedb8fcca75d03be2cf3b7b8b723b93a0783a55699b1396ab33719e0",
+    "task_state_sha256": "0eafe76e5f30b77bc4b5b1fb1f2c42f4c68bcf82bc30318d2bde3525d2e9fd06",
+    "run_seal_path": "runs/final-validation-20261105/state/run-seals/final-c-provider-t015.json",
+    "run_seal_sha256": "96a614a8b98b5d126abef6afcc70b1d9fd8e1c04dbb48cfd0a56b86b98e8ca97",
+    "run_sha256": "984847ba9625e405b3f537f5dee83e16c821cc174e995bf8eef4987d682328f2",
+    "request_evidence_004_sha256": "ddd0f6e999add5c81b9097b0a1deb40edc2a85556fb78c45e4ea00e65d651bc6",
+    "diagnostic_004_sha256": "3bfc2c2201a709ebe9c4279974a9da3ac69e4be7e9e8b47c4aad53cd09e7edc5",
+    "controller_stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "controller_stdout_note": "the operator writes no stdout; exit 1 reflects non-complete status"
+  },
+  "official_reward": null,
+  "real_model_requests": 4,
+  "notes": [
+    "Only final-c-provider-t015 was executed; the other eight tasks have no output directory, no attempt and no request.",
+    "Rounds 1-3 settled; round 4 is pending after a 240.022s transport timeout, so its result and usage are unknown and must not be described as zero send or zero cost.",
+    "No business write tool ran; resource snapshots are byte-identical before and after (provider 2202 rows, payer 0 rows); the only business call was a patient search observation.",
+    "The pending request is retained unchanged; it was not cleared, reconciled, retried or moved to another root.",
+    "The operator, runner, world and network were removed; capture_error and cleanup_error are null; world quiescence is confirmed.",
+    "The old payer-010 unknown, the old S failure and the old B authorization remain unchanged; the B receipt and seal still match after the new attempt.",
+    "This is a development role_operator run, not formal Harbor; official_reward is null and no clinical or official score is claimed.",
+    "This record is an executor check, not a new independent review."
+  ]
+}

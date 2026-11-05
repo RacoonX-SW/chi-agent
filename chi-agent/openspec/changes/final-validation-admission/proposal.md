@@ -1,6 +1,6 @@
-# 最终候选冻结、新B执行与九题验证准入准备（B已完成；九题未授权）
+# 最终候选冻结、新B执行与九题验证准入准备（B已完成；九题首题pending后停止）
 
-日期：2026-11-05（Asia/Shanghai；2026-11-06 更新）。**本文件不是真实调用授权。** 2026-11-06 用户另行明确批准后，一次新 coding-B `final-b-001` 已执行成功（3 个 main HTTP、全部 settled、receipt/seal 有效）；九题、摘要/恢复、患者、world、Trial、judge、发布仍未授权。`official_reward=null`。
+日期：2026-11-05（Asia/Shanghai；2026-11-06 更新）。**本文件不是真实调用授权。** 2026-11-06 用户另行明确批准后，一次新 coding-B `final-b-001` 已执行成功（3 个 main HTTP、全部 settled、receipt/seal 有效）；用户随后批准九题开发 C，首题 `final-c-provider-t015` round4 `chi_timeout` pending 后按停止条件中止，其余8题未运行。摘要/恢复、患者、Trial、judge、发布仍未授权。`official_reward=null`。
 
 ## 1. 固定候选
 
@@ -50,20 +50,22 @@ python /package/scripts/go_chi_entry.py coding-b \
 
 若用户选择先补齐 payer-010 的可信结算/对账证据，则先走既有受审处置，不启动本 B。无答复、PR 合并或候选存在都不等于选项 2 同意。
 
-## 3. 九题预登记：草案
+## 3. 九题预登记：已批准执行（首题停止）
 
 - 清单：[nine-task-preregistration-20261105.json](../../../reviews/nine-task-preregistration-20261105.json)，SHA-256 `bb9d79308951e89939767697f82e3525b9e0f9d166e937c4158188de4edfb209`。
 - 选择方法：只读公开 `data/tasks.jsonl` 的 family/task_id/path/title/kind/actor/timeout/公开 fixture 计数/URL；**不读取** expected_target_status、expected_payer_route、verifier_contract、expectations/solution/verifier 内容。排除历史已见 base 后按 task_id 升序取前三；provider/UM base 不重叠；CM 排除已见 afib 后取前三。
 - 9 题：provider `t015/t016/t021`；UM `t022/t023/t024`；CM `cm_anorexia_hard_refuses_001`、`cm_asthma_low_coop_001`、`cm_ckd_moderate_anxious_001`。
 - 污染：历史已见/已分析 base `008/011/012/013/014/017/018/019/027/030/031/032` 与 `cm_afib_moderate_anxious_001` 排除；所选 9 题在选定仓库历史中未找到先前使用，但这不是“保证未见”，若后续发现污染必须如实标注，不能按结果换题。
-- 资源：已按冻结 revision `5ce88104…` 获取 9 题公开 instruction/tool_reference、必要公开 PDF、world 资产和 opaque expectations；9/9 资源 manifest 由已审工具生成并通过资源 preflight。冻结结果见 [nine-task-resource-freeze-20261106.json](../../../reviews/nine-task-resource-freeze-20261106.json)（SHA-256 `074fd38e…`）。t022 保留 5 个 request PDF，t023/t024 各 4 个；未删除/漏供/重命名资源，未解析 expectations 内容。真实 world/MCP 仍未启动。
+- 资源：已按冻结 revision `5ce88104…` 获取 9 题公开 instruction/tool_reference、必要公开 PDF、world 资产和 opaque expectations；9/9 资源 manifest 由已审工具生成并通过资源 preflight。冻结结果见 [nine-task-resource-freeze-20261106.json](../../../reviews/nine-task-resource-freeze-20261106.json)（SHA-256 `074fd38e…`）。t022 保留 5 个 request PDF，t023/t024 各 4 个；未删除/漏供/重命名资源，未解析 expectations 内容。冻结阶段未启动真实 world/MCP；执行阶段首题启动了新 world，见执行记录。
 - 路径：**推荐开发 `role_operator` 路径**，明确标为“开发未见验证”，不是正式 Harbor。若同一次运行同时满足正式 Harbor 供应/CLI/state/患者/授权条件，可合并取证，但不得把 mock/开发装配称为真实 Harbor 通过。
 - 每题一次、同一冻结候选、新 world；provider/payer 物理 HTTP 上界 50，CM 主/确认共享 50 加开发患者辅助≤10（一般≤60）；确认≤2；主输出 8192、确认 32768、患者 8192；B 单列，不藏进 16C。
 - 停止：新 unknown、pending/halt、跨 case/patient 写、越界副作用、预算/时间、取消、持久化或清理失败；不按结果替换任务、不自动重跑、不改名冒充未见。
 
-**九题分阶段审批草案（未授权执行）：** 详细绑定见 [nine-task-approval-draft-20261106.md](../../../reviews/nine-task-approval-draft-20261106.md)。
+**九题执行结果（已批准；首题停止）：** 详细绑定见 [nine-task-approval-draft-20261106.md](../../../reviews/nine-task-approval-draft-20261106.md)，机器记录见 [final-validation-nine-task-execution-20261106.json](../../../reviews/final-validation-nine-task-execution-20261106.json)。
 
-> 9 题公开资源已按冻结 revision 获取并逐题生成/通过 manifest；新 identity B `final-b-001` 已成功且收据适用，旧 unknown 已按用户决定保留未结算；建议另行批准 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world，使用候选 SHA `0df12589…` 与预登记 SHA `bb9d79…`。provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；不启用摘要/恢复/Y。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归；若走正式 Harbor 必须另满足其供应/授权条件并如实标注。本段是草案，当前未授权任何执行。
+> 9 题公开资源已按冻结 revision 获取并逐题生成/通过 manifest；新 identity B `final-b-001` 已成功且收据适用，旧 unknown 已按用户决定保留未结算；建议另行批准 9 次开发 `role_operator` C：provider/UM/CM 各 3 题、每题一次、新 world，使用候选 SHA `0df12589…` 与预登记 SHA `bb9d79…`。provider/payer 每 run 主+确认≤50 HTTP，CM 另加开发患者辅助≤10；确认≤2；不启用摘要/恢复/Y。任一 unknown、pending/halt、越界写、清理不明即停止；不按结果换题、不自动重跑。该批准不包含正式 Harbor、官方患者、judge、发布或额外已见题回归；若走正式 Harbor 必须另满足其供应/授权条件并如实标注。
+
+用户已批准上段文本。实际只执行首题 `final-c-provider-t015`：4 个 main（3 settled + round4 pending），240.022s `chi_timeout`，`pending={本 run, round:4}`、`halted=null`；按停止条件未执行其余8题，未重试/换题/换根。pending 未清、未对账。
 
 ## 4. 16C 与正式路径边界
 
