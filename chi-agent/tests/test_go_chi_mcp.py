@@ -1,3 +1,4 @@
+import json
 import unittest
 from types import SimpleNamespace
 
@@ -61,6 +62,61 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(binding.observed, [])
             self.assertEqual(len(server.calls), 1)
             self.assertEqual([event["event"] for event in journal.run["tool_events"]], ["started", "returned_error"])
+            journal.finish("failed"); journal.close()
+
+    async def test_structured_and_text_result_is_returned_once(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from mcp.types import CallToolResult, TextContent
+        from go_chi_journal import ChiJournal
+        payload = {"items": [{"id": "PAT-1", "name": "A"}], "total": 1}
+        text = json.dumps(payload, indent=2)
+        class Rich(FakeServer):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                return CallToolResult(isError=False,
+                                      content=[TextContent(type="text", text=text)],
+                                      structuredContent=payload)
+        with TemporaryDirectory() as d:
+            journal = ChiJournal(Path(d), identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+            server, binding = Rich(), FakeBinding()
+            bridge = MCPBridge(server, "provider", [tool("chart.search_patients")], binding=binding)
+            bridge.guard = SimpleNamespace(contract=ToolContract([Converter.tool_to_openai(t) for t in bridge.tools]),
+                                           journal=journal, secret="secret", session="session")
+            call = {"id": "x", "type": "function", "function": {"name": "chart__search_patients", "arguments": "{}"}}
+            bridge.guard.contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "r", "tool_calls": [call]})
+            result = await bridge.invoke("chart__search_patients", "{}")
+            self.assertEqual(result, text)
+            self.assertEqual(result.count('"items"'), 1)
+            evidence = json.loads((Path(d) / "tool-evidence" / "r" / "x.json").read_text())
+            self.assertEqual(evidence["body_utf8"], text)
+            self.assertIsNone(evidence["redaction"])
+            journal.finish("failed"); journal.close()
+
+    async def test_differing_structured_and_text_are_both_preserved(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from mcp.types import CallToolResult, TextContent
+        from go_chi_journal import ChiJournal
+        payload = {"items": [], "total": 0}
+        text = "human summary"
+        class Mixed(FakeServer):
+            async def call_tool(self, name, arguments):
+                self.calls.append((name, arguments))
+                return CallToolResult(isError=False,
+                                      content=[TextContent(type="text", text=text)],
+                                      structuredContent=payload)
+        with TemporaryDirectory() as d:
+            journal = ChiJournal(Path(d), identity="a" * 64, evaluation="e", task="t", attempt="a", run="r")
+            server, binding = Mixed(), FakeBinding()
+            bridge = MCPBridge(server, "provider", [tool("chart.search_patients")], binding=binding)
+            bridge.guard = SimpleNamespace(contract=ToolContract([Converter.tool_to_openai(t) for t in bridge.tools]),
+                                           journal=journal, secret="secret", session="session")
+            call = {"id": "x", "type": "function", "function": {"name": "chart__search_patients", "arguments": "{}"}}
+            bridge.guard.contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "r", "tool_calls": [call]})
+            result = await bridge.invoke("chart__search_patients", "{}")
+            self.assertIn(text, result)
+            self.assertIn('"total": 0', result)
             journal.finish("failed"); journal.close()
 
     async def test_uncertain_backend_failure_records_start_and_failure_and_poisons(self):
