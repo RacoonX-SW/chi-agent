@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import httpx
 
+import go_chi_entry
+
 from go_chi_context import DEFAULT_BUDGET
 from go_chi_journal import ChiJournal
 from go_chi_runtime import run_chi
@@ -22,8 +24,8 @@ class Result:
 
 
 class Server:
-    def __init__(self, names, *, fail=None):
-        self.names, self.fail, self.calls = names, fail, []
+    def __init__(self, names, *, fail=None, errors=()):
+        self.names, self.fail, self.errors, self.calls = names, fail, set(errors), []
     async def __aenter__(self):
         return self
     async def __aexit__(self, *_args):
@@ -36,18 +38,23 @@ class Server:
         self.calls.append((name, arguments))
         if self.fail == name:
             raise RuntimeError("synthetic transport loss")
+        if name in self.errors:
+            from mcp.types import CallToolResult, TextContent
+            return CallToolResult(isError=True, content=[TextContent(
+                type="text", text="validation: business prerequisite not met")])
         return Result()
 
 
-def completion(calls=None, content="done"):
+def completion(calls=None, content="done", indexed=False):
     if calls is None:
         message = {"role": "assistant", "content": content}
         finish = "stop"
     else:
         message = {"role": "assistant", "content": None, "reasoning_content": "reason",
                    "tool_calls": [{"id": call_id, "type": "function",
-                                   "function": {"name": name, "arguments": json.dumps(args)}}
-                                  for call_id, name, args in calls]}
+                                   "function": {"name": name, "arguments": json.dumps(args)},
+                                   **({"index": index} if indexed else {})}
+                                  for index, (call_id, name, args) in enumerate(calls)]}
         finish = "tool_calls"
     return {"id": "synthetic", "object": "chat.completion", "created": 0,
             "model": "deepseek-v4.1-flash",
@@ -72,10 +79,10 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.temp.cleanup()
 
     async def exercise(self, responses, *, names=("triage.get",), role="payer", capabilities="f0-f3-v1",
-                       fail=None, expect_failure=False, context_budget=DEFAULT_BUDGET):
+                       fail=None, errors=(), expect_failure=False, context_budget=DEFAULT_BUDGET):
         journal = ChiJournal(self.root / "state", identity="a" * 64, evaluation="eval",
                              task=role, attempt="a", run="run")
-        server = Server(names, fail=fail)
+        server = Server(names, fail=fail, errors=errors)
         observed = []
         async def wire(request):
             observed.append(json.loads(request.content))
@@ -136,10 +143,127 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("Synthetic payer instruction", "\n".join(context_lines))
         self.assertEqual(log["completion"]["verification"], "mechanical_pass")
         self.assertEqual(log["completion"]["business_effect"], "observed")
+        self.assertIsNotNone(go_chi_entry._read_run_log(self.root / "logs"))
         # The search tool returned a bounded hit from the public handbook.
         tool_messages = [message for request in observed for message in request["messages"]
                          if message.get("role") == "tool" and message.get("tool_call_id") == "call_2"]
         self.assertIn("policy.md", json.dumps(tool_messages))
+
+    async def test_optional_position_index_is_accepted_and_dropped(self):
+        responses = [
+            completion([("call_1", "triage__get", {"case_id": "CASE-A"})], indexed=True),
+            completion([("call_2", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "case open", "source_call_id": "call_1"}})]),
+            completion(),
+        ]
+        output, observed, server, journal = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        self.assertEqual(server.calls, [("triage.get", {"case_id": "CASE-A"})])
+        self.assertEqual(journal.run["tool_events"][0]["call_id"], "call_1")
+
+    async def test_repaired_same_file_delivery_allows_claim(self):
+        target = self.workspace / "CASE-A" / "payer" / "note.md"
+        target.write_text("old", encoding="utf-8")
+        responses = [
+            completion([("bad_edit", "local-fs-edit",
+                         {"path": str(target), "old_string": "missing", "new_string": "new"})]),
+            completion([("fixed_write", "local-fs-write",
+                         {"path": str(target), "content": "corrected"})]),
+            completion([("readback", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("status", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "observed", "source_call_id": "readback"}})]),
+            completion([("claim", "local-claim_done", {})]),
+            completion(),
+        ]
+        output, observed, _, journal = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertEqual(results["bad_edit"], "ERROR: old_string not found")
+        self.assertEqual(results["fixed_write"], "workspace file written")
+        self.assertEqual(target.read_text(encoding="utf-8"), "corrected")
+        self.assertEqual(results["claim"], "task marked as done")
+        self.assertTrue(journal.run["claim_done"])
+        self.assertEqual(len(observed), 6)
+        report = json.loads((self.root / "logs" / "run_log.txt").read_text())["completion"]
+        self.assertEqual(report["verification"], "mechanical_pass")
+        self.assertEqual(report["unresolved_file_deliveries"], [])
+
+    async def test_unrelated_file_success_does_not_clear_delivery_failure(self):
+        target = self.workspace / "CASE-A" / "payer" / "note.md"
+        other = self.workspace / "CASE-A" / "payer" / "other.md"
+        target.write_text("old", encoding="utf-8")
+        responses = [
+            completion([("bad_edit", "local-fs-edit",
+                         {"path": str(target), "old_string": "missing", "new_string": "new"})]),
+            completion([("other_write", "local-fs-write",
+                         {"path": str(other), "content": "other"})]),
+            completion([("readback", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("status", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "observed", "source_call_id": "readback"}})]),
+            completion([("claim", "local-claim_done", {})]),
+            completion(),
+        ]
+        output, observed, _, journal = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertTrue(results["claim"].startswith("REFUSED: completion_file_write_failed:bad_edit"))
+        self.assertFalse(journal.run["claim_done"])
+        self.assertEqual(target.read_text(encoding="utf-8"), "old")
+        self.assertEqual(other.read_text(encoding="utf-8"), "other")
+        report = json.loads((self.root / "logs" / "run_log.txt").read_text())["completion"]
+        self.assertEqual([item["call_id"] for item in report["unresolved_file_deliveries"]],
+                         ["bad_edit"])
+
+    async def test_mcp_business_error_closes_the_batch_and_allows_the_next_read(self):
+        responses = [
+            completion([("call_1", "payer_intake_hub__confirm_decisions", {"case_id": "CASE-A"})]),
+            completion([("call_2", "triage__get", {"case_id": "CASE-A"})]),
+            completion([("call_3", "local-state-update", {
+                "target": {"case_id": "CASE-A"},
+                "latest_business_status": {"text": "intake observed", "source_call_id": "call_2"}})]),
+            completion([("call_4", "local-claim_done", {})]),
+            completion(),
+        ]
+        output, observed, server, journal = await self.exercise(
+            responses, names=("payer_intake_hub.confirm_decisions", "triage.get"),
+            errors=("payer_intake_hub.confirm_decisions",))
+        self.assertEqual(output, "done")
+        self.assertEqual([call[0] for call in server.calls],
+                         ["payer_intake_hub.confirm_decisions", "triage.get"])
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        self.assertIn("business prerequisite not met", results["call_1"])
+        self.assertIn("task marked as done", results["call_4"])
+        self.assertEqual([event["event"] for event in journal.run["tool_events"]
+                          if event["call_id"] == "call_1"], ["started", "returned_error"])
+        state = json.loads((self.root / "logs" / "task-state" / "task-state.json").read_text())
+        first = next(item for item in state["observations"] if item["call_id"] == "call_1")
+        self.assertEqual((first["source_kind"], first["event"]), ("business_mutation", "returned_error"))
+        self.assertIsNotNone(state["claim"])
+
+    async def test_invalid_second_call_dispatches_nothing(self):
+        responses = [
+            completion([("call_1", "triage__get", {"case_id": "CASE-A"}),
+                        ("call_2", "local-fs-write", {"path": str(self.workspace / "CASE-A" / "payer" / "x")})]),
+            completion(),
+        ]
+        output, _, server, journal = await self.exercise(
+            responses, names=("triage.get",), expect_failure=True)
+        self.assertIsNone(output)
+        self.assertEqual(server.calls, [])
+        self.assertEqual(journal.run["tool_events"], [])
+        log = json.loads((self.root / "logs" / "run_log.txt").read_text())
+        self.assertEqual(log["status"], "incomplete")
+        self.assertEqual(log["safe_error_code"], "chi_tool_batch_invalid")
+        self.assertFalse((self.workspace / "CASE-A" / "payer" / "x").exists())
 
     async def test_claim_blocks_after_mutation_until_readback(self):
         responses = [

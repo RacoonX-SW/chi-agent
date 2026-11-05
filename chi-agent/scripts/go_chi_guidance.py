@@ -1,4 +1,4 @@
-"""Versioned role stage guidance for Go CHI (chi-role-guidance-v1).
+"""Versioned role stage guidance for Go CHI (chi-role-guidance-v3).
 
 The guidance describes legal branches, preconditions and readbacks. It never
 contains task ids, expected outcomes, rubric thresholds or hidden material.
@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-VERSION = "chi-role-guidance-v1"
+VERSION = "chi-role-guidance-v3"
 
 _INVARIANTS = {
     "provider": [
@@ -18,6 +18,7 @@ _INVARIANTS = {
         "Do not submit an under-supported packet; gathering evidence, deferring or reporting incomplete is legal.",
         "Never resubmit a case that already shows a submitted/accepted state.",
         "After any business write, read the case status back before claiming completion.",
+        "A latest-business-status update must cite a returned case-state read of the target case: exactly cases.get_case or auth.check_status. Other chart, document, handbook, policy, workspace-file and error/refused results are evidence only.",
     ],
     "payer": [
         "Approval, partial approval, denial, pend and routing are all legal outcomes; do not assume one is correct.",
@@ -26,14 +27,21 @@ _INVARIANTS = {
         "Closing on an earlier branch is legal only when the observed public rule makes the later stage unnecessary; record that reason in the determination or notes.",
         "Letter type and finalize/deliver actions must match the observed determination and the public rule.",
         "After finalize/deliver, read the determination or letter state back before claiming completion.",
+        "A latest-business-status update must cite a returned case-state read of the target case: exactly payer_intake_hub.get_intake_case, triage.get, review.get_nurse_review_data, review.get_md_review_data, determination.get_summary, p2p.list or payer_letter_center.list. payer_letter_center.list is the allowed case-scoped letter-state read; payer_letter_center.get by letter id, other letter/document reads and workspace-file reads are evidence only.",
     ],
     "cm": [
         "Respect patient STOP and contact preferences; stop outreach when the patient declines or cannot be reached.",
         "Keep chart facts, outreach statements, assessment sections and the care plan separately sourced.",
         "Do not claim a completed assessment or plan without the corresponding save/finalize result.",
         "After a finalize write, read the case/plan state back before claiming completion.",
+        "A latest-business-status update must cite a returned case-scoped business read of the target case: exactly cm_chart.get_chart_data. Referral, transcript, policy and workspace-file reads are evidence only. cm_chart.get_chart_data is not proof that a care plan was finalized.",
     ],
 }
+
+_BUSINESS_READBACK = (
+    "Saving a deliverable file after a business readback does not require another business readback; "
+    "a failed file write still blocks completion."
+)
 
 _WORKSPACE_INVARIANT = ("Write artifacts only under '<case_id>/<role>/' or '<case_id>/shared/' in the role workspace; "
                         "the role directory is the exact role id (provider, payer or cm), not a job title.")
@@ -134,8 +142,9 @@ _STAGES = {
 
 
 def delivered_invariants() -> dict[str, list[str]]:
-    """Invariants exactly as delivered, including the shared workspace rule."""
-    return {role: _INVARIANTS[role] + [_WORKSPACE_INVARIANT] for role in _INVARIANTS}
+    """Invariants exactly as delivered, including shared evidence rules."""
+    return {role: _INVARIANTS[role] + [_BUSINESS_READBACK, _WORKSPACE_INVARIANT]
+            for role in _INVARIANTS}
 
 
 def guidance(role: str, state_summary: dict | None = None) -> dict:
@@ -144,17 +153,26 @@ def guidance(role: str, state_summary: dict | None = None) -> dict:
     summary = state_summary if type(state_summary) is dict else {}
     target = summary.get("target") if type(summary.get("target")) is dict else {}
     next_candidates = summary.get("next_candidates") if type(summary.get("next_candidates")) is list else []
+    plans = summary.get("plans") if type(summary.get("plans")) is list else []
+    gaps = summary.get("gaps") if type(summary.get("gaps")) is list else []
+    open_gaps = [item for item in gaps if type(item) is dict and item.get("status") == "open"]
+    open_unknowns = [item for item in summary.get("unknowns", [])
+                     if type(item) is dict and item.get("status") == "open"]
+    blocked = bool(open_unknowns or summary.get("claim_violation") or summary.get("stagnation"))
     return {
         "schema": VERSION,
         "role": role,
         "stages": _STAGES[role],
         "invariants": delivered_invariants()[role],
         "current_target": target,
+        "plans": plans,
+        "open_gaps": open_gaps,
         "next_candidates": next_candidates,
         "state_version": summary.get("version"),
-        "unknowns": [item for item in summary.get("unknowns", [])
-                     if type(item) is dict and item.get("status") == "open"],
-        "note": "Guidance only; decide from public observations and read back after writes.",
+        "unknowns": open_unknowns,
+        "blocked": blocked,
+        "note": ("Guidance only; decide from public observations and read back after writes. "
+                 "Optional MD, patient refusal/STOP, not-applicable and blocked branches remain legal."),
     }
 
 

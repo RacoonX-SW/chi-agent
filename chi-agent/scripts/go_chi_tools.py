@@ -379,13 +379,26 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         "case_sensitive": {"type": "boolean"},
     }, ["path", "query"])
     defs = [
-        ("local-fs-read", "Read an allowlisted task, handbook or role workspace file.", schema({"path": {"type": "string"}, "offset": {"type": "integer", "minimum": 1}, "limit": {"type": "integer", "minimum": 1}}, ["path"]), read_file),
-        ("local-fs-list", "List an allowlisted role workspace or handbook directory.", schema({"path": {"type": "string"}}, ["path"]), list_files),
-        ("local-fs-write", "Write a file inside the permitted role workspace. The path must be an absolute path of the form "
-         "'<workspace>/<case_id>/<role>/<file>' or '<workspace>/<case_id>/shared/<file>', where <role> is exactly "
-         "provider, payer or cm; missing parent directories are created.", schema({"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]), write_file),
-        ("local-fs-edit", "Edit a file inside the permitted role workspace.", schema({"path": {"type": "string"}, "old_string": {"type": "string", "minLength": 1}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}}, ["path", "old_string", "new_string"]), edit_file),
-        ("local-claim_done", "Mark the task as complete after finishing the work.", empty, claim),
+        ("local-fs-read", "Read an allowlisted instruction, handbook, fixed reference or role workspace file. "
+         "Use an absolute path under the role workspace ('<workspace>/<case_id>/<role>/...' or "
+         "'<workspace>/<case_id>/shared/...'), the handbook root, or a supplied fixed reference. "
+         "A workspace read is file evidence, not business-state evidence.",
+         schema({"path": {"type": "string"}, "offset": {"type": "integer", "minimum": 1}, "limit": {"type": "integer", "minimum": 1}}, ["path"]), read_file),
+        ("local-fs-list", "List an allowlisted role workspace, shared case directory or handbook directory. "
+         "The path must be absolute and inside an allowed root.",
+         schema({"path": {"type": "string"}}, ["path"]), list_files),
+        ("local-fs-write", "Write a deliverable file inside the permitted role workspace. The path must be an absolute "
+         "path of the form '<workspace>/<case_id>/<role>/<file>' or '<workspace>/<case_id>/shared/<file>', where <role> "
+         "is exactly provider, payer or cm; missing parent directories are created. A successful file write is a "
+         "deliverable, not a business-state readback; a failed write still blocks completion.",
+         schema({"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]), write_file),
+        ("local-fs-edit", "Edit a deliverable file inside the permitted role workspace using the same path rules as "
+         "local-fs-write. old_string must occur in the current file; replace_all controls whether every occurrence "
+         "or only the first is replaced. A failed edit still blocks completion.",
+         schema({"path": {"type": "string"}, "old_string": {"type": "string", "minLength": 1}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}}, ["path", "old_string", "new_string"]), edit_file),
+        ("local-claim_done", "Mark the task as complete after finishing the work. The program may refuse when a "
+         "business write lacks a later business-status readback, a file write failed, an unknown write is open, "
+         "or a tool batch is still pending.", empty, claim),
     ]
     if binding is not None:
         from patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION
@@ -399,16 +412,31 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
              "Read this run's bounded task state: target, observed sources, facts, plans, gaps, open unknown writes, latest business status and next candidates. Read it before planning or after a surprising tool result.",
              empty, task_state),
             ("local-state-update",
-             "Submit a sourced task-state update. Facts and latest business status must cite a call_id already observed in this run. The program fills source versions and rejects stale, wrong-case, unobserved or binding-changing updates. It cannot mark an unknown write as success or failure.",
+             "Submit a sourced task-state update. Facts must cite a returned call_id observed in this run. "
+             "latest_business_status must cite a returned business-status read of the target case: provider "
+             "cases.get_case or auth.check_status; payer payer_intake_hub.get_intake_case, triage.get, "
+             "review.get_nurse_review_data, review.get_md_review_data, determination.get_summary, p2p.list "
+             "or payer_letter_center.list; cm cm_chart.get_chart_data. Other chart/document, policy, handbook, "
+             "workspace-file, error and refused results are evidence only and are rejected for status. For CM, "
+             "cm_chart.get_chart_data is a case-scoped business read, not proof of care-plan finalize. The "
+             "program fills source versions and rejects stale, wrong-case, unobserved or binding-changing "
+             "updates. It cannot mark an unknown write as success or failure.",
              state_update_schema, state_update),
             ("local-completion-check",
-             "Report mechanical completion evidence: target, latest business status, last mutation, open unknowns, claim and whether a later readback is missing. It does not claim, approve, or produce a clinical/official verdict.",
+             "Report mechanical completion evidence: target, latest business status and its source kind, "
+             "last business write, last file write, open unknowns, claim and the required readback. A "
+             "successful file write after a business readback does not require another business readback; "
+             "a failed file write still blocks. Final text without a claim is not blocked. It does not "
+             "claim, approve, or produce a clinical/official verdict.",
              empty, completion_check),
             ("local-role-guidance",
              "Return the versioned role stage guide with legal branches, preconditions, readbacks and stop conditions. It contains no task answers or expected outcomes; decide from public observations.",
              empty, role_guidance_tool),
             ("local-fs-search",
-             "Search an allowlisted public directory or fixed reference file for a literal string. Returns bounded line hits with path, line, byte offset, file hash and truncation flags. Re-read the original context with local-fs-read before citing it.",
+             "Search an allowlisted handbook/public directory, fixed reference file, or the target case's role "
+             "workspace for a literal string. Returns bounded line hits with path, line, byte offset, file hash "
+             "and truncation flags. Re-read the original context with local-fs-read before citing it. Search "
+             "hits are evidence, not a business-status readback.",
              search_schema, fs_search),
         ])
     if evidence_shadow == "shadow":

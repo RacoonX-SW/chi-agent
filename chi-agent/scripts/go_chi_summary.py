@@ -194,7 +194,8 @@ def protected_snapshot(*, journal, contract, canonical_tools, role, instruction,
                 'gaps', 'unknowns', 'latest_business_status', 'next_candidates', 'claim',
                 'claim_violation', 'repeat', 'stagnation', 'updated_at_utc_ms'}
         if (type(task_state) is not dict or set(task_state) != keys
-                or task_state.get('schema') != 'chi-task-state-v1'
+                or task_state.get('schema') not in {'chi-task-state-v1', 'chi-task-state-v2',
+                                                    'chi-task-state-v3'}
                 or task_state.get('run') != journal.run['run'] or task_state.get('role') != role
                 or type(task_state.get('version')) is not int or task_state['version'] < 0
                 or type(task_state.get('updated_at_utc_ms')) is not int or task_state['updated_at_utc_ms'] < 0

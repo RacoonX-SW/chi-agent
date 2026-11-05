@@ -862,3 +862,26 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 已讲清的取舍：主请求有界输出恢复已实现但默认关闭，首版不覆盖摘要且两能力互斥；不能据本次摘要失败判断恢复无效。摘要选区上限与摘要续写仍是独立设计问题，不因理解这一区别自动启用或恢复真实运行。
 - 用户曾提出摘要接续，现已明确撤销PR57的E卡，选择先独立处理摘要生成预算。需要区分“较大生成预算”和“较短最终摘要”：前者包含reasoning，后者仍可保持原候选结构/大小；提高预算不是追加请求或恢复内部思考状态，不能保证真实端点必然成功。
 - 下一入口：[A–D有界离线加固规格](../openspec/changes/score-readiness-hardening/proposal.md)保留给DeepSeek；摘要预算由GPT/Terra另行实现、固定候选复审后交用户合并。此处没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-05：A–D 有界离线加固的完成来源与诊断边界
+
+- 本轮把“完成”拆成三类证据：业务状态回读（固定公开 case-state 工具）、政策/手册/患者证据、文件交付物。文件写成功不能证明业务终态，业务回读后保存交付文件也不应再强制一次无关回读；失败文件写、未知写效果和 claim 后写保护仍然有效。
+- 关键取舍：`latest_business_status` 只能由程序固定的业务状态读提供，模型不能自选来源；claim 与最终报告复用同一个完成判断，避免两套诊断不一致。状态/报告/日志显式升版，旧 v1 只读解释，不追溯否定旧 run。
+- 工具契约要按“描述承诺 vs 实际接受条件”逐项核对；P0 的旧例是已修的可选 `index`，本轮没有复现新的“业务拒绝被误判 fatal”，因此不新增恢复策略。协议损坏、未知工具、重复 ID、角色/case 越界、未知副作用仍 fatal。
+- 正式配送的凭据集合必须只有一份：harness 原先漏了 `DEEPSEEK_API_KEY`，而 delivery plan 已列；修复为共用集合，并把 harness 新依赖的 delivery 模块纳入包成员。`install()` no-op 是供应契约，不是缺陷。
+- entry 外层失败不能覆盖 runtime 已写的有效诊断；本轮保留 safe cause/计数/completion/context，并分开 first/outer/journal/cleanup 错误；损坏/超大/未知 schema 日志走明确 fallback，不合并任意文本。
+- 下一入口：GPT 对 `deepseek/score-readiness-hardening` 的 A–D 固定 SHA 独立复审；之后才决定 Git 交付、新 B 及任何真实运行。本轮没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-05：初审不通过后的返工——修复证据要能被程序证明
+
+- R1 的关键不是“允许覆盖失败”，而是区分历史失败与当前未解决交付：同一 `(scope, path)` 的后续成功 write/edit 才能解除；无关路径、其他 case/role、unknown 和再次失败仍阻断。程序不能相信模型说“已修复”。
+- R2 的关键不是“日志能解析就算有效”，而是保留字段也要有精确结构/类型/有限错误码；非法字段走明确 fallback，正常字段仍保留。格式合法但未定义的 code 不能进入安全字段。
+- R3 的关键是同一快照：分开读取多个文件会混合不同时刻的状态；现在输出绑定 SHA-256，变化时只报告快照变化，不生成混合指标。缺失/损坏/截断与“确认没有事件”必须分开。
+- R4 的关键是描述与程序一致：状态来源按 role/canonical 工具精确列出；`payer_letter_center.list` 与 `cm_chart.get_chart_data` 是允许的 case-scoped 读，但不扩大为 letter/document/file 或 care-plan finalize 的证明。
+- 测试覆盖也要精确：8 个 skip 是 operator 3 + role config 5；controller 12 项不覆盖 operator 3 项，必须另跑并记录。下一入口：GPT 对返工候选 `e9c503a` 独立复审。没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-05：第二轮返工——validator 必须是全函数，记录完整不等于 JSON 可解析
+
+- R2 的教训：validator 对任意有界 JSON 形状都必须返回合法/非法，不能因为 list/dict 参与 set membership 抛 TypeError。reader 的结构验证边界要接住这类异常并转为明确 fallback；fallback 不能掩盖首个 `chi_timeout`，写盘失败仍单独可见。
+- R3 的教训：`completion={}`、缺 `claim`、`claim=17`、trace 只有 `{"role":"tool"}` 或 `{}` 都是“JSON 可解析但记录不完整/无效”。只有版本、必要字段和类型完整时才能输出 `claim_present=false` 或计数 0；否则 null + invalid/incomplete。
+- 两轮都保留旧失败、旧盘点输出和旧账；返工只追加新证据。下一入口：GPT 对第二次返工候选 `36db613` 独立复审。没有用户亲自操作证据，不升级为已实践。

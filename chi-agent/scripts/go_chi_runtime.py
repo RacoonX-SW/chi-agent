@@ -11,7 +11,7 @@ from opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as 
 from model_runner_adapter import _patch_empty_history_compatibility
 from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
 from go_chi_policy import TIME_POLICY, RECOVERY_POLICY, SUMMARY_VERSIONS
-from go_chi_guidance import digest as guidance_digest
+from go_chi_guidance import VERSION as GUIDANCE_VERSION, digest as guidance_digest
 from go_chi_state import TaskState
 
 
@@ -384,7 +384,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             failure = failure or "chi_log_persistence_failed"
         try:
             guard_ref = holder.get("guard")
-            summary = {"status": "incomplete" if failure else "complete", "safe_error_code": failure,
+            summary = {"schema": "chi-go-run-log-v2",
+                       "status": "incomplete" if failure else "complete", "safe_error_code": failure,
                        "safe_cause": getattr(guard_ref, "safe_cause", None),
                        "provider_requests": len(agent_requests),
                        "physical_requests": dict(wire_counts),
@@ -397,6 +398,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                        "current_run_agent_usage": {"input_tokens_known": input_tokens, "output_tokens_known": output_tokens,
                                                    "complete": len(settled) == len(agent_requests)},
                        "tool_events": len(journal.run["tool_events"]),
+                       "final_output_claimed": bool(journal.run["claim_done"]),
                        "elapsed_ms": int((time.monotonic() - run_started) * 1000), "official_reward": None}
             if journal.run['launch'].get('input_summary') in SUMMARY_VERSIONS:
                 summary.update({'input_summary_policy': journal.run['launch']['input_summary'],
@@ -404,7 +406,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             if state is not None:
                 summary.update({
                     "capabilities": capabilities,
-                    "guidance_version": "chi-role-guidance-v1",
+                    "guidance_version": GUIDANCE_VERSION,
                     "guidance_sha256": guidance_digest(),
                     "task_state_version": state.data["version"],
                     "task_state_target": state.data["target"],
