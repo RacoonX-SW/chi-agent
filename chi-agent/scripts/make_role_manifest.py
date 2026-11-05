@@ -14,6 +14,8 @@ import os
 import tempfile
 from pathlib import Path
 
+from role_resource_preflight import bounded_request_count
+
 ROLE_MAP = {
     "prior_auth_provider": ("provider", "provider"),
     "prior_auth_um": ("payer", "payer"),
@@ -101,7 +103,7 @@ def build_manifest(dataset: Path, family: str, task_id: str, revision: str | Non
         if request_dir.is_symlink() or not request_dir.is_dir():
             raise ManifestError("manifest_request_missing")
         pdfs = sorted(request_dir.glob("*.pdf"))
-        if len(pdfs) != 4:
+        if not bounded_request_count(len(pdfs)):
             raise ManifestError("manifest_request_count")
         for pdf in pdfs:
             files.append(_entry(pdf, dataset, "public"))

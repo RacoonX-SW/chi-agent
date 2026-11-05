@@ -18,7 +18,7 @@ from evaluation_bundle import _check_components, _read_regular_bounded
 from go_chi_operator_snapshot import capture_resources
 from live_development import _capture_review_input
 from role_cm_capture import capture_cm_review_input
-from role_resource_preflight import validate
+from role_resource_preflight import bounded_request_count, validate
 from go_chi_resources import workspace_path
 from docker.types import Mount
 from chi_bench.verifier.task_runtime import collect_all_verifier_checks  # fail before world startup if verifier is unavailable
@@ -88,7 +88,14 @@ def _config(path, expected):
 def _payer_projection(artifacts, manifest):
     expected = {Path(item['path']).name: item for item in manifest['files'] if '/fixtures/request/' in item['path']}
     found = [p for p in (artifacts / 'workspaces').rglob('*') if p.is_file() and p.parent.name == 'incoming_request']
-    if len(found) != 4 or len(expected) != 4 or {p.name for p in found} != set(expected): raise ValueError('payer_projection_invalid')
+    # The public task layout is not fixed at four request files (t022 has five).
+    # Use the frozen manifest count, but keep a bounded, exact and duplicate-free
+    # projection so missing/extra/duplicate files still fail.
+    count = len(expected)
+    if (not bounded_request_count(count) or len(found) != count
+            or len({p.name for p in found}) != count
+            or {p.name for p in found} != set(expected)):
+        raise ValueError('payer_projection_invalid')
     for path in found:
         _check_components(path, 'payer_projection_invalid', final_may_be_missing=False)
         item = expected[path.name]

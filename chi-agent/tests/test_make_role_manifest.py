@@ -95,8 +95,28 @@ class ManifestTests(unittest.TestCase):
         with self.assertRaises(gen.ManifestError):
             gen.build_manifest(self.root, "prior_auth_um", self.payer)
 
-    def test_wrong_request_count_and_missing_revision_are_refused(self):
-        (self.root / "prior_auth_um/tasks" / self.payer / "fixtures/request/01_doc.pdf").unlink()
+    def test_five_request_pdfs_are_accepted_and_pass_preflight(self):
+        base = self.root / "prior_auth_um/tasks" / self.payer
+        write(base / "fixtures/request/05_extra.pdf", b"%PDF-1.4 extra")
+        manifest = gen.build_manifest(self.root, "prior_auth_um", self.payer)
+        self.assertEqual(len(manifest["files"]), 12)
+        gen.write_manifest(manifest, self.root / "out/five.json", self.root,
+                           preflight=role_resource_preflight.validate)
+
+    def test_out_of_bounds_request_count_is_refused(self):
+        base = self.root / "prior_auth_um/tasks" / self.payer
+        for path in sorted((base / "fixtures/request").glob("*.pdf")):
+            path.unlink()
+        with self.assertRaises(gen.ManifestError):
+            gen.build_manifest(self.root, "prior_auth_um", self.payer)
+        for index in range(21):
+            write(base / f"fixtures/request/{index:02d}_doc.pdf", b"%PDF-1.4 test")
+        with self.assertRaises(gen.ManifestError):
+            gen.build_manifest(self.root, "prior_auth_um", self.payer)
+
+    def test_non_pdf_request_file_is_refused(self):
+        base = self.root / "prior_auth_um/tasks" / self.payer
+        write(base / "fixtures/request/notes.txt", "not a pdf")
         with self.assertRaises(gen.ManifestError):
             gen.build_manifest(self.root, "prior_auth_um", self.payer)
 

@@ -1,0 +1,283 @@
+{
+  "coding_b_plan": {
+    "evaluation_id": "eval-final-20261105",
+    "max_provider_http": 6,
+    "path": "reviews/coding-b-plan-20261105.json",
+    "run_id": "final-b-001",
+    "sha256": "19ea22a3ab362af78c13c285b964b7fb95c6b22a45a34f557f9e5bb18c588672",
+    "state_root": "runs/final-validation-20261105/state",
+    "status": "draft_not_authorized"
+  },
+  "context_budget": {
+    "basis": "utf8 byte upper estimate; configured_unverified",
+    "max_chars": 3500000,
+    "max_estimated_tokens": 1000000,
+    "output_reserve_tokens": 8192,
+    "schema": "chi-context-budget-v2"
+  },
+  "date": "2026-11-05",
+  "dependency_volumes": [
+    "chi-h-root-model-deps-20261027-v1",
+    "chi-k-pdf-deps-20261027-v1"
+  ],
+  "development_operator_compatibility": {
+    "chain_4_and_5_file_positive": true,
+    "chain_invalid_0_21_missing_duplicate_rejected": true,
+    "five_file_projection_accepted": true,
+    "four_file_projection_accepted": true,
+    "front_manifest_and_preflight_bounded": true,
+    "legacy_request_pdfs": 4,
+    "missing_extra_duplicate_provider_symlink_wrong_hash_rejected": true,
+    "operator_change_is_package_external": true,
+    "package_identity_changed": false,
+    "t022_public_request_pdfs": 5
+  },
+  "entry_configuration": {
+    "automatic_retries": 0,
+    "chi_max_output_tokens": 8192,
+    "chi_max_requests": 50,
+    "coding_b_max_output_tokens": 1024,
+    "coding_b_max_requests": 6,
+    "confirmation_max_output_tokens": 32768,
+    "confirmation_max_requests": 2,
+    "fee_policy": "go-chi-record-incomplete-fees-v1",
+    "hard_cap_usd": null,
+    "input_summary_policy": {
+      "default_enabled": false,
+      "max_output_tokens": 8192,
+      "max_per_run": 1,
+      "minimum_reduction_bytes": 1024,
+      "retained_batches": 2,
+      "shared_max_requests": 50,
+      "trigger_denominator": 5,
+      "trigger_numerator": 4,
+      "version": "chi-input-summary-v1"
+    },
+    "input_summary_policy_v2": {
+      "default_enabled": false,
+      "max_output_tokens": 32768,
+      "max_per_run": 1,
+      "minimum_reduction_bytes": 1024,
+      "retained_batches": 2,
+      "shared_max_requests": 50,
+      "trigger_denominator": 5,
+      "trigger_numerator": 4,
+      "version": "chi-input-summary-v2"
+    },
+    "output_recovery_policy": {
+      "default_enabled": false,
+      "instruction_version": "chi-recovery-instruction-v1",
+      "max_output_tokens": 8192,
+      "max_per_chain": 1,
+      "max_per_run": 2,
+      "shared_max_requests": 50,
+      "version": "chi-output-recovery-v1",
+      "view_version": "chi-recovery-view-v1"
+    },
+    "policy_mode": "record_only",
+    "provider_profile_id": "opencode-go-deepseek-v4.1-flash-v1",
+    "schema": "chi-go-evaluation-entry-v1",
+    "time_policy": {
+      "b_admission_seconds": 180,
+      "b_operator_seconds": 360,
+      "chi_admission_seconds": 900,
+      "chi_operator_seconds": 1380,
+      "confirmation_io_seconds": 420,
+      "confirmation_read_seconds": 360,
+      "connect_seconds": 10,
+      "main_io_seconds": 300,
+      "main_read_seconds": 240,
+      "operator_max_seconds": 3600,
+      "pool_seconds": 60,
+      "write_seconds": 60
+    }
+  },
+  "evaluation_bundle_manifest_identity": "a6a69d7d23ae5197eff00fadb198e2cf743f74aae600b65ae2f5e36e3085abfc",
+  "evidence_sha256": {
+    "build.log": "e273974fd4fb712870c9ddab361ca146614dfdde9e98ae7b4f399e9953196445",
+    "controller.log": "375a4f4c7cf043adc86111309d1c0fab57f957be73a5754c0300c563a66e9346",
+    "metadata.json": "9f0a7ae145152a6a8e5935bd5e80b10ba7c062a1ca61887d1aada7494acfc898",
+    "preflight-release.json": "93df013a1f410a65950b7b07ab305e93fb5110722273f72d3a78cc2f27efbb1c",
+    "preflight.json": "93df013a1f410a65950b7b07ab305e93fb5110722273f72d3a78cc2f27efbb1c",
+    "reviewed-package-diff.txt": "207c813fee394d465d8d05b2d05f7a245ca3de1eda7e817195b2dd3b40b2a06d",
+    "targeted-tests.log": "b0c8c93926a033cdaedee7ea4b61c665b119fd6ef94db1dd4b3825a95155d18e"
+  },
+  "execution_check_image": "sha256:24bef2e2c7e30bb972667b29afd0ed80d6fb79ae735210b8e3167ee5013b0bf3",
+  "go_bundle_manifest_identity": "c5f569e8a20439c07f020fd8776af4aba4d62da0c64e86e2da88e744cc077f0d",
+  "limitations": [
+    "No new coding-B receipt for this identity; old B receipt is not reusable",
+    "payer-010 old unknown/pending remains unresolved; new isolated B requires an explicit user decision and does not settle old history",
+    "All nine preregistered tasks require authorized public resource acquisition; none is present in this offline tree",
+    "Nine-task path is development role_operator, not formal Harbor; formal supply/CLI/state/patient conditions remain unverified",
+    "MCP live schemas are not fetched in this preparation; actual discovery must be recorded before model calls",
+    "No real endpoint, summary/continuation, patient, world, Trial, judge or official score is verified"
+  ],
+  "nine_task_preregistration": {
+    "counts": {
+      "care_management": 3,
+      "prior_auth_provider": 3,
+      "prior_auth_um": 3
+    },
+    "execution_path": "development_role_operator",
+    "formal_harbor": "not verified; separate supply/authorization required",
+    "local_resources_missing": 9,
+    "local_resources_present": 0,
+    "path": "reviews/nine-task-preregistration-20261105.json",
+    "sha256": "bb9d79308951e89939767697f82e3525b9e0f9d166e937c4158188de4edfb209",
+    "status": "draft_not_authorized"
+  },
+  "non_package_changes": [
+    {
+      "commit": "8992af1132f8e369dbfeb86542474ea7a7726c9e",
+      "in_package_files": false,
+      "path": "scripts/go_chi_readiness_inventory.py",
+      "review": "score-readiness-hardening-review.md section 12"
+    },
+    {
+      "commit": "8992af1132f8e369dbfeb86542474ea7a7726c9e",
+      "in_package_files": false,
+      "path": "tests/test_go_chi_readiness_inventory.py",
+      "review": "score-readiness-hardening-review.md section 12"
+    }
+  ],
+  "official_reward": null,
+  "package_external_scripts": {
+    "scripts/go_chi_readiness_inventory.py": "86b7938b214735d5f7e4ee7d09e9242410b07188416f58f0b09441472320f110",
+    "scripts/make_role_manifest.py": "d199743fbf886e65731ef235fcf5b2c2a7719f374c670f31c590cc4d6dac83ef",
+    "scripts/role_operator.py": "1ac9deda3481b4275be167a46f4aab4e49d7c7599a1d95d54f556629b5d250f6",
+    "scripts/role_resource_preflight.py": "df9d734c95ac1bf3accc2db54a55c8de5eb420ff29503c259a79f22f91e1073e",
+    "scripts/role_runner.py": "65f7c541513e960ff70e9320e46a0cc4ab55938fe1c6f7dbe7a2918db16d5e2d",
+    "tests/test_make_role_manifest.py": "58852b6c5f5d74c1f39c0b1aba272ad188537171efb376cfa84890fbe4f46413",
+    "tests/test_role_payer_projection.py": "0763bd2ce83a4df33cdb6a3bb006d38dacb7d944aafad1eaa28f794f77bbee85",
+    "tests/test_role_resource_preflight.py": "73a3c648b06de54020840117bb3ce2b01bcb6e2579904a49ca26abf96a7ae1c1"
+  },
+  "package_file_sha256": {
+    "RUN_CHI_GO.md": "12c37877e18df7700011723aec56154b74279aac8c775509aac7b6444ee7d3c6",
+    "bundle-manifest.json": "780b3ee1a9d20871d59fbcdf0019522ff75f30da510612018593944edb9870dd",
+    "profiles/go-chi-entry.json": "d0d982af431e34e95fc62678b58c0426180f657923e99b881ac4a48a20492d6b",
+    "profiles/opencode-go-deepseek.json": "ea4ea8ce0fce81b79d72d8d00c28e5834ef944d71d16f01a0269f2ee15e21fd9",
+    "requirements-model.lock": "47e00d40985e682e40c3e36cf7f74c0a10886935ff4c4e6d25fe8d3aaa08927d",
+    "requirements-pdf.lock": "61c09a5c1cff09003ef2e5b09842cfcc6ef0ef0a86a36ba5f507833e16570202",
+    "scripts/b_execution_policy.py": "c2c236e4037ea671acdbd12898836cd9a989b59a6890f3736e3ad935df5eb63a",
+    "scripts/b_model_adapter.py": "182b5e3cdcd2975780943e0ac7a8f8f78a7c1b10090a63844c949f7a3a622d26",
+    "scripts/b_provider_profile.py": "8a89cf53a114ddf064bcf1d9caf8312f9f4934bf995aa4a5fc36e53cfc492879",
+    "scripts/b_provider_transport.py": "514a0cecf6b6380be37b0fb56cfa824d3bdca64ebbe0f8c959b1adc99e9edd83",
+    "scripts/budget_evaluation.py": "93e1072e71188a11c7300688c001489bc9469c1e7e4719beb807b8b0a46118aa",
+    "scripts/evaluation_bundle.py": "02e2e14a1a03421306c63c516b8f70c39d0d982013e8feee3ec1e291f2512fbe",
+    "scripts/go_chi_auxiliary.py": "67c697fad92cfa2b2b9b929ef73977c49b357cc4c2019249c3e9ea10d6cedd19",
+    "scripts/go_chi_bundle.py": "fd4e621f49ce1cd8af5b2980b094834108a643f632bb9b64ba0e5324adcc3a99",
+    "scripts/go_chi_context.py": "20a95d8fc6431fac00be7a6f6d7177d34fb828f7d775e8a4d082eac7a1438323",
+    "scripts/go_chi_contract.py": "7a658f0584eb275e75ccbbbbf67e6fd0170a994d568354becb67f43e629d4aba",
+    "scripts/go_chi_delivery.py": "9cf57ad2a6b9a05d4c80c9b9cea82e875a322ca15ed760a301b0c3dd28ebe26c",
+    "scripts/go_chi_diagnostics.py": "82d4345fe08340f4a5fb8560563ff3bcbabb68b70c42fb7e7898f55e80dd9370",
+    "scripts/go_chi_entry.py": "7dc1bc06465bfa4b800093544a531e1517e21cde5bc479613bf49c90a38e2b68",
+    "scripts/go_chi_evidence.py": "4ad0e55af01e4b6fd9385e880266d19b96d001611234781b18d8ce5926dc24d6",
+    "scripts/go_chi_guard.py": "531aecc211e995106ae652e40f9d910a7575d727055f9f3cc8561d13e2c63257",
+    "scripts/go_chi_guidance.py": "84307a6587d8ca4c6282457817fd74de4ef140087bccc94db8cdefe38bcbec5a",
+    "scripts/go_chi_harness.py": "c81f406e9a7b20710970066f306c98aa36d2584a629ac92a0dec319ad02aa962",
+    "scripts/go_chi_inspect.py": "88ab3258d78170191e86b2bd1d0cf85fc8a632486138d4a9710ff468a56878d1",
+    "scripts/go_chi_journal.py": "f003bec43a1e734e3023f0ea09c967465163ece2484db9826bb36c9f39224721",
+    "scripts/go_chi_local.py": "178809b86ba4f9e59a01dd096eab0762ffd13835d14c98f91255e466216f4f31",
+    "scripts/go_chi_mcp.py": "019fac0a05252ca800ba33450b316d3c686fcbbbead0b523c9eea3a9191019d1",
+    "scripts/go_chi_policy.py": "c0fdb40a73dea4fc71150f2dc4c0dc78da93f134bbf269e2cb78fa3b714dd470",
+    "scripts/go_chi_recovery.py": "c20ebb511b7c2a10a08025f3c388472ca5e97331aa02253d1a9e339413dbeb65",
+    "scripts/go_chi_resources.py": "6a3caa4119963e113839c66188c0e5ba2cace09269df6e08cc3f3d97d56174a1",
+    "scripts/go_chi_runtime.py": "f5824b587d7fb895400675c564488fabb932b61634cdfddfb88d4610b2cf74b6",
+    "scripts/go_chi_search.py": "af0048d34ced9ce96121d7d49f40a773c01cbd76e6a24db9e78f10bbaad5e66f",
+    "scripts/go_chi_state.py": "10e6c43bade96b6dcfb270214b0b9ccf69f10a39f81e570d5df87d5fab8f194e",
+    "scripts/go_chi_summary.py": "8a80bd9f9c0b4fcb0f553614b2fdc03f8d72f78bbd85d60c112468fee377b041",
+    "scripts/go_chi_tools.py": "d3f1dd06eb536336ab7103091d6469bb260477b86b092d9deb643f0b090c87fa",
+    "scripts/install_model_dependencies.sh": "ba3283e557bd79fd6e7aa5907761b7923f5f86e4864f4bee6538e40b5008c987",
+    "scripts/model_runner_adapter.py": "28321552bb0d6c6d4992a742c4cdb102fb34aa0b619e3b8ddc0ca1faee97b1e9",
+    "scripts/opencode_go_provider.py": "4731e501c13fd8fefc6cff9b47d10af6e1da5d60ead62d09779ec4cafe6af778",
+    "scripts/patient_identity_binding.py": "53d50e9faec055a2ec8be6db932b9c9ecd8116a3208ab3fd97fc57aaeb926346",
+    "scripts/payer_evidence.py": "f7f8a4f3fc1e3f1a67a891851d17a744642eaed26627231fe8636e7842c190b0",
+    "scripts/pdf_resource_reader.py": "0db663079a43e30e466ea65c66b51a2a3d5bd4c362d9f9875e5bcda42e27679f",
+    "scripts/referral_field_guidance.py": "10ca4df37ad579c34294df1057f4e3f445b03c6a7a34f949f09a8a2416bdebdf",
+    "scripts/request_budget.py": "8b1a700d3d9547f0dc183764f68e85f6e9685c39dd1aace75f8a657074cd63e3"
+  },
+  "package_members_unchanged_since_reviewed_implementation": true,
+  "platform": "Linux arm64 Python 3.12.15",
+  "prompt_sha256": {
+    "coding_descriptions": "230baa08e697b6643ab023b626068c68e4b5f3730192b5675e4a58f7899f7b5d",
+    "coding_instruction": "10cf56d2fdcab2a854e6680287f50fe6dcda66fc585ba60ae88f05a1c35ed511",
+    "coding_schemas": "db51c1d0226d72dda285b5f2dbf6d17714257de36c5814b93c68513411b3e9f8",
+    "coding_system": "8213314660cea5e695d170d95a4a23eb36f0f43bf371cb50cd405e725821bf59",
+    "official_system": "f6db1a146efe771b73a2415948b725570b374833724b584d8d8e12f9d3ac7084",
+    "recovery_partial": "5177afa846adac165ea5016b6a3c79bb7fb14b4cd506a267344d796affc3fb18",
+    "recovery_regenerate": "9a80dd82ecaedfa7aec8e99e64427b4df498acf034d455c9418a8bc24ed02592",
+    "summary_notice": "4c9541bacbd69d869a089420b0815c5423892e223269ac62e3e798168eac9179",
+    "summary_schema": "d0f7844d7b4e39f7fdcd05b4008ed366f265ac41b884d09e652926ef5a9d528a",
+    "summary_system": "15fe8034bbf5ed7bc8a549f0059a0bc8247d267cbe394c74b87f043351469ab0"
+  },
+  "provider_profile": {
+    "automatic_retries": 0,
+    "base_url": "https://opencode.ai/inference/go/openai/v1",
+    "context_evidence": "documentation_only_not_measured",
+    "currency": "USD",
+    "documented_context_tokens": 1048576,
+    "key_env": "OPENCODE_API_KEY",
+    "max_output_tokens": 1024,
+    "max_requests": 6,
+    "model": "deepseek-v4.1-flash",
+    "profile_id": "opencode-go-deepseek-v4.1-flash-v1",
+    "reasoning_effort": "high",
+    "schema": "chi-opencode-go-profile-v1",
+    "session_header": "x-opencode-session",
+    "thinking": {
+      "type": "enabled"
+    },
+    "user_agent": "chi-agent"
+  },
+  "real_requests_this_preparation": 0,
+  "release_checksum_list_sha256": "3f4d18825f12607dd91c0c8f0018a8798e6342869ccca4153c52c99b2dc463a7",
+  "release_manifest_sha256": "4553e703effef63cae69a9260c13b1a73973d5c51439213fa9337feef326d4e6",
+  "release_source_commit": "ec1a7064b5cd0a10bd8c397c9f7f61e1946d19cf",
+  "reviewed_implementation_commit": "36db613358ac9d01d792ee8f0bb4d39431c02b9e",
+  "runtime_identity": "2a9a32711f8e3de43eac037fe2c745c803c09851e71947dae36325d1931953fc",
+  "runtime_identity_detail": {
+    "bundle_manifest_sha256": "c5f569e8a20439c07f020fd8776af4aba4d62da0c64e86e2da88e744cc077f0d",
+    "pdf": {
+      "lock_sha256": "61c09a5c1cff09003ef2e5b09842cfcc6ef0ef0a86a36ba5f507833e16570202",
+      "package_sha256": "4a8a5931d0e268d93e0ed7282d415943813efe31f05ce37ab4508d75629bdddc",
+      "version": "6.20.1",
+      "wheel_sha256": "aa5a55ddcffdc5e5ab291d5decb23f6383f4e56f8e3263dc39af41fff03885ad"
+    },
+    "sdk": {
+      "httpcore": "1.0.9",
+      "httpx": "0.28.1",
+      "jsonschema": "4.26.0",
+      "mcp": "1.30.0",
+      "openai": "2.36.0",
+      "openai-agents": "0.13.6",
+      "pydantic": "2.14.1",
+      "pydantic-core": "2.50.1"
+    },
+    "sdk_sources_sha256": {
+      "agents": "e30f993853cf60e399621d52dc61c7956905ccd8156d180091a000930171eb40",
+      "httpcore": "a1d1a9dcf7afc3c1768c74264530e380ad6c5159e9f733966c6c1b956b719336",
+      "httpx": "5ad684db628b74a638ed4973d0e52efb59a43a0f1114928d111f988d05967a4e",
+      "jsonschema": "2e9c4ee072728dd185489e04645735429fe6c4b24e3556a5a6c3d07517eb251b",
+      "mcp": "67ea1623c5a6368dde4cd84f945e68c904cc39b51399f44dac29b8801084905f",
+      "openai": "a96ee43ab7fc954de935663bf3475f4ac08cf11b809d0509aada5bb8dec3f9ee",
+      "pydantic": "46a4b1f7674e38f8c7fb810e526ba0a064be63d7484f7826f0ff79f28753c2d1"
+    },
+    "upstream": {
+      "clean": true,
+      "commit": "4444a07fa68a4f1623f841a292a54e284fc8e7f7",
+      "source_blobs": {
+        "src/chi_bench/experiment/agents/nemotron_tool_protocol.py": "d6fcab0173ab6c4df9f4a00e0c00ce4982c8ad15",
+        "src/chi_bench/experiment/agents/openai_agents_local_tools.py": "2783c35f7732f5eff73a022b16d2885e17c4dbde",
+        "src/chi_bench/experiment/agents/openai_agents_runner.py": "87657b79b535f340714542a745c1354b4e54dad0"
+      }
+    }
+  },
+  "same_git_trees": {
+    "profiles": "5ef02dda6aaf6a001838a33ba8adebd09318a67c",
+    "scripts": "88878aeaeaa869ce58597894586ed7810beaa995",
+    "tests": "f431c65b11a79c2860daa87c94464484328851bd"
+  },
+  "schema": "chi-validation-candidate-v2",
+  "source_commit": "ec1a7064b5cd0a10bd8c397c9f7f61e1946d19cf",
+  "status": "offline_frozen_not_authorized_for_real_execution"
+}
