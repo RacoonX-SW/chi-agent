@@ -2,7 +2,7 @@
 
 日期：2026-11-05（Asia/Shanghai）。结论：A–D 已完成有界离线实现、Docker/Python 3.12 禁网自测、隔离包身份/预检和只读余量盘点；未进行任何真实模型、摘要、续写、B/C、患者、world、Trial、judge 或发布调用。official_reward 全部为 null。本文是唯一详细证据；短状态只写 [REVIEW_STATE](REVIEW_STATE.md)。
 
-> **返工状态（2026-11-05）**：初审快照 `33e6ecabbda388f1947a96b892acef328d27c4e1` 的独立复审结论为**不通过**（2 项 P1、2 项 P2）。原候选、初审失败与旧历史保留；R1–R4 的修复、独立反例、测试和新包身份追加在第 10 节，不覆盖第 1–9 节的历史含义。
+> **返工状态（2026-11-05）**：初审快照 `33e6ecabbda388f1947a96b892acef328d27c4e1` 的独立复审结论为**不通过**（2 项 P1、2 项 P2）；第一次返工 `4613fd110236c8c371a1f7df54573c5caecc8c7f` 复审仍**不通过**（R1/R4 限定通过，R2 剩 1 项 P1、R3 剩 1 项 P2）。原候选与两次失败均保留；R1–R4 追加在第 10 节，第二轮 R2/R3 追加在第 11 节，不覆盖第 1–10 节的历史含义。
 
 ## 1. 基线、分支与提交
 
@@ -340,3 +340,78 @@
 - CM 仍没有公开 care-plan 读取工具；`cm_chart.get_chart_data` 只是机械业务资源回读，不能证明 plan finalize。
 - `final_text` 未 claim 仍不会被阻止；这是保留的既有边界。
 - 两个 anthropic 模块的 collection error 与 dev 镜像 8 个 operator skip 继续单列，不写全环境全绿。
+
+## 11. 第二轮返工 R2/R3（第一次返工不通过后追加）
+
+第一次返工快照 `4613fd110236c8c371a1f7df54573c5caecc8c7f` 的独立复审结论为**仍不通过**：R1、R4 限定离线通过，R2 剩 1 项 P1，R3 剩 1 项 P2。初审 `33e6eca` 与第一次返工 `4613fd1` 的失败均保留原义；本节只记录第二轮修复，不覆盖前两轮结论。
+
+| 项 | 提交/证据 |
+| --- | --- |
+| R2 修复 | `36db613358ac9d01d792ee8f0bb4d39431c02b9e` |
+| R3 修复 | 包外 `runs/score-readiness-hardening-20261105/inventory.py`，SHA-256 `00433eaac6f675fc05ef491be5b4f72571e278e9ab28694afc8ba1be3a622952` |
+| 第二次返工代码候选 | `36db613358ac9d01d792ee8f0bb4d39431c02b9e` |
+
+### 11.1 R2 / P1：非法嵌套类型不得击穿错误处理
+
+**独立反例（GPT 提供，已复跑）**：在其余字段合法的 runtime 日志中分别设置
+`completion["verification"]=[]`、`business_effect={}`、`required_readback=[]`、`remaining_limitations=[{}]`。原候选 `_read_run_log` 与 `_failure_run_log` 均抛 `TypeError`，无 fallback；合成 entry 在 `chi_timeout` 后遇坏日志也抛 `TypeError`，无最终安全 JSON。
+
+**最小修法**：
+- 所有嵌套 validator 在枚举/set membership 前检查 `str` 类型；覆盖 `verification`、`business_effect`、`required_readback`、`remaining_limitations` 元素、reference/status `event`、`source_kind`、`unresolved_file_deliveries.event` 等。
+- `_read_run_log` 外层增加读取/验证异常边界：任意畸形嵌套 JSON 返回 `None`，不向上抛；`_failure_run_log`/cleanup 读取坏日志时走明确 fallback。
+- 不吞写盘错误：`_write_run_log` 仍返回 False，main 仍以 `chi_log_persistence_failed` 收口；首个 `chi_timeout` 保留在 `safe_error_code`/`first_error_code`，外层错误另列。
+- 正常 runtime 日志、有限错误码、safe_cause、first/outer/journal/cleanup 分层、wire/journal 原字节不变。
+
+**返工后实测**：四个原始反例均 `accepted=false`、`fallback=true`、注入文本不保留；`verification`/`business_effect`/`required_readback`/`limitations` 的 list/dict/null/int/string 错误类型均 fallback；reference/status/unresolved event 的 list/dict 错误类型也 fallback。合成 entry 先 `chi_timeout` 再遇坏日志时返回受控失败（exit 1）、stdout 安全 JSON、`run_log.log_fallback=true`、`safe_error_code=chi_timeout`、`first_error_code=chi_timeout`。正常实际 runtime 日志仍 `_read_run_log` 非 None。
+
+**测试**：`tests/test_score_readiness_diagnostics.py` 新增嵌套类型矩阵、reference/status/unresolved 类型矩阵和合成 entry 错误边界回归；全部通过。
+
+### 11.2 R3 / P2：区分“JSON 可解析”和“记录完整”
+
+**独立反例（GPT 提供，已复跑）**：原盘点对
+`completion={}`、`completion` 有 schema 但缺 `claim`、`completion={"schema":"chi-completion-v3","claim":17}` 分别输出 `present/false`、`present/false`、`present/true`；`trace` 只有 `{"role":"tool"}` 或 `{}` 时仍 `present` 且计数 0。
+
+**最小修法**：
+- `_completion_state()` 校验受支持历史版本 v1/v2/v3、必要键集、verification/business_effect、target、claim 结构、claim_violation、open_unknowns、note 及 v2/v3 的 claim_policy/reference/required_readback/limitations/unresolved；缺字段标 `incomplete`，错误类型/未知键/非法 claim 标 `invalid`，相关 `claim_present` 为 `null`。
+- `_trace_counts()` 要求每行是 dict、`role` 在受支持集合、`content` 为 str；坏行/缺字段将 `trace_status` 改为 `invalid`，拒绝/错误/unknown 计数为 `null`。只有完整 trace 才输出 0。
+- 保留已通过的 SHA 快照、读取变化停止、缺文件/空/损坏/截断区分、删除不可配对准确率指标；旧 `inventory-v1.json`/`inventory-v2.json` 保留，新输出 `inventory-v3.json`，脚本 SHA 见上。
+
+**返工后实测**：`completion={}` → `invalid/null`；缺 claim → `incomplete/null`；`claim=17` → `invalid/null`；合法 v1 真实样本 → `present/false`；合法 v3 真实样本 → `present/true`；trace `{"role":"tool"}`/`{}` → `invalid/null`；完整 trace 明确无事件 → 0；缺文件/空/坏 JSON/截断/读取变化均保持 null 或明确状态。真实 payer-014 行 hash 匹配、前后文件不变、`trace_refusals=4`、`claim_present=true`。
+
+**独立检查**：`runs/score-readiness-hardening-20261105/inventory_checks_v2.py`，输出 `inventory-checks-v2.log`；新盘点 `inventory-v3.json`。旧输出不被覆盖。
+
+### 11.3 保留的 R1/R4 与回归
+
+- R1：同 `(scope,path)` 后续合法 write/edit 才解除交付失败；无关文件/case/role、未解决 unknown、后续再次失败仍阻断；失败记录不删除；实际 SDK 六请求修复路径可 claim，无额外 HTTP。第二轮 `edge_checks` 与全量测试回归通过。
+- R4：`BUSINESS_STATUS_READS` 未扩大；canonical 描述、letter list/get、CM chart/finalize 边界不变；8 个 skip=operator 3+role config 5；controller 12 项与 operator 3 项分别执行并记录。
+
+### 11.4 第二轮测试、包与历史
+
+| 检查 | 实际结果 |
+| --- | --- |
+| 适用全量 pytest（dev；Harbor overlay；隔离 runs） | **exit 0：951 passed、8 skipped、350 subtests passed**（29.24s） |
+| controller `test_role_operator_config` + `test_role_validation_wiring` | **exit 0：12 tests OK** |
+| controller `test_go_chi_operator` | **exit 0：3 tests OK** |
+| anthropic 两模块 | **exit 2：2 collection errors，`ModuleNotFoundError: anthropic`** |
+
+新包（代码 `36db613`）：
+
+| 项目 | 实测 |
+| --- | --- |
+| Go manifest | `c5f569e8a20439c07f020fd8776af4aba4d62da0c64e86e2da88e744cc077f0d` |
+| runtime identity | `2a9a32711f8e3de43eac037fe2c745c803c09851e71947dae36325d1931953fc` |
+| release manifest | `cfc3d9f42bd9ef2bcf766924faa895dc415f1ed0cd91e8dca0d355ec3d98d1c3` |
+| release source_commit | `36db613358ac9d01d792ee8f0bb4d39431c02b9e` |
+| 旧 evaluation manifest | `a6a69d7d23ae5197eff00fadb198e2cf743f74aae600b65ae2f5e36e3085abfc`，不变 |
+
+42 成员；相对第一次返工包 `b3d0e87b…` 无增删，只有 `scripts/go_chi_entry.py` 变化；其余 41 项一致。隔离无 Key/禁网 preflight 实际 `identity_verified`、upstream clean、`official_reward=null`。新身份没有新 B，旧 B 不适用。
+
+历史保留：旧 S 账仍 `91412a231c2407fc5a32663376bd1cd2226325b18e02b4c78ba6bc4fde872c41`；`pending=null`、`halted=null`；`vprep-s-001` 仍 failed/`chi_summary_invalid`、20 settled。未改旧 accounting/pending/receipt/seal/wire/轨迹。
+
+### 11.5 仍未验证
+
+- 真实模型、摘要、续写、B/C、患者、world、Trial、judge、发布仍为 0；`official_reward=null`。
+- 新包真实端点是否接受 v3 state/completion/log 校验、真实模型行为、真实 Harbor/operator/官方患者/取消/在途/清理仍未验证。
+- CM 仍无公开 care-plan 读取工具；`cm_chart.get_chart_data` 只是机械业务资源回读，不能证明 plan finalize。
+- `final_text` 未 claim 仍不会被阻止；这是保留的既有边界。
+- anthropic 两个模块的 collection error 与 dev 镜像 8 个 operator skip 继续单列，不写全环境全绿。

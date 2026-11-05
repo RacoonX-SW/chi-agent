@@ -33,6 +33,15 @@
 - [x] 重建 Go/evaluation/release 并做隔离 preflight；新 manifest/runtime/release 与 source_commit 见报告第10节；旧 B 不适用。
 - [x] 旧 S 账严格只读验证保持原 hash/失败/20 settled；详细证据追加到同一报告，不覆盖初审不通过。
 
+## 1b. 第二次返工 R2/R3（第一次返工不通过后，已完成本地候选，待GPT复审）
+
+- [x] R2：嵌套 validator 在枚举/set membership 前检查类型；reader 错误边界把任意畸形嵌套 JSON 转为明确 fallback；合成 entry 保留首个 chi_timeout（`36db613`）。
+- [x] R3：completion 校验 v1/v2/v3 必要字段与 claim 结构；trace 校验 role/content，坏行/缺字段标 invalid 且计数 null；旧 v1/v2 盘点保留，新 inventory-v3 与脚本 SHA 记录。
+- [x] R1/R4 回归保持：同资源修复、无关文件/case/role/unknown 阻断；canonical 描述与 8 skip 覆盖表述不变。
+- [x] 第二轮适用 pytest `951 passed/8 skipped/350 subtests`、controller `12 OK`、operator `3 OK`；anthropic 两模块 collection error 单列。
+- [x] 重建 Go/evaluation/release 并隔离 preflight；新 manifest/runtime/release/source_commit 见报告第11节；旧 B 不适用。
+- [x] 旧 S 账严格只读验证保持原 hash/失败/20 settled；详细证据追加到同一报告，不覆盖前两次不通过。
+
 ## 2. 明确不随本轮启动
 
 - [ ] 新候选coding-B（必要性/具体次数/状态/身份另行批准，不算入16次C）。

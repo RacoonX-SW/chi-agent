@@ -879,3 +879,9 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - R3 的关键是同一快照：分开读取多个文件会混合不同时刻的状态；现在输出绑定 SHA-256，变化时只报告快照变化，不生成混合指标。缺失/损坏/截断与“确认没有事件”必须分开。
 - R4 的关键是描述与程序一致：状态来源按 role/canonical 工具精确列出；`payer_letter_center.list` 与 `cm_chart.get_chart_data` 是允许的 case-scoped 读，但不扩大为 letter/document/file 或 care-plan finalize 的证明。
 - 测试覆盖也要精确：8 个 skip 是 operator 3 + role config 5；controller 12 项不覆盖 operator 3 项，必须另跑并记录。下一入口：GPT 对返工候选 `e9c503a` 独立复审。没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-05：第二轮返工——validator 必须是全函数，记录完整不等于 JSON 可解析
+
+- R2 的教训：validator 对任意有界 JSON 形状都必须返回合法/非法，不能因为 list/dict 参与 set membership 抛 TypeError。reader 的结构验证边界要接住这类异常并转为明确 fallback；fallback 不能掩盖首个 `chi_timeout`，写盘失败仍单独可见。
+- R3 的教训：`completion={}`、缺 `claim`、`claim=17`、trace 只有 `{"role":"tool"}` 或 `{}` 都是“JSON 可解析但记录不完整/无效”。只有版本、必要字段和类型完整时才能输出 `claim_present=false` 或计数 0；否则 null + invalid/incomplete。
+- 两轮都保留旧失败、旧盘点输出和旧账；返工只追加新证据。下一入口：GPT 对第二次返工候选 `36db613` 独立复审。没有用户亲自操作证据，不升级为已实践。
