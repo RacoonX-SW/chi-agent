@@ -300,8 +300,32 @@
     }
   },
   "failure_analysis": {
-    "proximate_cause": "the fourth main request exceeded the fixed main_read_seconds=240 read timeout; no HTTP response, response body or usage was received, so the request remains pending",
+    "proximate_cause": "the client's fixed main_read_seconds=240 read timeout fired before the provider's first attempt finished; the provider log shows attempt 1 ended with 524 after 600048ms and an internal retry returned 200 after 82484ms (total 682808ms), but the journal still records the request as pending",
     "trigger": "chart.search_patients was called with {limit: 5000} and no filters, returning all 65 task-scope patients with full records; the tool message is 172813 chars and 63.3% of the 272857-char fourth request",
+    "provider_log": {
+      "source": "/Users/asaki/Downloads/request-logs-2026-11-05.json",
+      "request_id": "01a1acea-2001-7aaa-9c5d-4579e72cbb13",
+      "session_id": "chi-0b45f5745e7842cb97ce8bcb6617fd5f",
+      "session_sha256_matches_journal": true,
+      "content_length": 272934,
+      "started_at_ms": 1793902387201,
+      "finished_at_ms": 1793903070009,
+      "duration_ms": 682808,
+      "outcome": "succeeded",
+      "status_code": 200,
+      "attempts": [
+        {"status_code": 524, "duration_ms": 600048, "error_code": "inference_failed"},
+        {"status_code": 200, "duration_ms": 82484}
+      ],
+      "input_tokens": 73204,
+      "output_tokens": 1494,
+      "reasoning_tokens": 1125,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": "0.011877",
+      "stream": false,
+      "note": "the client timed out at 240s; the provider completed after 682.8s; the journal pending was not reconciled with this log"
+    },
     "serialization_duplication": {
       "source": "go_chi_mcp.py else branch when structuredContent is present",
       "compact_structured_chars": 50030,
@@ -317,20 +341,25 @@
     "not_causes": [
       "context budget: configured 3500000 chars / 1000000 estimated tokens; request 272857 chars / 272934 upper estimate; no chi_context_budget_exceeded",
       "documented model context: 1048576 tokens; the request is far below it",
-      "HTTP error, business refusal, business write, or cleanup failure: none observed"
+      "HTTP error, business refusal, business write, or cleanup failure: none observed",
+      "permanent provider stall: the provider log shows a 524 attempt at 600s followed by a 200 retry at 82.5s"
     ],
     "comparison": {
       "round1": {"prompt_tokens": 12133, "elapsed_ms": 4526},
       "round2": {"prompt_tokens": 13923, "elapsed_ms": 2665},
       "round3": {"prompt_tokens": 15256, "elapsed_ms": 4747},
-      "round4_estimated_prompt_tokens": 65000,
-      "round4_elapsed_ms": 240022
+      "round4_prompt_tokens": 73204,
+      "round4_output_tokens": 1494,
+      "round4_reasoning_tokens": 1125,
+      "round4_client_timeout_ms": 240022,
+      "round4_provider_duration_ms": 682808
     },
-    "unknown": "the evidence cannot distinguish a still-generating request from a provider queue or transport stall; there is no provider request ID or Console record for round 4",
+    "unknown": "resolved on the provider side by the supplied log: attempt 1 returned 524 after 600048ms, attempt 2 returned 200 after 82484ms; the client had already timed out at 240s. The journal pending remains because no reconciliation was authorized.",
     "recommendations": [
       "fix go_chi_mcp.py to return one tool-result representation instead of compact structuredContent plus the full model dump",
       "evaluate a bounded projection or cap for search_patients full-roster results",
-      "decide with evidence whether the 240s read timeout covers the largest allowed prompts; do not retry without authorization"
+      "decide with evidence whether the 240s read timeout or a large-request guard should change; do not retry without authorization",
+      "if reconciling the pending, adapt inspect_provider to the observed attemptCount=2 (524 then 200) record under a separate authorization"
     ]
   },
   "state": {
