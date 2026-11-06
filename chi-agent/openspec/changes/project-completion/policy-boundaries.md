@@ -48,10 +48,11 @@
 | input summary read / 单次总IO | 240 / 300 | 后续摘要用途沿主请求时间策略，不扩大CHI准入窗口 |
 | confirmation read / 单次总IO | 360 / 420 | TIME_POLICY；最终用途决定，不能沿用SDK客户端main默认值 |
 | patient simulator read / 单次总IO | 360 / 420 | AuxiliaryTransport当前独立硬边界；恰与确认相等，不共享额度/确认语义 |
-| B / CHI请求准入窗口 | 180 / 900 | TIME_POLICY；新请求派发前检查，不是保证全程在此时刻完成 |
+| B / CHI请求准入窗口 | 180 / 1800 | TIME_POLICY；新请求派发前检查，不是保证全程在此时刻完成。CHI 于 2026-11-06 按官方 submission 默认 2× 从 900 调到 1800；B 不变 |
+| 官方 task agent timeout / submission multiplier | 900 / 2× | task.toml `[agent] timeout_sec=900`；`SubmissionRun.timeout_multiplier` 默认 2.0；有效 agent 上限 1800 |
 | 旧Go operator最低等待（B / CHI） | 360 / 1380 | TIME_POLICY，由go_chi_operator校验调用方配置 |
 | 旧Go operator可配置最大等待 | 3600 | TIME_POLICY.operator_max_seconds |
-| 统一role_runner运行 / 清理 | 1500 / 450 | role_runner的运行和收尾边界，不是main IO |
+| 统一role_runner运行 / 清理 | 1900 / 450 | role_runner的运行和收尾边界，不是main IO；随 1800 准入上调 |
 | 统一role_operator等待 | 2040 | role_operator配置期望和runner.wait，不和旧operator强行统一 |
 | 患者bootstrap等待broker | 430 | dev_patient_bootstrap，broker HTTP等待，不是提供方read预算 |
 

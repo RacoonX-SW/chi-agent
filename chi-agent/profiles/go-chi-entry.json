@@ -20,7 +20,7 @@
     "main_io_seconds": 300,
     "confirmation_io_seconds": 420,
     "b_admission_seconds": 180,
-    "chi_admission_seconds": 900,
+    "chi_admission_seconds": 1800,
     "b_operator_seconds": 360,
     "chi_operator_seconds": 1380,
     "operator_max_seconds": 3600

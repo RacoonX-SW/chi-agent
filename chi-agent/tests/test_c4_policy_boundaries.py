@@ -147,7 +147,7 @@ def test_returned_usage_cap_settles_before_decision(tmp_path,role,limit,over):
 def test_time_policy_literal_contract():
     assert TIME_POLICY=={'connect_seconds':10,'main_read_seconds':240,'confirmation_read_seconds':360,
         'write_seconds':60,'pool_seconds':60,'main_io_seconds':300,'confirmation_io_seconds':420,
-        'b_admission_seconds':180,'chi_admission_seconds':900,'b_operator_seconds':360,
+        'b_admission_seconds':180,'chi_admission_seconds':1800,'b_operator_seconds':360,
         'chi_operator_seconds':1380,'operator_max_seconds':3600}
     assert DEFAULT_BUDGET['max_chars']==3500000 and DEFAULT_BUDGET['max_estimated_tokens']==1000000
     assert DEFAULT_BUDGET['output_reserve_tokens']==8192
