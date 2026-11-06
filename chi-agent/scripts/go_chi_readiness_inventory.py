@@ -34,7 +34,7 @@ LIMITS = {"run_log.txt": 1024 * 1024, "run_result.json": 16 * 1024 * 1024,
 MAX_LINES = 200000
 
 WINDOWS = {
-    "connect_seconds": 10,
+    "connect_seconds": 30,
     "main_read_seconds": 240,
     "main_io_seconds": 300,
     "confirmation_read_seconds": 360,

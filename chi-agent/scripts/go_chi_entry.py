@@ -21,6 +21,7 @@ sys.dont_write_bytecode = True
 
 from evaluation_bundle import BundleFailure, _check_components, _read_regular_bounded
 from go_chi_bundle import validate_bundle
+from go_chi_context import DEFAULT_BUDGET
 from go_chi_diagnostics import is_safe_error_code, validate_cause
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
@@ -658,6 +659,7 @@ def _parser():
     parser.add_argument("--output-recovery", choices=(RECOVERY_POLICY["version"],), default=None)
     parser.add_argument("--input-summary", choices=SUMMARY_VERSIONS, default=None)
     parser.add_argument("--requirements", choices=(REQUIREMENTS_POLICY,), default=None)
+    parser.add_argument("--context-max-estimated-tokens", type=int, default=None)
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
     parser.add_argument("--mcp-url")
@@ -704,6 +706,9 @@ def main(argv=None, *, development=None):
             raise GoFailure('chi_summary_configuration_invalid')
         if args.output_recovery is not None and args.mode != "live":
             raise GoFailure("chi_recovery_invalid")
+        if args.context_max_estimated_tokens is not None and (
+                args.mode != "live" or not 1 <= args.context_max_estimated_tokens <= 3_500_000):
+            raise GoFailure("chi_context_budget_invalid")
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
             import importlib
@@ -848,12 +853,16 @@ def main(argv=None, *, development=None):
         else:
             import httpx
             from go_chi_runtime import run_chi
+            context_budget = dict(DEFAULT_BUDGET)
+            if args.context_max_estimated_tokens is not None:
+                context_budget["max_estimated_tokens"] = args.context_max_estimated_tokens
             async def execute():
                 kwargs = dict(role=args.role, instruction=instruction, mcp_url=args.mcp_url,
                     instruction_path=instruction_path, logs_dir=logs_dir, workspace_root=args.workspace_root,
                     handbook_root=args.handbook_root, tool_references=args.tool_reference,
                     lower=httpx.AsyncHTTPTransport(retries=0, verify=True),
-                    capabilities="f0-f3-v1", requirements=args.requirements)
+                    capabilities="f0-f3-v1", requirements=args.requirements,
+                    context_budget=context_budget)
                 if development is None:
                     return await run_chi(journal, secret, **kwargs)
                 return await development(journal, secret, run_chi, kwargs)

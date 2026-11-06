@@ -43,7 +43,7 @@
 
 | 参数/用途 | 秒 | 当前来源与意义 |
 | --- | ---: | --- |
-| connect / write / pool | 10 / 60 / 60 | TIME_POLICY；guard最终request.extensions覆盖 |
+| connect / write / pool | 30 / 60 / 60 | TIME_POLICY；guard最终request.extensions覆盖 |
 | main/B/continuation read / 单次总IO | 240 / 300 | TIME_POLICY；read为socket等待，IO是整次异步wall timeout |
 | input summary read / 单次总IO | 240 / 300 | 后续摘要用途沿主请求时间策略，不扩大CHI准入窗口 |
 | confirmation read / 单次总IO | 360 / 420 | TIME_POLICY；最终用途决定，不能沿用SDK客户端main默认值 |

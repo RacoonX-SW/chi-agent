@@ -53,6 +53,11 @@ class EntryTests(unittest.TestCase):
                 self.assertTrue((qroot / "chi-evaluation" / "chi-accounting.json").exists())
             self.assertEqual(q_bytes, (qroot / "accounting.json").read_bytes())
 
+    def test_context_cap_is_parsed_for_live(self):
+        args = entry._parser().parse_args(["live", "--bundle-sha256", "a" * 64,
+                                           "--context-max-estimated-tokens", "2000000"])
+        self.assertEqual(args.context_max_estimated_tokens, 2_000_000)
+
     def test_profile_matches_entry_config_without_patching(self):
         raw = (entry.ROOT / "profiles/go-chi-entry.json").read_bytes()
         config = entry.json.loads(raw, object_pairs_hook=entry._pairs,

@@ -12,7 +12,7 @@
   "automatic_retries": 0,
   "fee_policy": "go-chi-record-incomplete-fees-v1",
   "time_policy": {
-    "connect_seconds": 10,
+    "connect_seconds": 30,
     "main_read_seconds": 240,
     "confirmation_read_seconds": 360,
     "write_seconds": 60,
