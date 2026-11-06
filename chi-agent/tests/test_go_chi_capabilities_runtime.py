@@ -104,6 +104,21 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         finally:
             journal.close()
 
+    async def test_invalid_tool_arguments_are_refused_and_run_continues(self):
+        responses = [
+            completion([("call_1", "local-state-update",
+                         {"target": {"case_id": None, "put_plans": []}})]),
+            completion([("call_2", "local-state-update", {"target": {"case_id": None}})]),
+            completion(),
+        ]
+        output, observed, server, journal = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        messages = observed[1]["messages"]
+        refusal = [message for message in messages
+                   if message.get("role") == "tool" and "REFUSED" in str(message.get("content"))]
+        self.assertTrue(refusal)
+        self.assertIn("chi_tool_arguments_invalid", refusal[0]["content"])
+
     async def test_state_guidance_search_and_claim_close_the_loop(self):
         responses = [
             completion([("call_1", "local-role-guidance", {}),
@@ -249,21 +264,24 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((first["source_kind"], first["event"]), ("business_mutation", "returned_error"))
         self.assertIsNotNone(state["claim"])
 
-    async def test_invalid_second_call_dispatches_nothing(self):
+    async def test_invalid_second_call_refuses_whole_batch(self):
         responses = [
             completion([("call_1", "triage__get", {"case_id": "CASE-A"}),
                         ("call_2", "local-fs-write", {"path": str(self.workspace / "CASE-A" / "payer" / "x")})]),
             completion(),
         ]
-        output, _, server, journal = await self.exercise(
-            responses, names=("triage.get",), expect_failure=True)
-        self.assertIsNone(output)
+        output, observed, server, journal = await self.exercise(responses, names=("triage.get",))
+        self.assertEqual(output, "done")
         self.assertEqual(server.calls, [])
-        self.assertEqual(journal.run["tool_events"], [])
-        log = json.loads((self.root / "logs" / "run_log.txt").read_text())
-        self.assertEqual(log["status"], "incomplete")
-        self.assertEqual(log["safe_error_code"], "chi_tool_batch_invalid")
         self.assertFalse((self.workspace / "CASE-A" / "payer" / "x").exists())
+        results = {message.get("tool_call_id"): message.get("content")
+                   for request in observed for message in request["messages"]
+                   if message.get("role") == "tool"}
+        for call_id in ("call_1", "call_2"):
+            self.assertIn("chi_tool_arguments_invalid", results[call_id])
+        self.assertEqual([event["event"] for event in journal.run["tool_events"]], ["refused", "refused"])
+        log = json.loads((self.root / "logs" / "run_log.txt").read_text())
+        self.assertEqual(log["status"], "complete")
 
     async def test_claim_blocks_after_mutation_until_readback(self):
         responses = [

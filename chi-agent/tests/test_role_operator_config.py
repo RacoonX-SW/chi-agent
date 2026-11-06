@@ -76,6 +76,28 @@ class RoleOperatorConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check(both)
 
+    def test_context_cap_override(self):
+        value = dict(self.base)
+        value["context_max_estimated_tokens"] = 2_000_000
+        config = self.check(value)
+        self.assertEqual(role_operator._validation_flags(config),
+                         ["--context-max-estimated-tokens", "2000000"])
+        for bad in (None, True, 0, -1, 3_500_001, "2000000", 1.5):
+            with self.subTest(bad=bad):
+                value = dict(self.base)
+                value["context_max_estimated_tokens"] = bad
+                with self.assertRaises(ValueError):
+                    self.check(value)
+
+    def test_output_recovery_and_context_cap_can_combine(self):
+        value = dict(self.base)
+        value["output_recovery"] = "chi-output-recovery-v1"
+        value["context_max_estimated_tokens"] = 2_000_000
+        config = self.check(value)
+        self.assertEqual(role_operator._validation_flags(config),
+                         ["--output-recovery", "chi-output-recovery-v1",
+                          "--context-max-estimated-tokens", "2000000"])
+
     def test_requirements_exact_and_mutual_exclusion(self):
         value = dict(self.base)
         value["requirements"] = "chi-requirements-v1"

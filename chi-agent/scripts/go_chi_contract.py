@@ -98,6 +98,8 @@ def _local_schema_references(value):
 class ToolContract:
     """Freeze tool definitions and validate each whole batch before dispatch."""
 
+    RECOVERABLE_SCHEMA_LIMIT = 2
+
     def __init__(self, definitions: list[dict[str, Any]]):
         self.definitions = copy.deepcopy(definitions)
         self.schemas: dict[str, dict] = {}
@@ -105,6 +107,7 @@ class ToolContract:
         self.records: list[dict] = []
         self.batches: list[dict] = []
         self.refusals: dict[str, str] = {}
+        self.schema_refusals = 0
         try:
             if not isinstance(definitions, list) or not definitions:
                 raise ValueError
@@ -123,11 +126,13 @@ class ToolContract:
         except Exception:
             raise ContractFailure("tool_definitions_invalid") from None
 
-    def accept_batch(self, message: dict) -> list[dict]:
+    def accept_batch(self, message: dict, *, recover_schema: bool = False) -> list[dict]:
         """Validate all IDs and arguments before committing any batch record.
 
         The first proven failure determines the finite diagnostic cause; the
-        accepted set and the no-partial-commit rule are unchanged.
+        accepted set and the no-partial-commit rule are unchanged. With
+        recover_schema, a JSON-valid but schema-invalid batch is accepted
+        atomically with per-call refusals so the model can correct it once.
         """
         def fail(reason: str):
             failure = ContractFailure("tool_batch_invalid")
@@ -146,7 +151,7 @@ class ToolContract:
                 canonical = _canonical_calls(message["tool_calls"])
             except ValueError:
                 fail("call_shape")
-            calls, ids = [], set()
+            calls, ids, schema_refusal = [], set(), None
             for call in canonical:
                 if set(call) != {"id", "type", "function"} or call["type"] != "function":
                     fail("call_shape")
@@ -165,10 +170,21 @@ class ToolContract:
                     arguments = _parse(fn["arguments"])
                 except Exception:
                     fail("arguments_json")
-                if not Draft202012Validator(self.schemas[fn["name"]]).is_valid(arguments):
-                    fail("arguments_schema")
+                errors = sorted(Draft202012Validator(self.schemas[fn["name"]]).iter_errors(arguments),
+                                key=lambda error: list(error.absolute_path))
+                if errors:
+                    if not recover_schema:
+                        fail("arguments_schema")
+                    if schema_refusal is None:
+                        schema_refusal = self._schema_refusal(fn["name"], errors[0])
                 ids.add(call_id)
                 calls.append({"id": call_id, "name": fn["name"], "arguments": arguments, "result": None})
+            if schema_refusal is not None:
+                if self.schema_refusals >= self.RECOVERABLE_SCHEMA_LIMIT:
+                    fail("arguments_schema")
+                self.schema_refusals += 1
+                for call in calls:
+                    self.refusals[call["id"]] = schema_refusal
         except ContractFailure:
             raise
         except Exception:
@@ -181,6 +197,25 @@ class ToolContract:
         stored["tool_calls"] = copy.deepcopy(canonical)
         self.batches.append({"message": stored, "ids": [c["id"] for c in calls]})
         return copy.deepcopy(calls)
+
+    @staticmethod
+    def _schema_refusal(tool: str, error) -> str:
+        path = ".".join(str(part) for part in error.absolute_path) or "$"
+        if error.validator == "required" and isinstance(error.instance, dict):
+            missing = [name for name in error.validator_value if name not in error.instance]
+            detail = "missing required field(s) " + ", ".join(missing)
+        elif error.validator == "additionalProperties" and isinstance(error.instance, dict):
+            allowed = set(error.schema.get("properties", {}))
+            unexpected = [name for name in error.instance if name not in allowed]
+            detail = ("unknown field(s) " + ", ".join(unexpected) if unexpected
+                      else "unknown field(s)")
+        elif error.validator == "type":
+            detail = "expected " + str(error.validator_value)
+        elif error.validator == "enum":
+            detail = "expected one of " + ", ".join(str(value) for value in error.validator_value)
+        else:
+            detail = "failed " + str(error.validator)
+        return f"chi_tool_arguments_invalid: {tool}: {detail} at {path}"
 
     def record_result(self, call_id: str, result: Any) -> None:
         pending = [record for record in self.records if record["id"] == call_id and record["result"] is None]

@@ -261,7 +261,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                             raise GoFailure('chi_summary_replay' if purpose == 'main' else 'chi_recovery_tool_unclassified') from None
                         if effect == "mutation" and canonical_sha({"name": canonical, "arguments": call["arguments"]}) in completed:
                             raise GoFailure('chi_summary_replay' if purpose == 'main' else 'chi_recovery_replay')
-                parsed = self.contract.accept_batch(clean)
+                parsed = self.contract.accept_batch(clean, recover_schema=True)
                 if self.before_batch is not None:
                     self.before_batch(parsed)
             except ContractFailure as failure:

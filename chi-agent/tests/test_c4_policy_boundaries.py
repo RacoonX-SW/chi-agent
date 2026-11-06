@@ -145,7 +145,7 @@ def test_returned_usage_cap_settles_before_decision(tmp_path,role,limit,over):
 
 
 def test_time_policy_literal_contract():
-    assert TIME_POLICY=={'connect_seconds':10,'main_read_seconds':240,'confirmation_read_seconds':360,
+    assert TIME_POLICY=={'connect_seconds':30,'main_read_seconds':240,'confirmation_read_seconds':360,
         'write_seconds':60,'pool_seconds':60,'main_io_seconds':300,'confirmation_io_seconds':420,
         'b_admission_seconds':180,'chi_admission_seconds':1800,'b_operator_seconds':360,
         'chi_operator_seconds':1380,'operator_max_seconds':3600}
@@ -239,7 +239,7 @@ def test_actual_transport_timeout_by_purpose(tmp_path,role,read,wall):
             return original(value)
         with patch('asyncio.timeout',side_effect=spy):
             await guard.handle_async_request(request(data))
-        assert timeouts==[{'connect':10,'read':read,'write':60,'pool':60}]
+        assert timeouts==[{'connect':TIME_POLICY['connect_seconds'],'read':read,'write':60,'pool':60}]
         assert walls==[wall]
         j.finish('failed');j.close()
     asyncio.run(run())

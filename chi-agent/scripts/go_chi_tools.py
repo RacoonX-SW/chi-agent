@@ -360,6 +360,15 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
     source_item = {"type": "object",
                    "properties": {"text": {"type": "string"}, "source_call_id": {"type": "string"}},
                    "required": ["text", "source_call_id"], "additionalProperties": False}
+    target_properties = {
+        "case_id": {"type": ["string", "null"],
+                    "description": "Omit or use null until a case is created or known."},
+    }
+    if role == "provider":
+        target_properties["patient_id"] = {
+            "type": ["string", "null"],
+            "description": "Omit or use null until a patient is bound.",
+        }
     state_update_schema = schema({
         "facts": {"type": "array", "items": source_item},
         "plans": {"type": "array", "items": {"type": "string"}},
@@ -367,12 +376,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             "text": {"type": "string"}, "status": {"type": "string", "enum": ["open", "resolved"]},
             "source_call_id": {"type": "string"}},
             "required": ["text", "status"], "additionalProperties": False}},
-        "target": {"type": "object", "properties": {
-            "case_id": {"type": ["string", "null"],
-                        "description": "Omit or use null until a case is created or known."},
-            "patient_id": {"type": ["string", "null"],
-                           "description": "Omit or use null until a patient is bound."},
-        }, "additionalProperties": False},
+        "target": {"type": "object", "properties": target_properties,
+                   "description": ("Bind case_id from a returned case-scoped read. "
+                                   "payer/cm set case_id only; provider may also set patient_id."),
+                   "additionalProperties": False},
         "latest_business_status": source_item,
         "next_candidates": {"type": "array", "items": {"type": "string"}},
         "resolve_unknown": {"type": "array", "items": {"type": "object", "properties": {
@@ -419,15 +426,19 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         "workspace-file, error and refused results are evidence only and are rejected for status. For CM, "
         "cm_chart.get_chart_data is a case-scoped business read, not proof of care-plan finalize. The "
         "program fills source versions and rejects stale, wrong-case, unobserved or binding-changing "
-        "updates. It cannot mark an unknown write as success or failure.")
+        "updates. It cannot mark an unknown write as success or failure. Bind target.case_id from a "
+        "returned case-scoped read before latest_business_status; payer/cm set case_id only, while "
+        "provider may set patient_id only after unique confirmation.")
     claim_description = (
         "Mark the task as complete after finishing the work. The program may refuse when a "
         "business write lacks a later business-status readback, a file write failed, an unknown write is open, "
-        "or a tool batch is still pending.")
+        "or a tool batch is still pending. On a readback refusal, perform the named business-status read and retry; "
+        "do not finish with an unverified mutation.")
     completion_description = (
         "Report mechanical completion evidence: target, latest business status and its source kind, "
-        "last business write, last file write, open unknowns, claim and the required readback. A "
-        "successful file write after a business readback does not require another business readback; "
+        "last business write, last file write, open unknowns, claim and the required readback. Call it "
+        "before final text; if it reports completion_readback_required, perform that business-status readback. "
+        "A successful file write after a business readback does not require another business readback; "
         "a failed file write still blocks. Final text without a claim is not blocked. It does not "
         "claim, approve, or produce a clinical/official verdict.")
     if requirements == REQUIREMENTS_POLICY:
