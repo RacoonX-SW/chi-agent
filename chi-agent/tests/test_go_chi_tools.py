@@ -84,6 +84,32 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(observation["event"], "failed")
             self.assertEqual(observation["scope"], "case:CASE-A")
 
+    async def test_state_update_schema_accepts_null_target_fields(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            workspace = root / "workspace"; workspace.mkdir()
+            handbook = root / "handbook"; handbook.mkdir()
+            instruction = root / "instruction.md"; instruction.write_text("synthetic")
+            state = TaskState(root / "state", run="run", role="payer")
+            holder = {}
+            tools = local_tools(role="payer", workspace_root=workspace, instruction_path=instruction,
+                tool_references=[], handbook_root=handbook, journal=Journal(), binding=None,
+                guard_getter=lambda: holder["guard"], client_getter=lambda: None,
+                confirmation_context=contextvars.ContextVar("test", default=None), exchanges=[],
+                dispatch_lock=asyncio.Lock(), state=state, capabilities="f0-f3-v1")
+            guard = SimpleNamespace(contract=ToolContract([Converter.tool_to_openai(t) for t in tools]),
+                                    secret="secret", session="session")
+            holder["guard"] = guard
+            import json
+            args = {"target": {"case_id": None, "patient_id": None}}
+            guard.contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": "c", "type": "function",
+                                "function": {"name": "local-state-update", "arguments": json.dumps(args)}}]})
+            update = next(t for t in tools if t.name == "local-state-update")
+            props = update.params_json_schema["properties"]["target"]["properties"]
+            self.assertEqual(props["case_id"]["type"], ["string", "null"])
+            self.assertEqual(props["patient_id"]["type"], ["string", "null"])
+
 
 class WorkspaceWriteTests(unittest.IsolatedAsyncioTestCase):
     def _tools(self, root, role, workspace, state=None, binding=None):

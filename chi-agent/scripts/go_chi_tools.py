@@ -367,9 +367,12 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             "text": {"type": "string"}, "status": {"type": "string", "enum": ["open", "resolved"]},
             "source_call_id": {"type": "string"}},
             "required": ["text", "status"], "additionalProperties": False}},
-        "target": {"type": "object", "properties": {"case_id": {"type": "string"},
-                                                    "patient_id": {"type": "string"}},
-                   "additionalProperties": False},
+        "target": {"type": "object", "properties": {
+            "case_id": {"type": ["string", "null"],
+                        "description": "Omit or use null until a case is created or known."},
+            "patient_id": {"type": ["string", "null"],
+                           "description": "Omit or use null until a patient is bound."},
+        }, "additionalProperties": False},
         "latest_business_status": source_item,
         "next_candidates": {"type": "array", "items": {"type": "string"}},
         "resolve_unknown": {"type": "array", "items": {"type": "object", "properties": {
