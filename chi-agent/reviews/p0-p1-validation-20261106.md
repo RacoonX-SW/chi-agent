@@ -126,3 +126,62 @@
 1. 由用户决定：等待提供方恢复后使用**新 state + 新 B-008** 再跑一次有界 P1 on，或对本次 429 走显式 acknowledgement 路径；不得静默清除 `p1fix-on` 的 pending。
 2. 修复代码已在新分支，建议先以 base=main 的 PR 提交修复与本节记录，供独立复审；不 merge、不启用 requirements。
 3. 在至少一次 on-run 真正声明并闭合 requirements 之前，`chi-requirements-v1` 保持默认 off，不进入九题候选。
+
+## 8. P1fix2：新 state + B-008 的第二次 on-run
+
+用户批准“新 state + B-008 重跑一次”。`p1fix-on` 的失败与 round2 pending 原样保留，不读取、不清除、不复用。
+
+### 8.1 身份与 B-008
+
+| 项目 | 值 |
+| --- | --- |
+| state | `runs/final-validation-20261105/p1fix2-on/state` |
+| config SHA-256 | `f3b8ce56b4b2104ee73284f5ac2371500520887bf7019bc09e02375c3793c0bf` |
+| bundle / runtime | `454b048e…` / `4835ee36…`（同 7.1 修复） |
+| B | `final-b-008`：3 main settled、1396/126、charged 0 / list 0.00011565 / allowance 0.00006939；receipt/seal 匹配 |
+
+### 8.2 C 结果
+
+| 项目 | 实际值 |
+| --- | --- |
+| C run | `final-c-provider-t015-p1fix2` / `attempt-1`；evaluation `eval-final-20261106-p1fix2`；requirements on |
+| 结果 | **failed / `chi_run_time_limit`**；runner exit 1；1805.095s |
+| 物理 HTTP | **34**（33 main + 1 confirmation），全部 settled |
+| completion | v4 `mechanical_pass` / `business_effect=observed`；claim null；final output null |
+| requirements | `declared=true`、`count=7`、`done=7`、`open=0`、`waived=0`、`status=closed_reported`；`verification=provenance_only` |
+| 业务进度 | case created、service request、procedure/diagnosis/service type/site、cross.forward true；case_status/final_action/provider_determination false；packet_absent false；required_documents N/A |
+| 确定性检查 | 7 true / 4 false / 1 N/A（与 P0 相同） |
+| usage | input 5,003,188 / output 59,671；list 0.77538906 / allowance 0.46523340 / charged 0 |
+| 资源 | provider 2202→2225、payer 0→2；capture initial/final ready |
+| 清理 | runner/world/network removed；runner quiescent=true、world quiescence=confirmed；capture/cleanup error null |
+
+### 8.3 requirements 实际声明
+
+模型最终使用 `r1..r7`，全部 `done`，每条都有本 run 的 returned observation 和非空 note；quote 长度 32..231（归一化后在 16..400 内）：
+
+| id | quote 长度 | evidence |
+| --- | --- | --- |
+| r1 | 181 | `call_02_X1TYJJw1SVrFKfUg0dwi7250` |
+| r2 | 231 | `chatcmpl-tool-ac3ec016cea32c1c` |
+| r3 | 65 | `call_01_GaNVJTI4WsdqmQPE6dAc2651` |
+| r4 | 102 | `chatcmpl-tool-b6010b604b01610d` |
+| r5 | 105 | `call_00_ComuLvEpfRkOUMYmEckD1970` |
+| r6 | 32 | `call_00_BS7lx9CFwCbEUUGM2As04247` |
+| r7 | 71 | `call_00_5Lt4k0NfTcSek7EPdZEC2958` |
+
+模型仍先尝试直接以 `done` 提交，收到 `chi_state_requirement_transition_invalid`，随后按“先 open 再 done”重试成功。说明 `id`/`quote` 的主要可发现性缺口已修复；剩余摩擦是“新项必须先 open”的步骤，模型能在 2 轮内自行恢复。
+
+### 8.4 结论
+
+- **修复有效**：模型能发现并使用 `r1..r7`，quote 与 evidence 均被接受，7 项全部闭合；不再是 P1 中“所有声明都被拒绝”的状态。
+- **但 on 路径仍未端到端完成**：模型在闭合 requirements 后、下一次调用前撞上 1800s 上限，没有 claim、没有 final output；run 状态仍是 `chi_run_time_limit`。
+- completion v4 在截断时报告 `mechanical_pass`/`observed`、requirements `closed_reported`，这是机械/来源检查，不是临床或官方通过；`official_reward=null`。
+- 与 P0 off（393.6s、claim）相比，requirements on 的额外读取/声明/闭合把本次运行推到 1800s 边缘；不能据此断言 on 一定超时，但说明当前提示/流程仍有时间风险。
+- 本 state 无 pending/halt，cleanup 与 quiescence 已确认；旧 `p1fix-on` round2 pending 及旧 900s/429/1800b pending 均未改变。
+
+### 8.5 建议
+
+1. 不再自动重跑；由用户决定是否再用新 state+B-009 验证“claim 前完成”，或接受“修复已验证、但 on 路径仍受时间限制”的结论。
+2. 若继续，优先减少非必要读取/总结、让模型在 requirements 闭合后立即 claim，并保持 1800s；不要复用 `p1fix2-on` 的失败 attempt。
+3. 独立复审重点：`r1..r7` 的 quote/evidence 是否真实对应 instruction/returned observation；completion `mechanical_pass` 是否仅来自来源检查；1800s 截断是否掩盖 claim 违规。
+4. `chi-requirements-v1` 继续保持默认 off；在 claim 成功的 on-run 之前不进入九题候选。

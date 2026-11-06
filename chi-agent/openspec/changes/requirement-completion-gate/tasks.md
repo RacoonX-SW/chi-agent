@@ -51,5 +51,6 @@
 - [x] 测试：28 requirements OK；129 相关 OK/3 skipped；全量 654/18 skipped/3 既有 import error。
 - [x] 新 release `454b048e…`/`933d4136…`、runtime `4835ee36…`；verify/preflight 通过。
 - [x] B-007 成功（3 main、1400/118、receipt/seal 有效）。
-- [ ] P1fix on-run：`final-c-provider-t015-p1fix` round1 settled、round2 HTTP429 `prefill_cap_refused` pending，`chi_http_error`、无业务写；按停止条件未重试，修复尚未在真实 on-run 中验证。
-- [ ] 用户决定新 state+B-008 或显式 429 acknowledgement；不得静默清除 `p1fix-on` round2 pending。
+- [x] P1fix on-run：`final-c-provider-t015-p1fix` round1 settled、round2 HTTP429 `prefill_cap_refused` pending，`chi_http_error`、无业务写；按停止条件未重试，`p1fix-on` pending 保留。
+- [x] 用户批准新 state+B-008：`final-b-008` 成功（3 main、1396/126）；`final-c-provider-t015-p1fix2` 34 HTTP、1805s、`chi_run_time_limit`，requirements `declared=true`/7 项全 done（`r1..r7`，quote/evidence 有效），completion v4 `mechanical_pass`/`observed`，但 claim null、final output null；无 pending/halt，清理确认。
+- [ ] on 路径仍未端到端 claim：由用户决定接受“修复已验证、on 仍受时间限制”，或用新 state+B-009 再验证一次；不得静默清除 `p1fix-on` round2 pending。
