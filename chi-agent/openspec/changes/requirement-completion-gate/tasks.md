@@ -41,3 +41,15 @@
 - [x] Gemini 独立复审 **Pass/LGTM，0 Blocker**；Docker 4 组数据一致。
 - [x] 按用户要求 push 并创建 [PR66](https://github.com/xsw932187210-cell/chi-agent/pull/66) base=main；未 merge/auto-merge。
 - [ ] 用户最终验收合并；合并后才进入主线，不自动启用 requirements 或恢复真实执行权限。
+
+## 5. 合并后验证（2026-11-06）
+
+- [x] P0：合并 main `dbbd356` 重建 bundle `eabec08e…`/runtime `f41021f4…`；B-005 成功；t015 requirements off 完成（34 HTTP、393.6s、completion v3 `mechanical_pass`/`observed`、claim、确定性 7/4/1）。
+- [x] P1：同 bundle requirements on；B-006 成功；t015 `chi_run_time_limit`（37 HTTP、1829s），requirements `undeclared`、claim null。
+- [x] 定位可发现性缺口：模型使用描述性 id、`REQ1`/`req-1`、短 quote，均被 `chi_state_requirement_invalid` 拒绝；schema/guidance 未暴露 id/quote 约束。
+- [x] 修复 `47b5417`：`id` pattern `^r[0-9]{1,2}$`、quote 16..400（raw ≤800）/逐字子串、done/waived 规则进入 schema 和 v4 guidance；新增回归测试。
+- [x] 测试：28 requirements OK；129 相关 OK/3 skipped；全量 654/18 skipped/3 既有 import error。
+- [x] 新 release `454b048e…`/`933d4136…`、runtime `4835ee36…`；verify/preflight 通过。
+- [x] B-007 成功（3 main、1400/118、receipt/seal 有效）。
+- [ ] P1fix on-run：`final-c-provider-t015-p1fix` round1 settled、round2 HTTP429 `prefill_cap_refused` pending，`chi_http_error`、无业务写；按停止条件未重试，修复尚未在真实 on-run 中验证。
+- [ ] 用户决定新 state+B-008 或显式 429 acknowledgement；不得静默清除 `p1fix-on` round2 pending。

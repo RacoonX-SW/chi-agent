@@ -83,3 +83,46 @@
 - P1 失败是时间上限，不是 pending/unknown；两 state 均无 pending/halt。
 - 旧 900s/429/1800b 的 pending 状态不变；本报告不处理旧 pending。
 - 本报告是执行者记录，不替代独立复审。
+
+## 7. P1fix：schema/guidance 可发现性修复与第二次 P1 on
+
+### 7.1 修复
+
+从合并后 `origin/main=7969e32` 新建 `deepseek/requirements-discoverability`，修复提交 `47b5417a9b374a427e1e10407cfead9845c626ad`：
+
+- `scripts/go_chi_tools.py`：`requirements` 数组增加快照说明；`id` 增加 `pattern: "^r[0-9]{1,2}$"` 及 `r1..r8` 描述；`quote` 增加 `minLength: 16`、`maxLength: 800`（归一化后 16..400）及“exact substring”描述；`status`/`evidence_call_id`/`waiver_reason`/`note` 写明 open→done/waived 的终态、来源和说明规则；`state_update_description` 同步这些约束。
+- `scripts/go_chi_guidance.py`：v4 invariant 增加 `r1..r8`、`^r[0-9]{1,2}$`、quote 逐字子串/16..400（raw ≤800）。
+- `tests/test_go_chi_requirements.py`：新增 schema pattern/长度/描述断言、guidance 断言和描述性 id 拒绝回归。
+
+测试（Docker，无网）：28 requirements tests OK；129 相关 tests OK / 3 skipped；全量 654 tests、18 skipped、3 个既有 import 错误（`anthropic` ×2、`docker.types` ×1），无新增回归。
+
+新 release：`runs/final-validation-20261105/exports/release-p1fix-20261106`；bundle `454b048ec5b52c39ccb3f0b730fdd30b5a8a5a2b750c6ee1a5bafad89b2d38fa`、release manifest `933d41368ba4dc6c1a5753335d0889ec9c5f3678b2ee9ab25cd580ec5c3c23cd`、runtime `4835ee369beb988fd6812bee78d5f2e73fc4e4c7fd1edbf5f2dd7594d2f7b3f8`；verify `valid`，preflight `identity_verified`、upstream clean。
+
+### 7.2 B-007 与 P1fix C
+
+| 项目 | 实际值 |
+| --- | --- |
+| state | `runs/final-validation-20261105/p1fix-on/state` |
+| B | `final-b-007`：3 main settled、1400/118、charged 0 / list 0.00011145 / allowance 0.00006687；receipt/seal 匹配 |
+| C run | `final-c-provider-t015-p1fix` / `attempt-1`；evaluation `eval-final-20261106-p1fix`；requirements on |
+| 结果 | **failed / `chi_http_error`**；runner exit 1；elapsed 27.994s |
+| 物理 HTTP | **2**（2 main）：round1 settled，round2 `pending` |
+| round2 原因 | HTTP **429** `prefill_cap_refused`（“cell is at capacity; retry shortly (after 30 s)”），657ms，无 response |
+| completion | v4 `blocked` / `not_verified`，reason `completion_requirements_undeclared`；claim null |
+| requirements | `declared=false`、`count=0`、`status=undeclared`；`instruction_sha256=ae40b530…` |
+| 业务进度 | 无业务写：target `case_id=null`/`patient_id=null`；provider 资源前后同为 2202 项、payer 同为 0 项；确定性检查除 `packet_absent=true` 外全 false |
+| usage | input 12,699 / output 230（已知部分；round2 unsettled，billing_complete=false）；list 0.00215430 / allowance 0.00129258 / charged 0 |
+| 清理 | runner/world/network removed；runner quiescent=true、world quiescence=confirmed；capture/cleanup error null |
+
+### 7.3 结论
+
+- **P1fix 没有走到 requirements 声明阶段**：round1 只有读取类工具事件，round2 在第一次模型调用就被提供方 429 容量拒绝；因此修复后的 schema/guidance 是否可发现**仍未在真实 on-run 中验证**。
+- 这不是新的 requirements 契约失败，也不是门禁误放行；是提供方容量/传输问题。不能据此判定修复有效或无效。
+- 当前 `p1fix-on` state 保留 `pending={run: final-c-provider-t015-p1fix, round: 2}`；按停止条件**未自动重试**，也未清除 pending。
+- 旧 900s/429/1800b pending 仍原样保留。
+
+### 7.4 下一步
+
+1. 由用户决定：等待提供方恢复后使用**新 state + 新 B-008** 再跑一次有界 P1 on，或对本次 429 走显式 acknowledgement 路径；不得静默清除 `p1fix-on` 的 pending。
+2. 修复代码已在新分支，建议先以 base=main 的 PR 提交修复与本节记录，供独立复审；不 merge、不启用 requirements。
+3. 在至少一次 on-run 真正声明并闭合 requirements 之前，`chi-requirements-v1` 保持默认 off，不进入九题候选。
