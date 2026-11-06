@@ -15,9 +15,11 @@ VERSION_REQUIREMENTS = "chi-role-guidance-v4"
 REQUIREMENTS_POLICY = "chi-requirements-v1"
 _REQUIREMENTS_INVARIANT = (
     "When chi-requirements-v1 is enabled, explicitly declare the public instruction requirements "
-    "before claiming completion. Keep unproven items open; close an item only with a returned "
-    "observation from this run, and use waived only when a public rule supports not applicable. "
-    "An empty list, a waiver without a public rule, or insufficient evidence is not completion."
+    "before claiming completion. Use ids r1..r8 matching ^r[0-9]{1,2}$; quote must be an exact "
+    "instruction substring with normalized length 16..400 (raw <=800). Keep unproven items open; "
+    "close an item only with a returned observation from this run, and use waived only when a public "
+    "rule supports not applicable. An empty list, a waiver without a public rule, or insufficient "
+    "evidence is not completion."
 )
 
 _INVARIANTS = {

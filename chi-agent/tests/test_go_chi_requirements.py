@@ -113,6 +113,12 @@ class RequirementsStateTests(unittest.TestCase):
             fresh.propose({"requirements": [item(status="bogus")]})
         self.assertEqual(caught.exception.code, "chi_state_requirement_invalid")
 
+    def test_descriptive_id_is_rejected(self):
+        state = make_state(self.root)
+        with self.assertRaises(StateRefusal) as caught:
+            state.propose({"requirements": [item("patient_identified", Q1)]})
+        self.assertEqual(caught.exception.code, "chi_state_requirement_invalid")
+
     def test_instruction_binding_and_protected_fields(self):
         with self.assertRaises(GoFailure):
             TaskState(self.root, run="run", role="provider", requirements=REQUIREMENTS_POLICY)
@@ -350,6 +356,10 @@ class GuidanceAndToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(on["schema"], VERSION_REQUIREMENTS)
         self.assertEqual(on["requirements_policy"], REQUIREMENTS_POLICY)
         self.assertIn("chi-requirements-v1", " ".join(on["invariants"]))
+        joined = " ".join(on["invariants"])
+        self.assertIn("r1..r8", joined)
+        self.assertIn("16..400", joined)
+        self.assertIn("exact", joined)
         self.assertNotEqual(digest(REQUIREMENTS_POLICY), digest())
 
     async def test_tool_schema_off_and_on(self):
@@ -376,6 +386,12 @@ class GuidanceAndToolTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("requirements", on_update.params_json_schema["properties"])
             self.assertNotIn("chi-requirements-v1", off_update.description)
             self.assertIn("chi-requirements-v1", on_update.description)
+            item_schema = on_update.params_json_schema["properties"]["requirements"]["items"]["properties"]
+            self.assertEqual(item_schema["id"]["pattern"], "^r[0-9]{1,2}$")
+            self.assertEqual(item_schema["quote"]["minLength"], 16)
+            self.assertEqual(item_schema["quote"]["maxLength"], 800)
+            self.assertIn("exact", item_schema["quote"]["description"].lower())
+            self.assertIn("r1..r8", on_update.description)
 
 
 class EntryAndInventoryTests(unittest.TestCase):
