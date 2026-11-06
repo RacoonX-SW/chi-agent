@@ -101,14 +101,58 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
                                     secret="secret", session="session")
             holder["guard"] = guard
             import json
-            args = {"target": {"case_id": None, "patient_id": None}}
+            args = {"target": {"case_id": None}}
             guard.contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "reason",
                 "tool_calls": [{"id": "c", "type": "function",
                                 "function": {"name": "local-state-update", "arguments": json.dumps(args)}}]})
             update = next(t for t in tools if t.name == "local-state-update")
             props = update.params_json_schema["properties"]["target"]["properties"]
             self.assertEqual(props["case_id"]["type"], ["string", "null"])
+            self.assertNotIn("patient_id", props)
+            guard.contract.record_result("c", "updated")
+            guard.contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": "d", "type": "function",
+                                "function": {"name": "local-state-update",
+                                             "arguments": json.dumps({"target": {"case_id": "CASE-A",
+                                                                                 "patient_id": "PAT-1"}})}}]},
+                recover_schema=True)
+            self.assertIn("patient_id", guard.contract.refusals["d"])
+
+    async def test_provider_target_schema_includes_patient_id(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            workspace = root / "workspace"; workspace.mkdir()
+            handbook = root / "handbook"; handbook.mkdir()
+            instruction = root / "instruction.md"; instruction.write_text("synthetic")
+            state = TaskState(root / "state", run="run", role="provider")
+            holder = {}
+            tools = local_tools(role="provider", workspace_root=workspace, instruction_path=instruction,
+                tool_references=[], handbook_root=handbook, journal=Journal(), binding=SimpleNamespace(),
+                guard_getter=lambda: holder["guard"], client_getter=lambda: None,
+                confirmation_context=contextvars.ContextVar("test", default=None), exchanges=[],
+                dispatch_lock=asyncio.Lock(), state=state, capabilities="f0-f3-v1")
+            update = next(t for t in tools if t.name == "local-state-update")
+            props = update.params_json_schema["properties"]["target"]["properties"]
+            self.assertIn("patient_id", props)
             self.assertEqual(props["patient_id"]["type"], ["string", "null"])
+
+    async def test_payer_target_schema_omits_patient_id(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            workspace = root / "workspace"; workspace.mkdir()
+            handbook = root / "handbook"; handbook.mkdir()
+            instruction = root / "instruction.md"; instruction.write_text("synthetic")
+            state = TaskState(root / "state", run="run", role="payer")
+            holder = {}
+            tools = local_tools(role="payer", workspace_root=workspace, instruction_path=instruction,
+                tool_references=[], handbook_root=handbook, journal=Journal(), binding=None,
+                guard_getter=lambda: holder["guard"], client_getter=lambda: None,
+                confirmation_context=contextvars.ContextVar("test", default=None), exchanges=[],
+                dispatch_lock=asyncio.Lock(), state=state, capabilities="f0-f3-v1")
+            update = next(t for t in tools if t.name == "local-state-update")
+            props = update.params_json_schema["properties"]["target"]["properties"]
+            self.assertIn("case_id", props)
+            self.assertNotIn("patient_id", props)
 
 
 class WorkspaceWriteTests(unittest.IsolatedAsyncioTestCase):

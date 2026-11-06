@@ -37,13 +37,33 @@ class ContractTests(unittest.TestCase):
                 with self.assertRaises(ContractFailure):
                     contract.validate_history(history, system='system', instruction='instruction', used=1, claimed=False)
 
-    def test_invalid_second_call_does_not_commit_first(self):
+    def test_invalid_second_call_refuses_whole_batch(self):
         contract = ToolContract(definition())
+        calls = contract.accept_batch(message([call("a", '{"id":1}'), call("b", '{"id":"bad"}')]), recover_schema=True)
+        self.assertEqual([item["id"] for item in calls], ["a", "b"])
+        self.assertEqual(len(contract.records), 2)
+        for item in calls:
+            self.assertTrue(contract.refusals[item["id"]].startswith("chi_tool_arguments_invalid: read:"))
+            contract.record_result(item["id"], "REFUSED: " + contract.refusals[item["id"]])
+        contract.accept_batch(message([call("c", '{"id":1}')]))
+
+    def test_schema_refusal_names_missing_and_unknown_fields(self):
+        contract = ToolContract(definition())
+        calls = contract.accept_batch(message([call("a", '{}')]), recover_schema=True)
+        self.assertIn("missing required field(s) id", contract.refusals["a"])
+        contract.record_result("a", "REFUSED: " + contract.refusals["a"])
+        calls = contract.accept_batch(message([call("b", '{"id":1,"extra":2}')]), recover_schema=True)
+        self.assertIn("unknown field(s) extra", contract.refusals["b"])
+        contract.record_result("b", "REFUSED: " + contract.refusals["b"])
+
+    def test_schema_refusal_is_bounded(self):
+        contract = ToolContract(definition())
+        for index in range(ToolContract.RECOVERABLE_SCHEMA_LIMIT):
+            call_id = f"a{index}"
+            calls = contract.accept_batch(message([call(call_id, '{}')]), recover_schema=True)
+            contract.record_result(call_id, "REFUSED: " + contract.refusals[call_id])
         with self.assertRaises(ContractFailure):
-            contract.accept_batch(message([call("a", '{"id":1}'), call("b", '{"id":"bad"}')]))
-        self.assertEqual(contract.records, [])
-        self.assertEqual(contract.seen, set())
-        contract.accept_batch(message([call("a", '{"id":1}')]))
+            contract.accept_batch(message([call("overflow", '{}')]), recover_schema=True)
 
     def test_duplicate_id_and_result_are_rejected(self):
         contract = ToolContract(definition())

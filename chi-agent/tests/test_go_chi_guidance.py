@@ -92,6 +92,15 @@ class GuidanceTests(unittest.TestCase):
             self.assertEqual(guidance(role)["invariants"][-1],
                              guidance("cm")["invariants"][-1])
 
+    def test_target_binding_is_role_specific(self):
+        provider = " ".join(guidance("provider")["invariants"]).lower()
+        self.assertIn("patient_id", provider)
+        self.assertIn("unique confirmation", provider)
+        for role in ("payer", "cm"):
+            text = " ".join(guidance(role)["invariants"]).lower()
+            self.assertIn("patient_id is provider-only", text)
+            self.assertIn("target.case_id", text)
+
     def test_invalid_role_is_rejected(self):
         with self.assertRaises(ValueError):
             guidance("admin")
