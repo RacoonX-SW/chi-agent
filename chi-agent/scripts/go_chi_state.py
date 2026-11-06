@@ -23,16 +23,26 @@ import os
 import re
 import tempfile
 import time
+import unicodedata
 from pathlib import Path
 
 from opencode_go_provider import GoFailure
 
 SCHEMA = "chi-task-state-v3"
 VERSION = "chi-task-state-v3"
+SCHEMA_V4 = "chi-task-state-v4"
+VERSION_V4 = "chi-task-state-v4"
 LEGACY_SCHEMAS = frozenset({"chi-task-state-v1", "chi-task-state-v2"})
 COMPLETION_SCHEMA = "chi-completion-v3"
+COMPLETION_SCHEMA_V4 = "chi-completion-v4"
+REQUIREMENTS_POLICY = "chi-requirements-v1"
 MAX_STATE_BYTES = 65536
 MAX_TEXT = 800
+MAX_REQUIREMENTS = 8
+REQUIREMENT_ID = re.compile(r"^r[0-9]{1,2}$")
+REQUIREMENT_STATUSES = frozenset({"open", "done", "waived"})
+WAIVER_REASONS = frozenset({"not_applicable_public_rule"})
+REQUIREMENT_ITEM_KEYS = {"id", "quote", "status", "evidence_call_id", "waiver_reason", "note"}
 LIMITS = {
     "observations": 256,
     "facts": 64,
@@ -108,6 +118,10 @@ def _text(value: object, *, field: str) -> str:
     if type(value) is not str or not value.strip() or len(value) > MAX_TEXT:
         raise StateRefusal("chi_state_update_invalid")
     return value
+
+
+def _normalized_quote(value: str) -> str:
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value)).strip().casefold()
 
 
 def _fingerprint(tool: str, kind: str, arguments) -> str:
@@ -219,7 +233,16 @@ def _atomic_write(path: Path, payload: dict) -> None:
 class TaskState:
     """One run's bounded task state with immutable version snapshots."""
 
-    def __init__(self, root, *, run: str, role: str, binding=None):
+    def __init__(self, root, *, run: str, role: str, binding=None,
+                 requirements=None, instruction=None):
+        if requirements not in {None, REQUIREMENTS_POLICY}:
+            raise GoFailure("chi_requirements_configuration_invalid")
+        if requirements == REQUIREMENTS_POLICY and (type(instruction) is not str or not instruction.strip()):
+            raise GoFailure("chi_requirements_configuration_invalid")
+        self._requirements_enabled = requirements == REQUIREMENTS_POLICY
+        self._instruction = instruction if self._requirements_enabled else None
+        self._requirements_sha = (hashlib.sha256(instruction.encode("utf-8")).hexdigest()
+                                  if self._requirements_enabled else None)
         if (type(run) is not str or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,47}", run)
                 or role not in {"provider", "payer", "cm"}):
             raise GoFailure("chi_state_invalid")
@@ -252,6 +275,15 @@ class TaskState:
             "stagnation": None,
             "updated_at_utc_ms": 0,
         }
+        self._update_keys = set(UPDATE_KEYS)
+        if self._requirements_enabled:
+            self.data.update({
+                "schema": SCHEMA_V4,
+                "requirements": [],
+                "requirements_declared": False,
+                "requirements_instruction_sha256": self._requirements_sha,
+            })
+            self._update_keys.add("requirements")
         self._persist(snapshot=False)
 
     # -- persistence -----------------------------------------------------
@@ -361,6 +393,118 @@ class TaskState:
         if observation["scope"] not in {"case:" + case_id, "shared_public"}:
             raise StateRefusal("chi_state_case_mismatch")
 
+    def _unique_observation(self, call_id: object) -> dict:
+        if type(call_id) is not str:
+            raise StateRefusal("chi_state_requirement_evidence_invalid")
+        matches = [item for item in self.data["observations"] if item["call_id"] == call_id]
+        if len(matches) != 1:
+            raise StateRefusal("chi_state_requirement_evidence_invalid")
+        return matches[0]
+
+    def _requirement_scope(self, observation: dict) -> None:
+        scope = observation.get("scope")
+        if scope == "conflict":
+            raise StateRefusal("chi_state_requirement_evidence_invalid")
+        case_id = self.data["target"]["case_id"]
+        if case_id is None:
+            if scope != "shared_public":
+                raise StateRefusal("chi_state_requirement_evidence_invalid")
+            return
+        if scope not in {"case:" + case_id, "shared_public"}:
+            raise StateRefusal("chi_state_requirement_evidence_invalid")
+
+    def _validate_requirement_source(self, item: dict) -> None:
+        source = self._unique_observation(item.get("evidence_call_id"))
+        if source["event"] != "returned":
+            raise StateRefusal("chi_state_requirement_evidence_invalid")
+        if item["status"] == "done":
+            if source.get("source_kind") == "neutral" or source["tool"] in NEUTRAL_LOCAL:
+                raise StateRefusal("chi_state_requirement_evidence_invalid")
+        elif item["status"] == "waived":
+            if source.get("effect") != "read" or source.get("source_kind") == "neutral":
+                raise StateRefusal("chi_state_requirement_evidence_invalid")
+        else:
+            raise StateRefusal("chi_state_requirement_evidence_invalid")
+        self._requirement_scope(source)
+
+    def _parse_requirement(self, item: object) -> dict:
+        if type(item) is not dict or set(item) != REQUIREMENT_ITEM_KEYS:
+            raise StateRefusal("chi_state_requirement_invalid")
+        identifier = item["id"]
+        quote = item["quote"]
+        status = item["status"]
+        evidence = item["evidence_call_id"]
+        waiver = item["waiver_reason"]
+        note = item["note"]
+        if type(identifier) is not str or not REQUIREMENT_ID.fullmatch(identifier):
+            raise StateRefusal("chi_state_requirement_invalid")
+        if type(quote) is not str or not quote or len(quote) > MAX_TEXT:
+            raise StateRefusal("chi_state_requirement_quote_invalid")
+        normalized = _normalized_quote(quote)
+        if not 16 <= len(normalized) <= 400 or quote not in self._instruction:
+            raise StateRefusal("chi_state_requirement_quote_invalid")
+        if type(status) is not str or status not in REQUIREMENT_STATUSES:
+            raise StateRefusal("chi_state_requirement_invalid")
+        if evidence is not None and (type(evidence) is not str or not CALL_ID.fullmatch(evidence)):
+            raise StateRefusal("chi_state_requirement_invalid")
+        if waiver is not None and (type(waiver) is not str or waiver not in WAIVER_REASONS):
+            raise StateRefusal("chi_state_requirement_transition_invalid")
+        if note is not None and (type(note) is not str or not note.strip() or len(note) > MAX_TEXT):
+            raise StateRefusal("chi_state_requirement_invalid")
+        if status == "open":
+            if any(value is not None for value in (evidence, waiver, note)):
+                raise StateRefusal("chi_state_requirement_invalid")
+        elif status == "done":
+            if waiver is not None:
+                raise StateRefusal("chi_state_requirement_transition_invalid")
+            if evidence is None:
+                raise StateRefusal("chi_state_requirement_evidence_invalid")
+            if note is None:
+                raise StateRefusal("chi_state_requirement_invalid")
+        else:
+            if waiver is None:
+                raise StateRefusal("chi_state_requirement_transition_invalid")
+            if evidence is None:
+                raise StateRefusal("chi_state_requirement_evidence_invalid")
+            if note is None:
+                raise StateRefusal("chi_state_requirement_invalid")
+        return {"id": identifier, "quote": quote, "status": status,
+                "evidence_call_id": evidence, "waiver_reason": waiver, "note": note}
+
+    def _apply_requirements(self, payload: object) -> None:
+        if not self._requirements_enabled:
+            raise StateRefusal("chi_state_requirement_invalid")
+        if type(payload) is not list or len(payload) > MAX_REQUIREMENTS:
+            raise StateRefusal("chi_state_requirement_invalid")
+        parsed, seen = [], set()
+        for item in payload:
+            value = self._parse_requirement(item)
+            if value["id"] in seen:
+                raise StateRefusal("chi_state_requirement_invalid")
+            seen.add(value["id"])
+            parsed.append(value)
+        existing = self.data["requirements"]
+        if len(parsed) < len(existing):
+            raise StateRefusal("chi_state_requirement_transition_invalid")
+        for index, old in enumerate(existing):
+            new = parsed[index]
+            if new["id"] != old["id"] or new["quote"] != old["quote"]:
+                raise StateRefusal("chi_state_requirement_transition_invalid")
+            if old["status"] in {"done", "waived"}:
+                if new != old:
+                    raise StateRefusal("chi_state_requirement_transition_invalid")
+            elif new["status"] == "open":
+                if new != old:
+                    raise StateRefusal("chi_state_requirement_transition_invalid")
+        for new in parsed[len(existing):]:
+            if new["status"] != "open":
+                raise StateRefusal("chi_state_requirement_transition_invalid")
+        for item in parsed:
+            if item["status"] in {"done", "waived"}:
+                self._validate_requirement_source(item)
+        self.data["requirements"] = parsed
+        self.data["requirements_declared"] = True
+
     def _apply_target(self, payload: dict) -> None:
         if type(payload) is not dict or not payload or set(payload) - {"case_id", "patient_id"}:
             raise StateRefusal("chi_state_update_invalid")
@@ -408,6 +552,10 @@ class TaskState:
                                 if item["call_id"] == call_id), None)
             if observation is None or observation["scope"] not in allowed:
                 raise StateRefusal("chi_state_case_mismatch")
+        if self._requirements_enabled:
+            for item in self.data.get("requirements", []):
+                if item["status"] in {"done", "waived"}:
+                    self._validate_requirement_source(item)
 
     def _apply_facts(self, payload: object) -> None:
         if type(payload) is not list or len(payload) > LIMITS["facts"]:
@@ -513,12 +661,14 @@ class TaskState:
 
     def propose(self, payload: object) -> dict:
         """Validate and apply one model-proposed update; return the new version."""
-        if type(payload) is not dict or not payload or set(payload) - UPDATE_KEYS:
+        if type(payload) is not dict or not payload or set(payload) - self._update_keys:
             raise StateRefusal("chi_state_update_invalid")
         backup = json.loads(json.dumps(self.data))
         try:
             if "target" in payload:
                 self._apply_target(payload["target"])
+            if "requirements" in payload:
+                self._apply_requirements(payload["requirements"])
             if "facts" in payload:
                 self._apply_facts(payload["facts"])
             if "plans" in payload:
@@ -643,6 +793,22 @@ class TaskState:
         if unresolved:
             return (False, "completion_file_write_failed:" + unresolved[0]["call_id"],
                     "blocked", "not_verified", "file_delivery")
+        if self._requirements_enabled:
+            if not self.data["requirements_declared"]:
+                return False, "completion_requirements_undeclared", "blocked", "not_verified", None
+            items = self.data["requirements"]
+            if not items:
+                return False, "completion_requirements_empty", "blocked", "not_verified", None
+            open_items = [item for item in items if item["status"] == "open"]
+            if open_items:
+                return (False, "completion_requirements_open:" + open_items[0]["id"],
+                        "blocked", "not_verified", None)
+            for item in items:
+                try:
+                    self._validate_requirement_source(item)
+                except StateRefusal:
+                    return (False, "completion_requirements_evidence_invalid:" + item["id"],
+                            "blocked", "not_verified", None)
         status = self.data["latest_business_status"]
         business = self._business_mutations()
         if business:
@@ -657,6 +823,37 @@ class TaskState:
     def can_claim(self) -> tuple[bool, str | None]:
         allowed, reason, _verification, _effect, _missing = self._completion()
         return allowed, reason
+
+    def _requirements_report(self) -> dict:
+        items = self.data["requirements"]
+        done = sum(1 for item in items if item["status"] == "done")
+        waived = sum(1 for item in items if item["status"] == "waived")
+        open_ids = [item["id"] for item in items if item["status"] == "open"]
+        count = len(items)
+        declared = bool(self.data["requirements_declared"])
+        if not declared:
+            status = "undeclared"
+        elif count == 0:
+            status = "empty_unverified"
+        elif open_ids:
+            status = "open"
+        elif waived:
+            status = "closed_with_waivers"
+        else:
+            status = "closed_reported"
+        return {
+            "policy": REQUIREMENTS_POLICY,
+            "instruction_sha256": self.data["requirements_instruction_sha256"],
+            "declared": declared,
+            "status": status,
+            "count": count,
+            "done": done,
+            "waived": waived,
+            "open": len(open_ids),
+            "open_ids": open_ids,
+            "verification": "provenance_only",
+            "semantic_completion_verified": False,
+        }
 
     def completion_report(self) -> dict:
         """Mechanical completion evidence, not a business or official verdict."""
@@ -689,8 +886,18 @@ class TaskState:
         limitations = []
         if self.data["claim"] is None:
             limitations.append("final_text_without_claim_not_blocked")
-        return {
-            "schema": COMPLETION_SCHEMA,
+        if self._requirements_enabled:
+            limitations.append("requirements_provenance_only_not_semantic_completion")
+        note = ("mechanical/source check only; not a clinical or official verdict; "
+                "a later successful write/edit to the same path and scope repairs a "
+                "known file-write failure, while unrelated paths, unresolved unknowns "
+                "and failed repairs still block; a successful file write after a "
+                "business readback does not require another business readback")
+        if self._requirements_enabled:
+            note += ("; requirement done/waived is provenance-only and does not prove "
+                     "semantic business completion")
+        report = {
+            "schema": COMPLETION_SCHEMA_V4 if self._requirements_enabled else COMPLETION_SCHEMA,
             "verification": verification,
             "business_effect": effect,
             "reason": reason,
@@ -711,12 +918,11 @@ class TaskState:
             "claim_violation": bool(self.data.get("claim_violation")),
             "stagnation": self.data.get("stagnation"),
             "remaining_limitations": limitations,
-            "note": ("mechanical/source check only; not a clinical or official verdict; "
-                     "a later successful write/edit to the same path and scope repairs a "
-                     "known file-write failure, while unrelated paths, unresolved unknowns "
-                     "and failed repairs still block; a successful file write after a "
-                     "business readback does not require another business readback"),
+            "note": note,
         }
+        if self._requirements_enabled:
+            report["requirements"] = self._requirements_report()
+        return report
 
     def record_claim(self) -> dict:
         allowed, reason = self.can_claim()
@@ -737,8 +943,8 @@ class TaskState:
     def summary(self) -> dict:
         data = self.data
         observations = data["observations"][-LIMITS["observations_in_summary"]:]
-        return {
-            "schema": VERSION,
+        result = {
+            "schema": VERSION_V4 if self._requirements_enabled else VERSION,
             "version": data["version"],
             "role": data["role"],
             "target": dict(data["target"]),
@@ -759,3 +965,7 @@ class TaskState:
             "observation_count": len(data["observations"]),
             "limits": dict(LIMITS),
         }
+        if self._requirements_enabled:
+            result["requirements"] = list(data["requirements"])
+            result["requirements_declared"] = bool(data["requirements_declared"])
+        return result

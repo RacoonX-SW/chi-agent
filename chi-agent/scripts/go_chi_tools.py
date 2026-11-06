@@ -11,12 +11,13 @@ from go_chi_resources import workspace_path
 from evaluation_bundle import _check_components, BundleFailure
 from go_chi_guidance import guidance as role_guidance
 from go_chi_search import SearchRefusal, search as bounded_search
-from go_chi_state import StateRefusal
+from go_chi_state import REQUIREMENTS_POLICY, StateRefusal
 from payer_evidence import CASE_ID, EvidenceRegistry
 from pdf_resource_reader import read_allowed_file
 
 EVIDENCE_SHADOW_MODES = {None, "off", "shadow"}
 CAPABILITIES = {None, "f0-f3-v1"}
+REQUIREMENTS_VERSIONS = {None, REQUIREMENTS_POLICY}
 OBSERVED_LOCAL = {"local-fs-read", "local-fs-list", "local-fs-search",
                   "local-fs-write", "local-fs-edit", "local-read-patient-observation"}
 
@@ -24,7 +25,7 @@ OBSERVED_LOCAL = {"local-fs-read", "local-fs-list", "local-fs-search",
 def local_tools(*, role, workspace_root, instruction_path, tool_references, handbook_root,
                 journal, binding, guard_getter, client_getter, confirmation_context,
                 exchanges, dispatch_lock, instruction=None, evidence_shadow=None,
-                state=None, capabilities=None):
+                state=None, capabilities=None, requirements=None):
     from agents.tool import FunctionTool
     if role not in {"provider", "payer", "cm"} or (role == "provider" and binding is None):
         raise GoFailure("chi_local_role_invalid")
@@ -32,6 +33,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         raise GoFailure("chi_capabilities_invalid")
     if capabilities == "f0-f3-v1" and state is None:
         raise GoFailure("chi_state_missing")
+    if requirements not in REQUIREMENTS_VERSIONS:
+        raise GoFailure("chi_requirements_configuration_invalid")
+    if requirements == REQUIREMENTS_POLICY and (state is None or capabilities != "f0-f3-v1"):
+        raise GoFailure("chi_requirements_configuration_invalid")
     if evidence_shadow not in EVIDENCE_SHADOW_MODES:
         raise GoFailure("chi_evidence_shadow_invalid")
     if evidence_shadow == "off":
@@ -302,7 +307,7 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         if type(args) is not dict or args:
             return "REFUSED: chi_guidance_arguments_invalid"
         try:
-            value = role_guidance(role, state.summary() if state is not None else None)
+            value = role_guidance(role, state.summary() if state is not None else None, requirements)
         except ValueError:
             raise GoFailure("chi_guidance_role_invalid") from None
         return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False)
@@ -372,12 +377,58 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             "note": {"type": "string"}},
             "required": ["unknown_id", "source_call_id", "note"], "additionalProperties": False}},
     }, [])
+    if requirements == REQUIREMENTS_POLICY:
+        state_update_schema["properties"]["requirements"] = {
+            "type": "array", "maxItems": 8,
+            "items": {"type": "object", "properties": {
+                "id": {"type": "string"},
+                "quote": {"type": "string"},
+                "status": {"type": "string", "enum": ["open", "done", "waived"]},
+                "evidence_call_id": {"type": ["string", "null"]},
+                "waiver_reason": {"type": ["string", "null"]},
+                "note": {"type": ["string", "null"]},
+            }, "required": ["id", "quote", "status", "evidence_call_id", "waiver_reason", "note"],
+                "additionalProperties": False},
+        }
     search_schema = schema({
         "path": {"type": "string"},
         "query": {"type": "string", "minLength": 1, "maxLength": 200},
         "max_results": {"type": "integer", "minimum": 1, "maximum": 20},
         "case_sensitive": {"type": "boolean"},
     }, ["path", "query"])
+    state_update_description = (
+        "Submit a sourced task-state update. Facts must cite a returned call_id observed in this run. "
+        "latest_business_status must cite a returned business-status read of the target case: provider "
+        "cases.get_case or auth.check_status; payer payer_intake_hub.get_intake_case, triage.get, "
+        "review.get_nurse_review_data, review.get_md_review_data, determination.get_summary, p2p.list "
+        "or payer_letter_center.list; cm cm_chart.get_chart_data. Other chart/document, policy, handbook, "
+        "workspace-file, error and refused results are evidence only and are rejected for status. For CM, "
+        "cm_chart.get_chart_data is a case-scoped business read, not proof of care-plan finalize. The "
+        "program fills source versions and rejects stale, wrong-case, unobserved or binding-changing "
+        "updates. It cannot mark an unknown write as success or failure.")
+    claim_description = (
+        "Mark the task as complete after finishing the work. The program may refuse when a "
+        "business write lacks a later business-status readback, a file write failed, an unknown write is open, "
+        "or a tool batch is still pending.")
+    completion_description = (
+        "Report mechanical completion evidence: target, latest business status and its source kind, "
+        "last business write, last file write, open unknowns, claim and the required readback. A "
+        "successful file write after a business readback does not require another business readback; "
+        "a failed file write still blocks. Final text without a claim is not blocked. It does not "
+        "claim, approve, or produce a clinical/official verdict.")
+    if requirements == REQUIREMENTS_POLICY:
+        state_update_description += (
+            " When chi-requirements-v1 is enabled, requirements is a full snapshot: new ids append at the end "
+            "with status open; existing ids cannot be deleted, reordered, quote-edited or terminal-edited; "
+            "done/waived need a returned observation from this run and a non-empty note, and waived needs "
+            "waiver_reason not_applicable_public_rule. An empty explicit list declares an empty list but does "
+            "not complete the task.")
+        claim_description += (
+            " With chi-requirements-v1, a claim is refused while requirements are undeclared, empty, open, "
+            "or a closed item no longer has a valid provenance source.")
+        completion_description += (
+            " With chi-requirements-v1, the report includes the requirements provenance object and the "
+            "same requirements gate; closed items remain provenance-only, not semantic completion.")
     defs = [
         ("local-fs-read", "Read an allowlisted instruction, handbook, fixed reference or role workspace file. "
          "Use an absolute path under the role workspace ('<workspace>/<case_id>/<role>/...' or "
@@ -396,9 +447,7 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
          "local-fs-write. old_string must occur in the current file; replace_all controls whether every occurrence "
          "or only the first is replaced. A failed edit still blocks completion.",
          schema({"path": {"type": "string"}, "old_string": {"type": "string", "minLength": 1}, "new_string": {"type": "string"}, "replace_all": {"type": "boolean"}}, ["path", "old_string", "new_string"]), edit_file),
-        ("local-claim_done", "Mark the task as complete after finishing the work. The program may refuse when a "
-         "business write lacks a later business-status readback, a file write failed, an unknown write is open, "
-         "or a tool batch is still pending.", empty, claim),
+        ("local-claim_done", claim_description, empty, claim),
     ]
     if binding is not None:
         from patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION
@@ -411,24 +460,8 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             ("local-task-state",
              "Read this run's bounded task state: target, observed sources, facts, plans, gaps, open unknown writes, latest business status and next candidates. Read it before planning or after a surprising tool result.",
              empty, task_state),
-            ("local-state-update",
-             "Submit a sourced task-state update. Facts must cite a returned call_id observed in this run. "
-             "latest_business_status must cite a returned business-status read of the target case: provider "
-             "cases.get_case or auth.check_status; payer payer_intake_hub.get_intake_case, triage.get, "
-             "review.get_nurse_review_data, review.get_md_review_data, determination.get_summary, p2p.list "
-             "or payer_letter_center.list; cm cm_chart.get_chart_data. Other chart/document, policy, handbook, "
-             "workspace-file, error and refused results are evidence only and are rejected for status. For CM, "
-             "cm_chart.get_chart_data is a case-scoped business read, not proof of care-plan finalize. The "
-             "program fills source versions and rejects stale, wrong-case, unobserved or binding-changing "
-             "updates. It cannot mark an unknown write as success or failure.",
-             state_update_schema, state_update),
-            ("local-completion-check",
-             "Report mechanical completion evidence: target, latest business status and its source kind, "
-             "last business write, last file write, open unknowns, claim and the required readback. A "
-             "successful file write after a business readback does not require another business readback; "
-             "a failed file write still blocks. Final text without a claim is not blocked. It does not "
-             "claim, approve, or produce a clinical/official verdict.",
-             empty, completion_check),
+            ("local-state-update", state_update_description, state_update_schema, state_update),
+            ("local-completion-check", completion_description, empty, completion_check),
             ("local-role-guidance",
              "Return the versioned role stage guide with legal branches, preconditions, readbacks and stop conditions. It contains no task answers or expected outcomes; decide from public observations.",
              empty, role_guidance_tool),
