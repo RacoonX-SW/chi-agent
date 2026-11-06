@@ -39,5 +39,5 @@
 - [x] REVIEW_STATE 短状态和报告链接。
 - [x] 本地显式暂存/提交，固定实现 SHA `85b89664…`。
 - [x] Gemini 独立复审 **Pass/LGTM，0 Blocker**；Docker 4 组数据一致。
-- [x] 按用户要求 push 并创建 base=main PR；未 merge/auto-merge。
+- [x] 按用户要求 push 并创建 [PR66](https://github.com/xsw932187210-cell/chi-agent/pull/66) base=main；未 merge/auto-merge。
 - [ ] 用户最终验收合并；合并后才进入主线，不自动启用 requirements 或恢复真实执行权限。

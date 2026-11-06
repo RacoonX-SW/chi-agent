@@ -108,5 +108,5 @@
 ## 9. 交付状态（更新）
 
 - 实现与报告已在本地提交 `85b89664…` / `5b9a3fc…`。
-- 已按用户要求准备最终 PR；**不自行 merge、不启用 auto-merge**。
+- 已按用户要求 push 并创建 [PR66](https://github.com/xsw932187210-cell/chi-agent/pull/66)，base=main；**不自行 merge、不启用 auto-merge**。
 - 用户最终验收合并后，本分支才进入主线；合并不自动启用 requirements，也不恢复真实执行权限。
