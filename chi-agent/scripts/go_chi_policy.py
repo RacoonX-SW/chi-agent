@@ -9,7 +9,7 @@ a success, and a timeout still records unknown usage and stops the run.
 """
 TIME_POLICY = {"connect_seconds": 10, "main_read_seconds": 240, "confirmation_read_seconds": 360,
                "write_seconds": 60, "pool_seconds": 60, "main_io_seconds": 300,
-               "confirmation_io_seconds": 420, "b_admission_seconds": 180, "chi_admission_seconds": 900,
+               "confirmation_io_seconds": 420, "b_admission_seconds": 180, "chi_admission_seconds": 1800,
                "b_operator_seconds": 360, "chi_operator_seconds": 1380, "operator_max_seconds": 3600}
 FEE_POLICY = 'go-chi-record-incomplete-fees-v1'
 

@@ -14,9 +14,11 @@
 让读窗口覆盖已观测的长上下文生成时间，同时保持失败语义和运行预算：
 
 1. `main_read_seconds=240`、`main_io_seconds=300`。
-2. `main_io_seconds < chi_admission_seconds(900)`，单请求不会耗尽整轮准入。
+2. `main_io_seconds < chi_admission_seconds(1800；2026-11-06 按官方 submission 默认 2× 从 900 调整)`，单请求不会耗尽整轮准入。
 3. `main_io_seconds < chi_operator_seconds(1380)`，operator 仍能在自身窗口内收尾。
 4. 超时仍映射 `chi_timeout`：记录 response/diagnostic 证据、usage unknown、`state.pending` 保留、运行终止。
+
+2026-11-06 更新：官方 `SubmissionRun.timeout_multiplier` 默认 2.0、实验配置 `agent_timeout_multiplier: 2`，task.toml `[agent] timeout_sec=900` 的有效 agent 上限为 1800；本设计原 900 保留为历史，现行值见 `policy-boundaries.md` 和 `reviews/agent-timeout-1800-20261106.md`。
 
 ## 不采用的替代方案
 

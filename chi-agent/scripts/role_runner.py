@@ -118,7 +118,7 @@ async def development(journal, secret, run_chi, kwargs):
                     if server_task.done(): raise RuntimeError('broker_start_failed')
                     await asyncio.sleep(.05)
             kwargs['auxiliary'] = broker
-        async with asyncio.timeout(1500):
+        async with asyncio.timeout(1900):
             result = await run_chi(journal, secret, **kwargs)
         return result
     finally:

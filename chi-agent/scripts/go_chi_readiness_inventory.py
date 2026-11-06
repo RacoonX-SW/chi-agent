@@ -39,11 +39,11 @@ WINDOWS = {
     "main_io_seconds": 300,
     "confirmation_read_seconds": 360,
     "confirmation_io_seconds": 420,
-    "chi_admission_seconds": 900,
+    "chi_admission_seconds": 1800,
     "b_admission_seconds": 180,
     "auxiliary_read_seconds": 450,
     "chi_operator_seconds": 1380,
-    "role_runner_timeout_seconds": 1500,
+    "role_runner_timeout_seconds": 1900,
     "role_operator_timeout_seconds": 2040,
 }
 _SAFE_INT = re.compile(r"^-?[0-9]+$")
