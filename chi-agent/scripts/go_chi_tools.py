@@ -380,13 +380,24 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
     if requirements == REQUIREMENTS_POLICY:
         state_update_schema["properties"]["requirements"] = {
             "type": "array", "maxItems": 8,
+            "description": ("Full snapshot. New ids append at the end with status open; existing ids cannot be "
+                            "deleted, reordered, quote-edited or terminal-edited. Use ids r1..r8."),
             "items": {"type": "object", "properties": {
-                "id": {"type": "string"},
-                "quote": {"type": "string"},
-                "status": {"type": "string", "enum": ["open", "done", "waived"]},
-                "evidence_call_id": {"type": ["string", "null"]},
-                "waiver_reason": {"type": ["string", "null"]},
-                "note": {"type": ["string", "null"]},
+                "id": {"type": "string", "pattern": "^r[0-9]{1,2}$",
+                       "description": "Requirement id: r1..r8; must match ^r[0-9]{1,2}$."},
+                "quote": {"type": "string", "minLength": 16, "maxLength": 800,
+                          "description": ("Exact substring of the public instruction. Raw length <= 800; "
+                                          "after NFKC + whitespace collapse + case-fold, length must be 16..400.")},
+                "status": {"type": "string", "enum": ["open", "done", "waived"],
+                           "description": "New ids must start open. done/waived are terminal."},
+                "evidence_call_id": {"type": ["string", "null"],
+                                     "description": ("Required for done/waived: a returned observation call_id "
+                                                     "from this run; null only for open.")},
+                "waiver_reason": {"type": ["string", "null"],
+                                  "description": ("null except waived, where it must be "
+                                                  "not_applicable_public_rule.")},
+                "note": {"type": ["string", "null"],
+                         "description": ("Required non-empty for done/waived (<=800 chars); null only for open.")},
             }, "required": ["id", "quote", "status", "evidence_call_id", "waiver_reason", "note"],
                 "additionalProperties": False},
         }
@@ -420,9 +431,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         state_update_description += (
             " When chi-requirements-v1 is enabled, requirements is a full snapshot: new ids append at the end "
             "with status open; existing ids cannot be deleted, reordered, quote-edited or terminal-edited; "
-            "done/waived need a returned observation from this run and a non-empty note, and waived needs "
-            "waiver_reason not_applicable_public_rule. An empty explicit list declares an empty list but does "
-            "not complete the task.")
+            "use ids r1..r8 matching ^r[0-9]{1,2}$; quote must be an exact substring of the public instruction, "
+            "with normalized length 16..400 and raw length <= 800; done/waived need a returned observation "
+            "from this run and a non-empty note, and waived needs waiver_reason not_applicable_public_rule. "
+            "An empty explicit list declares an empty list but does not complete the task.")
         claim_description += (
             " With chi-requirements-v1, a claim is refused while requirements are undeclared, empty, open, "
             "or a closed item no longer has a valid provenance source.")
