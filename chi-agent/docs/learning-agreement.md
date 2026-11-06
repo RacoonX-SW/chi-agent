@@ -920,3 +920,10 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 关键区分：这不是永久停滞，也不是零发送；是客户端 240s 读超时早于提供方 600s 首试 + 82.5s 内部重试。重复序列化把 65 患者 roster 放大到 172,813 字符的工具消息、272,857 字符的第4请求，是放大器而非唯一根因。
 - 修复：`go_chi_mcp.py` 在 text 与 `structuredContent` 语义相同时只返回一份，不同时保留两份；新增回归测试；[PR64](https://github.com/xsw932187210-cell/chi-agent/pull/64)（待审）。冻结 release 包未重建，240s 策略未改。
 - 下一入口：用户决定 pending 对账/超时策略；没有明确授权不重跑、不追加同 state 运行。
+
+### 2026-11-06：1800s 官方 2× 与 429 过载
+
+- 官方 task.toml 的基础 agent timeout 是 900s，但官方 `SubmissionRun.timeout_multiplier` 默认 2.0、实验配置统一 `agent_timeout_multiplier: 2`，所以有效 agent 上限是 1800s。原 `chi_admission_seconds=900` 只对齐基础值；本次按官方默认调到 1800，`role_runner` 外层同步 1900，单请求 240s 不变。
+- 新 bundle `193c0a99…` / runtime `6858e5cc…`；新 B `final-b-003` 成功。t015 的 1800s 尝试第一个 main 请求就收到 HTTP 429 `server overloaded`，`chi_http_error`，pending round1；模型未执行任何工具/业务步骤，1800s 窗口没有被检验。
+- 关键区分：429 是提供方过载，不是 1800s 策略或重复序列化；按规则不自动重试、不静默清 pending。429 响应没有 usage，但账本仍按 pending/unknown 保留，不能称为零费用。
+- 下一入口：等待提供方恢复后，决定确认 429 无 usage 后同 state 重试，或新建隔离 state + 新 B；未获明确授权不重跑。没有用户亲自操作证据，不升级为已实践。
