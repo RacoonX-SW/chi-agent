@@ -12,7 +12,7 @@
 
 非目标：
 
-- 不解决 reasoning 吃满 8192 output 的生成预算问题（t022）；另立设计。
+- 不解决 reasoning 吃满 8192 output 的生成预算问题（t022）；另见 [`../reasoning-output-budget/design.md`](../reasoning-output-budget/design.md)。
 - 不改变输入 context budget（`chi-context-budget-v2` / 1.5M 实验）。
 - 不判断临床正确性、官方得分或语义完成；`official_reward=null`。
 - 不自动重试业务写、工具调用或未知副作用的请求。

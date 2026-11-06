@@ -18,7 +18,7 @@
 
 **非目标：**
 
-- reasoning/输出预算（t022）；另立设计。
+- reasoning/输出预算（t022）；另见 [`../reasoning-output-budget/design.md`](../reasoning-output-budget/design.md)。
 - 输入 context budget（1.5M 实验）。
 - 真实模型/B/C/Trial/judge/发布。
 - 自动 merge、auto-merge、自动重跑九题。
