@@ -11,8 +11,10 @@ from opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as 
 from model_runner_adapter import _patch_empty_history_compatibility
 from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
 from go_chi_policy import TIME_POLICY, RECOVERY_POLICY, SUMMARY_VERSIONS
-from go_chi_guidance import VERSION as GUIDANCE_VERSION, digest as guidance_digest
-from go_chi_state import TaskState
+from go_chi_guidance import (VERSION as GUIDANCE_VERSION,
+                             VERSION_REQUIREMENTS as GUIDANCE_VERSION_REQUIREMENTS,
+                             digest as guidance_digest, version as guidance_version)
+from go_chi_state import REQUIREMENTS_POLICY, TaskState
 
 
 def coding_tools(guard_getter):
@@ -85,7 +87,7 @@ async def run_coding_b(client, guard, tools):
 async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_path,
                   logs_dir, workspace_root, handbook_root, tool_references, lower,
                   server_factory=None, auxiliary=None, evidence_shadow=None,
-                  capabilities="f0-f3-v1", context_budget=DEFAULT_BUDGET):
+                  capabilities="f0-f3-v1", context_budget=DEFAULT_BUDGET, requirements=None):
     """Run one role using a previously preflighted journal and injected transport.
 
     No authorization or bundle/source verification is performed here. The
@@ -129,6 +131,18 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         raise GoFailure("chi_transport_missing")
     if capabilities not in {None, "f0-f3-v1"}:
         raise GoFailure("chi_capabilities_invalid")
+    if requirements not in {None, REQUIREMENTS_POLICY}:
+        raise GoFailure("chi_requirements_configuration_invalid")
+    if requirements is not None:
+        if (capabilities != "f0-f3-v1"
+                or journal.run["launch"].get("requirements") != requirements
+                or type(instruction) is not str or not instruction.strip()
+                or journal.run["launch"].get("input_summary") is not None
+                or journal.run["launch"].get("output_recovery") is not None
+                or evidence_shadow == "shadow"):
+            raise GoFailure("chi_requirements_configuration_invalid")
+    elif "requirements" in journal.run["launch"]:
+        raise GoFailure("chi_requirements_configuration_invalid")
     if check_budget(measure_request({"messages": [], "max_tokens": 8192}), context_budget) == "chi_context_budget_invalid":
         raise GoFailure("chi_context_budget_invalid")
     logs_dir = __import__("pathlib").Path(logs_dir)
@@ -196,7 +210,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     context = contextvars.ContextVar("chi_confirmation", default=None)
     holder, exchanges = {}, []
     binding = PatientBinding(instruction, journal) if role == "provider" else None
-    state = (TaskState(logs_dir / "task-state", run=journal.run["run"], role=role, binding=binding)
+    state = (TaskState(logs_dir / "task-state", run=journal.run["run"], role=role, binding=binding,
+                       requirements=requirements, instruction=instruction)
              if capabilities == "f0-f3-v1" else None)
     factory = server_factory or (lambda url: selected_server(url, auxiliary=auxiliary is not None))
     prior_trace = get_trace_provider()._manual_disabled
@@ -213,7 +228,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                                 journal=journal, binding=binding, guard_getter=lambda: holder.get("guard"),
                                 client_getter=lambda: holder.get("client"), confirmation_context=context,
                                 exchanges=exchanges, dispatch_lock=bridge.lock, instruction=instruction,
-                                evidence_shadow=evidence_shadow, state=state, capabilities=capabilities)
+                                evidence_shadow=evidence_shadow, state=state, capabilities=capabilities,
+                                requirements=requirements)
             tools = bridge.tools + local
             definitions = [Converter.tool_to_openai(tool) for tool in tools]
             if len({tool.name for tool in tools}) != len(tools):
@@ -406,8 +422,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             if state is not None:
                 summary.update({
                     "capabilities": capabilities,
-                    "guidance_version": GUIDANCE_VERSION,
-                    "guidance_sha256": guidance_digest(),
+                    "guidance_version": guidance_version(requirements),
+                    "guidance_sha256": guidance_digest(requirements),
                     "task_state_version": state.data["version"],
                     "task_state_target": state.data["target"],
                     "task_state_claim": state.data["claim"],
@@ -420,6 +436,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                     summary["task_state_sha256"] = hashlib.sha256(state.path.read_bytes()).hexdigest()
                 except OSError:
                     summary["task_state_sha256"] = None
+            if requirements is not None:
+                summary["requirements_policy"] = requirements
             if context_budget is not None:
                 summary.update({
                     "context_budget": context_budget["schema"],

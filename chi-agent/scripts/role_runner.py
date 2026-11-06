@@ -19,7 +19,7 @@ from go_chi_entry import main
 
 STATUS_PATH = Path('/runner-logs/lifecycle.json')
 CAPABILITY_PATH = Path('/run/chi-capability')
-SHADOW_FLAGS = ('--input-summary', '--output-recovery')
+SHADOW_FLAGS = ('--input-summary', '--output-recovery', '--requirements')
 
 
 def _option_strings():
