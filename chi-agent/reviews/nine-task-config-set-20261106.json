@@ -1,0 +1,93 @@
+{
+  "bundle_sha256": "454b048ec5b52c39ccb3f0b730fdd30b5a8a5a2b750c6ee1a5bafad89b2d38fa",
+  "configs": [
+    {
+      "config": "final-c-cm-anorexia.json",
+      "config_sha256": "ba6438f73739f45416ad45797b116f60f0b14a42b220d98b9b70232b60f1c35f",
+      "manifest_sha256": "fc2c9d4badf52d0bdc9483b66cec46b6f3c98f8b783d0709b867a3a6b9fb629a",
+      "role": "cm",
+      "run_id": "final-c-cm-anorexia",
+      "task_id": "cm_anorexia_hard_refuses_001"
+    },
+    {
+      "config": "final-c-cm-asthma.json",
+      "config_sha256": "0d6fe6de101d61406e26720c524242c40f99c88e0696be17a2ceead74d848b2a",
+      "manifest_sha256": "7508e7ac84cdde5211318df4d72eaa2fe393dc7d78f8e533beffe2c544f8e54e",
+      "role": "cm",
+      "run_id": "final-c-cm-asthma",
+      "task_id": "cm_asthma_low_coop_001"
+    },
+    {
+      "config": "final-c-cm-ckd.json",
+      "config_sha256": "655bc2b70e693cba3a175b7bdddae8056e26f43e7effa2fe6394ada102cdaaf5",
+      "manifest_sha256": "08bf5853781375c0c637584ef3d7f9dc9fe5fc52aabf843479cad00b609d0746",
+      "role": "cm",
+      "run_id": "final-c-cm-ckd",
+      "task_id": "cm_ckd_moderate_anxious_001"
+    },
+    {
+      "config": "final-c-payer-t022.json",
+      "config_sha256": "f0bb7a3317d602c17f7844a656918e52ccb8d0fcd08ebe9e4c2d20e49432de9d",
+      "manifest_sha256": "1c10857de9f2b4992aea934969a1678036d2262d2692d0944c25c694106ed3f5",
+      "role": "payer",
+      "run_id": "final-c-payer-t022",
+      "task_id": "pa_t022_t022_o001_p01_nurse_review_payer"
+    },
+    {
+      "config": "final-c-payer-t023.json",
+      "config_sha256": "94d176aa856ed6ee4d236c38e2f563258f2e75c751d9a872ce9560dc442009ea",
+      "manifest_sha256": "ab2f0362d3358445ec1510f744bfd807e86667be8b45790478bed544d21fc77e",
+      "role": "payer",
+      "run_id": "final-c-payer-t023",
+      "task_id": "pa_t023_t023_o003_p01_triage_payer"
+    },
+    {
+      "config": "final-c-payer-t024.json",
+      "config_sha256": "352c957573a675306d8edb8bcbcd55d276c9a6dcbf7b0b98bf25ef44771d65a4",
+      "manifest_sha256": "f6b448c7adc2797db6820c0a3f335ccf305648424b16bdc016d49cc4665f46bf",
+      "role": "payer",
+      "run_id": "final-c-payer-t024",
+      "task_id": "pa_t024_t024_o001_p01_nurse_review_payer"
+    },
+    {
+      "config": "final-c-provider-t015.json",
+      "config_sha256": "a8c380ab9fc74166811194d03bda6578512de6e9a2929a329ba3e3cf21fd8359",
+      "manifest_sha256": "5cd655f63b6ea52bd8ae9aa8b7fceee2c39fef7a546914773e07447c42dc70f4",
+      "role": "provider",
+      "run_id": "final-c-provider-t015",
+      "task_id": "pa_t015_t015_o002_p01_new_referral_provider"
+    },
+    {
+      "config": "final-c-provider-t016.json",
+      "config_sha256": "cee855a0f5a9db56741189d986952452781238dbf922143a1a1cb23888a60e42",
+      "manifest_sha256": "fde037d0b7334cb80ff4de7166d275cfe8d92778e9473203faa549eaa3b895c5",
+      "role": "provider",
+      "run_id": "final-c-provider-t016",
+      "task_id": "pa_t016_t016_o001_p01_new_referral_provider"
+    },
+    {
+      "config": "final-c-provider-t021.json",
+      "config_sha256": "a935190ae2684de526823240c7b2052d3f7540f770c7e8a2cfd5f9b33622858a",
+      "manifest_sha256": "aa227b6956999ff8620e5a02267ee1b56d8243724b5634dc0d96d5650f5ddc3b",
+      "role": "provider",
+      "run_id": "final-c-provider-t021",
+      "task_id": "pa_t021_t021_o003_p01_new_referral_provider"
+    }
+  ],
+  "date": "2026-11-06",
+  "dev_sha256": {
+    "dev_patient_adapter.py": "f54a2cb54e87928372e09f01b0e20fcc72611a9fbd69d8f8bca3854d26f6d027",
+    "dev_patient_bootstrap.py": "3df7690d62e3c49619d443af0d03f88ed20c371fc9b71e00cf2e30bccadde3c2",
+    "dev_patient_broker.py": "273c09ffdb9fa0196ccd9f531ea100851ac71918fb139dd7a0cff4e025744237",
+    "dev_patient_cb": "5f905149360aa3852874fcd5fcfe191e00998681adea26ecbd4935942707549f",
+    "role_runner.py": "b7e7240f14082a95a62349c2f3d033b09e6c9ddbd827476dd4c74580eb7d02fe"
+  },
+  "evaluation_id": "eval-final-20261106-nine",
+  "operator_timeout_seconds": 2040,
+  "release_manifest_sha256": "58037fd47d1180663d1bd17f052735abb4a0458710cbaaa20e5a6e357191599b",
+  "requirements": null,
+  "runtime_identity": "4835ee369beb988fd6812bee78d5f2e73fc4e4c7fd1edbf5f2dd7594d2f7b3f8",
+  "schema": "chi-nine-task-config-set-v1",
+  "source_commit": "e3b58ba932f1f4a9ce8691ed857aff1232ca6a61",
+  "state_relative": "runs/final-validation-20261105/nine-20261106/state"
+}
