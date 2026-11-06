@@ -29,6 +29,21 @@ DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MAX_STATE_BYTES = 32 * 1024 * 1024
 RECOVERY_POLICY = "chi-output-recovery-v1"
 SUMMARY_POLICY = "chi-input-summary-v1"
+REQUIREMENTS_POLICY = "chi-requirements-v1"
+
+
+def _requirements_enabled(launch: dict, kind: str) -> bool:
+    if type(launch) is not dict or type(kind) is not str \
+            or kind not in {"chi", "coding_b", "patient_probe"}:
+        raise GoFailure("chi_identity_invalid")
+    if "requirements" not in launch:
+        return False
+    if (kind != "chi" or type(launch["requirements"]) is not str
+            or launch["requirements"] != REQUIREMENTS_POLICY
+            or "input_summary" in launch or "output_recovery" in launch
+            or launch.get("evidence_shadow") == "shadow"):
+        raise GoFailure("chi_requirements_configuration_invalid")
+    return True
 
 
 def _recovery_enabled(launch: dict, kind: str) -> bool:
@@ -41,6 +56,8 @@ def _recovery_enabled(launch: dict, kind: str) -> bool:
     if (kind != "chi" or type(launch["output_recovery"]) is not str
             or launch["output_recovery"] != RECOVERY_POLICY):
         raise GoFailure("chi_identity_invalid")
+    if "requirements" in launch:
+        raise GoFailure("chi_requirements_configuration_invalid")
     return True
 
 
@@ -49,6 +66,8 @@ def _summary_enabled(launch: dict, kind: str) -> bool:
         raise GoFailure("chi_summary_configuration_invalid")
     if "input_summary" not in launch:
         return False
+    if "requirements" in launch:
+        raise GoFailure("chi_requirements_configuration_invalid")
     if (kind != "chi" or type(launch['input_summary']) is not str
             or launch['input_summary'] not in SUMMARY_VERSIONS or 'output_recovery' in launch
             or launch.get('evidence_shadow') == 'shadow'):
@@ -542,6 +561,7 @@ class ChiJournal:
             raise GoFailure("chi_identity_invalid")
         recovery_enabled = _recovery_enabled(launch if launch is not None else {}, kind)
         summary_enabled = _summary_enabled(launch if launch is not None else {}, kind)
+        _requirements_enabled(launch if launch is not None else {}, kind)
         if launch is not None and 'aux_contract' in launch:
             if (launch['aux_contract'] != 'patient-simulator-v1' or kind not in {'chi', 'patient_probe'}
                     or (kind == 'chi' and launch.get('role') != 'cm')):
@@ -738,6 +758,7 @@ class ChiJournal:
                     raise ValueError
                 recovery_enabled = _recovery_enabled(a.get("launch"), a.get("kind"))
                 summary_enabled = _summary_enabled(a.get("launch"), a.get("kind"))
+                _requirements_enabled(a.get("launch"), a.get("kind"))
                 run_keys = {"evaluation", "task", "attempt", "run", "kind", "status", "requests", "patient_binding_events", "claim_done", "tool_events", "safe_error_code", "launch"}
                 if recovery_enabled:
                     run_keys.add("recovery_events")

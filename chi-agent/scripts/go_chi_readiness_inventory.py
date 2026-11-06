@@ -136,9 +136,11 @@ _COMPLETION_V2 = _COMPLETION_V1 | {"claim_policy", "last_business_mutation",
                                    "last_file_mutation", "required_readback",
                                    "remaining_limitations"}
 _COMPLETION_V3 = _COMPLETION_V2 | {"unresolved_file_deliveries"}
+_COMPLETION_V4 = _COMPLETION_V3 | {"requirements"}
 _COMPLETION_KEYS = {"chi-completion-v1": _COMPLETION_V1,
                     "chi-completion-v2": _COMPLETION_V2,
-                    "chi-completion-v3": _COMPLETION_V3}
+                    "chi-completion-v3": _COMPLETION_V3,
+                    "chi-completion-v4": _COMPLETION_V4}
 _CLAIM_KEYS = {"version", "target", "verified_status_call_id", "at_utc_ms", "kind"}
 _TRACE_ROLES = {"system", "user", "assistant", "tool", "reasoning"}
 _EVENTS = {"returned", "returned_error", "refused", "failed"}
@@ -190,6 +192,37 @@ def _unresolved(value):
         and (item["resource"] is None or _text(item["resource"]))
         and type(item["event"]) is str and item["event"] in {"failed", "returned_error"}
         for item in value))
+
+
+def _requirements(value):
+    keys = {"policy", "instruction_sha256", "declared", "status", "count",
+            "done", "waived", "open", "open_ids", "verification",
+            "semantic_completion_verified"}
+    if type(value) is not dict or set(value) != keys:
+        return False
+    if value["policy"] != "chi-requirements-v1":
+        return False
+    if not _text(value["instruction_sha256"]) or len(value["instruction_sha256"]) != 64 \
+            or not re.fullmatch(r"[0-9a-f]{64}", value["instruction_sha256"]):
+        return False
+    if type(value["declared"]) is not bool:
+        return False
+    if value["status"] not in {"undeclared", "empty_unverified", "open",
+                               "closed_reported", "closed_with_waivers"}:
+        return False
+    if any(not _int(value[key]) for key in ("count", "done", "waived", "open")):
+        return False
+    if value["count"] != value["done"] + value["waived"] + value["open"]:
+        return False
+    open_ids = value["open_ids"]
+    if (type(open_ids) is not list or len(open_ids) != value["open"] or len(open_ids) > 8
+            or any(not _text(item) or not re.fullmatch(r"r[0-9]{1,2}", item)
+                   for item in open_ids)
+            or len(set(open_ids)) != len(open_ids)):
+        return False
+    if value["verification"] != "provenance_only" or value["semantic_completion_verified"] is not False:
+        return False
+    return True
 
 
 def _completion_state(value):
@@ -247,7 +280,7 @@ def _completion_state(value):
         return "invalid", None, None, None
     if type(value["note"]) is not str:
         return "invalid", None, None, None
-    if schema in {"chi-completion-v2", "chi-completion-v3"}:
+    if schema in {"chi-completion-v2", "chi-completion-v3", "chi-completion-v4"}:
         if type(value["claim_policy"]) is not str:
             return "invalid", None, None, None
         if any(not _reference(value[key])
@@ -261,8 +294,11 @@ def _completion_state(value):
         if (type(value["remaining_limitations"]) is not list
                 or any(type(item) is not str for item in value["remaining_limitations"])):
             return "invalid", None, None, None
-    if schema == "chi-completion-v3":
+    if schema in {"chi-completion-v3", "chi-completion-v4"}:
         if not _unresolved(value["unresolved_file_deliveries"]):
+            return "invalid", None, None, None
+    if schema == "chi-completion-v4":
+        if not _requirements(value["requirements"]):
             return "invalid", None, None, None
     return "present", value["verification"], value["reason"], claim is not None
 

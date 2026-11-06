@@ -76,6 +76,27 @@ class RoleOperatorConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check(both)
 
+    def test_requirements_exact_and_mutual_exclusion(self):
+        value = dict(self.base)
+        value["requirements"] = "chi-requirements-v1"
+        config = self.check(value)
+        self.assertEqual(role_operator._validation_flags(config),
+                         ["--requirements", "chi-requirements-v1"])
+        for bad in (None, True, 1, [], "", "chi-other-v1", "CHI-REQUIREMENTS-V1"):
+            with self.subTest(bad=bad):
+                value = dict(self.base)
+                value["requirements"] = bad
+                with self.assertRaises(ValueError):
+                    self.check(value)
+        for field, version in (("input_summary", "chi-input-summary-v1"),
+                               ("output_recovery", "chi-output-recovery-v1")):
+            with self.subTest(field=field):
+                value = dict(self.base)
+                value["requirements"] = "chi-requirements-v1"
+                value[field] = version
+                with self.assertRaises(ValueError):
+                    self.check(value)
+
     def test_local_rejects_state_relative(self):
         value = dict(self.base); value["history_mode"] = "local"
         value["state_relative"] = "runs/external-state"

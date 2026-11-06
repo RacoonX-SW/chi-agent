@@ -11,6 +11,14 @@ import hashlib
 import json
 
 VERSION = "chi-role-guidance-v3"
+VERSION_REQUIREMENTS = "chi-role-guidance-v4"
+REQUIREMENTS_POLICY = "chi-requirements-v1"
+_REQUIREMENTS_INVARIANT = (
+    "When chi-requirements-v1 is enabled, explicitly declare the public instruction requirements "
+    "before claiming completion. Keep unproven items open; close an item only with a returned "
+    "observation from this run, and use waived only when a public rule supports not applicable. "
+    "An empty list, a waiver without a public rule, or insufficient evidence is not completion."
+)
 
 _INVARIANTS = {
     "provider": [
@@ -141,13 +149,21 @@ _STAGES = {
 }
 
 
-def delivered_invariants() -> dict[str, list[str]]:
+def delivered_invariants(requirements=None) -> dict[str, list[str]]:
     """Invariants exactly as delivered, including shared evidence rules."""
-    return {role: _INVARIANTS[role] + [_BUSINESS_READBACK, _WORKSPACE_INVARIANT]
-            for role in _INVARIANTS}
+    result = {role: _INVARIANTS[role] + [_BUSINESS_READBACK, _WORKSPACE_INVARIANT]
+              for role in _INVARIANTS}
+    if requirements == REQUIREMENTS_POLICY:
+        for role in result:
+            result[role] = result[role] + [_REQUIREMENTS_INVARIANT]
+    return result
 
 
-def guidance(role: str, state_summary: dict | None = None) -> dict:
+def version(requirements=None) -> str:
+    return VERSION_REQUIREMENTS if requirements == REQUIREMENTS_POLICY else VERSION
+
+
+def guidance(role: str, state_summary: dict | None = None, requirements=None) -> dict:
     if role not in _STAGES:
         raise ValueError("chi_guidance_role_invalid")
     summary = state_summary if type(state_summary) is dict else {}
@@ -159,11 +175,11 @@ def guidance(role: str, state_summary: dict | None = None) -> dict:
     open_unknowns = [item for item in summary.get("unknowns", [])
                      if type(item) is dict and item.get("status") == "open"]
     blocked = bool(open_unknowns or summary.get("claim_violation") or summary.get("stagnation"))
-    return {
-        "schema": VERSION,
+    result = {
+        "schema": version(requirements),
         "role": role,
         "stages": _STAGES[role],
-        "invariants": delivered_invariants()[role],
+        "invariants": delivered_invariants(requirements)[role],
         "current_target": target,
         "plans": plans,
         "open_gaps": open_gaps,
@@ -174,9 +190,14 @@ def guidance(role: str, state_summary: dict | None = None) -> dict:
         "note": ("Guidance only; decide from public observations and read back after writes. "
                  "Optional MD, patient refusal/STOP, not-applicable and blocked branches remain legal."),
     }
+    if requirements == REQUIREMENTS_POLICY:
+        result["requirements_policy"] = REQUIREMENTS_POLICY
+        result["requirements_declared"] = bool(summary.get("requirements_declared", False))
+    return result
 
 
-def digest() -> str:
-    raw = json.dumps({"version": VERSION, "invariants": delivered_invariants(), "stages": _STAGES},
+def digest(requirements=None) -> str:
+    raw = json.dumps({"version": version(requirements), "invariants": delivered_invariants(requirements),
+                      "stages": _STAGES},
                      ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()

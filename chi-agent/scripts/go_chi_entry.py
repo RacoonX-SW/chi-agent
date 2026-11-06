@@ -35,6 +35,7 @@ CONFIG = {"schema": "chi-go-evaluation-entry-v1", "provider_profile_id": "openco
           "output_recovery_policy": RECOVERY_POLICY, "input_summary_policy": SUMMARY_POLICY,
           "input_summary_policy_v2": summary_policy('chi-input-summary-v2')}
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
+REQUIREMENTS_POLICY = "chi-requirements-v1"
 
 
 def _pairs(pairs):
@@ -69,7 +70,7 @@ _RUN_LOG_KEYS = frozenset({
     "patient_simulator_requests", "patient_simulator_input_tokens_known",
     "patient_simulator_output_tokens_known", "first_error_code",
     "outer_error_code", "cleanup_error_code", "journal_error_code",
-    "log_fallback", "log_fallback_reason",
+    "log_fallback", "log_fallback_reason", "requirements_policy",
 })
 _RUN_LOG_INTS = frozenset({
     "provider_requests", "logical_model_steps", "recovery_permits_consumed",
@@ -83,6 +84,7 @@ _RUN_LOG_STRINGS = frozenset({
     "input_summary_policy", "capabilities", "guidance_version", "guidance_sha256",
     "task_state_sha256", "context_budget", "first_error_code", "outer_error_code",
     "cleanup_error_code", "journal_error_code", "log_fallback_reason",
+    "requirements_policy",
 })
 _RUN_LOG_JSON = frozenset({
     "safe_cause", "physical_requests", "recovery_limits", "journal_usage",
@@ -93,7 +95,8 @@ _SAFE_CODE = re.compile(r"^[a-z0-9_]{1,64}$")
 
 
 _COMPLETION_REASON = re.compile(
-    r"^completion_(blocked_claim_violation|blocked_unknown|file_write_failed|readback_required)"
+    r"^completion_(blocked_claim_violation|blocked_unknown|file_write_failed|readback_required|"
+    r"requirements_undeclared|requirements_empty|requirements_open|requirements_evidence_invalid)"
     r"(:[A-Za-z0-9_-]{1,128})?$")
 _TARGET_KEYS = {"case_id", "patient_id"}
 _CLAIM_KEYS = {"version", "target", "verified_status_call_id", "at_utc_ms", "kind"}
@@ -107,6 +110,12 @@ _COMPLETION_V2_KEYS = {
     "open_unknowns", "claim_violation", "stagnation", "remaining_limitations", "note",
 }
 _COMPLETION_V3_KEYS = _COMPLETION_V2_KEYS | {"unresolved_file_deliveries"}
+_COMPLETION_V4_KEYS = _COMPLETION_V3_KEYS | {"requirements"}
+_REQUIREMENTS_KEYS = {"policy", "instruction_sha256", "declared", "status", "count",
+                      "done", "waived", "open", "open_ids", "verification",
+                      "semantic_completion_verified"}
+_REQUIREMENTS_STATUSES = {"undeclared", "empty_unverified", "open",
+                          "closed_reported", "closed_with_waivers"}
 _SOURCE_KINDS = {"business_status", "business_mutation", "business_evidence",
                  "policy_evidence", "file_evidence", "file_deliverable",
                  "patient_evidence", "neutral", "unknown_mutation", "other_evidence"}
@@ -182,6 +191,37 @@ def _is_open_unknowns(value):
                     for item in value))
 
 
+def _is_requirements(value):
+    if type(value) is not dict or set(value) != _REQUIREMENTS_KEYS:
+        return False
+    if value["policy"] != REQUIREMENTS_POLICY:
+        return False
+    if (type(value["instruction_sha256"]) is not str
+            or not DIGEST.fullmatch(value["instruction_sha256"])):
+        return False
+    if type(value["declared"]) is not bool:
+        return False
+    if type(value["status"]) is not str or value["status"] not in _REQUIREMENTS_STATUSES:
+        return False
+    for key in ("count", "done", "waived", "open"):
+        if not _is_int(value[key]):
+            return False
+    if value["count"] != value["done"] + value["waived"] + value["open"]:
+        return False
+    open_ids = value["open_ids"]
+    if (type(open_ids) is not list or len(open_ids) > 8
+            or len(open_ids) != value["open"]
+            or any(type(item) is not str or not re.fullmatch(r"r[0-9]{1,2}", item)
+                   for item in open_ids)
+            or len(set(open_ids)) != len(open_ids)):
+        return False
+    if value["verification"] != "provenance_only":
+        return False
+    if value["semantic_completion_verified"] is not False:
+        return False
+    return True
+
+
 def _is_completion(value):
     if type(value) is not dict:
         return False
@@ -190,6 +230,8 @@ def _is_completion(value):
         keys = _COMPLETION_V2_KEYS
     elif schema == "chi-completion-v3":
         keys = _COMPLETION_V3_KEYS
+    elif schema == "chi-completion-v4":
+        keys = _COMPLETION_V4_KEYS
     else:
         return False
     if set(value) != keys:
@@ -237,14 +279,17 @@ def _is_completion(value):
                 or not _is_text(stagnation["effect"], 64)):
             return False
     limitations = value["remaining_limitations"]
+    allowed_limitations = {"final_text_without_claim_not_blocked"}
+    if schema == "chi-completion-v4":
+        allowed_limitations.add("requirements_provenance_only_not_semantic_completion")
     if (type(limitations) is not list
             or any(type(item) is not str
-                   or item not in {"final_text_without_claim_not_blocked"}
+                   or item not in allowed_limitations
                    for item in limitations)):
         return False
     if not _is_text(value["note"], 1024, allow_newlines=True):
         return False
-    if schema == "chi-completion-v3":
+    if schema in {"chi-completion-v3", "chi-completion-v4"}:
         unresolved = value["unresolved_file_deliveries"]
         if type(unresolved) is not list or len(unresolved) > 256:
             return False
@@ -257,6 +302,8 @@ def _is_completion(value):
                     or type(item["event"]) is not str
                     or item["event"] not in {"failed", "returned_error"}):
                 return False
+    if schema == "chi-completion-v4" and not _is_requirements(value["requirements"]):
+        return False
     return True
 
 
@@ -370,10 +417,13 @@ def _read_run_log_checked(logs_dir):
             if key == "input_summary_policy" and item not in {
                     None, "chi-input-summary-v1", "chi-input-summary-v2"}:
                 return None
+            if key == "requirements_policy" and item not in {None, REQUIREMENTS_POLICY}:
+                return None
             if key == "capabilities" and item not in {None, "f0-f3-v1"}:
                 return None
             if key == "guidance_version" and item not in {
-                    "chi-role-guidance-v1", "chi-role-guidance-v2", "chi-role-guidance-v3"}:
+                    "chi-role-guidance-v1", "chi-role-guidance-v2", "chi-role-guidance-v3",
+                    "chi-role-guidance-v4"}:
                 return None
             if key == "context_budget" and item not in {
                     None, "chi-context-budget-v1", "chi-context-budget-v2"}:
@@ -607,6 +657,7 @@ def _parser():
     parser.add_argument("--acknowledgement-reason")
     parser.add_argument("--output-recovery", choices=(RECOVERY_POLICY["version"],), default=None)
     parser.add_argument("--input-summary", choices=SUMMARY_VERSIONS, default=None)
+    parser.add_argument("--requirements", choices=(REQUIREMENTS_POLICY,), default=None)
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
     parser.add_argument("--mcp-url")
@@ -646,6 +697,9 @@ def main(argv=None, *, development=None):
     b_receipt = None
     output = {"status": "blocked", "official_reward": None}
     try:
+        if args.requirements is not None and (args.mode != "live" or args.input_summary is not None
+                                               or args.output_recovery is not None):
+            raise GoFailure("chi_requirements_configuration_invalid")
         if args.input_summary is not None and (args.mode != 'live' or args.output_recovery is not None):
             raise GoFailure('chi_summary_configuration_invalid')
         if args.output_recovery is not None and args.mode != "live":
@@ -758,6 +812,8 @@ def main(argv=None, *, development=None):
                 launch['output_recovery'] = args.output_recovery
             if args.input_summary is not None:
                 launch['input_summary'] = args.input_summary
+            if args.requirements is not None:
+                launch['requirements'] = args.requirements
             if development is not None and args.role == 'cm':
                 launch['aux_contract'] = 'patient-simulator-v1'
         if args.history_mode == "local":
@@ -797,7 +853,7 @@ def main(argv=None, *, development=None):
                     instruction_path=instruction_path, logs_dir=logs_dir, workspace_root=args.workspace_root,
                     handbook_root=args.handbook_root, tool_references=args.tool_reference,
                     lower=httpx.AsyncHTTPTransport(retries=0, verify=True),
-                    capabilities="f0-f3-v1")
+                    capabilities="f0-f3-v1", requirements=args.requirements)
                 if development is None:
                     return await run_chi(journal, secret, **kwargs)
                 return await development(journal, secret, run_chi, kwargs)
