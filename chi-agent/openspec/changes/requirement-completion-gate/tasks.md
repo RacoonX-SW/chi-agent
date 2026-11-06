@@ -53,4 +53,5 @@
 - [x] B-007 成功（3 main、1400/118、receipt/seal 有效）。
 - [x] P1fix on-run：`final-c-provider-t015-p1fix` round1 settled、round2 HTTP429 `prefill_cap_refused` pending，`chi_http_error`、无业务写；按停止条件未重试，`p1fix-on` pending 保留。
 - [x] 用户批准新 state+B-008：`final-b-008` 成功（3 main、1396/126）；`final-c-provider-t015-p1fix2` 34 HTTP、1805s、`chi_run_time_limit`，requirements `declared=true`/7 项全 done（`r1..r7`，quote/evidence 有效），completion v4 `mechanical_pass`/`observed`，但 claim null、final output null；无 pending/halt，清理确认。
-- [ ] on 路径仍未端到端 claim：由用户决定接受“修复已验证、on 仍受时间限制”，或用新 state+B-009 再验证一次；不得静默清除 `p1fix-on` round2 pending。
+- [x] 用户选择原样再跑：`final-b-009` 成功（3 main、1386/116）；`final-c-provider-t015-p1fix3` **complete**，32 HTTP（31main+1confirmation）、451.8s，requirements 4/4 done（`r1..r4`）、completion v4 `mechanical_pass`/`observed`、claim 已记录、final output 已给出；业务 7/4/1，无 pending/halt，清理确认。
+- [ ] 独立复审 PR68：`r1..r4` 的 quote/evidence、4 项覆盖度、claim readback；`chi-requirements-v1` 保持默认 off，是否进入九题候选/启用 on 由用户决定。不得静默清除 `p1fix-on` round2 pending。

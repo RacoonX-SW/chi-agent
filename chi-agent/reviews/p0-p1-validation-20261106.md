@@ -185,3 +185,68 @@
 2. 若继续，优先减少非必要读取/总结、让模型在 requirements 闭合后立即 claim，并保持 1800s；不要复用 `p1fix2-on` 的失败 attempt。
 3. 独立复审重点：`r1..r7` 的 quote/evidence 是否真实对应 instruction/returned observation；completion `mechanical_pass` 是否仅来自来源检查；1800s 截断是否掩盖 claim 违规。
 4. `chi-requirements-v1` 继续保持默认 off；在 claim 成功的 on-run 之前不进入九题候选。
+
+## 9. P1fix3：原样重跑，requirements on 首次完成并 claim
+
+用户选择“原样再跑一次”：不改代码，新 state `p1fix3-on` + B-009，同一 t015、同一 1800s、同一修复 bundle。`p1fix-on` 与 `p1fix2-on` 均原样保留。
+
+### 9.1 身份与 B-009
+
+| 项目 | 值 |
+| --- | --- |
+| state | `runs/final-validation-20261105/p1fix3-on/state` |
+| config SHA-256 | `7f51a330a19fc43d283e906ffd04bc1159a5ba0354478df2230318f89e142cfa` |
+| bundle / runtime | `454b048e…` / `4835ee36…` |
+| B | `final-b-009`：3 main settled、1386/116、charged 0 / list 0.00010815 / allowance 0.00006489；receipt/seal 匹配 |
+
+### 9.2 C 结果
+
+| 项目 | 实际值 |
+| --- | --- |
+| C run | `final-c-provider-t015-p1fix3` / `attempt-1`；evaluation `eval-final-20261106-p1fix3`；requirements on |
+| 结果 | **complete**；runner exit 0；451.773s |
+| 物理 HTTP | **32**（31 main + 1 confirmation），全部 settled |
+| completion | v4 `mechanical_pass` / `business_effect=observed`；claim **已记录**、final output 已给出 |
+| requirements | `declared=true`、`count=4`、`done=4`、`open=0`、`waived=0`、`status=closed_reported`；`verification=provenance_only` |
+| claim | `kind=model_claim`、target `CASE-ACT-001`/`PAT-6a3c9adc966a`、verified status call `call_01_zyhrib08ya1r9cztah7fowi2`、version 47 |
+| 业务进度 | case created、service request、procedure/diagnosis/service type/site、cross.forward true；case_status/final_action/provider_determination false；packet_absent false；required_documents N/A |
+| 确定性检查 | 7 true / 4 false / 1 N/A（与 P0 相同） |
+| usage | input 4,363,100 / output 43,237；list 0.68036482 / allowance 0.40821889 / charged 0 |
+| 资源 | provider 2202→2220、payer 0→2；capture initial/final ready |
+| 清理 | runner/world/network removed；runner quiescent=true、world quiescence=confirmed；capture/cleanup error null |
+
+### 9.3 requirements 实际声明
+
+模型使用 `r1..r4`，全部 `done`，均有本 run 的 returned observation 和非空 note；quote 长度 32..181：
+
+| id | quote 长度 | evidence |
+| --- | --- | --- |
+| r1 | 181 | `call_00_9ciw8xc06ccqi4xko4m0m4si` |
+| r2 | 102 | `call_00_92qm515eyqdjx7f3cgfx3s7q` |
+| r3 | 105 | `call_00_l0jsbfxduyzaoz8zop2bg7v6` |
+| r4 | 32 | `call_00_9ciw8xc06ccqi4xko4m0m4si` |
+
+### 9.4 对比
+
+| 运行 | requirements | HTTP | 耗时 | 结果 | claim |
+| --- | --- | --- | --- | --- | --- |
+| P0 off | off | 34 | 393.6s | complete | 已记录 |
+| P1 pre-fix | on | 37 | 1829s | `chi_run_time_limit` | null；声明全被拒 |
+| P1fix | on | 2 | 28.0s | `chi_http_error`（429） | null |
+| P1fix2 | on | 34 | 1805s | `chi_run_time_limit` | null；7/7 done |
+| **P1fix3** | **on** | **32** | **451.8s** | **complete** | **已记录；4/4 done** |
+
+### 9.5 结论
+
+- **修复在端到端 on-run 中验证通过**：模型能发现并使用 `r1..r4`，quote/evidence 被接受，requirements 全部闭合，随后 claim 成功。
+- P1fix2 的 1800s 截断不是必然结果；同一 bundle/配置在 P1fix3 中 451.8s 完成，说明 on 路径可行，但运行间耗时方差较大。
+- P1fix3 声明 4 项而非 7 项；契约允许 1..8 项，且 completion 只做来源检查（`provenance_only`）。**不能据此断言 4 项已覆盖 instruction 的全部语义要求**，独立复审应核对覆盖度。
+- 业务结果仍是 PA 已提交、payer intake `in_progress`，不是批准或官方通过；确定性检查 7/4/1，`official_reward=null`。
+- 无 pending/halt；cleanup/quiescence confirmed。旧 `p1fix-on` round2 429 pending 及旧 900s/429/1800b pending 均未改变。
+
+### 9.6 建议
+
+1. 将 PR68 的修复与 P0/P1/P1fix/P1fix2/P1fix3 证据提交独立复审；不 merge、不启用 requirements。
+2. 复审重点：`r1..r4` 的 quote 是否逐字来自 instruction、evidence 是否为 returned observation、4 项覆盖是否足够、claim 的 status readback 是否在写之后。
+3. `chi-requirements-v1` 仍保持默认 off；是否进入九题候选、是否启用 on，由用户在复审后决定。
+4. 若未来启用 on，建议在 guidance 中明确“新项先 open 再 done”和“闭合后立即 claim”，以降低 P1fix2 类时间风险；本次不改代码。
