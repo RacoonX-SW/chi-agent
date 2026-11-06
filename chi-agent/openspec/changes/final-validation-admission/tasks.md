@@ -1,6 +1,6 @@
 # 最终候选冻结与准入准备任务清单（草案）
 
-当前状态：PR60/61/62/63/64 已合并；1800s 官方 2× 策略已实现并推送 [PR65](https://github.com/xsw932187210-cell/chi-agent/pull/65)（未 merge）；新 bundle `193c0a99…`、新 B `final-b-003` 成功；t015 的 1800s 尝试首请求 HTTP 429 `overloaded`，`pending={round:1}`，按停止条件中止，1800s 窗口未检验。旧 900s round4 pending 仍保留，其余 8 题未运行。候选/审批/预登记见[proposal](proposal.md)，详细证据见[准入报告](../../../reviews/final-validation-admission-review.md)、[执行报告](../../../reviews/final-validation-execution-review.md)、[1800s记录](../../../reviews/agent-timeout-1800-20261106.md)及[九题执行记录](../../../reviews/final-validation-nine-task-execution-20261106.json)。
+当前状态：PR60/61/62/63/64 已合并；1800s 官方 2× 策略已实现并推送 [PR65](https://github.com/xsw932187210-cell/chi-agent/pull/65)（未 merge）；新 bundle `193c0a99…`、B-003/B-004 成功；429 state 原样保留；新隔离 state 的 1800b 尝试 20 settled+round21 pending `chi_transport_error`（699s，非时间上限），按停止条件中止；1800s 窗口仍未检验。旧 900s round4 pending 仍保留，其余 8 题未运行。候选/审批/预登记见[proposal](proposal.md)，详细证据见[准入报告](../../../reviews/final-validation-admission-review.md)、[执行报告](../../../reviews/final-validation-execution-review.md)、[1800s记录](../../../reviews/agent-timeout-1800-20261106.md)及[九题执行记录](../../../reviews/final-validation-nine-task-execution-20261106.json)。
 
 ## 0. 本轮已完成
 
@@ -25,6 +25,9 @@
 - [x] 1800s 官方 2× 策略：依据 t015 task.toml 基础 900s、官方 `SubmissionRun.timeout_multiplier=2.0` 和实验配置 `agent_timeout_multiplier: 2`，将 `chi_admission_seconds` 调到 1800、role_runner 1900；代码/测试/profile/文档见 PR65 和 `reviews/agent-timeout-1800-20261106.md`。
 - [x] 1800s 新身份与 B：重建 bundle `193c0a99…`、runtime `6858e5cc…`；新 state `retry-t015-1800/state`；B `final-b-003` 3 main settled、receipt/seal 匹配。
 - [x] 1800s t015 尝试：`final-c-provider-t015-1800` 首请求 HTTP 429 `overloaded`，`chi_http_error`，`pending={round:1}`；无业务写、资源前后同 hash、清理确认。1800s 时间窗口未被检验。
+- [x] 1800b 新 state + B：保留 429 state 不动，新建 `retry-t015-1800b/state`；B `final-b-004` 3 main settled、receipt/seal 匹配。
+- [x] 1800b t015 尝试：`final-c-provider-t015-1800b` 20 settled+round21 pending，`chi_transport_error`（30.8s，无 response），699s；已建 case/大部分字段，差业务回读；非 1800s 上限；按停止条件中止。
+- [ ] 1800b pending/重试：需等待提供方稳定，并决定新 state+B-005 或 429/transport acknowledgement；未解除前不自动重试。
 - [ ] 429 pending 处置/重试：需等待提供方恢复，并决定确认 429 无 usage 后同 state `attempt-2`，或新建隔离 state + 新 B；未解除前不自动重试。
 - [ ] 九题剩余 8 题：需先处置 t015 pending/unknown 或取得可信结算证据；未解除前不重跑、不追加同 state 运行、不换题。
 - [ ] 正式 Harbor/官方患者/judge/发布：各自供应和授权，不由本清单勾选自动恢复。

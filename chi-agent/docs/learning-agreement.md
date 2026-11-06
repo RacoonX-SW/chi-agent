@@ -927,3 +927,11 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 新 bundle `193c0a99…` / runtime `6858e5cc…`；新 B `final-b-003` 成功。t015 的 1800s 尝试第一个 main 请求就收到 HTTP 429 `server overloaded`，`chi_http_error`，pending round1；模型未执行任何工具/业务步骤，1800s 窗口没有被检验。
 - 关键区分：429 是提供方过载，不是 1800s 策略或重复序列化；按规则不自动重试、不静默清 pending。429 响应没有 usage，但账本仍按 pending/unknown 保留，不能称为零费用。
 - 下一入口：等待提供方恢复后，决定确认 429 无 usage 后同 state 重试，或新建隔离 state + 新 B；未获明确授权不重跑。没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-06：1800b 新 state 与 transport error
+
+- 保留 429 state 不动，新建 `retry-t015-1800b/state`；B `final-b-004` 成功（3 main、1366/106、receipt/seal 匹配）。
+- t015 的 1800b 尝试：21 个物理请求（20 settled + round21 pending），`chi_transport_error`（stage=transport，30.8s 无 response），总 699s；不是 1800s 时间上限，也不是 240s 读超时。
+- 模型已建 case、写入大部分 new-referral 字段，最后业务写 `cases.create_from_order`；completion 要求 business_status readback，被 transport error 打断。资源 provider 2202→2206、payer 0→1；capture/cleanup 正常。
+- 关键区分：429 和 transport error 都是提供方/网络侧不稳定，不是策略或重复序列化；1800s 窗口仍未真正检验。按规则不自动重试、不静默清 pending。
+- 下一入口：等待提供方稳定，再决定新 state+B-005 或 429/transport acknowledgement；没有明确授权不重跑。没有用户亲自操作证据，不升级为已实践。
