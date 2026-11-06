@@ -67,6 +67,13 @@ class StateTests(unittest.TestCase):
             state.propose({"facts": [{"text": "made up", "source_call_id": "call_9"}]})
         self.assertEqual(caught.exception.code, "chi_state_source_unobserved")
 
+    def test_null_target_fields_are_noops(self):
+        state = self.state()
+        result = state.propose({"target": {"case_id": None, "patient_id": None}})
+        self.assertEqual(result["status"], "updated")
+        self.assertIsNone(state.data["target"]["case_id"])
+        self.assertIsNone(state.data["target"]["patient_id"])
+
     def test_stale_status_cannot_overwrite_newer(self):
         state = self.state()
         read_call(state, "call_1")
