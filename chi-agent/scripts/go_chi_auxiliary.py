@@ -10,6 +10,7 @@ import httpx
 
 from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
 from go_chi_diagnostics import cause_for_code
+from go_chi_policy import TIME_POLICY
 from b_provider_transport import GuardedTransport
 from opencode_go_provider import GoFailure, _contains_secret, _unique
 
@@ -62,7 +63,7 @@ class AuxiliaryTransport(httpx.AsyncBaseTransport):
                 self.journal.reserve(raw, 'patient_simulator', secrets=(self.secret, self.session),
                                      dispatch=dispatch, parent_call_id=parent)
                 reserved = True
-                request.extensions['timeout'] = {'connect': 10, 'read': 360, 'write': 60, 'pool': 60}
+                request.extensions['timeout'] = {'connect': TIME_POLICY['connect_seconds'], 'read': 360, 'write': 60, 'pool': 60}
                 async with asyncio.timeout(420):
                     dispatched = True
                     response = await self.lower.handle_async_request(request)

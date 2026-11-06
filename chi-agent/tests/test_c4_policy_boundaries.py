@@ -239,7 +239,7 @@ def test_actual_transport_timeout_by_purpose(tmp_path,role,read,wall):
             return original(value)
         with patch('asyncio.timeout',side_effect=spy):
             await guard.handle_async_request(request(data))
-        assert timeouts==[{'connect':10,'read':read,'write':60,'pool':60}]
+        assert timeouts==[{'connect':TIME_POLICY['connect_seconds'],'read':read,'write':60,'pool':60}]
         assert walls==[wall]
         j.finish('failed');j.close()
     asyncio.run(run())
