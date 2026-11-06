@@ -86,3 +86,27 @@
 - 实现与契约已在本地提交 `85b89664…`；本报告随后本地提交。
 - **未 push、未开 PR、未 merge**；固定候选后交独立审核及用户决定。
 - 不恢复任何真实执行权限；旧 1800s/九题 pending 和旧候选不在本分支处理。
+
+## 8. Gemini 独立复审（2026-11-06）
+
+复审者：Gemini，按独立复审 Prompt 在禁网 Docker 环境实测。
+
+| 项目 | 结果 |
+| --- | --- |
+| 结论 | **Pass / LGTM，0 Blocker** |
+| 身份 | 分支 `deepseek/requirement-completion-gate`；基线 `8154148`；实现 `85b89664…`；报告 `5b9a3fc…`；工作区 clean |
+| bundle / runtime | `7bb65f3d…` / `6e95480a…`，与实现者记录一致 |
+| 定向需求测试 | `tests.test_go_chi_requirements`：27 tests，1.313s，OK，exit 0 |
+| 相关回归 | 11 模块 112 tests，2.037s，OK（6 skipped），exit 0 |
+| controller 配置 | `tests.test_role_operator_config`：6 tests，0.004s，OK，exit 0 |
+| 全量 | 653 tests，15.976s，errors=3，skipped=18，exit 1；3 个均为既有环境缺失（`anthropic` ×2、`docker.types` ×1），无新增回归 |
+| 契约 A–E | 全部通过；off 路径字段保真、quote 逐字/归一化两阶段、快照/终态/事务、done/waived 来源、scope、门禁顺序、互斥早拒、v4 reader 均核对 |
+| 建议 | 准予合并；用户最终验收/合并，未启用 auto-merge |
+
+复审边界：离线/合成证据，不证明真实模型收益、语义完成、临床正确或官方得分；不改变默认关闭和旧 B 收据不适用的事实。
+
+## 9. 交付状态（更新）
+
+- 实现与报告已在本地提交 `85b89664…` / `5b9a3fc…`。
+- 已按用户要求准备最终 PR；**不自行 merge、不启用 auto-merge**。
+- 用户最终验收合并后，本分支才进入主线；合并不自动启用 requirements，也不恢复真实执行权限。
