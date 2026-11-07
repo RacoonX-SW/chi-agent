@@ -1,6 +1,6 @@
 # Reasoning/输出预算：8192 → 16384 单变量实验
 
-建立：2026-11-07（Asia/Shanghai）。状态：**设计文档，未实现、未运行真实 B/C。** 本页只记录 t022/t024 的 reasoning 预算问题、16384 实验方案、代码触点与兼容性风险；不授权真实模型/judge/Trial/发布。
+建立：2026-11-07（Asia/Shanghai）。状态：**per-run override 已实现并合并（PR76 `526fd10`）；16384 在 t022 上获部分真实验证（round1 正常，round2 被 429 中断）**。本页只记录 t022/t024 的 reasoning 预算问题、16384 实验方案、代码触点与兼容性风险；不授权真实模型/judge/Trial/发布。
 
 ## 1. 现象
 
@@ -38,6 +38,16 @@ finish_reason = "length"
 - 默认仍 8192；本次失败重跑的 5 个 config 设 16384。
 - 旧 run 的 launch 无该字段时按 8192 解释，历史 evidence 继续可 inspect。
 - 代码触点：`role_operator.py`、`go_chi_entry.py`、`go_chi_runtime.py`、`go_chi_guard.py`、`go_chi_journal.py`。
+
+### 3.2 首次实验证据（2026-11-07）
+
+PR76 合并（`526fd10`）后重建 bundle `11d5a5c2…` / runtime `4f797f2d…`，用 4 个独立 state 尝试 t022（其余 4 题因停止条件未启动）。
+
+- **唯一进入模型执行的请求**（`nine-rerun3` round1）：HTTP 200，`finish_reason=tool_calls`，reasoning 61 / completion 188 / prompt 19,839，14.5s，产出 4 个 tool call。
+- `nine-rerun4` 的 wire 证据确认实际请求体 `max_tokens=16384`，journal 亦记录 `launch.main_max_tokens=16384`。
+- 其余 5 次请求（含 `nine-rerun3` round2）均被提供方 `429 prefill_cap_refused` 拒绝，发生在模型执行前（`usage=null`），响应体 SHA 五次相同。
+- 结论：16384 **解决了 8192 的 reasoning 吃满问题**（round1 不再 length）；但**未获得全程证据**，无法判断后续轮次是否仍会 length 或超 240s。
+- 4 个 429 pending 保留；未自动重试。详见 [BDE 执行记录第 6 节](../../../reviews/nine-task-bde-execution-20261107.md#6-失败题重跑16384-主输出预算2026-11-07)。
 
 ### 决策规则
 
