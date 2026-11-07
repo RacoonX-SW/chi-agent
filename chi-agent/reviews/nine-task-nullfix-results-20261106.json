@@ -1,0 +1,192 @@
+{
+  "schema": "chi-nine-task-execution-v1",
+  "date": "2026-11-06",
+  "identity": {
+    "source_commit": "1c008bbc9d953ae33e575fb04da24aa64fd2e1cf",
+    "bundle_sha256": "b7e247f6afcd2f5be09401a5c51621563e5543676bd9c8260dcd0ee88c63f40e",
+    "runtime_identity": "dafc9ce9d863c82ce14fd7ba15442f5b13d9289b8e58db93709fa7cddabe39af",
+    "state": "runs/final-validation-20261105/nine-nullfix-20261106/state",
+    "requirements": null,
+    "time_policy_seconds": 1800
+  },
+  "b": {
+    "run": "final-b-011",
+    "status": "complete",
+    "input": 1367,
+    "output": 101
+  },
+  "pending": {
+    "run": "final-c-cm-asthma",
+    "round": 21
+  },
+  "rows": [
+    {
+      "run": "final-c-cm-anorexia",
+      "role": "cm",
+      "task": "cm_anorexia_hard_refuses_001",
+      "status": "failed",
+      "safe_error": "chi_tool_batch_invalid",
+      "http": 11,
+      "elapsed_s": 100.3,
+      "input": 441636,
+      "output": 5068,
+      "claim": false,
+      "verification": "blocked",
+      "reason": "completion_readback_required:call_00_r1qexf4hk8hzcv73ex3a4w50",
+      "checks": {
+        "true": 2,
+        "false": 4,
+        "not_applicable": 8
+      }
+    },
+    {
+      "run": "final-c-cm-asthma",
+      "role": "cm",
+      "task": "cm_asthma_low_coop_001",
+      "status": "failed",
+      "safe_error": "chi_timeout",
+      "http": 21,
+      "elapsed_s": 156.5,
+      "input": 634000,
+      "output": 7919,
+      "claim": false,
+      "verification": "blocked",
+      "reason": "completion_readback_required:chatcmpl-tool-af83fe591691c8f7",
+      "checks": {
+        "true": 2,
+        "false": 4,
+        "not_applicable": 8
+      }
+    },
+    {
+      "run": "final-c-cm-ckd",
+      "role": "cm",
+      "task": "cm_ckd_moderate_anxious_001",
+      "status": "not_run",
+      "http": 0
+    },
+    {
+      "run": "final-c-payer-t022",
+      "role": "payer",
+      "task": "pa_t022_t022_o001_p01_nurse_review_payer",
+      "status": "failed",
+      "safe_error": "chi_output_truncated",
+      "http": 13,
+      "elapsed_s": 595.7,
+      "input": 1220803,
+      "output": 26716,
+      "claim": false,
+      "verification": "not_applicable",
+      "reason": null,
+      "checks": {
+        "true": 3,
+        "false": 16,
+        "not_applicable": 4
+      }
+    },
+    {
+      "run": "final-c-payer-t023",
+      "role": "payer",
+      "task": "pa_t023_t023_o003_p01_triage_payer",
+      "status": "failed",
+      "safe_error": "chi_output_truncated",
+      "http": 18,
+      "elapsed_s": 276.8,
+      "input": 1545909,
+      "output": 29373,
+      "claim": false,
+      "verification": "blocked",
+      "reason": "completion_readback_required:chatcmpl-tool-bf5d28d81bede76a",
+      "checks": {
+        "true": 10,
+        "false": 13,
+        "not_applicable": 2
+      }
+    },
+    {
+      "run": "final-c-payer-t024",
+      "role": "payer",
+      "task": "pa_t024_t024_o001_p01_nurse_review_payer",
+      "status": "complete",
+      "safe_error": null,
+      "http": 33,
+      "elapsed_s": 458.3,
+      "input": 3870008,
+      "output": 34976,
+      "claim": false,
+      "verification": "blocked",
+      "reason": "completion_readback_required:call_00_xpr1xla5xpnf38t9tp97syzl",
+      "checks": {
+        "true": 11,
+        "false": 1,
+        "not_applicable": 10
+      }
+    },
+    {
+      "run": "final-c-provider-t015",
+      "role": "provider",
+      "task": "pa_t015_t015_o002_p01_new_referral_provider",
+      "status": "failed",
+      "safe_error": "chi_tool_batch_invalid",
+      "http": 34,
+      "elapsed_s": 434.5,
+      "input": 4078243,
+      "output": 49154,
+      "claim": false,
+      "verification": "mechanical_pass",
+      "reason": null,
+      "checks": {
+        "true": 7,
+        "false": 5,
+        "not_applicable": 1
+      }
+    },
+    {
+      "run": "final-c-provider-t016",
+      "role": "provider",
+      "task": "pa_t016_t016_o001_p01_new_referral_provider",
+      "status": "complete",
+      "safe_error": null,
+      "http": 36,
+      "elapsed_s": 702.2,
+      "input": 5560729,
+      "output": 44984,
+      "claim": true,
+      "verification": "mechanical_pass",
+      "reason": null,
+      "checks": {
+        "true": 7,
+        "false": 4,
+        "not_applicable": 1
+      }
+    },
+    {
+      "run": "final-c-provider-t021",
+      "role": "provider",
+      "task": "pa_t021_t021_o003_p01_new_referral_provider",
+      "status": "failed",
+      "safe_error": "chi_context_budget_exceeded",
+      "http": 20,
+      "elapsed_s": 400.0,
+      "input": 3143187,
+      "output": 34857,
+      "claim": false,
+      "verification": null,
+      "reason": null,
+      "checks": {
+        "true": 6,
+        "false": 5,
+        "not_applicable": 1
+      }
+    }
+  ],
+  "totals": {
+    "http": 186,
+    "input": 20494515,
+    "output": 233047,
+    "completed": 2,
+    "failed": 6,
+    "not_run": 1
+  },
+  "official_reward": null
+}
