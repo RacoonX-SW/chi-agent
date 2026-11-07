@@ -99,6 +99,8 @@ class ToolContract:
     """Freeze tool definitions and validate each whole batch before dispatch."""
 
     RECOVERABLE_SCHEMA_LIMIT = 2
+    RECOVERABLE_JSON_LIMIT = 2
+    RECOVERABLE_TOTAL_LIMIT = 3
 
     def __init__(self, definitions: list[dict[str, Any]]):
         self.definitions = copy.deepcopy(definitions)
@@ -108,6 +110,8 @@ class ToolContract:
         self.batches: list[dict] = []
         self.refusals: dict[str, str] = {}
         self.schema_refusals = 0
+        self.json_refusals = 0
+        self.total_refusals = 0
         try:
             if not isinstance(definitions, list) or not definitions:
                 raise ValueError
@@ -151,7 +155,7 @@ class ToolContract:
                 canonical = _canonical_calls(message["tool_calls"])
             except ValueError:
                 fail("call_shape")
-            calls, ids, schema_refusal = [], set(), None
+            calls, ids, failure_kind, failure_reason = [], set(), None, None
             for call in canonical:
                 if set(call) != {"id", "type", "function"} or call["type"] != "function":
                     fail("call_shape")
@@ -169,22 +173,38 @@ class ToolContract:
                 try:
                     arguments = _parse(fn["arguments"])
                 except Exception:
-                    fail("arguments_json")
-                errors = sorted(Draft202012Validator(self.schemas[fn["name"]]).iter_errors(arguments),
-                                key=lambda error: list(error.absolute_path))
-                if errors:
                     if not recover_schema:
-                        fail("arguments_schema")
-                    if schema_refusal is None:
-                        schema_refusal = self._schema_refusal(fn["name"], errors[0])
+                        fail("arguments_json")
+                    arguments = {"__chi_invalid_json__": True}
+                    if failure_reason is None:
+                        failure_kind = "json"
+                        failure_reason = (f"chi_tool_arguments_json_invalid: "
+                                          f"{fn['name']}: invalid JSON")
+                else:
+                    errors = sorted(Draft202012Validator(self.schemas[fn["name"]]).iter_errors(arguments),
+                                    key=lambda error: list(error.absolute_path))
+                    if errors:
+                        if not recover_schema:
+                            fail("arguments_schema")
+                        if failure_reason is None:
+                            failure_kind = "schema"
+                            failure_reason = self._schema_refusal(fn["name"], errors[0])
                 ids.add(call_id)
                 calls.append({"id": call_id, "name": fn["name"], "arguments": arguments, "result": None})
-            if schema_refusal is not None:
-                if self.schema_refusals >= self.RECOVERABLE_SCHEMA_LIMIT:
-                    fail("arguments_schema")
-                self.schema_refusals += 1
+            if failure_reason is not None:
+                class_limit = (self.RECOVERABLE_JSON_LIMIT if failure_kind == "json"
+                               else self.RECOVERABLE_SCHEMA_LIMIT)
+                class_count = (self.json_refusals if failure_kind == "json"
+                               else self.schema_refusals)
+                if class_count >= class_limit or self.total_refusals >= self.RECOVERABLE_TOTAL_LIMIT:
+                    fail("arguments_json" if failure_kind == "json" else "arguments_schema")
+                if failure_kind == "json":
+                    self.json_refusals += 1
+                else:
+                    self.schema_refusals += 1
+                self.total_refusals += 1
                 for call in calls:
-                    self.refusals[call["id"]] = schema_refusal
+                    self.refusals[call["id"]] = failure_reason
         except ContractFailure:
             raise
         except Exception:

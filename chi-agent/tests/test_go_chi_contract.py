@@ -65,6 +65,35 @@ class ContractTests(unittest.TestCase):
         with self.assertRaises(ContractFailure):
             contract.accept_batch(message([call("overflow", '{}')]), recover_schema=True)
 
+    def test_json_syntax_error_is_refused_atomically(self):
+        contract = ToolContract(definition())
+        calls = contract.accept_batch(message([call("a", '{"id":"secret-value"')]), recover_schema=True)
+        self.assertEqual([item["id"] for item in calls], ["a"])
+        self.assertIn("chi_tool_arguments_json_invalid", contract.refusals["a"])
+        self.assertNotIn("secret-value", contract.refusals["a"])
+        self.assertEqual(contract.json_refusals, 1)
+        self.assertEqual(contract.total_refusals, 1)
+        self.assertEqual(contract.records[0]["arguments"], {"__chi_invalid_json__": True})
+        contract.record_result("a", "REFUSED: " + contract.refusals["a"])
+        contract.accept_batch(message([call("b", '{"id":1}')]))
+
+    def test_json_syntax_error_stays_fatal_without_recovery(self):
+        contract = ToolContract(definition())
+        with self.assertRaises(ContractFailure):
+            contract.accept_batch(message([call("a", '{"id":')]))
+
+    def test_total_recovery_limit_spans_schema_and_json(self):
+        contract = ToolContract(definition())
+        for index in range(ToolContract.RECOVERABLE_SCHEMA_LIMIT):
+            call_id = f"s{index}"
+            calls = contract.accept_batch(message([call(call_id, '{}')]), recover_schema=True)
+            contract.record_result(call_id, "REFUSED: " + contract.refusals[call_id])
+        calls = contract.accept_batch(message([call("j0", '{"id":')]), recover_schema=True)
+        contract.record_result("j0", "REFUSED: " + contract.refusals["j0"])
+        self.assertEqual(contract.total_refusals, 3)
+        with self.assertRaises(ContractFailure):
+            contract.accept_batch(message([call("overflow", '{"id":1,"extra":2}')]), recover_schema=True)
+
     def test_duplicate_id_and_result_are_rejected(self):
         contract = ToolContract(definition())
         contract.accept_batch(message([call("a", '{"id":1}')]))

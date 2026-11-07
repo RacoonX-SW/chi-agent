@@ -534,6 +534,19 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             guard = guard_getter()
             if guard is None:
                 raise GoFailure("chi_local_guard_missing")
+            call_id = getattr(_context, "tool_call_id", None)
+            if type(call_id) is str:
+                reason = guard.contract.refusals.get(call_id)
+                if reason is not None:
+                    record = next((item for item in guard.contract.records
+                                   if item["id"] == call_id and item["result"] is None), None)
+                    if record is None:
+                        raise GoFailure("chi_local_dispatch_unvalidated")
+                    output = "REFUSED: " + reason
+                    journal.refuse_tool(call_id, name, record["arguments"], output,
+                                        secrets=(guard.secret, guard.session))
+                    guard.contract.record_result(call_id, output)
+                    return output
             try:
                 args = json.loads(payload)
             except Exception:
