@@ -185,6 +185,38 @@ class WorkspaceWriteTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(await write.on_invoke_tool(None, json.dumps(args)), "workspace file written")
             self.assertEqual(Path(path).read_text(), "written")
 
+    async def test_cm_write_bootstraps_missing_case_root(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); workspace = root / "workspace"; workspace.mkdir()
+            state = TaskState(root / "state", run="run_1", role="cm")
+            state.observe(call_id="call_1", tool="cm_chart.get_chart_data", kind="mcp",
+                          arguments={"case_id": "CM-CASE-X"}, result="ok")
+            tools, holder = self._tools(root, "cm", workspace, state=state)
+            path = workspace / "CM-CASE-X" / "cm" / "note.md"
+            args = {"path": str(path), "content": "written"}
+            holder["guard"].contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": "c", "type": "function",
+                                "function": {"name": "local-fs-write", "arguments": json.dumps(args)}}]})
+            write = next(t for t in tools if t.name == "local-fs-write")
+            self.assertEqual(await write.on_invoke_tool(None, json.dumps(args)), "workspace file written")
+            self.assertEqual(path.read_text(), "written")
+
+    async def test_cm_write_rejects_unobserved_case_root(self):
+        import json
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d); workspace = root / "workspace"; workspace.mkdir()
+            state = TaskState(root / "state", run="run_1", role="cm")
+            tools, holder = self._tools(root, "cm", workspace, state=state)
+            path = workspace / "CM-CASE-X" / "cm" / "note.md"
+            args = {"path": str(path), "content": "written"}
+            holder["guard"].contract.accept_batch({"role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": "c", "type": "function",
+                                "function": {"name": "local-fs-write", "arguments": json.dumps(args)}}]})
+            write = next(t for t in tools if t.name == "local-fs-write")
+            self.assertTrue((await write.on_invoke_tool(None, json.dumps(args))).startswith("REFUSED:"))
+            self.assertFalse((workspace / "CM-CASE-X").exists())
+
     async def test_write_refuses_case_directory_that_does_not_exist(self):
         import json
         with tempfile.TemporaryDirectory() as d:
@@ -198,7 +230,7 @@ class WorkspaceWriteTests(unittest.IsolatedAsyncioTestCase):
                                 "function": {"name": "local-fs-write", "arguments": json.dumps(args)}}]})
             write = next(t for t in tools if t.name == "local-fs-write")
             result = await write.on_invoke_tool(None, json.dumps(args))
-            self.assertTrue(result.startswith("ERROR:"))
+            self.assertTrue(result.startswith("REFUSED:"))
             self.assertFalse((workspace / "CASE-FAKE").exists())
 
     async def test_write_does_not_follow_symlinked_role_directory(self):
