@@ -32,6 +32,13 @@ finish_reason = "length"
 - 只跑 t022 一题（或最小合成复现），不改其他任务/不跑九题。
 - 记录：`reasoning_tokens`、`completion_tokens`、`finish_reason`、是否产生 `tool_calls`、实际耗时、usage/费用。
 
+### 3.1 实现选择（2026-11-07）
+
+- 不全局改默认 8192；新增**按 run 的 `main_max_tokens` 覆盖**（config/`--main-max-tokens`/launch/runtime/guard/journal）。
+- 默认仍 8192；本次失败重跑的 5 个 config 设 16384。
+- 旧 run 的 launch 无该字段时按 8192 解释，历史 evidence 继续可 inspect。
+- 代码触点：`role_operator.py`、`go_chi_entry.py`、`go_chi_runtime.py`、`go_chi_guard.py`、`go_chi_journal.py`。
+
 ### 决策规则
 
 - 16384 完成且有 tool_calls，reasoning 约 9–12k：保留 16384。

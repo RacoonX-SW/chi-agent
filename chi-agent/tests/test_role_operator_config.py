@@ -89,6 +89,19 @@ class RoleOperatorConfigTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.check(value)
 
+    def test_main_max_tokens_override(self):
+        value = dict(self.base)
+        value["main_max_tokens"] = 16384
+        config = self.check(value)
+        self.assertEqual(role_operator._validation_flags(config),
+                         ["--main-max-tokens", "16384"])
+        for bad in (None, True, 0, 1023, 32769, "16384", 1.5):
+            with self.subTest(bad=bad):
+                value = dict(self.base)
+                value["main_max_tokens"] = bad
+                with self.assertRaises(ValueError):
+                    self.check(value)
+
     def test_output_recovery_and_context_cap_can_combine(self):
         value = dict(self.base)
         value["output_recovery"] = "chi-output-recovery-v1"

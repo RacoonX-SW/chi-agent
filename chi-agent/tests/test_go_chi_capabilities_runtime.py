@@ -79,9 +79,11 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.temp.cleanup()
 
     async def exercise(self, responses, *, names=("triage.get",), role="payer", capabilities="f0-f3-v1",
-                       fail=None, errors=(), expect_failure=False, context_budget=DEFAULT_BUDGET):
+                       fail=None, errors=(), expect_failure=False, context_budget=DEFAULT_BUDGET,
+                       main_max_tokens=8192):
+        launch = {"main_max_tokens": main_max_tokens} if main_max_tokens != 8192 else None
         journal = ChiJournal(self.root / "state", identity="a" * 64, evaluation="eval",
-                             task=role, attempt="a", run="run")
+                             task=role, attempt="a", run="run", launch=launch)
         server = Server(names, fail=fail, errors=errors)
         observed = []
         async def wire(request):
@@ -94,7 +96,8 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
                     instruction_path=self.instruction, logs_dir=self.root / "logs",
                     workspace_root=self.workspace, handbook_root=self.handbook, tool_references=[],
                     lower=httpx.MockTransport(wire), server_factory=lambda _url: server,
-                    capabilities=capabilities, context_budget=context_budget)
+                    capabilities=capabilities, context_budget=context_budget,
+                    main_max_tokens=main_max_tokens)
             except GoFailure:
                 if not expect_failure:
                     raise
@@ -103,6 +106,12 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
             return output, observed, server, journal
         finally:
             journal.close()
+
+    async def test_main_max_tokens_override_reaches_runtime_and_journal(self):
+        output, observed, server, journal = await self.exercise([completion()], main_max_tokens=16384)
+        self.assertEqual(output, "done")
+        self.assertEqual(journal.run["requests"][0]["max_tokens"], 16384)
+        self.assertEqual(journal.run["launch"]["main_max_tokens"], 16384)
 
     async def test_invalid_tool_arguments_are_refused_and_run_continues(self):
         responses = [

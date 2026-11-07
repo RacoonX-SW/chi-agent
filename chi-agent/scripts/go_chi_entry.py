@@ -660,6 +660,7 @@ def _parser():
     parser.add_argument("--input-summary", choices=SUMMARY_VERSIONS, default=None)
     parser.add_argument("--requirements", choices=(REQUIREMENTS_POLICY,), default=None)
     parser.add_argument("--context-max-estimated-tokens", type=int, default=None)
+    parser.add_argument("--main-max-tokens", type=int, default=None)
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
     parser.add_argument("--mcp-url")
@@ -708,6 +709,9 @@ def main(argv=None, *, development=None):
             raise GoFailure("chi_recovery_invalid")
         if args.context_max_estimated_tokens is not None and (
                 args.mode != "live" or not 1 <= args.context_max_estimated_tokens <= 3_500_000):
+            raise GoFailure("chi_context_budget_invalid")
+        if args.main_max_tokens is not None and (
+                args.mode != "live" or not 1024 <= args.main_max_tokens <= 32768):
             raise GoFailure("chi_context_budget_invalid")
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
@@ -819,6 +823,8 @@ def main(argv=None, *, development=None):
                 launch['input_summary'] = args.input_summary
             if args.requirements is not None:
                 launch['requirements'] = args.requirements
+            if args.main_max_tokens is not None:
+                launch['main_max_tokens'] = args.main_max_tokens
             if development is not None and args.role == 'cm':
                 launch['aux_contract'] = 'patient-simulator-v1'
         if args.history_mode == "local":
@@ -862,7 +868,8 @@ def main(argv=None, *, development=None):
                     handbook_root=args.handbook_root, tool_references=args.tool_reference,
                     lower=httpx.AsyncHTTPTransport(retries=0, verify=True),
                     capabilities="f0-f3-v1", requirements=args.requirements,
-                    context_budget=context_budget)
+                    context_budget=context_budget,
+                    main_max_tokens=args.main_max_tokens or 8192)
                 if development is None:
                     return await run_chi(journal, secret, **kwargs)
                 return await development(journal, secret, run_chi, kwargs)

@@ -30,7 +30,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
     def __init__(self, journal, secret, session, lower, *, tools, system, instruction,
                  claimed, confirmation, before_batch=None, observed_request=None, run_started=None,
                  billing_lock=None, fatal_getter=None, context_recorder=None, context_limit=DEFAULT_BUDGET,
-                 recovery_blocker=None, canonical_tools=None, wire_recorder=None, summary_snapshot=None):
+                 recovery_blocker=None, canonical_tools=None, wire_recorder=None, summary_snapshot=None,
+                 main_max_tokens=8192):
         if (type(secret) is not str or not secret.strip() or type(session) is not str
                 or not re.fullmatch(r"chi-[0-9a-f]{32}", session)
                 or type(system) is not str or type(instruction) is not str
@@ -43,6 +44,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
         if context_recorder is not None and not callable(context_recorder):
             raise GoFailure("chi_guard_invalid")
         if context_limit is not None and type(context_limit) is not dict:
+            raise GoFailure("chi_guard_invalid")
+        if type(main_max_tokens) is not int or not 1024 <= main_max_tokens <= 32768:
             raise GoFailure("chi_guard_invalid")
         if wire_recorder is not None and not callable(wire_recorder):
             raise GoFailure("chi_guard_invalid")
@@ -65,6 +68,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self._control_lock = asyncio.Lock()
         self.journal, self.secret, self.session, self.lower = journal, secret, session, lower
         self.context_recorder, self.context_limit = context_recorder, context_limit
+        self.main_max_tokens = main_max_tokens
         self.contract = ToolContract(tools)
         self.system, self.instruction = system, instruction
         self.claimed, self.confirmation = claimed, confirmation
@@ -80,6 +84,11 @@ class ChiGuard(httpx.AsyncBaseTransport):
                         "parameters": B_SCHEMAS[name], "strict": False}} for name in ("inspect_code", "verify_patch")]
             if system != B_SYSTEM or instruction != B_INSTRUCTION or not self.contract.definitions_match(expected):
                 raise GoFailure("chi_b_contract_invalid")
+
+    def _expected_max_tokens(self, purpose):
+        if self.journal.run['kind'] == 'chi' and purpose in {'main', 'continuation'}:
+            return self.main_max_tokens
+        return output_limit(self.journal.run['kind'], purpose, self.journal.run['launch'].get('input_summary'))
 
     def _validate(self, request, raw, *, source_only=False):
         if self.fatal_getter():
@@ -121,7 +130,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             keys = {"model", "messages", "max_tokens", "reasoning_effort", "thinking"}
             keys |= {"response_format"} if context is not None else set() if purpose == 'summary' else {"tools"}
             if (type(body) is not dict or set(body) != keys or body["model"] != "deepseek-v4.1-flash"
-                    or type(body["max_tokens"]) is not int or body["max_tokens"] != output_limit(self.journal.run['kind'], purpose, self.journal.run['launch'].get('input_summary'))
+                    or type(body["max_tokens"]) is not int or body["max_tokens"] != self._expected_max_tokens(purpose)
                     or body["thinking"] != {"type": "enabled"} or body["reasoning_effort"] != "high"
                     or _contains_secret(body, self.secret, self.session)):
                 raise ValueError
@@ -536,7 +545,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             if _contains_secret(payload, self.secret, self.session):
                 raise GoFailure("chi_secret_in_body")
             if (payload["usage"]["prompt_tokens"] > 1048576
-                    or payload["usage"]["completion_tokens"] > output_limit(self.journal.run['kind'], purpose, self.journal.run['launch'].get('input_summary'))):
+                    or payload["usage"]["completion_tokens"] > self._expected_max_tokens(purpose)):
                 raise GoFailure("chi_usage_over_limit")
             recoverable = self._response(payload, purpose)
             self.safe_cause = None
