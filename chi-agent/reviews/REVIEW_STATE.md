@@ -4,7 +4,7 @@
 
 | 项目 | 当前状态 |
 | --- | --- |
-| 当前任务 | PR75 实现故障处理三层：Task 1/2/3/4/5/6 已完成（name recovery、JSON/schema 有界恢复、计数、反馈安全、CM case root bootstrap）；Task 7 由既有测试覆盖；Task 8 connect 重试 **deferred**；Gemini 复审 **Pass/0 Blocker**，Task 10 文档已补，待用户合并。BDE 九题 4 claim/2 blocked/3 failed、无 pending；nullfix 九题 2 complete/6 failed/1 not_run，cm-asthma round21 pending 保留。详见[阶段报告](failure-handling-layers-implementation-20261107.md)、[nullfix 记录](nine-task-nullfix-execution-20261106.md)；BDE 记录见 PR73。 |
+| 当前任务 | PR75 实现故障处理三层：Task 1/2/3/4/5/6 已完成（name recovery、JSON/schema 有界恢复、计数、反馈安全、CM case root bootstrap）；Task 7 由既有测试覆盖；Task 8 connect 重试 **deferred**；Gemini 复审 **Pass/0 Blocker**，Task 10 文档已补，待用户合并。BDE 九题 4 claim/2 blocked/3 failed、无 pending；nullfix 九题 2 complete/6 failed/1 not_run，cm-asthma round21 pending 保留。PR73 已合并 `f2b82eb`；详见[阶段报告](failure-handling-layers-implementation-20261107.md)、[BDE 记录](nine-task-bde-execution-20261107.md)、[nullfix 记录](nine-task-nullfix-execution-20261106.md)。 |
 | 协作 | DeepSeek按用户批准实现 1800s 策略、更新代码/文档并执行一次新 B/C；本轮自查标为“执行者检查”，不冒充独立审核。未merge/auto-merge；429 后停止，用户决定等待/重试/对账 |
 | 最新独立审核 | 包外返工`bfc1d8f`在限定离线范围通过，前置计数P1及重复反例P2关闭；`36c2c79`有条件通过、`83749ac`未通过保留原义。包内`36db613`及包外`8992af1`维持旧范围，`33e6eca`/`4613fd1`失败与`50dd338`条件结论不改写。详见[报告第8节](final-validation-admission-review.md#8-gpt-独立复审与历史结论2026-11-06) |
 | 上次独立审核候选 | Y最终HEAD `283ea63216251734fdc3fba86908eeb76c0feb98`（容量实现 `6ae9ee1c5072cc9f88af9236707e19afccf95f06`）此前已审，在既定限定离线范围通过。原 `33d3e412…` / `0bf6c441…` 未通过结论保持其历史含义，不能用新通过回写旧失败 |
@@ -20,7 +20,7 @@
 | 正式提交前置 | U已实证真实Harbor工厂/类型/SingleStepTrial与固定官方Docker环境接点；原stock仍不自动选用，官方CLI、经Harbor的真实Go推理、完整生产供应/状态配送及F.5未验，不等于正式冻结 |
 | 本轮验证 | 执行者检查：PR75 Task1/2/3/4/5/6；定向74 OK、recovery SDK21、全量675/20 skipped/3既有import error；Gemini复审Pass/0 Blocker；Task8 deferred。BDE 4 claim/2 blocked/3 failed、无pending；nullfix 2 complete/6 failed/1 not_run、cm-asthma pending。 |
 | 历史 A 证据 | 原 A 的跨版本离线检查、官方 MCP 接入和异常分支范围保留在 [A 审核](bootstrap-baseline-a-review.md)，不被本轮环境回归替代 |
-| PR 与下一步 | PR42–PR74已合并：PR71 `3dfa87d`、PR72 `c88f6e5`、PR74 `86346aa`。PR73 BDE结果、PR75实现均open；PR75 Gemini Pass、Task10文档已补，待用户合并。Task8 deferred；合并后重建bundle；九题重跑另行授权。旧pending不变。 |
+| PR 与下一步 | PR42–PR74已合并：PR71 `3dfa87d`、PR72 `c88f6e5`、PR73 `f2b82eb`、PR74 `86346aa`。PR75 实现 open，Gemini Pass、Task10文档已补，待用户合并。Task8 deferred；合并后重建bundle；九题重跑另行授权。旧pending不变。 |
 | 外部条件复核 | 2026-11-01已读官方Rules正文：75道公开题；公开结果/75题audit packet非必需；必交Kaggle Writeup+私有可运行包+IEEE两栏≤5页报告，截止11/15 23:59 UTC（报名/组队11/7，结果11/23）；患者为模拟数据、无真实PHI；handbook受限且不得再分发。Go隐私/非编码用途用户明确不再确认，按用户决定继续，但不写成官方许可。来源：`https://www.kaggle.com/competitions/chi-bench/rules`；旧审批包保留历史，[新草案](../openspec/changes/validation-preparation/proposal.md)本身不授权，B/S各自具体批准及执行以对应报告为准，其他真实运行仍未获准 |
 | 未验证项 | payer终态不符的充分原因、业务改进及证据核对原型收益、其他任务/跨任务统计稳定性、内容verdict/临床批准/官方分数；旧未知可信结算、Go非编码用途官方确认、十一月ZDR、1M/长期缓存；Harbor官方CLI/真实Go Trial/完整配送/F.5、OpenSpec CLI、controller硬中断/daemon故障；F0–F3真实模型使用/检索命中质量/claim门禁误伤/F0逐题抽样、claim后写真实行为；F4真实tokenizer/预算余量、真实MCP超时副作用与更长读超时值、模型对停滞提示的遵守、自动压缩可行性；Z1真实Harbor Trial/world镜像/依赖锁hash/state清理/凭据注入、F7真实manifest/record、Z6真实干净依赖安装/空状态/Harbor Trial/模型/清理 |
 | 结构/可靠性判断 | C3闭包/C4用途核对保持；C5已核对completed/outcome→解析推荐→最终决定，原MD字段不单独证明绕过。会话支持/临床充分性、未锁环境依赖和外部编排动态计时未关闭；[架构评审](../docs/architecture-review.md)保留历史及后续指针，不搬目录/拆journal |
@@ -34,6 +34,7 @@
 - [本候选唯一获准输入摘要探针：失败、用量、清理及后续任务](summary-endpoint-probe-review.md)
 - [chi-requirements-v1 离线实现与验收](requirement-completion-gate-review.md)
 - [P0/P1 实际验证：1800s t015 与 requirements on](p0-p1-validation-20261106.md)
+- [BDE 九题执行记录](nine-task-bde-execution-20261107.md)；[BDE 结果 JSON](nine-task-bde-results-20261107.json)
 - [故障处理三层实现阶段报告](failure-handling-layers-implementation-20261107.md)；[设计](../openspec/changes/failure-handling-layers/design.md)、[计划](../openspec/changes/failure-handling-layers/plan.md)、[connect spike](../openspec/changes/failure-handling-layers/spike-connect-retry.md)
 
 - [本候选唯一获准coding-B：执行、账目与清理](validation-coding-b-review.md)
