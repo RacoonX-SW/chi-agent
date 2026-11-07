@@ -11,8 +11,9 @@
 - [x] Task 5：local/MCP malformed JSON + schema runtime 纠正测试。
 - [x] Task 6：CM case root bootstrap；只在 case 有 returned read 或 target 时创建；未观察/越界仍拒绝。
 - [x] Task 9（部分）：全量 `unittest discover` **675 tests、20 skipped、3 个既有 import error**；定向 74 tests OK；recovery SDK 21 passed。
-- [ ] Task 7：文件写失败/completion 回归的显式新增测试（现有 completion gate 测试可覆盖一部分，待补）。
-- [ ] Task 8：connect 前重试（spike 未完成；涉及 journal/usage/pending 语义）。
+- [x] Task 7：文件写失败/completion 回归已有完整测试覆盖（`tests/test_go_chi_state.py` 的 failure/repair/unrelated/unknown 用例）；无需新增生产代码。
+- [x] Task 8 spike：见 [`spike-connect-retry.md`](spike-connect-retry.md)；结论是暂不直接加 transport retry，先设计 journal `not_sent` 语义。
+- [ ] Task 8 实现：connect 前重试（依赖 journal/usage/pending 设计）。
 - [ ] Task 10：阶段报告 + Gemini 独立复审 + 用户合并。
 
 ## 1. 输出契约层
@@ -31,11 +32,12 @@
 - [x] 在条件满足时创建缺失的 case 根/角色目录（0700），再写文件。
 - [x] 未观察/越界/跨 case/symlink 仍拒绝；不创建目录；错误信息可操作。
 - [x] 保持 provider binding/payer 路径行为不变；补回归测试。
-- [ ] 确认 completion `completion_file_write_failed` 仍阻断 claim；同路径成功写可修复（补显式测试）。
+- [x] 确认 completion `completion_file_write_failed` 仍阻断 claim；同路径成功写可修复（已有 `tests/test_go_chi_state.py` 覆盖）。
 - [x] 补 CM/provider/payer 文件写测试。
 
 ## 3. 基础设施层
 
+- [x] Spike：connect 前重试的 transport/journal/usage/pending 语义见 [`spike-connect-retry.md`](spike-connect-retry.md)；暂不直接实现。
 - [ ] 定义请求阶段：connect / send / read；只在 connect 前失败重试。
 - [ ] 实现有界 connect 重试（次数/退避/总预算可配置），不产生 usage/pending；每次 attempt 可审计。
 - [ ] read 超时/断连、429/5xx、工具/业务写不自动重试；保持 pending/unknown。
