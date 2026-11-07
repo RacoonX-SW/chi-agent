@@ -119,6 +119,57 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(refusal)
         self.assertIn("chi_tool_arguments_invalid", refusal[0]["content"])
 
+    async def test_malformed_json_tool_arguments_are_refused_and_run_continues(self):
+        def raw_completion(calls):
+            payload = completion()
+            payload["choices"][0]["finish_reason"] = "tool_calls"
+            payload["choices"][0]["message"] = {
+                "role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": call_id, "type": "function",
+                                "function": {"name": name, "arguments": raw}}
+                               for call_id, name, raw in calls],
+            }
+            return payload
+
+        responses = [
+            raw_completion([("call_1", "local-state-update", '{"target":')]),
+            completion([("call_2", "local-state-update", {"target": {"case_id": None}})]),
+            completion(),
+        ]
+        output, observed, server, journal = await self.exercise(responses)
+        self.assertEqual(output, "done")
+        messages = observed[1]["messages"]
+        refusal = [message for message in messages
+                   if message.get("role") == "tool" and "REFUSED" in str(message.get("content"))]
+        self.assertTrue(refusal)
+        self.assertIn("chi_tool_arguments_json_invalid", refusal[0]["content"])
+
+    async def test_malformed_json_mcp_arguments_are_refused_and_run_continues(self):
+        def raw_completion(calls):
+            payload = completion()
+            payload["choices"][0]["finish_reason"] = "tool_calls"
+            payload["choices"][0]["message"] = {
+                "role": "assistant", "content": None, "reasoning_content": "reason",
+                "tool_calls": [{"id": call_id, "type": "function",
+                                "function": {"name": name, "arguments": raw}}
+                               for call_id, name, raw in calls],
+            }
+            return payload
+
+        responses = [
+            raw_completion([("call_1", "triage__get", '{"case_id":')]),
+            completion([("call_2", "triage__get", {"case_id": "CASE-A"})]),
+            completion(),
+        ]
+        output, observed, server, journal = await self.exercise(responses, names=("triage.get",))
+        self.assertEqual(output, "done")
+        self.assertEqual(server.calls, [("triage.get", {"case_id": "CASE-A"})])
+        messages = observed[1]["messages"]
+        refusal = [message for message in messages
+                   if message.get("role") == "tool" and "REFUSED" in str(message.get("content"))]
+        self.assertTrue(refusal)
+        self.assertIn("chi_tool_arguments_json_invalid", refusal[0]["content"])
+
     async def test_state_guidance_search_and_claim_close_the_loop(self):
         responses = [
             completion([("call_1", "local-role-guidance", {}),

@@ -87,6 +87,21 @@ class MCPBridge:
                 if addition is not None:
                     description = addition[0]
             async def invoke(_context, payload, *, model_name=model_name):
+                guard = self.guard
+                call_id = getattr(_context, "tool_call_id", None)
+                if guard is not None and type(call_id) is str:
+                    reason = guard.contract.refusals.get(call_id)
+                    if reason is not None:
+                        record = next((item for item in guard.contract.records
+                                       if item["id"] == call_id and item["result"] is None), None)
+                        if record is None:
+                            raise GoFailure("chi_mcp_call_unvalidated")
+                        raw, canonical = self.raw_names[model_name]
+                        result = "REFUSED: " + reason
+                        guard.journal.refuse_tool(call_id, canonical, record["arguments"], result,
+                                                  secrets=(guard.secret, guard.session))
+                        guard.contract.record_result(call_id, result)
+                        return result
                 return await self.invoke(model_name, payload)
             self.tools.append(FunctionTool(name=model_name, description=description, params_json_schema=schema,
                                            on_invoke_tool=invoke, strict_json_schema=False))

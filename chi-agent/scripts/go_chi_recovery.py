@@ -71,9 +71,9 @@ def mode_and_fragment(payload):
     choice = choices[0]
     msg = choice.get('message')
     if (choice.get('finish_reason') != 'length' or type(msg) is not dict or msg.get('role') != 'assistant'
-            or msg.get('function_call') is not None or set(msg) - {'role', 'content', 'reasoning_content', 'tool_calls', 'function_call', 'refusal', 'annotations', 'audio'}
+            or msg.get('function_call') is not None or set(msg) - {'role', 'content', 'reasoning_content', 'name', 'tool_calls', 'function_call', 'refusal', 'annotations', 'audio'}
             or any(msg.get(k) is not None for k in ('refusal', 'annotations', 'audio'))
-            or any(msg.get(k) is not None and type(msg[k]) is not str for k in ('content', 'reasoning_content'))):
+            or any(msg.get(k) is not None and type(msg[k]) is not str for k in ('content', 'reasoning_content', 'name'))):
         raise ValueError('chi_response_invalid')
     calls = msg.get('tool_calls')
     if calls is not None and type(calls) is not list: raise ValueError('chi_response_invalid')

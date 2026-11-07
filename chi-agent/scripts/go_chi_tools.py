@@ -127,6 +127,16 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                 return None
         return path
 
+    def case_known(case_id):
+        if state is None:
+            return False
+        target = (state.data.get("target") or {}).get("case_id")
+        if target == case_id:
+            return True
+        return any(item.get("scope") == "case:" + case_id
+                   and item.get("event") == "returned" and item.get("effect") == "read"
+                   for item in state.data.get("observations", []))
+
     async def read_file(args):
         path = allowed_read(args.get("path"))
         if path is None or not path.is_file() or path.is_symlink():
@@ -148,7 +158,15 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             return "REFUSED: workspace_case_unverified_or_role_invalid"
         case_root = workspace_root / path.relative_to(workspace_root).parts[0]
         if not case_root.is_dir() or case_root.is_symlink():
-            return "ERROR: workspace parent unavailable"
+            case_id = path.relative_to(workspace_root).parts[0]
+            if role != "cm" or not case_known(case_id):
+                return "REFUSED: workspace_case_unverified_or_role_invalid"
+            try:
+                case_root.mkdir(mode=0o700, parents=False, exist_ok=False)
+            except OSError:
+                return "ERROR: workspace parent unavailable"
+            if case_root.is_symlink() or not case_root.is_dir():
+                return "ERROR: workspace parent unavailable"
         parent = path.parent
         if not parent.is_dir():
             try:
@@ -516,6 +534,19 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             guard = guard_getter()
             if guard is None:
                 raise GoFailure("chi_local_guard_missing")
+            call_id = getattr(_context, "tool_call_id", None)
+            if type(call_id) is str:
+                reason = guard.contract.refusals.get(call_id)
+                if reason is not None:
+                    record = next((item for item in guard.contract.records
+                                   if item["id"] == call_id and item["result"] is None), None)
+                    if record is None:
+                        raise GoFailure("chi_local_dispatch_unvalidated")
+                    output = "REFUSED: " + reason
+                    journal.refuse_tool(call_id, name, record["arguments"], output,
+                                        secrets=(guard.secret, guard.session))
+                    guard.contract.record_result(call_id, output)
+                    return output
             try:
                 args = json.loads(payload)
             except Exception:
