@@ -46,11 +46,12 @@
 
 ## 4. 文档与验收
 
-- [ ] 更新 `REVIEW_STATE.md` 短状态与报告链接。
-- [ ] 写阶段报告：实现范围、证据、失败、未验证项、独立复审重点。
+- [x] 更新 `REVIEW_STATE.md` 短状态与报告链接。
+- [x] 写阶段报告：实现范围、证据、失败、未验证项、独立复审重点。
 - [x] Docker 定向/全量测试；既有 3 个 import error 单列。
-- [ ] Gemini 独立复审；0 Blocker 后再决定是否合并/重建 bundle。
-- [ ] 不授权真实模型/B/C/Trial/judge/发布；不自动重跑九题。
+- [x] Gemini 独立复审；0 Blocker，建议合并；Task 8 保持 deferred。
+- [ ] 用户最终合并；合并后再重建 bundle。
+- [x] 不授权真实模型/B/C/Trial/judge/发布；不自动重跑九题。
 
 ## 5. 待讨论（未决）
 
