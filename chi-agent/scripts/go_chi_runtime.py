@@ -87,7 +87,8 @@ async def run_coding_b(client, guard, tools):
 async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_path,
                   logs_dir, workspace_root, handbook_root, tool_references, lower,
                   server_factory=None, auxiliary=None, evidence_shadow=None,
-                  capabilities="f0-f3-v1", context_budget=DEFAULT_BUDGET, requirements=None):
+                  capabilities="f0-f3-v1", context_budget=DEFAULT_BUDGET, requirements=None,
+                  main_max_tokens=8192):
     """Run one role using a previously preflighted journal and injected transport.
 
     No authorization or bundle/source verification is performed here. The
@@ -143,7 +144,9 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             raise GoFailure("chi_requirements_configuration_invalid")
     elif "requirements" in journal.run["launch"]:
         raise GoFailure("chi_requirements_configuration_invalid")
-    if check_budget(measure_request({"messages": [], "max_tokens": 8192}), context_budget) == "chi_context_budget_invalid":
+    if type(main_max_tokens) is not int or not 1024 <= main_max_tokens <= 32768:
+        raise GoFailure("chi_context_budget_invalid")
+    if check_budget(measure_request({"messages": [], "max_tokens": main_max_tokens}), context_budget) == "chi_context_budget_invalid":
         raise GoFailure("chi_context_budget_invalid")
     logs_dir = __import__("pathlib").Path(logs_dir)
     logs_dir.mkdir(mode=0o700, parents=False, exist_ok=False)
@@ -294,7 +297,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                              fatal_getter=(lambda: auxiliary.fatal) if auxiliary else None,
                              context_recorder=record_context, context_limit=context_budget,
                              recovery_blocker=recovery_blocker, canonical_tools=canonical_tools,
-                             wire_recorder=record_wire, summary_snapshot=summary_snapshot)
+                             wire_recorder=record_wire, summary_snapshot=summary_snapshot,
+                             main_max_tokens=main_max_tokens)
             holder["guard"] = guard
             bridge.guard = guard
             client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",
@@ -316,7 +320,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             model = BudgetModel(model="deepseek-v4.1-flash", openai_client=client,
                                 should_replay_reasoning_content=_same_route_reasoning)
             agent = Agent(name="chi-go-evaluation", instructions=official.SYSTEM_PROMPT, model=model, tools=tools,
-                          model_settings=ModelSettings(max_tokens=8192, reasoning={"effort": "high"},
+                          model_settings=ModelSettings(max_tokens=main_max_tokens, reasoning={"effort": "high"},
                               extra_body={"thinking": {"type": "enabled"}}, extra_headers={"User-Agent": "chi-agent"},
                               retry=ModelRetrySettings(max_retries=0)))
             run_result = await Runner.run(agent, input=instruction, max_turns=50)

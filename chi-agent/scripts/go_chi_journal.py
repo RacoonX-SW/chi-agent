@@ -32,6 +32,13 @@ SUMMARY_POLICY = "chi-input-summary-v1"
 REQUIREMENTS_POLICY = "chi-requirements-v1"
 
 
+def _main_max_tokens(launch: dict) -> int:
+    value = launch.get("main_max_tokens", 8192) if type(launch) is dict else 8192
+    if type(value) is not int or not 1024 <= value <= 32768:
+        raise ValueError("chi_output_budget_invalid")
+    return value
+
+
 def _requirements_enabled(launch: dict, kind: str) -> bool:
     if type(launch) is not dict or type(kind) is not str \
             or kind not in {"chi", "coding_b", "patient_probe"}:
@@ -519,11 +526,12 @@ def _recovery_source(root: Path, run: dict, parent_round: int):
                                   parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
     request_body, response_body = parse(request["body_utf8"]), parse(response["body_utf8"])
     if (type(request_body) is not dict or type(request_body.get("max_tokens")) is not int
-            or request_body["max_tokens"] != 8192):
+            or request_body["max_tokens"] != _main_max_tokens(run["launch"])):
         raise ValueError("chi_recovery_invalid")
     incoming, outgoing = GuardedTransport._usage(response_body)
     if (item.get("usage") != {"input_tokens": incoming, "output_tokens": outgoing}
-            or response.get("usage") != response_body.get("usage") or incoming > 1048576 or outgoing > 8192):
+            or response.get("usage") != response_body.get("usage") or incoming > 1048576
+            or outgoing > _main_max_tokens(run["launch"])):
         raise ValueError("chi_recovery_invalid")
     billed, error, halt = _fee_decision(response_body["usage"], run["launch"].get("fee_policy"))
     if billed != item.get("billing") or error != item.get("billing_error") or halt is not None:
@@ -859,11 +867,14 @@ class ChiJournal:
                 confirms = 0
                 for index, item in enumerate(a["requests"], 1):
                     effective_fee_stop = None
+                    expected_limit = (_main_max_tokens(a['launch'])
+                                      if a['kind'] == 'chi' and item.get('purpose') in {'main', 'continuation'}
+                                      else output_limit(a['kind'], item.get('purpose'), a['launch'].get('input_summary')))
                     if (type(item) is not dict or item.get("round") != index
                             or item.get("purpose") not in ({"main", "confirmation"} | ({"patient_simulator"} if aux_enabled else set()) | ({"continuation"} if recovery_enabled else set()) | ({"summary"} if summary_enabled else set()))
                             or (a["kind"] == "coding_b" and item.get("purpose") != "main")
                             or (a['kind'] == 'patient_probe' and item.get('purpose') != 'patient_simulator')
-                            or item.get("max_tokens") != output_limit(a['kind'], item.get('purpose'), a['launch'].get('input_summary'))
+                            or item.get("max_tokens") != expected_limit
                             or type(item.get("request_sha256")) is not str or not DIGEST.fullmatch(item["request_sha256"])):
                         raise ValueError
                     required = {"round", "purpose", "max_tokens", "request_sha256", "status",
@@ -1620,7 +1631,9 @@ class ChiJournal:
             raise GoFailure('chi_reservation_invalid')
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
         entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
-                 "max_tokens": output_limit(self.run['kind'], purpose, self.run['launch'].get('input_summary')),
+                 "max_tokens": (_main_max_tokens(self.run['launch'])
+                                if self.run['kind'] == 'chi' and purpose in {'main', 'continuation'}
+                                else output_limit(self.run['kind'], purpose, self.run['launch'].get('input_summary'))),
                  "request_sha256": hashlib.sha256(raw).hexdigest(), "status": "pending",
                  "request_evidence_sha256": None, "response_evidence_sha256": None,
                  "diagnostic_evidence_sha256": None}

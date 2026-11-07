@@ -58,6 +58,11 @@ class EntryTests(unittest.TestCase):
                                            "--context-max-estimated-tokens", "2000000"])
         self.assertEqual(args.context_max_estimated_tokens, 2_000_000)
 
+    def test_main_max_tokens_is_parsed_for_live(self):
+        args = entry._parser().parse_args(["live", "--bundle-sha256", "a" * 64,
+                                           "--main-max-tokens", "16384"])
+        self.assertEqual(args.main_max_tokens, 16384)
+
     def test_profile_matches_entry_config_without_patching(self):
         raw = (entry.ROOT / "profiles/go-chi-entry.json").read_bytes()
         config = entry.json.loads(raw, object_pairs_hook=entry._pairs,
