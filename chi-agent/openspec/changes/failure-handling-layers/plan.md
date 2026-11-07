@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> 实现状态（2026-11-07）：Task 1/2/3/4/5/6 已完成并通过 Docker 测试；Task 7/8/10 未完成。实现记录见 [`tasks.md`](tasks.md)。
+
 来源设计：[`design.md`](design.md)、[`specs/failure-handling-layers/spec.md`](specs/failure-handling-layers/spec.md)、[`tasks.md`](tasks.md)。本计划只展开执行步骤；**不写代码、不跑真实 B/C、不授权 judge/Trial/发布**。
 
 ## 0. 目标与边界
