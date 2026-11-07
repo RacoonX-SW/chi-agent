@@ -105,7 +105,7 @@ docker run --rm --network none \
 
 - [ ] 写失败测试：2 次 schema + 1 次 JSON = 总 3 次；第 4 次停止；同一错误重复第二次后提前停止。
 - [ ] 运行测试，确认 **FAIL**。
-- [ ] 实现每类/每 run 计数；run log 暴露 `schema_refusals`/`json_refusals`/总恢复数。
+- [ ] 实现每类/每 run 计数；run log 暴露 `schema_refusals`/`json_refusals`/总恢复数。当前 `schema_refusals` 是 per-run 2，需迁移为 per-class + 总上限，并保留既有 2 次测试语义。
 - [ ] 运行测试，确认 **PASS**。
 - [ ] 提交：`fix: bound output-contract recovery per class and run`
 
@@ -128,7 +128,7 @@ docker run --rm --network none \
 **Files:**
 - Test: `tests/test_go_chi_capabilities_runtime.py`、`tests/test_go_chi_contract.py`
 
-- [ ] 加合成 runtime 场景：invalid JSON → REFUSED → 模型纠正 → run 继续；`name:null` length → recovery；第 3 次错误 → 安全停止。
+- [ ] 加合成 runtime 场景：invalid JSON → REFUSED → 模型纠正 → run 继续；`name:null` length → recovery；超过总恢复上限（第 4 次）→ 安全停止。
 - [ ] 运行测试，确认 **PASS**。
 - [ ] 提交：`test: cover output-contract recovery end to end`
 
