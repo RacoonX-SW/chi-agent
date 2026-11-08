@@ -20,6 +20,9 @@ from opencode_go_provider import (GoFailure, _contains_secret, _unique,
 from b_provider_transport import GuardedTransport
 from go_chi_policy import TIME_POLICY, SUMMARY_VERSIONS, output_limit
 
+MAX_FULL_RESULT_BYTES = 8 * 1024 * 1024
+MAX_FULL_RESULTS_TOTAL_BYTES = 64 * 1024 * 1024
+
 
 class ChiGuard(httpx.AsyncBaseTransport):
     """Zero-retry transport with a shared request ledger and fixed route.
@@ -65,6 +68,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self._active_summary = None
         self._active_projection = None
         self.full_results = {}
+        self.full_result_bytes = 0
         self.context_policy = journal.run['launch'].get('context_policy')
         if (self.context_policy == 'chi-context-v3'
                 and (journal.run['launch'].get('output_recovery') is not None
@@ -478,7 +482,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                 events[event['call_id']] = event['event']
                         projected, report = project_messages(
                             source_body['messages'], records=records, events=events,
-                            canonical_tools=self.canonical_tools, anchor=anchor)
+                            canonical_tools=self.canonical_tools, anchor=anchor,
+                            project_results=pressure)
                         if report['saved_bytes'] > 0 or anchor is not None:
                             wire_body = dict(source_body)
                             wire_body['messages'] = projected
@@ -654,7 +659,15 @@ class ChiGuard(httpx.AsyncBaseTransport):
 
     def record_full_result(self, call_id: str, result: str) -> None:
         """Keep the full tool result for deterministic projection evidence."""
-        if (type(call_id) is not str or not call_id or type(result) is not str
-                or len(result.encode("utf-8")) > 8 * 1024 * 1024):
+        if (type(call_id) is not str or not call_id or type(result) is not str):
             raise GoFailure("chi_tool_event_invalid")
+        size = len(result.encode("utf-8"))
+        if size > MAX_FULL_RESULT_BYTES:
+            raise GoFailure("chi_tool_event_invalid")
+        previous = self.full_results.get(call_id)
+        previous_size = len(previous.encode("utf-8")) if type(previous) is str else 0
+        total = self.full_result_bytes - previous_size + size
+        if total > MAX_FULL_RESULTS_TOTAL_BYTES:
+            raise GoFailure("chi_context_assembly_limit")
         self.full_results[call_id] = result
+        self.full_result_bytes = total

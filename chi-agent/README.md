@@ -503,7 +503,9 @@ docker run --rm --network none \
 1. 从 config 移除 `output_recovery`（并让 `role_operator` 不再传该 flag），先验证 v3 基础链路；或
 2. 等 recovery 与投影的组合另行实现并审核后，再启用 recovery。
 
-entry 当前仍固定 `deepseek-v4.1-flash` / 对应 profile；更换主模型需要同时更新 profile、bundle 和 B。
+v3 每次请求都注入锚点，但旧工具结果只在预算达到 **50%** 时投影；低压力时只增加锚点。`full_results` 单结果上限 8MB、总量上限 64MB，超限以 `chi_context_assembly_limit` fail closed。
+
+entry 当前仍固定 `deepseek-v4.1-flash` / 对应 profile；没有运行时模型选择，更换主模型需要同时更新 profile、bundle 和 B。
 
 
 

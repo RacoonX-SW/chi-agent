@@ -65,6 +65,9 @@
 - [x] 复审 P1-5/P1-6：终态只接受 `returned`；投影使用完整 evidence hash。
 - [x] 复审 P1-7：新错误码注册到 diagnostics。
 - [x] 复审 P2：锚点 wire 校验、role alias、索引缓存、next_offset 单位、50% 阈值、README/runbook 迁移说明。
+- [x] 合并后修复：锚点不再绕过 50% 投影阈值（`project_results` 开关）。
+- [x] 合并后修复：`full_results` 总量 64MB fail closed；`chi_context_assembly_limit` 注册。
+- [x] 合并后文档：DeepSeek profile 固定限制、BDE 静态必要步骤校准结果。
 - [ ] 独立复审；0 Blocker 后再谈真实运行。
 - [ ] 用户最终合并；不 auto-merge。
 

@@ -90,6 +90,40 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(projected[7]["content"], self.mutation)
         self.assertEqual(projected[9]["content"], "latest")
 
+    def test_anchor_only_does_not_project_results(self):
+        anchor = {"text": '{"schema":"chi-intent-anchor-v1"}', "sha256": "a" * 64}
+        projected, report = project_messages(
+            self.messages, records=self.records,
+            events={"c1": "returned", "c2": "returned", "c3": "returned", "c4": "returned"},
+            canonical_tools={"read": "local-fs-read", "write": "cases.create_from_order"},
+            anchor=anchor, project_results=False)
+        self.assertEqual(projected[2], {"role": "user", "content": anchor["text"]})
+        self.assertEqual(projected[4]["content"], self.big)
+        self.assertEqual(projected[6]["content"], self.big)
+        self.assertEqual(report["replaced"], 0)
+        self.assertEqual(report["deduped"], 0)
+        self.assertLessEqual(report["saved_bytes"], 0)
+
+    def test_anchor_plus_pressure_projects_results(self):
+        anchor = {"text": '{"schema":"chi-intent-anchor-v1"}', "sha256": "a" * 64}
+        projected, report = project_messages(
+            self.messages, records=self.records,
+            events={"c1": "returned", "c2": "returned", "c3": "returned", "c4": "returned"},
+            canonical_tools={"read": "local-fs-read", "write": "cases.create_from_order"},
+            anchor=anchor, project_results=True)
+        self.assertEqual(projected[2], {"role": "user", "content": anchor["text"]})
+        self.assertIn("chi-tool-result-ref-v1", projected[4]["content"])
+        self.assertGreater(report["replaced"], 0)
+        self.assertGreater(report["saved_bytes"], 0)
+
+    def test_anchor_only_projection_is_deterministic(self):
+        anchor = {"text": '{"schema":"chi-intent-anchor-v1"}', "sha256": "a" * 64}
+        one, _ = project_messages(self.messages, records=self.records, events={},
+                                  canonical_tools={}, anchor=anchor, project_results=False)
+        two, _ = project_messages(self.messages, records=self.records, events={},
+                                  canonical_tools={}, anchor=anchor, project_results=False)
+        self.assertEqual(canonical_sha(one), canonical_sha(two))
+
     def test_invalid_input_is_rejected(self):
         with self.assertRaises(ValueError):
             project_messages("bad", records={}, events={}, canonical_tools={})

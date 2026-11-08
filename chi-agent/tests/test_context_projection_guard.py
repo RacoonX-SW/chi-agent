@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 
@@ -11,6 +12,7 @@ from go_chi_assembly import truncate_tool_text
 from go_chi_context import DEFAULT_BUDGET_V3, measure_request
 from go_chi_guard import ChiGuard
 from go_chi_journal import ChiJournal
+from opencode_go_provider import GoFailure
 from request_budget import feedback
 from test_go_chi_guard import SECRET, SESSION, TOOLS, USAGE, URL, body, request
 
@@ -106,11 +108,12 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
 
             anchor = {"text": '{"schema":"chi-intent-anchor-v1"}', "sha256":
                       hashlib.sha256(b'{"schema":"chi-intent-anchor-v1"}').hexdigest()}
+            limit = dict(DEFAULT_BUDGET_V3, max_input_tokens=1000)
             guard = ChiGuard(journal, SECRET, SESSION, httpx.MockTransport(answer),
                              tools=TOOLS, system="system", instruction="instruction",
                              claimed=lambda: False, confirmation=lambda: None,
                              canonical_tools={"read": "local-fs-read"},
-                             context_limit=DEFAULT_BUDGET_V3,
+                             context_limit=limit,
                              anchor_getter=lambda: anchor)
             guard.contract.accept_batch(assistant("c1"))
             guard.contract.record_result("c1", visible)
@@ -160,8 +163,31 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
             await guard.handle_async_request(request(data))
             self.assertEqual(sent[0]["messages"][2],
                              {"role": "user", "content": anchor["text"]})
+            self.assertIn("tool result 1", sent[0]["messages"][4]["content"])
+            self.assertNotIn("chi-tool-result-ref-v1", sent[0]["messages"][4]["content"])
             entry = journal.run["requests"][0]
             self.assertEqual(entry["projection"]["anchor_sha256"], anchor["sha256"])
+            journal.finish("failed")
+            journal.close()
+
+
+class FullResultLimitTests(unittest.TestCase):
+    def test_total_limit_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = ChiJournal(Path(directory), identity="a" * 64, evaluation="e",
+                                 task="t", attempt="a", run="r",
+                                 launch={"context_policy": "chi-context-v3"})
+            guard = ChiGuard(journal, SECRET, SESSION, httpx.MockTransport(lambda r: r),
+                             tools=TOOLS, system="system", instruction="instruction",
+                             claimed=lambda: False, confirmation=lambda: None)
+            with patch("go_chi_guard.MAX_FULL_RESULTS_TOTAL_BYTES", 10):
+                guard.record_full_result("c1", "123456")
+                with self.assertRaises(GoFailure) as caught:
+                    guard.record_full_result("c2", "123456")
+                self.assertEqual(caught.exception.code, "chi_context_assembly_limit")
+            with self.assertRaises(GoFailure) as caught:
+                guard.record_full_result("c3", "x" * (8 * 1024 * 1024 + 1))
+            self.assertEqual(caught.exception.code, "chi_tool_event_invalid")
             journal.finish("failed")
             journal.close()
 

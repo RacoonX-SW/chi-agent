@@ -271,16 +271,19 @@ def _tool_message(message):
 
 
 def project_messages(messages, *, records, events, canonical_tools, keep_recent_batches=2,
-                     min_read_bytes=512, anchor=None):
+                     min_read_bytes=512, anchor=None, project_results=True):
     """Project older tool results into deterministic placeholders/records.
 
     ``messages`` is the complete source history validated by ToolContract. The
     returned messages keep the same assistant/tool_call_id structure; only tool
     contents change. The most recent batches stay complete. When ``anchor`` is
     provided, it is inserted as the second user message at index 2; the source
-    history remains anchor-free.
+    history remains anchor-free. When ``project_results`` is false, only the
+    anchor is injected and no old tool result is changed.
     """
     if type(messages) is not list or type(records) is not dict or type(events) is not dict:
+        raise ValueError("chi_assembly_projection_invalid")
+    if type(project_results) is not bool:
         raise ValueError("chi_assembly_projection_invalid")
     projected = json.loads(json.dumps(messages, ensure_ascii=False, allow_nan=False))
     anchor_sha = None
@@ -310,6 +313,8 @@ def project_messages(messages, *, records, events, canonical_tools, keep_recent_
     replaced = 0
     deduped = 0
     for batch_index, (start, end, ids) in enumerate(batches):
+        if not project_results:
+            break
         if batch_index >= keep_from:
             continue
         for position in range(start + 1, end):
