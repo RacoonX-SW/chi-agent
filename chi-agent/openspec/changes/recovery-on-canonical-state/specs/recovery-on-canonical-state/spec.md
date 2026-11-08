@@ -76,6 +76,12 @@
 - Given v3 main 请求；
 - When 写入 journal；
 - Then 保存 `NNN-source.json`（`chi-source-body-v1`，≤8MB）并记录 `source_evidence_sha256`；continuation 复用父 main 的 source。
+- New v3 run 的 launch 带 `source_evidence_policy=canonical-v1`；缺 source 的 main 或 continuation 指向无 source 的 main → `chi_source_evidence_missing`。旧 v3 无该 policy 时只读兼容。
+
+### E5 legacy view_identity
+- Given PR81 产生的 v3 `view_identity` 没有 `claimed`；
+- When reader 校验；
+- Then 按 legacy 读取，不迁移、不改写。
 
 ### E3 旧 permit 兼容
 - Given 旧 v1 permit（无 view/anchor 字段）；

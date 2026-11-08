@@ -37,7 +37,7 @@
 既有：
 
 - `tests.test_go_chi_recovery_journal` + `tests.test_go_chi_guard_recovery`：48 passed（pytest）。
-- 全量 `unittest discover`：**750 tests / 23 skipped / 3 个既有 import error**。
+- 全量 `unittest discover`：**754 tests / 23 skipped / 3 个既有 import error**。
 - `role_operator` 离线容器：11 tests OK。
 
 ## 旧 v1 兼容
@@ -58,6 +58,14 @@
 - `messages[2]` 锚点与真实 SDK/DeepSeek 的兼容性仍未实测；需要真实最小 length + continuation 验证。
 - regenerate 从 L0 source body 使用 `chi-context-projection-regenerate-v1`（`keep_recent_batches=1`、`project_results=True`）重新投影并记录 `parent_view_sha256` / 新 `view_sha256`；不重放 mutation。
 - reader 现在保存并重放 v3 main source 投影；旧 run 没有 source evidence 时仍按旧证据只读兼容。
+
+## 复审修复记录（source replay）
+
+- P1：`_replay_source_view` 现在包含 `refused` / `failed` 工具事件，并从 tool evidence 取完整结果；旧拒绝/失败工具结果可正常重放。
+- P2-1：`view_identity.claimed` 允许旧 v3 缺失；新 guard 继续写入。旧 v3 证据按 legacy 读取，不迁移。
+- P2-2：new v3 launch 写 `source_evidence_policy=canonical-v1`；journal/reader 要求 main 有 source，continuation 的 parent 必须有 source，否则 `chi_source_evidence_missing`。旧 v3 无 policy 只读兼容。
+- P2-3 未做：source 文件先写后 entry；若后续失败可能留下孤儿文件；source 总存储未设上限，保留为残余风险。
+- 全量更新为 **754 tests / 23 skipped / 3 个既有 import error**；48 recovery pytest 通过。
 - 未实现 P3（LLM 摘要 + recovery）、任务级 resume、RAG/L1/L2、reasoning 压缩。
 - 未改 240s、默认 `main_max_tokens=8192`、REQUIRED 表。
 - 未重建 bundle、未取得新 B。

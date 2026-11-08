@@ -861,7 +861,8 @@ def main(argv=None, *, development=None):
                       "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(),
                       "mcp_url_sha256": hashlib.sha256(args.mcp_url.encode()).hexdigest(),
                       "tool_references_sha256": references, "handbook_sha256": _handbook_digest(handbook),
-                      "context_policy": "chi-context-v3"}
+                      "context_policy": "chi-context-v3",
+                      "source_evidence_policy": "canonical-v1"}
             if args.output_recovery is not None:
                 launch['output_recovery'] = args.output_recovery
             if args.recovery_view_policy is not None:

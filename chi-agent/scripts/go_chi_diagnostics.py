@@ -32,7 +32,7 @@ STAGES = {
     "completion": frozenset({"claim_required", "drift_hard", "anchor_invalid",
                             "profile_invalid", "state_program_owned", "policy_incompatible",
                             "assembly_limit"}),
-    "source": frozenset({"mismatch", "too_large"}),
+    "source": frozenset({"mismatch", "too_large", "missing"}),
     "other": frozenset({"unspecified"}),
 }
 
@@ -74,6 +74,7 @@ _CODE_CAUSES = {
     "chi_recovery_policy_incompatible": ("recovery", "policy_incompatible"),
     "chi_view_source_mismatch": ("source", "mismatch"),
     "chi_source_too_large": ("source", "too_large"),
+    "chi_source_evidence_missing": ("source", "missing"),
     "chi_claim_required": ("completion", "claim_required"),
     "chi_drift_hard": ("completion", "drift_hard"),
     "chi_drift_event_invalid": ("completion", "drift_hard"),
@@ -220,6 +221,7 @@ chi_sdk_identity_mismatch
 chi_sdk_identity_unavailable
 chi_secret_in_body
 chi_source_too_large
+chi_source_evidence_missing
 chi_state_case_mismatch
 chi_state_exists
 chi_state_invalid

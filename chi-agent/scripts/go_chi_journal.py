@@ -569,7 +569,7 @@ def _replay_source_view(root: Path, run: dict, source_body: dict, wire_body: dic
                     calls[call['id']] = call
     records, events = {}, {}
     for event in run.get('tool_events', []):
-        if type(event) is not dict or event.get('event') not in {'returned', 'returned_error'}:
+        if type(event) is not dict or event.get('event') not in {'returned', 'returned_error', 'refused', 'failed'}:
             continue
         call_id = event.get('call_id')
         call = calls.get(call_id)
@@ -1000,8 +1000,9 @@ class ChiJournal:
                         vi = item['view_identity']
                         fields = {'schema', 'source_sha256', 'view_sha256', 'anchor_sha256',
                                   'history_length', 'recovery_mode', 'parent_round', 'frozen_view',
-                                  'projection_rule', 'pressure', 'claimed'}
-                        if (type(vi) is not dict or set(vi) != fields
+                                  'projection_rule', 'pressure'}
+                        allowed_fields = fields | {'claimed'}
+                        if (type(vi) is not dict or set(vi) not in (fields, allowed_fields)
                                 or vi.get('schema') != 'chi-view-identity-v1'
                                 or any(type(vi.get(k)) is not str or not DIGEST.fullmatch(vi[k])
                                        for k in ('source_sha256', 'view_sha256'))
@@ -1017,7 +1018,7 @@ class ChiJournal:
                                     'chi-context-projection-v1',
                                     'chi-context-projection-regenerate-v1'}
                                 or type(vi.get('pressure')) is not bool
-                                or type(vi.get('claimed')) is not bool):
+                                or ('claimed' in vi and type(vi.get('claimed')) is not bool)):
                             raise ValueError
                     if 'source_evidence_sha256' in item:
                         required.add('source_evidence_sha256')
@@ -1072,6 +1073,17 @@ class ChiJournal:
                             keep_recent_batches=2, project_results=vi['pressure'])
                         if replay_sha != vi['view_sha256']:
                             raise GoFailure('chi_view_source_mismatch')
+                    source_policy = (a.get("launch", {}).get("context_policy") == "chi-context-v3"
+                                     and a.get("launch", {}).get("source_evidence_policy") == "canonical-v1")
+                    if source_policy:
+                        if item.get("purpose") == "main" and 'source_evidence_sha256' not in item:
+                            raise GoFailure("chi_source_evidence_missing")
+                        if item.get("purpose") == "continuation":
+                            parent_round = (item.get('view_identity') or {}).get('parent_round')
+                            if (type(parent_round) is not int or parent_round < 1
+                                    or parent_round > len(a["requests"])
+                                    or 'source_evidence_sha256' not in a["requests"][parent_round - 1]):
+                                raise GoFailure("chi_source_evidence_missing")
                     if ('dispatch' in req) != ('dispatch_version' in item): raise ValueError
                     if 'dispatch' in req:
                         dispatch = req['dispatch']
@@ -1262,7 +1274,8 @@ class ChiJournal:
                                       or any(p.is_symlink() or not p.is_file() for p in receipts.iterdir())): raise ValueError
             if expected_receipts and not receipts.is_dir(): raise ValueError
         except Exception as exc:
-            if isinstance(exc, GoFailure) and exc.code == 'chi_view_source_mismatch':
+            if isinstance(exc, GoFailure) and exc.code in {'chi_view_source_mismatch',
+                                                           'chi_source_evidence_missing'}:
                 raise
             raise GoFailure("chi_history_invalid") from exc
 
@@ -1939,8 +1952,9 @@ class ChiJournal:
         if view_identity is not None:
             fields = {'schema', 'source_sha256', 'view_sha256', 'anchor_sha256',
                       'history_length', 'recovery_mode', 'parent_round', 'frozen_view',
-                      'projection_rule', 'pressure', 'claimed'}
-            if (type(view_identity) is not dict or set(view_identity) != fields
+                      'projection_rule', 'pressure'}
+            allowed_fields = fields | {'claimed'}
+            if (type(view_identity) is not dict or set(view_identity) not in (fields, allowed_fields)
                     or view_identity.get('schema') != 'chi-view-identity-v1'
                     or any(type(view_identity.get(k)) is not str or not DIGEST.fullmatch(view_identity[k])
                            for k in ('source_sha256', 'view_sha256'))
@@ -1958,7 +1972,7 @@ class ChiJournal:
                         'chi-context-projection-v1',
                         'chi-context-projection-regenerate-v1'}
                     or type(view_identity.get('pressure')) is not bool
-                    or type(view_identity.get('claimed')) is not bool):
+                    or ('claimed' in view_identity and type(view_identity.get('claimed')) is not bool)):
                 raise GoFailure('chi_reservation_invalid')
         source_ref = None
         if source_body is not None:
@@ -1981,6 +1995,17 @@ class ChiJournal:
                                             "source", source_doc)
             except Exception:
                 raise GoFailure("chi_evidence_persistence_failed") from None
+        source_policy = (self.run["launch"].get("context_policy") == "chi-context-v3"
+                         and self.run["launch"].get("source_evidence_policy") == "canonical-v1")
+        if source_policy:
+            if purpose == "main" and source_ref is None:
+                raise GoFailure("chi_source_evidence_missing")
+            if purpose == "continuation":
+                parent_round = view_identity.get("parent_round") if type(view_identity) is dict else None
+                if (type(parent_round) is not int or parent_round < 1
+                        or parent_round > len(self.run["requests"])
+                        or "source_evidence_sha256" not in self.run["requests"][parent_round - 1]):
+                    raise GoFailure("chi_source_evidence_missing")
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
         entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
                  "max_tokens": (_main_max_tokens(self.run['launch'])

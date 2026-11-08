@@ -21,6 +21,7 @@
 - [x] 复审修复：partial v2 用父请求重新派生视图并比较；regenerate 不重放 source 投影。
 - [x] 复审修复：`pressure` 表示视图是否使用结果投影；regenerate 强制 true。
 - [x] source evidence：v3 main 写 `NNN-source.json`（≤8MB）；continuation 复用父 main；reader 重放 main/regenerate 投影。
+- [x] 复审修复：重放包含 `refused`/`failed` 工具事件；`view_identity.claimed` 允许旧 v3 缺失；`source_evidence_policy=canonical-v1` 强制新 v3 main 写 source。
 - [x] 文档：design/runbook/README；明确默认关闭。
 
 ## P3：摘要 + recovery（另行评估）

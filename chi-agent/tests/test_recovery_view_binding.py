@@ -40,6 +40,7 @@ def setup(root, payloads):
     journal = ChiJournal(root, identity="a" * 64, evaluation="e", task="t",
                          attempt="a", run="r",
                          launch={"context_policy": "chi-context-v3",
+                                 "source_evidence_policy": "canonical-v1",
                                  "output_recovery": "chi-output-recovery-v1",
                                  "recovery_view_policy": "canonical-v1",
                                  "role": "payer"})
@@ -173,6 +174,47 @@ class RecoveryViewBindingTests(unittest.TestCase):
             raw_state = state_path.read_bytes()
             with self.assertRaisesRegex(GoFailure, "chi_view_source_mismatch"):
                 inspect_history(root, "a" * 64, hashlib.sha256(raw_state).hexdigest())
+
+    def test_legacy_v3_without_claimed_is_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal, guard, sent = setup(root, [
+                response({"content": "part"}, "length"),
+                response({"content": "done"}, "stop"),
+            ])
+            asyncio.run(guard.handle_async_request(request(local_body())))
+            for item in journal.run["requests"]:
+                item["view_identity"].pop("claimed", None)
+            journal.finish("failed")
+            journal.close()
+            raw = (root / "chi-accounting.json").read_bytes()
+            self.assertEqual(inspect_history(root, "a" * 64,
+                                             hashlib.sha256(raw).hexdigest())["status"], "inspected")
+
+    def test_source_policy_requires_main_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            journal = ChiJournal(Path(directory), identity="a" * 64, evaluation="e",
+                                 task="t", attempt="a", run="r",
+                                 launch={"context_policy": "chi-context-v3",
+                                         "source_evidence_policy": "canonical-v1"})
+            with self.assertRaisesRegex(GoFailure, "chi_source_evidence_missing"):
+                journal.reserve(b"{}", "main")
+            journal.close()
+
+    def test_source_policy_requires_parent_source_for_continuation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal, guard, sent = setup(root, [
+                response({"content": "part"}, "length"),
+                response({"content": "done"}, "stop"),
+            ])
+            asyncio.run(guard.handle_async_request(request(local_body())))
+            journal.run["requests"][0].pop("source_evidence_sha256", None)
+            journal.finish("failed")
+            journal.close()
+            raw = (root / "chi-accounting.json").read_bytes()
+            with self.assertRaisesRegex(GoFailure, "chi_source_evidence_missing"):
+                inspect_history(root, "a" * 64, hashlib.sha256(raw).hexdigest())
 
     def test_missing_view_fields_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
