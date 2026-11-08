@@ -214,7 +214,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     holder, exchanges = {}, []
     binding = PatientBinding(instruction, journal) if role == "provider" else None
     state = (TaskState(logs_dir / "task-state", run=journal.run["run"], role=role, binding=binding,
-                       requirements=requirements, instruction=instruction)
+                       requirements=requirements, instruction=instruction,
+                       context_policy=journal.run['launch'].get('context_policy'))
              if capabilities == "f0-f3-v1" else None)
     factory = server_factory or (lambda url: selected_server(url, auxiliary=auxiliary is not None))
     prior_trace = get_trace_provider()._manual_disabled
@@ -232,7 +233,8 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                                 client_getter=lambda: holder.get("client"), confirmation_context=context,
                                 exchanges=exchanges, dispatch_lock=bridge.lock, instruction=instruction,
                                 evidence_shadow=evidence_shadow, state=state, capabilities=capabilities,
-                                requirements=requirements)
+                                requirements=requirements,
+                                context_policy=journal.run['launch'].get('context_policy'))
             tools = bridge.tools + local
             definitions = [Converter.tool_to_openai(tool) for tool in tools]
             if len({tool.name for tool in tools}) != len(tools):
@@ -298,7 +300,10 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                              context_recorder=record_context, context_limit=context_budget,
                              recovery_blocker=recovery_blocker, canonical_tools=canonical_tools,
                              wire_recorder=record_wire, summary_snapshot=summary_snapshot,
-                             main_max_tokens=main_max_tokens)
+                             main_max_tokens=main_max_tokens,
+                             anchor_getter=((lambda: state.anchor()) if state is not None
+                                            and journal.run['launch'].get('context_policy') == 'chi-context-v3'
+                                            else None))
             holder["guard"] = guard
             bridge.guard = guard
             client = AsyncOpenAI(api_key=secret, base_url="https://opencode.ai/inference/go/openai/v1",
@@ -326,6 +331,9 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             run_result = await Runner.run(agent, input=instruction, max_turns=50)
             if guard.error is not None or (auxiliary and auxiliary.fatal) or not isinstance(run_result.final_output, str) or not run_result.final_output.strip():
                 raise GoFailure(guard.error or (auxiliary.fatal if auxiliary else None) or "chi_final_missing")
+            if journal.run['launch'].get('context_policy') == 'chi-context-v3' \
+                    and not journal.run['claim_done']:
+                raise GoFailure("chi_claim_required")
             if state is not None and state.data.get("claim_violation"):
                 raise GoFailure("chi_claim_violation")
             if state is not None and journal.run["claim_done"] and state.data["claim"] is None:
@@ -450,10 +458,24 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                     "context_requests": len(context_metrics),
                     "context_max_chars": max((item["total_chars"] for item in context_metrics), default=0),
                     "context_max_estimated_tokens": max(
-                        (item["estimated_tokens"] for item in context_metrics), default=0),
+                        (item.get("estimated_tokens", item.get("estimated_tokens_upper", 0))
+                         for item in context_metrics), default=0),
+                    "context_max_estimated_tokens_upper": max(
+                        (item.get("estimated_tokens_upper", item.get("estimated_tokens", 0))
+                         for item in context_metrics), default=0),
+                    "context_max_estimated_tokens_calibrated": max(
+                        (item.get("estimated_tokens_calibrated", item.get("estimated_tokens", 0))
+                         for item in context_metrics), default=0),
                     "context_prompt_tokens": sum(
                         item["usage"]["input_tokens"] for item in settled),
+                    "context_prompt_tokens_observed": sum(
+                        item["usage"]["input_tokens"] for item in settled),
                 })
+                if context_metrics and settled:
+                    last = context_metrics[-1]
+                    observed = settled[-1]["usage"]["input_tokens"]
+                    if last.get("total_bytes") and observed:
+                        summary["context_bytes_per_token_actual"] = round(last["total_bytes"] / observed, 4)
             if auxiliary is not None:
                 aux = [item for item in journal.run['requests'] if item['purpose'] == 'patient_simulator']
                 summary['patient_simulator_requests'] = len(aux)

@@ -935,3 +935,12 @@ L 回读的结果评估链为：`_capture_review_input()` 在 C 结束后保存�
 - 模型已建 case、写入大部分 new-referral 字段，最后业务写 `cases.create_from_order`；completion 要求 business_status readback，被 transport error 打断。资源 provider 2202→2206、payer 0→1；capture/cleanup 正常。
 - 关键区分：429 和 transport error 都是提供方/网络侧不稳定，不是策略或重复序列化；1800s 窗口仍未真正检验。按规则不自动重试、不静默清 pending。
 - 下一入口：等待提供方稳定，再决定新 state+B-005 或 429/transport acknowledgement；没有明确授权不重跑。没有用户亲自操作证据，不升级为已实践。
+
+### 2026-11-08：上下文工程 v3 的设计取舍
+
+- 预算单位：v3 把“字节硬上限”和“token 上界/校准估计”分开；`estimated_tokens_upper = ceil(bytes/3.0)` 用于硬门禁，`estimated_tokens_calibrated = round(bytes/3.9)` 只用于报告，不能用校准值放宽门禁。
+- 投影位置：源历史保持完整并由 `ToolContract.validate_history` 校验；只把发给模型的 wire 换成 reducer/占位符/规范记录。若在 contract 层改历史，就无法证明模型看到的仍是已执行工具的结果。
+- 锚点：作为 wire 的 `messages[2]`，不写入 SDK 源历史；否则 SDK 的 tool-call 回放和 summary/recovery 的批次假设都会被破坏。真实 SDK/DeepSeek 兼容性仍未实测。
+- mutation：模型不能写 facts/target；目标由程序从 case-scoped observation 和 patient binding 绑定。规范记录只保留程序可推导的 key_ids/hash，不用模型摘要替代。
+- 完成：claim 只是信号；必要步骤、终态对象和回读由程序推导。没有终态对象或回读的“假 claim”必须被拒绝。
+- 未做：240s 读超时、向量 RAG/L1/L2、任务级 resume、reasoning 压缩、摘要+recovery 组合；真实 B/C 与 judge 也未运行。
