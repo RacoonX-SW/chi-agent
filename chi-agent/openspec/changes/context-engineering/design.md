@@ -118,6 +118,8 @@ L6 LLM 摘要（最后手段）
 - wire 投影只在超过预算阈值（如 50%）时启用；
 - 投影必须确定性：相同历史 + 相同策略 → 相同 wire，并记录投影 hash。
 
+**v3 与 recovery/summary 的兼容边界（2026-11-08 复审）：** 本阶段不实现投影与 `output_recovery`/`input_summary` 的组合。entry、journal 和 guard 对 `context_policy=chi-context-v3` + 任一 recovery/summary 选项显式拒绝（`chi_context_policy_incompatible`），不得静默降级。现有带 recovery 的 config 必须先移除 recovery，或等组合实现后再运行。
+
 ### 2.8 预期收益
 
 | 层 | 预期节省 |

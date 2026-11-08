@@ -8,7 +8,7 @@
 ## 结论
 
 - 五项能力均有离线实现和定向测试：预算 v3、工具截断/reducer/投影、事实分层/锚点/漂移、完成门禁、检索 L0。
-- 全量 `unittest discover`：**723 tests / 21 skipped / 3 个既有 import error**，无新增失败。
+- 全量 `unittest discover`：**738 tests / 22 skipped / 3 个既有 import error**，无新增失败。
 - 旧 v1/v2 预算与旧 journal 证据保留只读分支；新 v3 证据的 `inspect_history` 回归通过。
 - bundle/runtime 身份已改变：新增 `go_chi_assembly.py`、`go_chi_completion.py`、`go_chi_index.py` 进入 `PACKAGE_FILES`；预算常量、工具 schema、锚点/完成 schema 也改变哈希。**未重建 bundle、未跑新 B。**
 
@@ -70,7 +70,7 @@ docker run --rm --network none \
   /opt/venv/bin/python -m unittest discover -s tests
 ```
 
-结果：**Ran 723 tests, skipped 21, errors 3**。
+结果：**Ran 738 tests, skipped 22, errors 3**。
 
 3 个既有 import error：
 
@@ -96,7 +96,7 @@ docker run --rm --network none \
 - **未跑真实 B/C、judge、Trial、发布**；所有结论仅离线。
 - `messages[2]` 锚点对真实 SDK/DeepSeek 的兼容性未验证；只做了离线契约/回放。
 - 锚点与 `input_summary`/`output_recovery` 的组合未实现；两者默认关闭，组合场景未验证。
-- wire 投影阈值使用 40%（设计文字举例 50%）；需要在开发集上用真实上下文校准。
+- ~~wire 投影阈值使用 40%（设计文字举例 50%）~~：复审已改回 50%。
 - reducer 只保守处理 `items` 列表；详情/未知工具的字段级 reducer 未展开。
 - 漂移硬规则目前覆盖未读先写（文件写/授权提交）；跨患者仍由 patient binding 负责，其他危险 mutation 未穷举。
 - 完成门禁的必要步骤/终态对象按角色固定，可能过度拦截；需开发集校准。
@@ -109,3 +109,35 @@ docker run --rm --network none \
 2. 重建 bundle，生成新身份与 B；在真实运行前单独授权。
 3. 先处理 240s 读超时小变更，再安排真实 C 验证。
 4. 用户审核 PR 后决定合并；不 auto-merge。
+
+## 复审修复记录（2026-11-08）
+
+复审结论为暂不通过；本轮继续在同一分支修复，未重写历史、未 force-push、未新建分支。
+
+### P1
+
+- **P1-1 已修复**：`--context-max-estimated-tokens` 恢复字节语义（1..3,500,000），新增 `--context-max-input-tokens`（1..1,000,000），两者互斥；`role_operator` 与 entry 一致。`1500000` → `max_context_bytes=1500000` / `max_input_tokens=500000`；`500000` → 166666；`1` → 1；`0` 和 `3500001` 拒绝；`3500000` 接受。现有 5 份 config 的 `_config` 已在 controller 依赖容器中通过。
+- **P1-2 已修复（最低要求）**：选择显式拒绝 v3 + `output_recovery`/`input_summary`，错误码 `chi_context_policy_incompatible`；entry、journal、guard 三处一致，不静默降级。现有 5 题 config 重跑前必须移除 `output_recovery`（或在组合实现后再启用）。
+- **P1-3 已修复**：JSON 结果走结构化 shrink（数组/字符串），截断后 `json.loads` 成功；无法压缩时回退到合法 JSON envelope。文本仍用头 4096 + 尾 1024。
+- **P1-4 已修复**：reducer 支持 `items`、`result`、`data`、`records`、`rows`；25×32 的 `{"result": [...]}` 保留 10 条选择字段并返回 `total`/`omitted`。
+- **P1-5 已修复**：终态对象只接受 `returned`；`returned_error`/`failed` 不算终态，返回 `completion_business_write_failed`；失败 finalize + 回读测试拒绝 claim。
+- **P1-6 已修复**：guard `full_results` 在截断前登记完整原文；投影 placeholder sha 等于完整 evidence sha，`key_ids` 从完整结果提取；`validate_history` 仍用 visible 结果。
+- **P1-7 已修复**：`go_chi_diagnostics` 新增 `completion` stage 并注册新错误码；run_log 新错误码通过 `_read_run_log`，不触发 fallback。
+
+### P2
+
+- **P2-1 已修复**：新增 `validate_anchor`，guard 对 wire 校验锚点位置、hash、唯一性；缺失/重复/hash 不符测试通过。
+- **P2-2 已修复**：L0 role alias 支持 `provider-pa`、`payer-um`、`care-manager`、`medical-library`、`platform`。
+- **P2-3 已修复**：索引按 root + mtime/数量/大小缓存；第二次 build 返回同一对象，测试覆盖缓存命中。
+- **P2-4 已修复**：文本 marker 的 `next_offset=None`，`offset_unit` 明确提示 `local-fs-read` 用行号/原工具 offset/limit，不再给 codepoints。
+- **P2-5 已记录限制**：entry 仍固定 `deepseek-v4.1-flash` 及 profile；换模型必须同时改 profile、bundle、B。
+- **P2-6 部分修复**：重复读只在 `repeat.count >= 2` 时进入 soft，减少误拦；必要步骤仍按角色固定，列为需开发集校准的残余风险。
+- **P2-7 已修复**：投影阈值改回 50%。
+- **P2-8 已修复**：README/runbook 补充旧 1.5M 字节 → 500k input 与 recovery 移除说明。
+
+### 最新验证
+
+- 定向：64 tests OK（新增/更新 11 个测试文件，覆盖 P1-1 至 P1-7 及 P2-1/P2-2/P2-4）。
+- 全量：**738 tests / 22 skipped / 3 个既有 import error**，无新增失败。
+- `role_operator` 测试在带 controller 依赖的离线容器中：10 tests OK。
+- 旧 v2 兼容、projection/drift inspect、锚点 wire 校验均回归通过。

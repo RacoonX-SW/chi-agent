@@ -7,7 +7,7 @@
 
 - [x] `go_chi_context.py`：新增 `chi-context-v3`，输出 `total_bytes`、`estimated_tokens_upper`、`estimated_tokens_calibrated`、`bytes_per_token_actual`（校准函数）。
 - [x] 删除 v3 的 `max_chars`；硬门禁改为 `U ≤ max_input_tokens` 且 `bytes ≤ max_context_bytes`；v1/v2 只读分支保留。
-- [x] 触发线改为 `U ≥ 0.8 × max_input_tokens`；装配阈值单独使用 40%。
+- [x] 触发线改为 `U ≥ 0.8 × max_input_tokens`；装配投影阈值使用 50%。
 - [x] `go_chi_policy.py`：预算常量与模型 profile（`provider_context_tokens`、`window_safety_fraction`、`bytes_per_token_floor`、`bytes_per_token_observed`）。
 - [x] 启动校验：运行时模型与 profile 一致，否则 fail closed。
 - [x] `run_log`/journal 新字段；旧 v2 证据只读兼容。
@@ -59,6 +59,12 @@
 - [x] 旧 v2 证据 inspect 回归（v2/v1 分支与 unmodified evidence）。
 - [x] bundle/runtime 身份变化说明；重建步骤写入阶段报告。
 - [x] 文档：README/运行手册/学习账本/阶段报告。
+- [x] 复审 P1-1：旧字节 flag 语义恢复；新增 `--context-max-input-tokens`；role_operator/entry 范围一致。
+- [x] 复审 P1-2：v3 + recovery/summary 显式拒绝（`chi_context_policy_incompatible`）。
+- [x] 复审 P1-3/P1-4：JSON 结构化截断；reducer 支持 `result/data/records/rows`。
+- [x] 复审 P1-5/P1-6：终态只接受 `returned`；投影使用完整 evidence hash。
+- [x] 复审 P1-7：新错误码注册到 diagnostics。
+- [x] 复审 P2：锚点 wire 校验、role alias、索引缓存、next_offset 单位、50% 阈值、README/runbook 迁移说明。
 - [ ] 独立复审；0 Blocker 后再谈真实运行。
 - [ ] 用户最终合并；不 auto-merge。
 

@@ -143,4 +143,7 @@ payer/UM 与 CM 分别使用 `--role payer` / `--role cm` 和相应角色 MCP；
 - `run_log.txt` 新增 `context_max_estimated_tokens_upper`、`context_max_estimated_tokens_calibrated`、`context_prompt_tokens_observed`、`context_bytes_per_token_actual`；旧字段仍保留。
 - `drift_events` 只在新 v3 run 出现；旧 journal 读取不要求该键。
 - 包内新增 `go_chi_assembly.py`、`go_chi_completion.py`、`go_chi_index.py`；必须重新导出 bundle 并取得新 B，旧 bundle 不能解释 v3 run。
+- `--context-max-estimated-tokens` 保留字节语义（1..3,500,000）；`--context-max-input-tokens` 是新增 token 参数（1..1,000,000），两者不能同时给。
+- v3 暂不支持 `output_recovery`/`input_summary`；entry/journal/guard 以 `chi_context_policy_incompatible` 显式拒绝。现有带 recovery 的 config 需先移除该字段，或等组合实现后再启用。
+- entry 固定 `deepseek-v4.1-flash` 及其 profile；更换主模型必须同时改 profile、bundle 和 B。
 - 真实 SDK/DeepSeek 对 `messages[2]` 锚点的兼容性、真实长上下文收益和 240s 读超时均未在本阶段验证。

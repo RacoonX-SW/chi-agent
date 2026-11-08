@@ -469,7 +469,7 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
 | 能力 | 入口 | 说明 |
 | --- | --- | --- |
 | 预算 v3 | `go_chi_context.py`、`go_chi_policy.py` | `chi-context-v3`：`total_bytes`、`estimated_tokens_upper`、`estimated_tokens_calibrated`、`bytes_per_token_actual`；硬门禁 500k input / 1.5MB bytes；旧 v1/v2 只读 |
-| 工具截断 | `go_chi_assembly.py`、`go_chi_tools.py`、`go_chi_mcp.py` | 单次文本 ≤ 8K 码点且 ≤ 32KB；头 4096 + 尾 1024 + `next_offset`；完整原文先入 evidence |
+| 工具截断 | `go_chi_assembly.py`、`go_chi_tools.py`、`go_chi_mcp.py` | 单次文本 ≤ 8K 码点且 ≤ 32KB；头 4096 + 尾 1024；JSON 结构化截断保持合法；完整原文先入 evidence |
 | 装配投影 | `go_chi_assembly.py`、`go_chi_guard.py` | 旧 read 占位符、dedup、mutation 规范记录；只改 wire，不改 SDK/contract 源历史；projection hash 入 journal |
 | 状态/锚点 | `go_chi_state.py`、`go_chi_contract.py` | v3 下 facts/target 由程序独占；锚点作为 wire 的 `messages[2]`；源历史仍由 `validate_history` 校验 |
 | 漂移 | `go_chi_state.py`、`go_chi_journal.py` | 软漂移拒绝并计数；同类 2 次、run 内 3 次后硬停止；`drift_events` 可 inspect |
@@ -491,6 +491,19 @@ docker run --rm --network none \
 ```
 
 这些变更会改变 bundle/runtime 身份：新增 `go_chi_assembly.py`、`go_chi_completion.py`、`go_chi_index.py` 进入包，预算常量、工具 schema、锚点/完成 schema 也改变哈希。**必须重建 bundle 并取得新 B；本轮未重建、未跑真实 B/C、未跑 judge/Trial。** 详细证据与残余风险见 [阶段报告](reviews/context-engineering-review.md)。
+
+预算覆盖参数：
+
+- `--context-max-estimated-tokens` 保留原**字节**语义，范围 `1..3,500,000`；`1500000` 表示 `max_context_bytes=1500000`，并推导 `max_input_tokens=min(window_cap, floor(1500000/3.0))`。
+- `--context-max-input-tokens` 是新增的 token 语义参数，范围 `1..1,000,000`；不能与旧的字节参数同时提供。
+- 现有 `nine-rerun*` config 的 `1500000` 仍会被 `role_operator._config` 接受，并映射为 500,000 input tokens。
+
+**v3 与 recovery/summary 的当前关系：** `chi-context-v3` 暂不支持 `output_recovery` 或 `input_summary`；entry、journal 和 guard 会以 `chi_context_policy_incompatible` **显式拒绝**，不会静默降级。现有 5 题 config 都带 `output_recovery=chi-output-recovery-v1`，重跑前必须二选一：
+
+1. 从 config 移除 `output_recovery`（并让 `role_operator` 不再传该 flag），先验证 v3 基础链路；或
+2. 等 recovery 与投影的组合另行实现并审核后，再启用 recovery。
+
+entry 当前仍固定 `deepseek-v4.1-flash` / 对应 profile；更换主模型需要同时更新 profile、bundle 和 B。
 
 
 

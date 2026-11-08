@@ -127,3 +127,21 @@
 ## 实施顺序
 
 Task 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8；每个 Task 定向测试通过后再进入下一个。发现设计/代码冲突时停止并记录，不静默扩大范围。
+
+## 复审修复决定（2026-11-08）
+
+- **P1-1 预算 flag**：`--context-max-estimated-tokens` 恢复原字节语义（1..3,500,000）；新增 `--context-max-input-tokens`（1..1,000,000）；两者互斥。`1500000` 映射 `max_context_bytes=1500000`、`max_input_tokens=500000`。
+- **P1-2 recovery/summary**：选择最低要求，**显式拒绝** `chi-context-v3` + `output_recovery`/`input_summary`，错误码 `chi_context_policy_incompatible`；不实现组合。现有 5 题 config 需先移除 recovery 字段。
+- **P1-3 JSON 截断**：JSON 结果走结构化 shrink（数组/字符串），保持合法 JSON；文本结果仍用头 4096 + 尾 1024。无法压到上限时回退到合法 JSON envelope。
+- **P1-4 reducer**：支持 `items`、`result`、`data`、`records`、`rows`；保留选择字段并加 `total`/`omitted`。
+- **P1-5 终态证据**：终态对象只接受 `event=returned`；`returned_error`/`failed` 不算，失败终态写返回 `completion_business_write_failed`。
+- **P1-6 投影完整结果**：guard 新增 `full_results`，工具/MCP 在截断前登记完整原文；投影的 `result_sha256` 和 `key_ids` 使用完整 evidence，`validate_history` 仍用 visible 结果。
+- **P1-7 错误码**：新增 `completion` 诊断 stage 并注册 `chi_claim_required`、`chi_drift_hard`、`chi_drift_event_invalid`、`chi_anchor_invalid`、`chi_context_profile_invalid`、`chi_state_program_owned`、`chi_context_policy_incompatible`。
+- **P2-1 锚点校验**：guard 对 wire 调用独立 `validate_anchor`（位置、hash、唯一性）。
+- **P2-2 L0 role**：支持 `provider-pa`、`payer-um`、`care-manager`、`medical-library`/`platform`。
+- **P2-3 索引缓存**：按 root + 文件 mtime/数量/大小缓存，命中返回同一索引。
+- **P2-4 next_offset**：文本 marker 改为 `next_offset=None` + 明确 `offset_unit`，不再给 codepoints。
+- **P2-5 模型 profile**：entry 仍固定 `deepseek-v4.1-flash`；更换模型必须同时改 profile、bundle、B，已写入 runbook/报告。
+- **P2-6 漂移阈值**：重复读只有在连续观察到重复（`repeat.count >= 2`）时才进入 soft；必要步骤仍按角色固定并记录为需校准风险。
+- **P2-7 投影阈值**：改回设计举例的 **50%**。
+- **P2-8 README**：补 config 迁移说明（1.5M 字节 → 500k input，recovery 需移除）。
