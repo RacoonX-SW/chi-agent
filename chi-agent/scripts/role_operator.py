@@ -55,7 +55,7 @@ def _config(path, expected):
             'bundle_sha256', 'runtime_identity', 'runner_image_id', 'world_image_id', 'dataset_relative',
             'manifest_relative', 'manifest_sha256', 'output_relative', 'dev_sha256', 'operator_timeout_seconds'}
     optional = {'history_mode', 'state_relative', 'local_q_root', 'input_summary', 'output_recovery',
-                'requirements', 'context_max_estimated_tokens', 'main_max_tokens'}
+                'requirements', 'context_max_estimated_tokens', 'context_max_input_tokens', 'main_max_tokens'}
     if (type(c) is not dict or not keys <= set(c) <= keys | optional
             or c['schema'] != 'chi-role-operator-v1'):
         raise ValueError('config_invalid')
@@ -73,6 +73,12 @@ def _config(path, expected):
     if 'context_max_estimated_tokens' in c and (
             type(c['context_max_estimated_tokens']) is not int
             or not 1 <= c['context_max_estimated_tokens'] <= 3_500_000):
+        raise ValueError('config_invalid')
+    if 'context_max_input_tokens' in c and (
+            type(c['context_max_input_tokens']) is not int
+            or not 1 <= c['context_max_input_tokens'] <= 1_000_000):
+        raise ValueError('config_invalid')
+    if 'context_max_estimated_tokens' in c and 'context_max_input_tokens' in c:
         raise ValueError('config_invalid')
     if 'main_max_tokens' in c and (
             type(c['main_max_tokens']) is not int
@@ -128,6 +134,8 @@ def _validation_flags(c):
         flags += ['--requirements', c['requirements']]
     if c.get('context_max_estimated_tokens') is not None:
         flags += ['--context-max-estimated-tokens', str(c['context_max_estimated_tokens'])]
+    if c.get('context_max_input_tokens') is not None:
+        flags += ['--context-max-input-tokens', str(c['context_max_input_tokens'])]
     if c.get('main_max_tokens') is not None:
         flags += ['--main-max-tokens', str(c['main_max_tokens'])]
     return flags

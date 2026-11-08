@@ -658,6 +658,9 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                     full_output = await callback(args)
                     if warning:
                         full_output = full_output + "\n" + warning
+                    recorder = getattr(guard, "record_full_result", None)
+                    if callable(recorder):
+                        recorder(selected["id"], full_output)
                     reduced, _reducer = reduce_tool_result(name, full_output)
                     visible, truncation = truncate_tool_text(reduced, tool=name, arguments=args)
                     guard.contract.record_result(selected["id"], visible)

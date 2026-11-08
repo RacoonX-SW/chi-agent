@@ -45,14 +45,20 @@ def evaluate(state_data):
     if role not in TERMINAL:
         return False, "completion_role_invalid", {}
     observed = {item.get("tool") for item in state_data.get("observations", [])
-                if type(item) is dict and item.get("event") in {"returned", "returned_error"}}
+                if type(item) is dict and item.get("event") == "returned"}
+    failed = {item.get("tool") for item in state_data.get("observations", [])
+              if type(item) is dict and item.get("event") in {"returned_error", "failed"}}
     missing = []
     for group in REQUIRED[role]:
         if not (group & observed):
             missing.append(sorted(group))
     terminal = sorted(TERMINAL[role] & observed)
+    failed_terminal = sorted(TERMINAL[role] & failed)
     details = {"missing_steps": missing, "terminal_objects": terminal,
+               "failed_terminal_objects": failed_terminal,
                "policy": POLICY, "schema": SCHEMA}
+    if failed_terminal:
+        return False, "completion_business_write_failed:" + failed_terminal[0], details
     if missing:
         return False, "completion_missing_step:" + missing[0][0], details
     if not terminal:

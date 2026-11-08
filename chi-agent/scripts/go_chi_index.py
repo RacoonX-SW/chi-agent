@@ -7,6 +7,7 @@ and check its hash before citing it.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 from pathlib import Path
 
@@ -14,9 +15,48 @@ SCHEMA = "chi-retrieval-l0-v1"
 HIT_SCHEMA = "chi-retrieval-hit-v1"
 BLOCKED = {"fixture", "fixtures", "verifier", "judge", "hidden", "private",
            "expectations", "solution", "solutions"}
+ROLE_ALIASES = {
+    "provider": "provider", "provider-pa": "provider", "provider_pa": "provider",
+    "payer": "payer", "payer-um": "payer", "payer_um": "payer", "um": "payer",
+    "care-manager": "cm", "care_manager": "cm", "cm": "cm",
+    "medical-library": "shared", "medical_library": "shared", "platform": "shared",
+}
 YEAR = re.compile(r"(?<!\d)(20[0-9]{2})(?!\d)")
 HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 MAX_TEXT_BYTES = 2 * 1024 * 1024
+_INDEX_CACHE = {}
+
+
+def _cache_key(roots):
+    parts = []
+    for root in roots:
+        path = Path(root)
+        try:
+            if path.is_file() and not path.is_symlink():
+                stat = path.stat()
+                parts.append((str(path), stat.st_mtime_ns, stat.st_size))
+                continue
+            latest = 0
+            count = 0
+            total = 0
+            for directory, names, files in os.walk(path, followlinks=False):
+                names[:] = [name for name in names if not name.startswith(".")
+                            and name.lower() not in BLOCKED]
+                for name in files:
+                    item = Path(directory) / name
+                    if item.is_symlink() or _blocked(item.relative_to(path)):
+                        continue
+                    try:
+                        stat = item.stat()
+                    except OSError:
+                        continue
+                    count += 1
+                    total += stat.st_size
+                    latest = max(latest, stat.st_mtime_ns)
+            parts.append((str(path), latest, count, total))
+        except OSError:
+            parts.append((str(path), None, None, None))
+    return tuple(parts)
 
 
 def _blocked(relative: Path) -> bool:
@@ -26,7 +66,8 @@ def _blocked(relative: Path) -> bool:
 def _metadata(root: Path, path: Path) -> dict:
     relative = path.relative_to(root)
     parts = [part for part in relative.parts]
-    role = next((part for part in parts if part in {"provider", "payer", "cm"}), None)
+    role = next((ROLE_ALIASES[part.lower()] for part in parts
+                 if part.lower() in ROLE_ALIASES), None)
     year = None
     for part in reversed(parts):
         match = YEAR.search(part)
@@ -43,9 +84,13 @@ def _metadata(root: Path, path: Path) -> dict:
     }
 
 
-def build_index(roots, *, read_text=None, max_files=2000, max_bytes=64 * 1024 * 1024):
+def build_index(roots, *, read_text=None, max_files=2000, max_bytes=64 * 1024 * 1024,
+                use_cache=True):
     if not isinstance(roots, (list, tuple)) or not roots:
         raise ValueError("chi_index_roots_invalid")
+    key = _cache_key(roots)
+    if use_cache and key in _INDEX_CACHE:
+        return _INDEX_CACHE[key]
     entries = []
     scanned = 0
     total = 0
@@ -102,8 +147,11 @@ def build_index(roots, *, read_text=None, max_files=2000, max_bytes=64 * 1024 * 
             })
             scanned += 1
             total += len(raw)
-    return {"schema": SCHEMA, "entries": entries, "files": len(entries),
-            "truncated": scanned >= max_files or total >= max_bytes}
+    result = {"schema": SCHEMA, "entries": entries, "files": len(entries),
+              "truncated": scanned >= max_files or total >= max_bytes}
+    if use_cache:
+        _INDEX_CACHE[key] = result
+    return result
 
 
 def _matches(entry, filters):

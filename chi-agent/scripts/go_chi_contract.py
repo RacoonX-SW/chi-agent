@@ -95,6 +95,24 @@ def _local_schema_references(value):
     return True
 
 
+def validate_anchor(messages: list[dict], anchor: dict) -> None:
+    """Validate exactly one program anchor at messages[2] and its hash."""
+    try:
+        import hashlib
+        if (type(messages) is not list or type(anchor) is not dict
+                or type(anchor.get("text")) is not str or type(anchor.get("sha256")) is not str
+                or len(messages) < 3
+                or not _same(messages[2], {"role": "user", "content": anchor["text"]})
+                or hashlib.sha256(anchor["text"].encode("utf-8")).hexdigest() != anchor["sha256"]):
+            raise ValueError
+        for item in messages[3:]:
+            if type(item) is dict and item.get("role") == "user" \
+                    and item.get("content") == anchor["text"]:
+                raise ValueError
+    except Exception:
+        raise ContractFailure("request_anchor_invalid") from None
+
+
 class ToolContract:
     """Freeze tool definitions and validate each whole batch before dispatch."""
 

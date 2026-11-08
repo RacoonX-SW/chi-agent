@@ -59,6 +59,20 @@ class CompletionGateTests(unittest.TestCase):
             self.assertFalse(allowed)
             self.assertTrue(reason.startswith("completion_readback_required:"))
 
+    def test_failed_terminal_write_does_not_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = self._state(directory)
+            self._observe(state, "c1", "payer_intake_hub.get_intake_case")
+            self._observe(state, "c2", "triage.get")
+            self._observe(state, "c3", "review.get_nurse_review_data")
+            self._observe(state, "c4", "determination.finalize", event="returned_error")
+            self._observe(state, "c5", "determination.get_summary")
+            state.propose({"latest_business_status": {
+                "text": "finalize failed", "source_call_id": "c5"}})
+            allowed, reason = state.can_claim()
+            self.assertFalse(allowed)
+            self.assertTrue(reason.startswith("completion_business_write_failed:"))
+
     def test_completion_report_marks_mandatory_claim(self):
         with tempfile.TemporaryDirectory() as directory:
             state = self._state(directory)

@@ -758,7 +758,7 @@ class TaskState:
         if rule is None and effect == "read":
             repeat = self.data.get("repeat") or {}
             if repeat.get("fingerprint") == _fingerprint(tool, kind, arguments) \
-                    and int(repeat.get("count", 0)) >= 1:
+                    and int(repeat.get("count", 0)) >= 2:
                 rule = "repeat_call"
         if rule is None:
             return None
@@ -835,6 +835,11 @@ class TaskState:
                 if item.get("source_kind") in {"business_mutation", "unknown_mutation"}
                 and item["event"] != "refused"]
 
+    def _failed_business_mutations(self) -> list[dict]:
+        return [item for item in self.data["observations"]
+                if item.get("source_kind") in {"business_mutation", "unknown_mutation"}
+                and item.get("event") in {"returned_error", "failed"}]
+
     def _file_mutations(self) -> list[dict]:
         return [item for item in self.data["observations"]
                 if item.get("source_kind") == "file_deliverable"]
@@ -897,11 +902,20 @@ class TaskState:
             allowed, reason, _details = evaluate(self.data)
             if not allowed:
                 return False, reason, "blocked", "not_verified", "terminal_object"
+            failed = self._failed_business_mutations()
+            if failed:
+                return (False, "completion_business_write_failed:" + failed[-1]["call_id"],
+                        "blocked", "not_verified", "business_status")
         status = self.data["latest_business_status"]
         business = self._business_mutations()
         if business:
             last = business[-1]
             if status is None or status["source_seq"] <= last["seq"]:
+                return (False, "completion_readback_required:" + last["call_id"],
+                        "blocked", "not_verified", "business_status")
+            source = next((item for item in self.data["observations"]
+                           if item["call_id"] == status["source_call_id"]), None)
+            if self._context_v3 and (source is None or source.get("scope") != last.get("scope")):
                 return (False, "completion_readback_required:" + last["call_id"],
                         "blocked", "not_verified", "business_status")
         if status is None:

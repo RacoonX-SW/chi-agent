@@ -50,6 +50,21 @@ class RetrievalL0Tests(unittest.TestCase):
         self.assertEqual(result["omitted"], 2)
         self.assertTrue(result["truncated"])
 
+    def test_role_aliases_and_shared_namespaces(self):
+        base = Path(self.tmp.name) / "aliases"
+        for role in ("provider-pa", "payer-um", "care-manager", "medical-library", "platform"):
+            directory = base / role / "2026" / "policy"
+            directory.mkdir(parents=True)
+            (directory / "doc.md").write_text("# Doc\n\nneedle\n", encoding="utf-8")
+        index = build_index([base], use_cache=False)
+        roles = {item["metadata"]["role"] for item in index["entries"]}
+        self.assertEqual(roles, {"provider", "payer", "cm", "shared"})
+
+    def test_index_cache_hit(self):
+        first = build_index([self.root])
+        second = build_index([self.root])
+        self.assertIs(first, second)
+
     def test_read_hit_verifies_hash_and_detects_staleness(self):
         index = build_index([self.root])
         hit = search_index(index, "site of service")["hits"][0]

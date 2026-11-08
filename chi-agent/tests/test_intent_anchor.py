@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from go_chi_contract import ContractFailure, ToolContract
+from go_chi_contract import ContractFailure, ToolContract, validate_anchor
 from go_chi_state import ANCHOR_SCHEMA, CONTEXT_POLICY_V3, StateRefusal, TaskState
 from request_budget import feedback
 
@@ -86,6 +86,26 @@ class AnchorHistoryTests(unittest.TestCase):
         with self.assertRaises(ContractFailure):
             contract.validate_history(duplicate, system=SYSTEM, instruction=INSTRUCTION,
                                       used=0, claimed=False, anchor=anchor)
+
+
+class WireAnchorTests(unittest.TestCase):
+    def test_validate_anchor_requires_position_hash_and_uniqueness(self):
+        import hashlib
+        text = '{"schema":"chi-intent-anchor-v1"}'
+        anchor = {"text": text, "sha256": hashlib.sha256(text.encode()).hexdigest()}
+        messages = [{"role": "system", "content": "s"},
+                    {"role": "user", "content": "i"},
+                    {"role": "user", "content": text}]
+        validate_anchor(messages, anchor)
+        for broken in ([{"role": "system", "content": "s"}, {"role": "user", "content": "i"}],
+                       [{"role": "system", "content": "s"}, {"role": "user", "content": "i"},
+                        {"role": "user", "content": "wrong"}],
+                       [{"role": "system", "content": "s"}, {"role": "user", "content": "i"},
+                        {"role": "user", "content": text}, {"role": "user", "content": text}]):
+            with self.assertRaises(ContractFailure):
+                validate_anchor(broken, anchor)
+        with self.assertRaises(ContractFailure):
+            validate_anchor(messages, dict(anchor, sha256="0" * 64))
 
 
 if __name__ == "__main__":

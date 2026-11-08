@@ -621,6 +621,10 @@ class ChiJournal:
             if any(a["run"] == run or (a["evaluation"], a["task"], a["attempt"]) == (evaluation, task, attempt)
                    for a in self.state["attempts"]):
                 raise GoFailure("chi_attempt_or_run_exists")
+            if ((launch or {}).get("context_policy") == "chi-context-v3"
+                    and (launch.get("output_recovery") is not None
+                         or launch.get("input_summary") is not None)):
+                raise GoFailure("chi_context_policy_incompatible")
             self.run = {"evaluation": evaluation, "task": task, "attempt": attempt, "run": run,
                         "kind": kind, "status": "started", "requests": [], "patient_binding_events": [],
                         "claim_done": False, "tool_events": [], "safe_error_code": None,

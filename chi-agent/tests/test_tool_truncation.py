@@ -24,7 +24,8 @@ class ToolTruncationTests(unittest.TestCase):
         self.assertTrue(visible.endswith("T" * 100))
         self.assertIn("[chi-truncated]", visible)
         self.assertTrue(meta["truncated"])
-        self.assertEqual(meta["next_offset"], 4096)
+        self.assertIsNone(meta["next_offset"])
+        self.assertIn("offset", meta["offset_unit"])
         self.assertLessEqual(len(visible), 8192 + 512)
         self.assertLessEqual(len(visible.encode("utf-8")), 32 * 1024)
 
@@ -33,6 +34,37 @@ class ToolTruncationTests(unittest.TestCase):
         visible, meta = truncate_tool_text(text)
         self.assertTrue(meta["truncated"])
         self.assertLessEqual(len(visible.encode("utf-8")), 32 * 1024)
+
+    def test_json_results_stay_valid(self):
+        payload = json.dumps({"results": [{"path": "/x", "line": i, "excerpt": "a" * 200}
+                                          for i in range(100)]})
+        visible, meta = truncate_tool_text(payload, tool="local-fs-search")
+        value = json.loads(visible)
+        self.assertTrue(meta["structured"])
+        self.assertIn("results", value)
+        self.assertLessEqual(len(value["results"]), 10)
+        self.assertEqual(value["results_total"], 100)
+        self.assertGreaterEqual(value["results_omitted"], 1)
+
+    def test_unknown_json_tool_stays_valid(self):
+        payload = json.dumps({"weird": [{"x": "y" * 5000} for _ in range(20)]})
+        visible, meta = truncate_tool_text(payload, tool="unknown.tool")
+        value = json.loads(visible)
+        self.assertTrue(meta["structured"])
+        self.assertIn("weird", value)
+
+    def test_reducer_handles_result_key(self):
+        payload = json.dumps({"result": [{"id": f"INTAKE-{i}", "case_id": f"CASE-{i}",
+                                          "status": "complete",
+                                          "diagnoses": [{"x": "y" * 100}]}
+                                         for i in range(25)]})
+        reduced, meta = reduce_tool_result("payer_intake_hub.list_intake_queue", payload)
+        value = json.loads(reduced)
+        self.assertEqual(len(value["result"]), 10)
+        self.assertEqual(value["total"], 25)
+        self.assertEqual(value["omitted"], 15)
+        self.assertEqual(meta["list_key"], "result")
+        self.assertIn("status", value["result"][0])
 
     def test_canonical_record_derives_key_ids_and_full_hash(self):
         result = json.dumps({"case_id": "CASE-A", "id": "DOC-1", "status": "saved"})

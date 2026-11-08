@@ -21,7 +21,8 @@ sys.dont_write_bytecode = True
 
 from evaluation_bundle import BundleFailure, _check_components, _read_regular_bounded
 from go_chi_bundle import validate_bundle
-from go_chi_context import DEFAULT_BUDGET, DEFAULT_BUDGET_V3
+from go_chi_context import (DEFAULT_BUDGET, DEFAULT_BUDGET_V3, budget_from_bytes,
+                            budget_from_input_tokens)
 from go_chi_diagnostics import is_safe_error_code, validate_cause
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
@@ -103,7 +104,7 @@ _SAFE_CODE = re.compile(r"^[a-z0-9_]{1,64}$")
 _COMPLETION_REASON = re.compile(
     r"^completion_(blocked_claim_violation|blocked_unknown|file_write_failed|readback_required|"
     r"requirements_undeclared|requirements_empty|requirements_open|requirements_evidence_invalid|"
-    r"missing_step|terminal_object_missing)"
+    r"missing_step|terminal_object_missing|business_write_failed)"
     r"(:[A-Za-z0-9_.-]{1,128})?$")
 _TARGET_KEYS = {"case_id", "patient_id"}
 _CLAIM_KEYS = {"version", "target", "verified_status_call_id", "at_utc_ms", "kind"}
@@ -691,6 +692,7 @@ def _parser():
     parser.add_argument("--input-summary", choices=SUMMARY_VERSIONS, default=None)
     parser.add_argument("--requirements", choices=(REQUIREMENTS_POLICY,), default=None)
     parser.add_argument("--context-max-estimated-tokens", type=int, default=None)
+    parser.add_argument("--context-max-input-tokens", type=int, default=None)
     parser.add_argument("--main-max-tokens", type=int, default=None)
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
@@ -739,11 +741,18 @@ def main(argv=None, *, development=None):
         if args.output_recovery is not None and args.mode != "live":
             raise GoFailure("chi_recovery_invalid")
         if args.context_max_estimated_tokens is not None and (
-                args.mode != "live" or not 1 <= args.context_max_estimated_tokens <= 1_000_000):
+                args.mode != "live" or not 1 <= args.context_max_estimated_tokens <= 3_500_000):
+            raise GoFailure("chi_context_budget_invalid")
+        if args.context_max_input_tokens is not None and (
+                args.mode != "live" or not 1 <= args.context_max_input_tokens <= 1_000_000):
+            raise GoFailure("chi_context_budget_invalid")
+        if args.context_max_estimated_tokens is not None and args.context_max_input_tokens is not None:
             raise GoFailure("chi_context_budget_invalid")
         if args.main_max_tokens is not None and (
                 args.mode != "live" or not 1024 <= args.main_max_tokens <= 32768):
             raise GoFailure("chi_context_budget_invalid")
+        if args.mode == "live" and (args.output_recovery is not None or args.input_summary is not None):
+            raise GoFailure("chi_context_policy_incompatible")
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
             import importlib
@@ -895,7 +904,11 @@ def main(argv=None, *, development=None):
             if context_budget.get("model") != "deepseek-v4.1-flash":
                 raise GoFailure("chi_config_invalid")
             if args.context_max_estimated_tokens is not None:
-                context_budget["max_input_tokens"] = args.context_max_estimated_tokens
+                context_budget = budget_from_bytes(args.context_max_estimated_tokens, context_budget)
+                launch["context_max_bytes"] = args.context_max_estimated_tokens
+            if args.context_max_input_tokens is not None:
+                context_budget = budget_from_input_tokens(args.context_max_input_tokens, context_budget)
+                launch["context_max_input_tokens"] = args.context_max_input_tokens
             async def execute():
                 kwargs = dict(role=args.role, instruction=instruction, mcp_url=args.mcp_url,
                     instruction_path=instruction_path, logs_dir=logs_dir, workspace_root=args.workspace_root,

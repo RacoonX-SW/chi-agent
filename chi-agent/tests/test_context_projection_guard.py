@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 
 import httpx
 
+from go_chi_assembly import truncate_tool_text
 from go_chi_context import DEFAULT_BUDGET_V3, measure_request
 from go_chi_guard import ChiGuard
 from go_chi_journal import ChiJournal
@@ -77,6 +79,55 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
                                              __import__("hashlib").sha256(raw).hexdigest())["status"],
                              "inspected")
 
+    async def test_projection_uses_full_evidence_hash_not_visible_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal = ChiJournal(root, identity="a" * 64, evaluation="e", task="t",
+                                 attempt="a", run="r",
+                                 launch={"context_policy": "chi-context-v3"})
+            full = "full " + "x" * 9000
+            visible, _ = truncate_tool_text(full, tool="local-fs-read")
+            data = body()
+            data["messages"] = data["messages"][:2]
+            data["messages"].extend([assistant("c1"), {"role": "tool", "tool_call_id": "c1",
+                                                       "content": visible}])
+            for index in (2, 3):
+                data["messages"].extend([assistant(f"c{index}"),
+                                         {"role": "tool", "tool_call_id": f"c{index}",
+                                          "content": f"small {index}"}])
+            sent = []
+
+            async def answer(req):
+                sent.append(json.loads(req.content))
+                return httpx.Response(200, request=req, json={
+                    "model": "deepseek-v4.1-flash", "usage": USAGE,
+                    "choices": [{"finish_reason": "stop",
+                                 "message": {"role": "assistant", "content": "done"}}]})
+
+            anchor = {"text": '{"schema":"chi-intent-anchor-v1"}', "sha256":
+                      hashlib.sha256(b'{"schema":"chi-intent-anchor-v1"}').hexdigest()}
+            guard = ChiGuard(journal, SECRET, SESSION, httpx.MockTransport(answer),
+                             tools=TOOLS, system="system", instruction="instruction",
+                             claimed=lambda: False, confirmation=lambda: None,
+                             canonical_tools={"read": "local-fs-read"},
+                             context_limit=DEFAULT_BUDGET_V3,
+                             anchor_getter=lambda: anchor)
+            guard.contract.accept_batch(assistant("c1"))
+            guard.contract.record_result("c1", visible)
+            guard.record_full_result("c1", full)
+            for index in (2, 3):
+                guard.contract.accept_batch(assistant(f"c{index}"))
+                guard.contract.record_result(f"c{index}", f"small {index}")
+            await guard.handle_async_request(request(data))
+            tool_message = sent[0]["messages"][4]
+            placeholder = json.loads(tool_message["content"])
+            self.assertEqual(placeholder["result_sha256"],
+                             hashlib.sha256(full.encode()).hexdigest())
+            self.assertNotEqual(placeholder["result_sha256"],
+                                hashlib.sha256(visible.encode()).hexdigest())
+            journal.finish("failed")
+            journal.close()
+
     async def test_anchor_is_injected_at_index_two_without_changing_source(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -85,8 +136,9 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
                                  launch={"context_policy": "chi-context-v3"})
             data = source_body()
             sent = []
-            anchor = {"text": '{"schema":"chi-intent-anchor-v1","current_step":"x"}',
-                      "sha256": "b" * 64}
+            text = '{"schema":"chi-intent-anchor-v1","current_step":"x"}'
+            anchor = {"text": text,
+                      "sha256": hashlib.sha256(text.encode()).hexdigest()}
 
             async def answer(req):
                 sent.append(json.loads(req.content))

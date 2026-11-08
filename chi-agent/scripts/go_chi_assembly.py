@@ -26,20 +26,89 @@ def canonical_sha(value) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _shrink_string(text, limit=2000):
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "…[truncated]"
+
+
+def _shrink_json(value, *, max_items=10, max_string=2000, depth=0):
+    if depth > 8:
+        return _shrink_string(json.dumps(value, ensure_ascii=False), max_string)
+    if type(value) is dict:
+        result = {}
+        for key, item in value.items():
+            if type(item) is list and len(item) > max_items:
+                kept = [_shrink_json(entry, max_items=max_items, max_string=max_string,
+                                     depth=depth + 1) for entry in item[:max_items]]
+                result[key] = kept
+                result[key + "_total"] = len(item)
+                result[key + "_omitted"] = len(item) - len(kept)
+            else:
+                result[key] = _shrink_json(item, max_items=max_items, max_string=max_string,
+                                           depth=depth + 1)
+        return result
+    if type(value) is list:
+        kept = [_shrink_json(entry, max_items=max_items, max_string=max_string,
+                             depth=depth + 1) for entry in value[:max_items]]
+        if len(value) > max_items:
+            return {"items": kept, "total": len(value), "omitted": len(value) - len(kept)}
+        return kept
+    if type(value) is str:
+        return _shrink_string(value, max_string)
+    return value
+
+
+def _json_truncate(text, *, tool=None, max_codepoints=MAX_CODEPOINTS, max_bytes=MAX_BYTES):
+    parsed = _json_value(text)
+    if parsed is None:
+        return None
+    for max_items, max_string in ((10, 2000), (5, 500), (3, 200)):
+        shrunk = _shrink_json(parsed, max_items=max_items, max_string=max_string)
+        rendered = json.dumps(shrunk, ensure_ascii=False, sort_keys=False, separators=(",", ":"),
+                              allow_nan=False)
+        if len(rendered) <= max_codepoints and len(rendered.encode("utf-8")) <= max_bytes:
+            return rendered, {"schema": "chi-tool-json-truncation-v1", "truncated": True,
+                              "tool": tool, "structured": True,
+                              "original_chars": len(text),
+                              "original_bytes": len(text.encode("utf-8")),
+                              "note": "JSON kept valid; arrays/strings were shrunk"}
+    fallback = {
+        "schema": "chi-tool-result-truncated-v1",
+        "truncated": True,
+        "tool": tool,
+        "structured": True,
+        "original_chars": len(text),
+        "original_bytes": len(text.encode("utf-8")),
+        "preview": text[:4096],
+        "note": "full JSON is in evidence; preview is bounded",
+    }
+    rendered = json.dumps(fallback, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return rendered, {"schema": "chi-tool-result-truncated-v1", "truncated": True,
+                      "tool": tool, "structured": True,
+                      "original_chars": len(text),
+                      "original_bytes": len(text.encode("utf-8")),
+                      "note": "structured fallback; full result is in evidence"}
+
+
 def truncate_tool_text(text, *, tool=None, arguments=None,
                        max_codepoints=MAX_CODEPOINTS, max_bytes=MAX_BYTES,
                        head=HEAD_CODEPOINTS, tail=TAIL_CODEPOINTS):
     """Return (visible_text, metadata) for one tool result.
 
-    The full text must be persisted before this function is called. The visible
-    text keeps a stable head and tail plus a machine-readable marker, so the
-    model can re-read the remainder through the normal tool path.
+    JSON results are shrunk structurally so the visible text stays valid JSON;
+    plain text keeps a stable head and tail plus a marker. The full text must be
+    persisted before this function is called.
     """
     if type(text) is not str:
         raise ValueError("chi_assembly_text_invalid")
     raw = text.encode("utf-8")
     if len(text) <= max_codepoints and len(raw) <= max_bytes:
         return text, None
+    structured = _json_truncate(text, tool=tool, max_codepoints=max_codepoints,
+                                max_bytes=max_bytes)
+    if structured is not None:
+        return structured
     if head < 0 or tail < 0 or head + tail >= len(text):
         raise ValueError("chi_assembly_window_invalid")
     head_text = text[:head]
@@ -51,14 +120,13 @@ def truncate_tool_text(text, *, tool=None, arguments=None,
         "original_chars": len(text),
         "original_bytes": len(raw),
         "visible_chars": head + tail,
-        "next_offset": head,
-        "offset_unit": "codepoints",
+        "next_offset": None,
+        "offset_unit": ("lines for local-fs-read; tool-specific otherwise; "
+                        "re-read with the original tool's offset/limit"),
         "note": "full result is in evidence; re-read with the normal tool/path",
     }
     visible = head_text + "\n\n[chi-truncated] " + json.dumps(
         marker, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n\n" + tail_text
-    # The fixed window is below MAX_BYTES for UTF-8 text; still fail closed if a
-    # caller supplies an unusually large head/tail pair.
     if len(visible.encode("utf-8")) > max_bytes or len(visible) > max_codepoints + 512:
         raise ValueError("chi_assembly_truncation_invalid")
     return visible, marker
@@ -163,30 +231,36 @@ def _selected_keys(tool: str):
 def reduce_tool_result(tool: str, result: str, *, max_items: int = 10):
     """Conservatively reduce list payloads while preserving selection fields.
 
-    Unknown shapes are returned unchanged. The caller applies the 8K/32KB bound
-    afterwards, so this function never has to guess a byte budget.
+    Supports common list keys (``items``, ``result``, ``data``, ``records``,
+    ``rows``). Unknown shapes are returned unchanged. The caller applies the
+    8K/32KB bound afterwards, so this function never has to guess a byte budget.
     """
     value = _json_value(result)
-    if type(value) is not dict or type(value.get("items")) is not list:
+    if type(value) is not dict:
         return result, None
-    items = value["items"]
+    key = next((name for name in ("items", "result", "data", "records", "rows")
+                if type(value.get(name)) is list), None)
+    if key is None:
+        return result, None
+    items = value[key]
     if len(items) <= max_items:
         return result, None
     selected = _selected_keys(tool)
     kept = []
     for item in items[:max_items]:
         if type(item) is dict and selected is not None:
-            kept.append({key: item[key] for key in item if key in selected})
+            kept.append({field: item[field] for field in item if field in selected})
         else:
             kept.append(item)
     reduced = dict(value)
-    reduced["items"] = kept
+    reduced[key] = kept
     reduced["total"] = len(items)
     reduced["omitted"] = len(items) - len(kept)
     return json.dumps(reduced, ensure_ascii=False, sort_keys=True, allow_nan=False), {
         "schema": SCHEMA,
         "reducer": "list_first_n_selected_fields",
         "tool": tool,
+        "list_key": key,
         "total": len(items),
         "omitted": len(items) - len(kept),
     }

@@ -248,6 +248,9 @@ class MCPBridge:
                     result = json.dumps(value, ensure_ascii=False, allow_nan=False)
                 if warning:
                     result = result + "\n" + warning
+                recorder = getattr(self.guard, "record_full_result", None)
+                if callable(recorder):
+                    recorder(selected["id"], result)
                 reduced, _reducer = reduce_tool_result(canonical, result)
                 visible, _truncation = truncate_tool_text(reduced, tool=canonical, arguments=args)
                 self.guard.contract.record_result(selected["id"], visible)

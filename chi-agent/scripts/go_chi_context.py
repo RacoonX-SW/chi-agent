@@ -55,6 +55,33 @@ DEFAULT_BUDGET_V3["basis"] = ("utf8 byte upper estimate for the hard gate; calib
                               "configured_unverified")
 
 
+def budget_from_bytes(value, base=None):
+    """Legacy byte-cap override: 1..3,500,000 maps to max_context_bytes."""
+    if type(value) is not int or not 1 <= value <= 3_500_000:
+        raise ValueError("chi_context_budget_invalid")
+    budget = dict(base if type(base) is dict else DEFAULT_BUDGET_V3)
+    floor = budget.get("bytes_per_token_floor")
+    window_cap = (math.floor(budget["provider_context_tokens"] * budget["window_safety_fraction"])
+                  - budget["output_reserve_tokens"])
+    byte_cap = math.floor(value / float(floor))
+    budget["max_context_bytes"] = value
+    budget["max_input_tokens"] = min(window_cap, max(1, byte_cap))
+    return budget
+
+
+def budget_from_input_tokens(value, base=None):
+    """New token-cap override: 1..1,000,000 maps to max_input_tokens."""
+    if type(value) is not int or not 1 <= value <= 1_000_000:
+        raise ValueError("chi_context_budget_invalid")
+    budget = dict(base if type(base) is dict else DEFAULT_BUDGET_V3)
+    window_cap = (math.floor(budget["provider_context_tokens"] * budget["window_safety_fraction"])
+                  - budget["output_reserve_tokens"])
+    if value > window_cap:
+        raise ValueError("chi_context_budget_invalid")
+    budget["max_input_tokens"] = value
+    return budget
+
+
 def _chars(value) -> int:
     return len(json.dumps(value, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"), allow_nan=False))
@@ -223,7 +250,7 @@ def _v3_budget_valid(budget: dict) -> bool:
         return False
     window_cap = math.floor(budget["provider_context_tokens"] * budget["window_safety_fraction"]) \
         - budget["output_reserve_tokens"]
-    byte_cap = math.floor(budget["max_context_bytes"] / budget["bytes_per_token_floor"])
+    byte_cap = max(1, math.floor(budget["max_context_bytes"] / budget["bytes_per_token_floor"]))
     return budget["max_input_tokens"] <= min(window_cap, byte_cap)
 
 

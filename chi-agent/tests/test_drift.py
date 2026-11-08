@@ -26,6 +26,9 @@ class DriftTests(unittest.TestCase):
             state.observe(call_id="c1", tool="payer_intake_hub.get_intake_case",
                           kind="mcp", arguments=args, result="{}",
                           event="returned", scope="case:CASE-A")
+            state.observe(call_id="c2", tool="payer_intake_hub.get_intake_case",
+                          kind="mcp", arguments=args, result="{}",
+                          event="returned", scope="case:CASE-A")
             first = state.drift_check("payer_intake_hub.get_intake_case", "mcp", args)
             second = state.drift_check("payer_intake_hub.get_intake_case", "mcp", args)
             third = state.drift_check("payer_intake_hub.get_intake_case", "mcp", args)

@@ -3,7 +3,8 @@ import math
 import unittest
 
 from go_chi_context import (DEFAULT_BUDGET, DEFAULT_BUDGET_V3, BUDGET_SCHEMA,
-                            SCHEMA, budget_pressure, calibration, check_budget,
+                            SCHEMA, budget_from_bytes, budget_from_input_tokens,
+                            budget_pressure, calibration, check_budget,
                             measure_request)
 from go_chi_policy import context_profile
 
@@ -86,6 +87,22 @@ class ContextBudgetV3Tests(unittest.TestCase):
                        dict(DEFAULT_BUDGET_V3, bytes_per_token_floor=0),
                        dict(DEFAULT_BUDGET_V3, bytes_per_token_observed=1.0)):
             self.assertEqual(check_budget(metric, broken), "chi_context_budget_invalid")
+
+    def test_legacy_byte_override_keeps_byte_semantics(self):
+        for value, expected_input in ((1_500_000, 500_000), (500_000, 166_666),
+                                      (1, 1), (3_500_000, 583_616)):
+            with self.subTest(value=value):
+                budget = budget_from_bytes(value)
+                self.assertEqual(budget["max_context_bytes"], value)
+                self.assertEqual(budget["max_input_tokens"], expected_input)
+        for bad in (0, -1, 3_500_001):
+            with self.assertRaises(ValueError):
+                budget_from_bytes(bad)
+        token = budget_from_input_tokens(500_000)
+        self.assertEqual(token["max_input_tokens"], 500_000)
+        for bad in (0, 1_000_001):
+            with self.assertRaises(ValueError):
+                budget_from_input_tokens(bad)
 
     def test_legacy_v2_evidence_remains_readable(self):
         metric = measure_request(body())
