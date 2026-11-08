@@ -16,15 +16,18 @@ MAX_FILES = 400
 MAX_FILE_BYTES = 2 * 1024 * 1024
 MAX_TOTAL_BYTES = 16 * 1024 * 1024
 MAX_RESULTS = 20
+SINGLE_FILE_MAX_RESULTS = 50
+DEFAULT_RESULTS = 10
 MAX_EXCERPT = 240
 BLOCKED = {"fixture", "fixtures", "verifier", "judge", "hidden", "private",
            "expectations", "solution", "solutions"}
 
 
 class SearchRefusal(ValueError):
-    def __init__(self, code: str):
+    def __init__(self, code: str, detail: dict | None = None):
         super().__init__(code)
         self.code = code
+        self.detail = detail or {}
 
 
 def _blocked(relative: Path) -> bool:
@@ -53,13 +56,21 @@ def _iter_files(root: Path):
         raise SearchRefusal("search_unreadable") from None
 
 
-def search(roots, query: str, *, max_results: int = 8, case_sensitive: bool = False,
-           read_text=None, single_file: bool = False) -> dict:
+def search(roots, query: str, *, max_results: int = DEFAULT_RESULTS, case_sensitive: bool = False,
+           read_text=None, single_file: bool = False, max_results_cap: int | None = None) -> dict:
     if type(query) is not str or not query.strip() or len(query) > MAX_QUERY \
             or any(ord(char) < 32 for char in query):
         raise SearchRefusal("search_query_invalid")
-    if type(max_results) is not int or not 1 <= max_results <= MAX_RESULTS:
-        raise SearchRefusal("search_arguments_invalid")
+    cap = SINGLE_FILE_MAX_RESULTS if single_file else MAX_RESULTS
+    if max_results_cap is not None:
+        if type(max_results_cap) is not int or not 1 <= max_results_cap <= cap:
+            raise SearchRefusal("search_arguments_invalid")
+        cap = max_results_cap
+    if type(max_results) is not int or not 1 <= max_results <= cap:
+        raise SearchRefusal("search_max_results_out_of_range", {
+            "requested": max_results, "allowed_min": 1, "allowed_max": cap,
+            "single_file": bool(single_file),
+        })
     if not isinstance(roots, (list, tuple)) or not roots:
         raise SearchRefusal("search_arguments_invalid")
     needle = query if case_sensitive else query.casefold()
@@ -142,6 +153,7 @@ def search(roots, query: str, *, max_results: int = 8, case_sensitive: bool = Fa
         "case_sensitive": bool(case_sensitive),
         "results": results,
         "no_matches": not results,
+        "total_matches": len(results) + omitted,
         "files_scanned": files_scanned,
         "bytes_scanned": bytes_scanned,
         "skipped_files": skipped,
@@ -149,6 +161,6 @@ def search(roots, query: str, *, max_results: int = 8, case_sensitive: bool = Fa
         "omitted": omitted,
         "truncated": truncated,
         "limits": {"files": MAX_FILES, "file_bytes": MAX_FILE_BYTES,
-                   "total_bytes": MAX_TOTAL_BYTES, "results": MAX_RESULTS,
-                   "excerpt": MAX_EXCERPT},
+                   "total_bytes": MAX_TOTAL_BYTES, "results": cap,
+                   "requested_results": max_results, "excerpt": MAX_EXCERPT},
     }
