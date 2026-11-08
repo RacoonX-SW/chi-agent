@@ -462,9 +462,54 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
   /opt/venv/bin/python -m unittest discover -s tests
 ```
 
+## 上下文工程 v3：预算、投影、锚点、完成门禁与 L0 检索
+
+`scripts/` 新增离线能力，默认只在 `launch.context_policy = "chi-context-v3"` 的新 run 启用；旧 v2 launch 与旧证据保持原语义。
+
+| 能力 | 入口 | 说明 |
+| --- | --- | --- |
+| 预算 v3 | `go_chi_context.py`、`go_chi_policy.py` | `chi-context-v3`：`total_bytes`、`estimated_tokens_upper`、`estimated_tokens_calibrated`、`bytes_per_token_actual`；硬门禁 500k input / 1.5MB bytes；旧 v1/v2 只读 |
+| 工具截断 | `go_chi_assembly.py`、`go_chi_tools.py`、`go_chi_mcp.py` | 单次文本 ≤ 8K 码点且 ≤ 32KB；头 4096 + 尾 1024；JSON 结构化截断保持合法；完整原文先入 evidence |
+| 装配投影 | `go_chi_assembly.py`、`go_chi_guard.py` | 旧 read 占位符、dedup、mutation 规范记录；只改 wire，不改 SDK/contract 源历史；projection hash 入 journal |
+| 状态/锚点 | `go_chi_state.py`、`go_chi_contract.py` | v3 下 facts/target 由程序独占；锚点作为 wire 的 `messages[2]`；源历史仍由 `validate_history` 校验 |
+| 漂移 | `go_chi_state.py`、`go_chi_journal.py` | 软漂移拒绝并计数；同类 2 次、run 内 3 次后硬停止；`drift_events` 可 inspect |
+| 完成门禁 | `go_chi_completion.py`、`go_chi_state.py`、`go_chi_runtime.py` | `mandatory_claim`；必要步骤/终态对象/回读由程序推导；无 claim 判 incomplete |
+| L0 检索 | `go_chi_index.py`、`go_chi_search.py` | 内存目录/标题/章节索引；role/category/year/service/doc_type 过滤；hit 引用前 `read_hit` 校验 hash |
+
+新增离线测试：
+
+```bash
+docker run --rm --network none \
+  -v "$PWD:/workspace:rw" \
+  -v chi-h-root-model-deps-20261027-v1:/model-deps:ro \
+  -v chi-k-pdf-deps-20261027-v1:/pdf-deps:ro \
+  -e PYTHONPATH=/model-deps:/pdf-deps:/workspace/vendor/chi-bench/src:/workspace/scripts:/workspace/tests \
+  -e PYTHONDONTWRITEBYTECODE=1 -w /workspace chi-agent-dev:latest \
+  /opt/venv/bin/python -m unittest tests.test_context_budget_v3 tests.test_tool_truncation \
+  tests.test_context_assembly tests.test_context_projection_guard tests.test_intent_anchor \
+  tests.test_drift tests.test_completion_gate tests.test_retrieval_l0
+```
+
+这些变更会改变 bundle/runtime 身份：新增 `go_chi_assembly.py`、`go_chi_completion.py`、`go_chi_index.py` 进入包，预算常量、工具 schema、锚点/完成 schema 也改变哈希。**必须重建 bundle 并取得新 B；本轮未重建、未跑真实 B/C、未跑 judge/Trial。** 详细证据与残余风险见 [阶段报告](reviews/context-engineering-review.md)。
+
+预算覆盖参数：
+
+- `--context-max-estimated-tokens` 保留原**字节**语义，范围 `1..3,500,000`；`1500000` 表示 `max_context_bytes=1500000`，并推导 `max_input_tokens=min(window_cap, floor(1500000/3.0))`。
+- `--context-max-input-tokens` 是新增的 token 语义参数，范围 `1..1,000,000`；不能与旧的字节参数同时提供。
+- 现有 `nine-rerun*` config 的 `1500000` 仍会被 `role_operator._config` 接受，并映射为 500,000 input tokens。
+
+**v3 与 recovery/summary 的当前关系：** `chi-context-v3` 暂不支持 `output_recovery` 或 `input_summary`；entry、journal 和 guard 会以 `chi_context_policy_incompatible` **显式拒绝**，不会静默降级。现有 5 题 config 都带 `output_recovery=chi-output-recovery-v1`，重跑前必须二选一：
+
+1. 从 config 移除 `output_recovery`（并让 `role_operator` 不再传该 flag），先验证 v3 基础链路；或
+2. 等 recovery 与投影的组合另行实现并审核后，再启用 recovery。
+
+entry 当前仍固定 `deepseek-v4.1-flash` / 对应 profile；更换主模型需要同时更新 profile、bundle 和 B。
+
+
+
 ## F4–F6 上下文预算、完成核验与失败处理
 
-`run_chi()` 默认启用 `context_budget=DEFAULT_BUDGET`（`chi-context-budget-v1`）：3.5M 字符、1M 估计 token、8192 输出预留，来源标 `configured_unverified`。每次通过 contract 的请求在 `journal.reserve()` 前测量 system/instruction/tools/history/tool_result/reasoning，写入 `logs/context.jsonl`（只含计数，不含正文）；超限在发送前返回 `chi_context_budget_exceeded`。`run_log.txt` 另记 `context_requests`、最大字符/估计 token 和已结算输入 token。自动历史压缩**未采用**：当前完整批次校验要求未满足新 contract/真实协议证据，不能靠删消息绕过。
+`run_chi()` 的旧默认路径仍使用 `context_budget=DEFAULT_BUDGET`（`chi-context-budget-v2` 兼容值）：3.5M 字符、1M 估计 token、8192 输出预留，来源标 `configured_unverified`；新 `go_chi_entry.py` 入口显式使用 `chi-context-budget-v3`。每次通过 contract 的请求在 `journal.reserve()` 前测量 system/instruction/tools/history/tool_result/reasoning，写入 `logs/context.jsonl`（只含计数，不含正文）；超限在发送前返回 `chi_context_budget_exceeded`。`run_log.txt` 另记 `context_requests`、最大字符/估计 token 和已结算输入 token。自动历史压缩**未采用**：当前完整批次校验要求未满足新 contract/真实协议证据，不能靠删消息绕过。
 
 完成核验通过 `local-completion-check` 返回 `chi-completion-v3`，区分 `mechanical_pass/not_applicable/blocked` 与 `observed/not_observed/not_verified/unknown/violation`，并写入 run_log 的 `completion`；它不替代 claim，也不是临床或官方 verdict。业务状态更新只能引用目标 case 的业务状态读；文件/手册/政策读只是证据。业务回读后保存交付文件不要求再次业务回读，但文件写失败和未知写效果仍阻止完成。
 

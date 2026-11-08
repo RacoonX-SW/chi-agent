@@ -621,6 +621,10 @@ class ChiJournal:
             if any(a["run"] == run or (a["evaluation"], a["task"], a["attempt"]) == (evaluation, task, attempt)
                    for a in self.state["attempts"]):
                 raise GoFailure("chi_attempt_or_run_exists")
+            if ((launch or {}).get("context_policy") == "chi-context-v3"
+                    and (launch.get("output_recovery") is not None
+                         or launch.get("input_summary") is not None)):
+                raise GoFailure("chi_context_policy_incompatible")
             self.run = {"evaluation": evaluation, "task": task, "attempt": attempt, "run": run,
                         "kind": kind, "status": "started", "requests": [], "patient_binding_events": [],
                         "claim_done": False, "tool_events": [], "safe_error_code": None,
@@ -629,6 +633,8 @@ class ChiJournal:
                 self.run["recovery_events"] = []
             if summary_enabled:
                 self.run["summary_events"] = []
+            if (launch or {}).get("context_policy") == "chi-context-v3":
+                self.run["drift_events"] = []
             self.run_doc = self.run
             self.state["attempts"].append(self.run)
             self._persist()
@@ -772,9 +778,23 @@ class ChiJournal:
                     run_keys.add("recovery_events")
                 if summary_enabled:
                     run_keys.add("summary_events")
+                drift_enabled = a.get("launch", {}).get("context_policy") == "chi-context-v3"
+                if drift_enabled:
+                    run_keys.add("drift_events")
                 if (set(a) != run_keys
                         or (recovery_enabled and (type(a["recovery_events"]) is not list or len(a["recovery_events"]) > 2))
                         or (summary_enabled and (type(a['summary_events']) is not list or len(a['summary_events']) > 1))
+                        or (drift_enabled and (type(a.get("drift_events")) is not list
+                                              or len(a["drift_events"]) > 32
+                                              or any(type(e) is not dict
+                                                     or set(e) != {"schema", "rule", "call_id", "count", "severity", "outcome"}
+                                                     or e.get("schema") != "chi-drift-event-v1"
+                                                     or type(e.get("rule")) is not str
+                                                     or type(e.get("call_id")) is not str
+                                                     or type(e.get("count")) is not int or e["count"] < 1
+                                                     or e.get("severity") not in {"soft", "hard"}
+                                                     or e.get("outcome") not in {"refused", "stopped"}
+                                                     for e in a["drift_events"])))
                         or any(type(a[k]) is not str or not ID.fullmatch(a[k]) for k in ("evaluation", "task", "attempt", "run"))
                         or a["kind"] not in {"chi", "coding_b", "patient_probe"}
                         or type(a["patient_binding_events"]) is not list
@@ -888,6 +908,27 @@ class ChiJournal:
                     if 'dispatch_version' in item:
                         required.add('dispatch_version')
                         if item['dispatch_version'] != 'chi-go-dispatch-v1': raise ValueError
+                    if 'projection' in item:
+                        required.add('projection')
+                        projection = item['projection']
+                        fields = {'schema', 'projection', 'source_sha256', 'projection_sha256',
+                                  'source_bytes', 'wire_bytes', 'saved_bytes', 'replaced', 'deduped',
+                                  'keep_recent_batches', 'anchor_sha256'}
+                        if (type(projection) is not dict or set(projection) != fields
+                                or projection.get('schema') != 'chi-context-assembly-v1'
+                                or projection.get('projection') != 'chi-context-projection-v1'
+                                or any(type(projection.get(k)) is not str or not DIGEST.fullmatch(projection[k])
+                                       for k in ('source_sha256', 'projection_sha256'))
+                                or (projection.get('anchor_sha256') is not None
+                                    and (type(projection['anchor_sha256']) is not str
+                                         or not DIGEST.fullmatch(projection['anchor_sha256'])))
+                                or any(type(projection.get(k)) is not int or projection[k] < 0
+                                       for k in ('source_bytes', 'wire_bytes', 'replaced', 'deduped'))
+                                or type(projection.get('saved_bytes')) is not int
+                                or projection['saved_bytes'] < -(1024 * 1024)
+                                or type(projection.get('keep_recent_batches')) is not int
+                                or projection['keep_recent_batches'] < 0):
+                            raise ValueError
                     if item.get("status") == "settled":
                         required |= {"usage", "billing", "billing_error"}
                     if set(item) != required:
@@ -1063,6 +1104,22 @@ class ChiJournal:
     def record_claim(self) -> None:
         self.run["claim_done"] = True
         self._persist()
+
+    def record_drift(self, rule: str, call_id: str, count: int, *, severity: str,
+                     outcome: str) -> None:
+        if (getattr(self.run, "get", None) is None or "drift_events" not in self.run
+                or type(rule) is not str or not re.fullmatch(r"[a-z0-9_]{1,64}", rule)
+                or type(call_id) is not str or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", call_id)
+                or type(count) is not int or count < 1
+                or severity not in {"soft", "hard"} or outcome not in {"refused", "stopped"}):
+            raise GoFailure("chi_drift_event_invalid")
+        self.run["drift_events"].append({"schema": "chi-drift-event-v1", "rule": rule,
+                                         "call_id": call_id, "count": count,
+                                         "severity": severity, "outcome": outcome})
+        try:
+            self._persist()
+        except Exception:
+            raise GoFailure("chi_evidence_persistence_failed") from None
 
     def _validate_summary_history(self, run, identity, expected_evidence):
         from go_chi_summary import (candidate_from_response, canonical_sha, derive_view, select_closed,
@@ -1323,11 +1380,12 @@ class ChiJournal:
         return len(events) - 1
 
     def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
-                parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None) -> None:
+                parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None,
+                context_projection=None) -> None:
         try:
             self._reserve(raw, purpose, secrets=secrets, dispatch=dispatch, parent_call_id=parent_call_id,
                           recovery_permit=recovery_permit, summary_permit=summary_permit,
-                          summary_projection=summary_projection)
+                          summary_projection=summary_projection, context_projection=context_projection)
         except BaseException:
             if purpose == "continuation": self._recovery_persistence_failed = True
             if purpose == "summary": self._summary_persistence_failed = True
@@ -1426,7 +1484,7 @@ class ChiJournal:
                                candidate_protected_sha256=selection['protected_sha256'], summary_was_sent=True)
             raw = json.dumps(view, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
             full = selection['source_raw'].encode()
-            if len(full) - len(raw) < 1024 or check_budget(measure_request(view, raw), context_limit) is not None:
+            if len(full) - len(raw) < 1024 or check_budget(measure_request(view, raw, context_limit), context_limit) is not None:
                 raise ValueError
             candidate_doc = {'schema': 'chi-summary-candidate-evidence-v1', 'selection_sha256': event['selection_sha256'],
                              'response_sha256': response['raw_sha256'], 'candidate': candidate,
@@ -1495,7 +1553,7 @@ class ChiJournal:
                                candidate=candidate_doc['candidate'], candidate_protected_sha256=selection['protected_sha256'],
                                summary_was_sent=first)
             wire = json.dumps(view, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
-            if len(source_raw) - len(wire) < 1024 or check_budget(measure_request(view, wire), context_limit):
+            if len(source_raw) - len(wire) < 1024 or check_budget(measure_request(view, wire, context_limit), context_limit):
                 raise ValueError
             doc = {'schema': 'chi-summary-projection-v1', 'checkpoint_sha256': event['checkpoint_sha256'],
                    'source_raw': source_raw.decode(), 'source_raw_sha256': hashlib.sha256(source_raw).hexdigest(),
@@ -1515,7 +1573,8 @@ class ChiJournal:
             raise GoFailure('chi_summary_persistence_failed') from None
 
     def _reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
-                 parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None) -> None:
+                 parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None,
+                 context_projection=None) -> None:
         if getattr(self, "_recovery_persistence_failed", False):
             raise GoFailure("chi_recovery_persistence_failed")
         if self.state["pending"] is not None or self.state["halted"] is not None:
@@ -1629,6 +1688,27 @@ class ChiJournal:
                 or type(dispatch['body_bytes']) is not int or not 0 < dispatch['body_bytes'] <= 8 * 1024 * 1024
                 or dispatch['body_bytes'] != len(raw)):
             raise GoFailure('chi_reservation_invalid')
+        if context_projection is not None:
+            fields = {'schema', 'projection', 'source_sha256', 'projection_sha256',
+                      'source_bytes', 'wire_bytes', 'saved_bytes', 'replaced', 'deduped',
+                      'keep_recent_batches', 'anchor_sha256'}
+            if (type(context_projection) is not dict or set(context_projection) != fields
+                    or context_projection.get('schema') != 'chi-context-assembly-v1'
+                    or context_projection.get('projection') != 'chi-context-projection-v1'
+                    or any(type(context_projection.get(k)) is not str or not DIGEST.fullmatch(context_projection[k])
+                           for k in ('source_sha256', 'projection_sha256'))
+                    or (context_projection.get('anchor_sha256') is not None
+                        and (type(context_projection['anchor_sha256']) is not str
+                             or not DIGEST.fullmatch(context_projection['anchor_sha256'])))
+                    or any(type(context_projection.get(k)) is not int or context_projection[k] < 0
+                           for k in ('source_bytes', 'wire_bytes', 'replaced', 'deduped'))
+                    or type(context_projection.get('saved_bytes')) is not int
+                    or context_projection['saved_bytes'] < -(1024 * 1024)
+                    or type(context_projection.get('keep_recent_batches')) is not int
+                    or context_projection['keep_recent_batches'] < 0
+                    or len(json.dumps(context_projection, ensure_ascii=False, sort_keys=True,
+                                      separators=(',', ':'), allow_nan=False)) > 4096):
+                raise GoFailure('chi_reservation_invalid')
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
         entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
                  "max_tokens": (_main_max_tokens(self.run['launch'])
@@ -1639,6 +1719,7 @@ class ChiJournal:
                  "diagnostic_evidence_sha256": None}
         if purpose == 'patient_simulator': entry['parent_call_id'] = parent_call_id
         if dispatch is not None: entry['dispatch_version'] = 'chi-go-dispatch-v1'
+        if context_projection is not None: entry['projection'] = context_projection
         request_doc = envelope(raw, kind="request", secrets=secrets, dispatch=dispatch)
         entry["request_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "request", request_doc)
         self.run["requests"].append(entry)

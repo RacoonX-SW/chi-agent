@@ -12,6 +12,7 @@ import re
 from jsonschema import Draft202012Validator
 
 from opencode_go_provider import GoFailure
+from go_chi_assembly import reduce_tool_result, truncate_tool_text
 from go_chi_state import effect_for
 
 CM_NAMES = {
@@ -164,6 +165,24 @@ class MCPBridge:
                     return result
             warning = None
             if self.state is not None:
+                drift = self.state.drift_check(canonical, "mcp", args)
+                if drift is not None:
+                    parts = drift.split(":")
+                    severity = "hard" if parts[0] == "HARD" else "soft"
+                    rule = parts[1]
+                    count = int(parts[2]) if len(parts) > 2 else 1
+                    self.state.drift_record(rule, selected["id"], severity,
+                                            "stopped" if severity == "hard" else "refused")
+                    self.guard.journal.record_drift(rule, selected["id"], count,
+                                                    severity=severity,
+                                                    outcome="stopped" if severity == "hard" else "refused")
+                    if severity == "hard":
+                        raise GoFailure("chi_drift_hard")
+                    result = f"REFUSED: drift_{rule}:{count}"
+                    self.guard.journal.refuse_tool(selected["id"], canonical, args, result,
+                                                   secrets=(self.guard.secret, self.guard.session))
+                    self.guard.contract.record_result(selected["id"], result)
+                    return result
                 stagnant = self.state.stagnation_block_reason(canonical, "mcp", args)
                 if stagnant is not None:
                     result = "REFUSED: " + stagnant
@@ -229,7 +248,12 @@ class MCPBridge:
                     result = json.dumps(value, ensure_ascii=False, allow_nan=False)
                 if warning:
                     result = result + "\n" + warning
-                self.guard.contract.record_result(selected["id"], result)
+                recorder = getattr(self.guard, "record_full_result", None)
+                if callable(recorder):
+                    recorder(selected["id"], result)
+                reduced, _reducer = reduce_tool_result(canonical, result)
+                visible, _truncation = truncate_tool_text(reduced, tool=canonical, arguments=args)
+                self.guard.contract.record_result(selected["id"], visible)
                 self.guard.journal.record_tool(selected["id"], canonical, result,
                                                event="returned_error" if is_error else "returned",
                                                secrets=(self.guard.secret, self.guard.session))
@@ -241,7 +265,7 @@ class MCPBridge:
                                        event="returned_error" if is_error else "returned",
                                        round_number=rounds,
                                        scope=self.state.scope_for_arguments(args))
-                return result
+                return visible
             except BaseException as exc:
                 code = ("chi_tool_cancelled" if isinstance(exc, asyncio.CancelledError) else
                         exc.code if isinstance(exc, GoFailure) else "chi_mcp_transport_error")

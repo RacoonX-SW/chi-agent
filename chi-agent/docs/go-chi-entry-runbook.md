@@ -133,3 +133,17 @@ payer/UM 与 CM 分别使用 `--role payer` / `--role cm` 和相应角色 MCP；
 适配器保留无Key预检摘要和安全执行摘要，原stdout/stderr只保留字节数/hash及受限安全诊断，不进入Harbor父类的原输出debug日志；实际执行仍由真实环境的exec完成。非零/缺返回码、损坏结果或trace向上报错，超时/取消继续交给Harbor清理，无自动重试。下载日志后核验结果/输出/trace并填充context与trajectory；总tokens取完整已结算请求的run_result，缓存/费用未知保留null，不从部分step用量推断零缓存或金额。
 
 `CHI_GO_STATE_ROOT` 内的账、wire、工具证据及seal需要调用方在删除世界前持久保存，单靠 `run_result.json` 不足以保全历史。仓库测试使用真实Trial hooks采集；开发操作者与官方配送侧各自负责资源供应、证据导出与清理。测试专用解释器/合成HTTP shim不在本包内，不能拿它代替真实模型运行；三角色只读协议也不证明三赛道业务能力。仓库README维护预演命令，详细通过层与限制只见阶段报告。
+
+## context-engineering v3 的运行差异
+
+新 `go_chi_entry.py` 在 launch 写 `context_policy: chi-context-v3`，并使用 `chi-context-budget-v3` 与 mandatory claim。运行手册旧命令不变，但需要知道：
+
+- `/logs/context.jsonl` 的 v3 记录含 `estimated_tokens_upper`、`estimated_tokens_calibrated`、`bytes_per_token_floor/observed`；旧 v2 记录不含这些字段，读取方应按 schema 分支。
+- 请求证据可能含 `projection` 元数据（`chi-context-assembly-v1`），记录 source/wire hash、节省字节、替换/去重数和 `anchor_sha256`；旧请求没有该字段。
+- `run_log.txt` 新增 `context_max_estimated_tokens_upper`、`context_max_estimated_tokens_calibrated`、`context_prompt_tokens_observed`、`context_bytes_per_token_actual`；旧字段仍保留。
+- `drift_events` 只在新 v3 run 出现；旧 journal 读取不要求该键。
+- 包内新增 `go_chi_assembly.py`、`go_chi_completion.py`、`go_chi_index.py`；必须重新导出 bundle 并取得新 B，旧 bundle 不能解释 v3 run。
+- `--context-max-estimated-tokens` 保留字节语义（1..3,500,000）；`--context-max-input-tokens` 是新增 token 参数（1..1,000,000），两者不能同时给。
+- v3 暂不支持 `output_recovery`/`input_summary`；entry/journal/guard 以 `chi_context_policy_incompatible` 显式拒绝。现有带 recovery 的 config 需先移除该字段，或等组合实现后再启用。
+- entry 固定 `deepseek-v4.1-flash` 及其 profile；更换主模型必须同时改 profile、bundle 和 B。
+- 真实 SDK/DeepSeek 对 `messages[2]` 锚点的兼容性、真实长上下文收益和 240s 读超时均未在本阶段验证。

@@ -89,6 +89,24 @@ class RoleOperatorConfigTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.check(value)
 
+    def test_context_input_token_override(self):
+        value = dict(self.base)
+        value["context_max_input_tokens"] = 500_000
+        config = self.check(value)
+        self.assertEqual(role_operator._validation_flags(config),
+                         ["--context-max-input-tokens", "500000"])
+        for bad in (None, True, 0, -1, 1_000_001, "500000", 1.5):
+            with self.subTest(bad=bad):
+                value = dict(self.base)
+                value["context_max_input_tokens"] = bad
+                with self.assertRaises(ValueError):
+                    self.check(value)
+        both = dict(self.base)
+        both["context_max_estimated_tokens"] = 1_500_000
+        both["context_max_input_tokens"] = 500_000
+        with self.assertRaises(ValueError):
+            self.check(both)
+
     def test_main_max_tokens_override(self):
         value = dict(self.base)
         value["main_max_tokens"] = 16384

@@ -29,6 +29,8 @@ STAGES = {
     "persistence": frozenset({"evidence_write", "state_write", "log_write"}),
     "summary": frozenset({"rejected"}),
     "recovery": frozenset({"rejected"}),
+    "completion": frozenset({"claim_required", "drift_hard", "anchor_invalid",
+                            "profile_invalid", "state_program_owned", "policy_incompatible"}),
     "other": frozenset({"unspecified"}),
 }
 
@@ -66,6 +68,13 @@ _CODE_CAUSES = {
     "chi_recovery_history_changed": ("recovery", "rejected"),
     "chi_recovery_limit": ("recovery", "rejected"),
     "chi_recovery_persistence_failed": ("recovery", "rejected"),
+    "chi_claim_required": ("completion", "claim_required"),
+    "chi_drift_hard": ("completion", "drift_hard"),
+    "chi_drift_event_invalid": ("completion", "drift_hard"),
+    "chi_anchor_invalid": ("completion", "anchor_invalid"),
+    "chi_context_profile_invalid": ("completion", "profile_invalid"),
+    "chi_state_program_owned": ("completion", "state_program_owned"),
+    "chi_context_policy_incompatible": ("completion", "policy_incompatible"),
 }
 
 
@@ -75,6 +84,7 @@ chi_ack_inflight
 chi_ack_invalid
 chi_ack_provider_mismatch
 chi_ack_target_invalid
+chi_anchor_invalid
 chi_attempt_or_run_exists
 chi_aux_parent_invalid
 chi_aux_request_invalid
@@ -90,14 +100,19 @@ chi_billing_halted
 chi_billing_invalid
 chi_capabilities_invalid
 chi_claim_invalidated
+chi_claim_required
 chi_claim_violation
 chi_cleanup_failed
 chi_config_invalid
 chi_confirmation_limit
 chi_context_budget_invalid
 chi_context_persistence_failed
+chi_context_policy_incompatible
+chi_context_profile_invalid
 chi_credential_missing
 chi_diagnostic_invalid
+chi_drift_event_invalid
+chi_drift_hard
 chi_entry_failed
 chi_evidence_invalid
 chi_evidence_persistence_failed
@@ -201,6 +216,7 @@ chi_state_limit
 chi_state_missing
 chi_state_patient_unbound
 chi_state_persistence_failed
+chi_state_program_owned
 chi_state_source_conflict
 chi_state_source_not_business
 chi_state_source_not_read

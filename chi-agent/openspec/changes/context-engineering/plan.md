@@ -28,12 +28,14 @@
 
 ## 1. 施工前检查（Brainstorming 审图结果）
 
-- [ ] **Q1 投影位置**：read 占位符放在 guard 的 wire 投影，还是 contract？需确认 `validate_history` 的输入是源历史还是投影。
-- [ ] **Q2 锚点位置**：`messages[2]` 是否与 SDK/DeepSeek 兼容？先写离线回放验证。
-- [ ] **Q3 mutation 规范记录**：哪些字段是“程序可推导”的？列出每类 mutation 的 key_ids。
-- [ ] **Q4 完成证据 schema**：payer/provider/CM 各自的终态对象与必要步骤清单。
-- [ ] **Q5 max_results 单文件上限**：50 是否会破坏 context 预算？与 8K 截断如何叠加。
-- [ ] **Q6 身份变化**：哪些常量/schema 进入 bundle/runtime 身份；旧证据如何只读兼容。
+- [x] **Q1 投影位置**：read 占位符放在 guard 的 wire 投影，还是 contract？需确认 `validate_history` 的输入是源历史还是投影。
+- [x] **Q2 锚点位置**：`messages[2]` 是否与 SDK/DeepSeek 兼容？先写离线回放验证。
+- [x] **Q3 mutation 规范记录**：哪些字段是“程序可推导”的？列出每类 mutation 的 key_ids。
+- [x] **Q4 完成证据 schema**：payer/provider/CM 各自的终态对象与必要步骤清单。
+- [x] **Q5 max_results 单文件上限**：50 是否会破坏 context 预算？与 8K 截断如何叠加。
+- [x] **Q6 身份变化**：哪些常量/schema 进入 bundle/runtime 身份；旧证据如何只读兼容。
+
+结论与实施取舍见 [decisions.md](decisions.md)；阶段证据见 [报告](../../../reviews/context-engineering-review.md)。
 
 ## 2. 标准测试命令
 

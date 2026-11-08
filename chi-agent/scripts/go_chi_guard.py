@@ -10,8 +10,9 @@ import time
 
 import httpx
 
-from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
-from go_chi_contract import ToolContract, ContractFailure
+from go_chi_context import DEFAULT_BUDGET, budget_pressure, check_budget, measure_request
+from go_chi_assembly import project_messages
+from go_chi_contract import ToolContract, ContractFailure, validate_anchor
 from go_chi_diagnostics import build_cause, cause_for_code
 from opencode_go_provider import (GoFailure, _contains_secret, _unique,
                                   SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
@@ -31,7 +32,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                  claimed, confirmation, before_batch=None, observed_request=None, run_started=None,
                  billing_lock=None, fatal_getter=None, context_recorder=None, context_limit=DEFAULT_BUDGET,
                  recovery_blocker=None, canonical_tools=None, wire_recorder=None, summary_snapshot=None,
-                 main_max_tokens=8192):
+                 main_max_tokens=8192, anchor_getter=None):
         if (type(secret) is not str or not secret.strip() or type(session) is not str
                 or not re.fullmatch(r"chi-[0-9a-f]{32}", session)
                 or type(system) is not str or type(instruction) is not str
@@ -50,6 +51,9 @@ class ChiGuard(httpx.AsyncBaseTransport):
         if wire_recorder is not None and not callable(wire_recorder):
             raise GoFailure("chi_guard_invalid")
         self.wire_recorder = wire_recorder
+        if anchor_getter is not None and not callable(anchor_getter):
+            raise GoFailure("chi_guard_invalid")
+        self.anchor_getter = anchor_getter or (lambda: None)
         if recovery_blocker is not None and not callable(recovery_blocker):
             raise GoFailure("chi_guard_invalid")
         if canonical_tools is not None and (type(canonical_tools) is not dict or
@@ -59,6 +63,13 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self.canonical_tools = dict(canonical_tools or {})
         self._active_permit = None
         self._active_summary = None
+        self._active_projection = None
+        self.full_results = {}
+        self.context_policy = journal.run['launch'].get('context_policy')
+        if (self.context_policy == 'chi-context-v3'
+                and (journal.run['launch'].get('output_recovery') is not None
+                     or journal.run['launch'].get('input_summary') is not None)):
+            raise GoFailure('chi_context_policy_incompatible')
         self.summary_snapshot = summary_snapshot
         if journal.run['launch'].get('input_summary') is not None:
             if (journal.run['launch'].get('input_summary') not in SUMMARY_VERSIONS
@@ -147,7 +158,10 @@ class ChiGuard(httpx.AsyncBaseTransport):
             else:
                 if not self.contract.definitions_match(body["tools"]):
                     raise ValueError
-                messages = body["messages"]
+                projection = self._active_projection
+                projected = projection is not None and raw == projection["wire_raw"]
+                source_body = projection["source_body"] if projected else body
+                messages = source_body["messages"]
                 source_used = used
                 if summary is not None and summary['kind'] == 'main':
                     from go_chi_recovery import canonical_sha
@@ -169,11 +183,18 @@ class ChiGuard(httpx.AsyncBaseTransport):
                     failure = GoFailure("chi_request_invalid")
                     failure.cause = build_cause("request", "history_invalid")
                     raise failure from None
+                if projected and projection.get("anchor") is not None:
+                    try:
+                        validate_anchor(body["messages"], projection["anchor"])
+                    except ContractFailure:
+                        failure = GoFailure("chi_request_invalid")
+                        failure.cause = build_cause("request", "history_invalid")
+                        raise failure from None
                 if self.observed_request is not None and not source_only:
-                    observed = (body['messages'][:2] + body['messages'][3:]
+                    observed = (source_body['messages'][:2] + source_body['messages'][3:]
                                 if summary is not None and summary['kind'] == 'main' else messages)
                     self.observed_request(observed, used)
-            metric = measure_request(body, raw)
+            metric = measure_request(body, raw, self.context_limit)
             blocked = check_budget(metric, self.context_limit)
             if blocked is not None and not source_only:
                 failure = GoFailure(blocked)
@@ -339,16 +360,14 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 self._validate(request, request.content, source_only=True)
                 body = json.loads(request.content, object_pairs_hook=_unique,
                                   parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
-                metric = measure_request(body, request.content)
+                metric = measure_request(body, request.content, self.context_limit)
                 blocked = check_budget(metric, self.context_limit)
                 if blocked not in (None, 'chi_context_budget_exceeded'):
                     raise GoFailure(blocked)
                 used = sum(item['purpose'] != 'patient_simulator' for item in self.journal.run['requests'])
                 events = self.journal.run['summary_events']
                 if not events:
-                    trigger = (blocked is not None or
-                               5 * (metric['estimated_tokens'] + metric['effective_output_reserve_tokens']) >=
-                               4 * self.context_limit['max_estimated_tokens'])
+                    trigger = (blocked is not None or budget_pressure(metric, self.context_limit))
                     if not trigger:
                         return False, None
                     selection = select_closed(body['messages'])
@@ -374,7 +393,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                         ensure_ascii=False, separators=(',', ':'))}] + body['messages'][selection['end']:]
                     minimal_raw = json.dumps(minimal, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode()
                     for probe, wire in ((candidate_request, summary_raw), (minimal, minimal_raw)):
-                        failure = check_budget(measure_request(probe, wire), self.context_limit)
+                        failure = check_budget(measure_request(probe, wire, self.context_limit), self.context_limit)
                         if failure: raise GoFailure(failure)
                     permit, generated = self.journal.select_summary(body, protected, self.canonical_tools,
                         source_raw=request.content, secrets=(self.secret, self.session))
@@ -433,12 +452,58 @@ class ChiGuard(httpx.AsyncBaseTransport):
             handled, summary_response = await self._handle_input_summary(request)
             if handled:
                 return summary_response
+            projection_request = request
+            self._active_projection = None
+            if (self.context_policy == "chi-context-v3"
+                    and self.confirmation() is None
+                    and self.journal.run['launch'].get('output_recovery') is None
+                    and self.journal.run['launch'].get('input_summary') is None):
+                try:
+                    source_body = json.loads(request.content, object_pairs_hook=_unique,
+                                             parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
+                    metric = measure_request(source_body, request.content, self.context_limit)
+                    limit = self.context_limit.get('max_input_tokens') if type(self.context_limit) is dict else None
+                    anchor = self.anchor_getter()
+                    pressure = (type(limit) is int and metric.get('estimated_tokens_upper', 0) >= int(0.5 * limit))
+                    if anchor is not None or pressure:
+                        records = {}
+                        for record in self.contract.records:
+                            value = dict(record)
+                            if record["id"] in self.full_results:
+                                value["result"] = self.full_results[record["id"]]
+                            records[record["id"]] = value
+                        events = {}
+                        for event in self.journal.run['tool_events']:
+                            if event.get('event') in {'returned', 'returned_error', 'refused', 'failed'}:
+                                events[event['call_id']] = event['event']
+                        projected, report = project_messages(
+                            source_body['messages'], records=records, events=events,
+                            canonical_tools=self.canonical_tools, anchor=anchor)
+                        if report['saved_bytes'] > 0 or anchor is not None:
+                            wire_body = dict(source_body)
+                            wire_body['messages'] = projected
+                            wire_raw = json.dumps(wire_body, ensure_ascii=False,
+                                                  separators=(',', ':'), allow_nan=False).encode()
+                            headers = httpx.Headers(request.headers)
+                            if 'content-length' in headers:
+                                del headers['content-length']
+                            projection_request = httpx.Request(
+                                request.method, request.url, headers=headers, content=wire_raw,
+                                extensions=dict(request.extensions))
+                            self._active_projection = {
+                                'source_body': source_body, 'wire_raw': wire_raw,
+                                'report': report, 'request': projection_request,
+                                'anchor': anchor,
+                            }
+                except (ValueError, KeyError, TypeError):
+                    self._active_projection = None
+                    projection_request = request
             snapshot = self._contract_snapshot()
             raw_hash = hashlib.sha256(request.content).hexdigest()
             used = sum(x['purpose'] != 'patient_simulator' for x in self.journal.run['requests'])
             claimed = self.claimed()
             async with self.billing_lock:
-                response, candidate = await self._handle_serialized(request)
+                response, candidate = await self._handle_serialized(projection_request)
             if candidate is None:
                 return response
             try:
@@ -449,7 +514,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                                used=used, claimed=claimed)
                 view = derive_view(original, candidate, old_used=used, claimed=claimed)
                 wire = json.dumps(view, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
-                blocked = check_budget(measure_request(view, wire), self.context_limit)
+                blocked = check_budget(measure_request(view, wire, self.context_limit), self.context_limit)
                 if blocked: raise GoFailure(blocked)
                 self._recovery_check(snapshot, raw_hash, request, used, claimed)
                 permit = self.journal.issue_recovery(view, secrets=(self.secret, self.session))
@@ -473,6 +538,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 raise GoFailure(self.error) from None
             finally:
                 self._active_permit = None
+                self._active_projection = None
 
     async def _handle_serialized(self, request):
         try:
@@ -488,7 +554,10 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                  recovery_permit=self._active_permit["index"] if purpose == "continuation" else None,
                                  summary_permit=self._active_summary['index'] if purpose == 'summary' else None,
                                  summary_projection=(self._active_summary['index'] if purpose == 'main'
-                                                     and self._active_summary is not None else None))
+                                                     and self._active_summary is not None else None),
+                                 context_projection=(self._active_projection["report"]
+                                                     if self._active_projection is not None and purpose == 'main'
+                                                     else None))
         except Exception as exc:
             self.error = exc.code if isinstance(exc, GoFailure) else "chi_persistence_failed"
             self.safe_cause = getattr(exc, "cause", None) or cause_for_code(self.error)
@@ -582,3 +651,10 @@ class ChiGuard(httpx.AsyncBaseTransport):
 
     async def aclose(self):
         await self.lower.aclose()
+
+    def record_full_result(self, call_id: str, result: str) -> None:
+        """Keep the full tool result for deterministic projection evidence."""
+        if (type(call_id) is not str or not call_id or type(result) is not str
+                or len(result.encode("utf-8")) > 8 * 1024 * 1024):
+            raise GoFailure("chi_tool_event_invalid")
+        self.full_results[call_id] = result

@@ -21,7 +21,8 @@ sys.dont_write_bytecode = True
 
 from evaluation_bundle import BundleFailure, _check_components, _read_regular_bounded
 from go_chi_bundle import validate_bundle
-from go_chi_context import DEFAULT_BUDGET
+from go_chi_context import (DEFAULT_BUDGET, DEFAULT_BUDGET_V3, budget_from_bytes,
+                            budget_from_input_tokens)
 from go_chi_diagnostics import is_safe_error_code, validate_cause
 from go_chi_journal import ChiJournal, publish_b_receipt
 from go_chi_local import acquire_existing_history
@@ -68,6 +69,8 @@ _RUN_LOG_KEYS = frozenset({
     "task_state_claim", "task_state_claim_violation", "task_state_open_unknowns",
     "completion", "task_state_sha256", "context_budget", "context_requests",
     "context_max_chars", "context_max_estimated_tokens", "context_prompt_tokens",
+    "context_max_estimated_tokens_upper", "context_max_estimated_tokens_calibrated",
+    "context_prompt_tokens_observed", "context_bytes_per_token_actual",
     "patient_simulator_requests", "patient_simulator_input_tokens_known",
     "patient_simulator_output_tokens_known", "first_error_code",
     "outer_error_code", "cleanup_error_code", "journal_error_code",
@@ -77,7 +80,9 @@ _RUN_LOG_INTS = frozenset({
     "provider_requests", "logical_model_steps", "recovery_permits_consumed",
     "tool_events", "elapsed_ms", "summary_events", "task_state_version",
     "context_requests", "context_max_chars", "context_max_estimated_tokens",
-    "context_prompt_tokens", "patient_simulator_requests",
+    "context_prompt_tokens", "context_max_estimated_tokens_upper",
+    "context_max_estimated_tokens_calibrated", "context_prompt_tokens_observed",
+    "patient_simulator_requests",
     "patient_simulator_input_tokens_known", "patient_simulator_output_tokens_known",
 })
 _RUN_LOG_STRINGS = frozenset({
@@ -87,6 +92,7 @@ _RUN_LOG_STRINGS = frozenset({
     "cleanup_error_code", "journal_error_code", "log_fallback_reason",
     "requirements_policy",
 })
+_RUN_LOG_FLOATS = frozenset({"context_bytes_per_token_actual"})
 _RUN_LOG_JSON = frozenset({
     "safe_cause", "physical_requests", "recovery_limits", "journal_usage",
     "current_run_agent_usage", "task_state_target", "task_state_claim",
@@ -97,8 +103,9 @@ _SAFE_CODE = re.compile(r"^[a-z0-9_]{1,64}$")
 
 _COMPLETION_REASON = re.compile(
     r"^completion_(blocked_claim_violation|blocked_unknown|file_write_failed|readback_required|"
-    r"requirements_undeclared|requirements_empty|requirements_open|requirements_evidence_invalid)"
-    r"(:[A-Za-z0-9_-]{1,128})?$")
+    r"requirements_undeclared|requirements_empty|requirements_open|requirements_evidence_invalid|"
+    r"missing_step|terminal_object_missing|business_write_failed)"
+    r"(:[A-Za-z0-9_.-]{1,128})?$")
 _TARGET_KEYS = {"case_id", "patient_id"}
 _CLAIM_KEYS = {"version", "target", "verified_status_call_id", "at_utc_ms", "kind"}
 _REFERENCE_KEYS = {"call_id", "tool", "seq", "event"}
@@ -112,6 +119,7 @@ _COMPLETION_V2_KEYS = {
 }
 _COMPLETION_V3_KEYS = _COMPLETION_V2_KEYS | {"unresolved_file_deliveries"}
 _COMPLETION_V4_KEYS = _COMPLETION_V3_KEYS | {"requirements"}
+_COMPLETION_V5_KEYS = _COMPLETION_V3_KEYS | {"completion_evidence"}
 _REQUIREMENTS_KEYS = {"policy", "instruction_sha256", "declared", "status", "count",
                       "done", "waived", "open", "open_ids", "verification",
                       "semantic_completion_verified"}
@@ -233,6 +241,10 @@ def _is_completion(value):
         keys = _COMPLETION_V3_KEYS
     elif schema == "chi-completion-v4":
         keys = _COMPLETION_V4_KEYS
+    elif schema == "chi-completion-v5":
+        keys = _COMPLETION_V5_KEYS
+        if "requirements" in value:
+            keys = keys | {"requirements"}
     else:
         return False
     if set(value) != keys:
@@ -250,7 +262,9 @@ def _is_completion(value):
         return False
     if not _is_target(value["target"]) or not _is_claim(value["claim"]):
         return False
-    if value["claim_policy"] != "optional_final_text":
+    if value["claim_policy"] not in {"optional_final_text", "mandatory_claim"}:
+        return False
+    if schema == "chi-completion-v5" and value["claim_policy"] != "mandatory_claim":
         return False
     if not _is_status_view(value["latest_business_status"]):
         return False
@@ -283,6 +297,8 @@ def _is_completion(value):
     allowed_limitations = {"final_text_without_claim_not_blocked"}
     if schema == "chi-completion-v4":
         allowed_limitations.add("requirements_provenance_only_not_semantic_completion")
+    if schema == "chi-completion-v5":
+        allowed_limitations.add("requirements_provenance_only_not_semantic_completion")
     if (type(limitations) is not list
             or any(type(item) is not str
                    or item not in allowed_limitations
@@ -290,7 +306,7 @@ def _is_completion(value):
         return False
     if not _is_text(value["note"], 1024, allow_newlines=True):
         return False
-    if schema in {"chi-completion-v3", "chi-completion-v4"}:
+    if schema in {"chi-completion-v3", "chi-completion-v4", "chi-completion-v5"}:
         unresolved = value["unresolved_file_deliveries"]
         if type(unresolved) is not list or len(unresolved) > 256:
             return False
@@ -303,6 +319,19 @@ def _is_completion(value):
                     or type(item["event"]) is not str
                     or item["event"] not in {"failed", "returned_error"}):
                 return False
+    if schema == "chi-completion-v5":
+        evidence = value["completion_evidence"]
+        if (type(evidence) is not dict
+                or set(evidence) != {"schema", "policy", "missing_steps", "terminal_objects"}
+                or evidence.get("schema") != "chi-completion-evidence-v1"
+                or evidence.get("policy") != "chi-context-v3"
+                or type(evidence.get("missing_steps")) is not list
+                or any(type(item) is not list or not item
+                       or any(type(name) is not str for name in item)
+                       for item in evidence["missing_steps"])
+                or type(evidence.get("terminal_objects")) is not list
+                or any(type(name) is not str for name in evidence["terminal_objects"])):
+            return False
     if schema == "chi-completion-v4" and not _is_requirements(value["requirements"]):
         return False
     return True
@@ -401,6 +430,9 @@ def _read_run_log_checked(logs_dir):
         if key in _RUN_LOG_INTS:
             if not _is_int(item):
                 return None
+        elif key in _RUN_LOG_FLOATS:
+            if type(item) is not float or item < 0 or item != item:
+                return None
         elif key in _RUN_LOG_STRINGS:
             if item is not None and not _is_text(item, 256):
                 return None
@@ -427,7 +459,7 @@ def _read_run_log_checked(logs_dir):
                     "chi-role-guidance-v4"}:
                 return None
             if key == "context_budget" and item not in {
-                    None, "chi-context-budget-v1", "chi-context-budget-v2"}:
+                    None, "chi-context-budget-v1", "chi-context-budget-v2", "chi-context-budget-v3"}:
                 return None
             if key == "journal_usage_scope" and item not in {None, "account_namespace"}:
                 return None
@@ -660,6 +692,7 @@ def _parser():
     parser.add_argument("--input-summary", choices=SUMMARY_VERSIONS, default=None)
     parser.add_argument("--requirements", choices=(REQUIREMENTS_POLICY,), default=None)
     parser.add_argument("--context-max-estimated-tokens", type=int, default=None)
+    parser.add_argument("--context-max-input-tokens", type=int, default=None)
     parser.add_argument("--main-max-tokens", type=int, default=None)
     parser.add_argument("--role", choices=("provider", "payer", "cm"))
     parser.add_argument("--instruction-file", type=Path)
@@ -710,9 +743,16 @@ def main(argv=None, *, development=None):
         if args.context_max_estimated_tokens is not None and (
                 args.mode != "live" or not 1 <= args.context_max_estimated_tokens <= 3_500_000):
             raise GoFailure("chi_context_budget_invalid")
+        if args.context_max_input_tokens is not None and (
+                args.mode != "live" or not 1 <= args.context_max_input_tokens <= 1_000_000):
+            raise GoFailure("chi_context_budget_invalid")
+        if args.context_max_estimated_tokens is not None and args.context_max_input_tokens is not None:
+            raise GoFailure("chi_context_budget_invalid")
         if args.main_max_tokens is not None and (
                 args.mode != "live" or not 1024 <= args.main_max_tokens <= 32768):
             raise GoFailure("chi_context_budget_invalid")
+        if args.mode == "live" and (args.output_recovery is not None or args.input_summary is not None):
+            raise GoFailure("chi_context_policy_incompatible")
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
             import importlib
@@ -816,7 +856,8 @@ def main(argv=None, *, development=None):
             launch = {"kind": "chi", "role": args.role, "fee_policy": FEE_POLICY,
                       "instruction_sha256": hashlib.sha256(instruction.encode()).hexdigest(),
                       "mcp_url_sha256": hashlib.sha256(args.mcp_url.encode()).hexdigest(),
-                      "tool_references_sha256": references, "handbook_sha256": _handbook_digest(handbook)}
+                      "tool_references_sha256": references, "handbook_sha256": _handbook_digest(handbook),
+                      "context_policy": "chi-context-v3"}
             if args.output_recovery is not None:
                 launch['output_recovery'] = args.output_recovery
             if args.input_summary is not None:
@@ -859,9 +900,15 @@ def main(argv=None, *, development=None):
         else:
             import httpx
             from go_chi_runtime import run_chi
-            context_budget = dict(DEFAULT_BUDGET)
+            context_budget = dict(DEFAULT_BUDGET_V3)
+            if context_budget.get("model") != "deepseek-v4.1-flash":
+                raise GoFailure("chi_config_invalid")
             if args.context_max_estimated_tokens is not None:
-                context_budget["max_estimated_tokens"] = args.context_max_estimated_tokens
+                context_budget = budget_from_bytes(args.context_max_estimated_tokens, context_budget)
+                launch["context_max_bytes"] = args.context_max_estimated_tokens
+            if args.context_max_input_tokens is not None:
+                context_budget = budget_from_input_tokens(args.context_max_input_tokens, context_budget)
+                launch["context_max_input_tokens"] = args.context_max_input_tokens
             async def execute():
                 kwargs = dict(role=args.role, instruction=instruction, mcp_url=args.mcp_url,
                     instruction_path=instruction_path, logs_dir=logs_dir, workspace_root=args.workspace_root,

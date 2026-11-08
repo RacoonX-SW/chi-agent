@@ -32,9 +32,14 @@ SCHEMA = "chi-task-state-v3"
 VERSION = "chi-task-state-v3"
 SCHEMA_V4 = "chi-task-state-v4"
 VERSION_V4 = "chi-task-state-v4"
+ANCHOR_SCHEMA = "chi-intent-anchor-v1"
+CONTEXT_POLICY_V3 = "chi-context-v3"
+DRIFT_CLASS_LIMIT = 2
+DRIFT_RUN_LIMIT = 3
 LEGACY_SCHEMAS = frozenset({"chi-task-state-v1", "chi-task-state-v2"})
 COMPLETION_SCHEMA = "chi-completion-v3"
 COMPLETION_SCHEMA_V4 = "chi-completion-v4"
+COMPLETION_SCHEMA_V5 = "chi-completion-v5"
 REQUIREMENTS_POLICY = "chi-requirements-v1"
 MAX_STATE_BYTES = 65536
 MAX_TEXT = 800
@@ -234,11 +239,12 @@ class TaskState:
     """One run's bounded task state with immutable version snapshots."""
 
     def __init__(self, root, *, run: str, role: str, binding=None,
-                 requirements=None, instruction=None):
+                 requirements=None, instruction=None, context_policy=None):
         if requirements not in {None, REQUIREMENTS_POLICY}:
             raise GoFailure("chi_requirements_configuration_invalid")
         if requirements == REQUIREMENTS_POLICY and (type(instruction) is not str or not instruction.strip()):
             raise GoFailure("chi_requirements_configuration_invalid")
+        self._context_v3 = context_policy == CONTEXT_POLICY_V3
         self._requirements_enabled = requirements == REQUIREMENTS_POLICY
         self._instruction = instruction if self._requirements_enabled else None
         self._requirements_sha = (hashlib.sha256(instruction.encode("utf-8")).hexdigest()
@@ -284,6 +290,8 @@ class TaskState:
                 "requirements_instruction_sha256": self._requirements_sha,
             })
             self._update_keys.add("requirements")
+        if self._context_v3:
+            self.data["drift"] = {"classes": {}, "total": 0, "events": []}
         self._persist(snapshot=False)
 
     # -- persistence -----------------------------------------------------
@@ -345,6 +353,8 @@ class TaskState:
             self.data["stagnation"] = {"tool": tool, "count": count,
                                        "call_id": call_id, "effect": effect}
         self.data["observations"].append(observation)
+        if self._context_v3:
+            self._bind_target_from_observation(observation)
         if effect == "mutation":
             # A write after a completion claim invalidates that claim. Dispatch
             # should normally refuse this (see mutation_block_reason); this is
@@ -355,6 +365,17 @@ class TaskState:
         self.data["version"] += 1
         self._persist()
         return observation
+
+    def _bind_target_from_observation(self, observation: dict) -> None:
+        scope = observation.get("scope")
+        if type(scope) is str and scope.startswith("case:"):
+            case_id = scope[5:]
+            if self.data["target"]["case_id"] is None:
+                self.data["target"]["case_id"] = case_id
+        if self.data["role"] == "provider":
+            bound = getattr(self.binding, "bound", None)
+            if type(bound) is str and bound and self.data["target"]["patient_id"] is None:
+                self.data["target"]["patient_id"] = bound
 
     def _register_unknown(self, observation: dict) -> None:
         if len(self.data["unknowns"]) >= LIMITS["unknowns"]:
@@ -663,6 +684,8 @@ class TaskState:
         """Validate and apply one model-proposed update; return the new version."""
         if type(payload) is not dict or not payload or set(payload) - self._update_keys:
             raise StateRefusal("chi_state_update_invalid")
+        if self._context_v3 and ({"facts", "target"} & set(payload)):
+            raise StateRefusal("chi_state_program_owned")
         backup = json.loads(json.dumps(self.data))
         try:
             if "target" in payload:
@@ -704,6 +727,66 @@ class TaskState:
         if self.data["claim"] is not None and effect_for(tool, kind) == "mutation":
             return "task_already_claimed_mutation_forbidden"
         return None
+
+    def drift_check(self, tool: str, kind: str, arguments) -> str | None:
+        """Classify v3 drift; soft refusals are counted, hard violations stop."""
+        if not self._context_v3 or tool in {"local-claim_done", "local-state-update",
+                                             "local-task-state", "local-completion-check",
+                                             "local-role-guidance"}:
+            return None
+        effect = effect_for(tool, kind)
+        rule = None
+        if effect == "mutation":
+            if tool in {"local-fs-write", "local-fs-edit"}:
+                args = arguments if type(arguments) is dict else {}
+                path = args.get("path")
+                case_id = None
+                if type(path) is str and "/" in path:
+                    parts = Path(path).parts
+                    if len(parts) >= 3:
+                        case_id = parts[-3] if parts[-2] in {"provider", "payer", "cm", "shared"} else None
+                if case_id is not None and not any(
+                        item.get("event") == "returned" and item.get("effect") == "read"
+                        and item.get("scope") == "case:" + case_id
+                        for item in self.data["observations"]):
+                    rule = "unread_write"
+            elif tool == "auth.submit_authorization":
+                if not any(item.get("event") == "returned" and item.get("effect") == "read"
+                           and type(item.get("scope")) is str and item["scope"].startswith("case:")
+                           for item in self.data["observations"]):
+                    rule = "unread_write"
+        if rule is None and effect == "read":
+            repeat = self.data.get("repeat") or {}
+            if repeat.get("fingerprint") == _fingerprint(tool, kind, arguments) \
+                    and int(repeat.get("count", 0)) >= 2:
+                rule = "repeat_call"
+        if rule is None:
+            return None
+        drift = self.data.setdefault("drift", {"classes": {}, "total": 0, "events": []})
+        hard = rule == "unread_write"
+        count = int(drift["classes"].get(rule, 0)) + 1
+        if hard or count > DRIFT_CLASS_LIMIT or drift["total"] >= DRIFT_RUN_LIMIT:
+            drift["classes"][rule] = count
+            drift["total"] = int(drift["total"]) + 1
+            self._persist()
+            return "HARD:" + rule
+        drift["classes"][rule] = count
+        drift["total"] = int(drift["total"]) + 1
+        self._persist()
+        return "SOFT:" + rule + ":" + str(count)
+
+    def drift_record(self, rule: str, call_id: str, severity: str, outcome: str) -> None:
+        if not self._context_v3:
+            return
+        if severity not in {"soft", "hard"} or outcome not in {"refused", "stopped"}:
+            raise StateRefusal("chi_state_update_invalid")
+        drift = self.data.setdefault("drift", {"classes": {}, "total": 0, "events": []})
+        drift["events"].append({"schema": "chi-drift-event-v1", "rule": rule,
+                                "call_id": call_id, "severity": severity,
+                                "outcome": outcome,
+                                "count": int(drift["classes"].get(rule, 0))})
+        drift["events"] = drift["events"][-32:]
+        self._persist()
 
     def stagnation_warning(self, tool: str, kind: str, arguments) -> str | None:
         """Warn before a third identical read; do not block yet."""
@@ -751,6 +834,11 @@ class TaskState:
         return [item for item in self.data["observations"]
                 if item.get("source_kind") in {"business_mutation", "unknown_mutation"}
                 and item["event"] != "refused"]
+
+    def _failed_business_mutations(self) -> list[dict]:
+        return [item for item in self.data["observations"]
+                if item.get("source_kind") in {"business_mutation", "unknown_mutation"}
+                and item.get("event") in {"returned_error", "failed"}]
 
     def _file_mutations(self) -> list[dict]:
         return [item for item in self.data["observations"]
@@ -809,11 +897,25 @@ class TaskState:
                 except StateRefusal:
                     return (False, "completion_requirements_evidence_invalid:" + item["id"],
                             "blocked", "not_verified", None)
+        if self._context_v3:
+            from go_chi_completion import evaluate
+            allowed, reason, _details = evaluate(self.data)
+            if not allowed:
+                return False, reason, "blocked", "not_verified", "terminal_object"
+            failed = self._failed_business_mutations()
+            if failed:
+                return (False, "completion_business_write_failed:" + failed[-1]["call_id"],
+                        "blocked", "not_verified", "business_status")
         status = self.data["latest_business_status"]
         business = self._business_mutations()
         if business:
             last = business[-1]
             if status is None or status["source_seq"] <= last["seq"]:
+                return (False, "completion_readback_required:" + last["call_id"],
+                        "blocked", "not_verified", "business_status")
+            source = next((item for item in self.data["observations"]
+                           if item["call_id"] == status["source_call_id"]), None)
+            if self._context_v3 and (source is None or source.get("scope") != last.get("scope")):
                 return (False, "completion_readback_required:" + last["call_id"],
                         "blocked", "not_verified", "business_status")
         if status is None:
@@ -897,13 +999,14 @@ class TaskState:
             note += ("; requirement done/waived is provenance-only and does not prove "
                      "semantic business completion")
         report = {
-            "schema": COMPLETION_SCHEMA_V4 if self._requirements_enabled else COMPLETION_SCHEMA,
+            "schema": (COMPLETION_SCHEMA_V5 if self._context_v3 else
+                       COMPLETION_SCHEMA_V4 if self._requirements_enabled else COMPLETION_SCHEMA),
             "verification": verification,
             "business_effect": effect,
             "reason": reason,
             "target": dict(self.data["target"]),
             "claim": self.data["claim"],
-            "claim_policy": "optional_final_text",
+            "claim_policy": "mandatory_claim" if self._context_v3 else "optional_final_text",
             "latest_business_status": status_view,
             "last_business_mutation": reference(last_business),
             "last_file_mutation": reference(last_file),
@@ -920,6 +1023,10 @@ class TaskState:
             "remaining_limitations": limitations,
             "note": note,
         }
+        if self._context_v3:
+            from go_chi_completion import evaluate
+            _allowed, _reason, details = evaluate(self.data)
+            report["completion_evidence"] = details
         if self._requirements_enabled:
             report["requirements"] = self._requirements_report()
         return report
@@ -940,6 +1047,80 @@ class TaskState:
         return {"status": "recorded"}
 
     # -- model-readable summary -----------------------------------------
+    def _has_tool(self, names) -> bool:
+        wanted = set(names)
+        return any(item.get("event") in {"returned", "returned_error"}
+                   and item.get("tool") in wanted for item in self.data["observations"])
+
+    def _current_stage(self) -> str:
+        role = self.data["role"]
+        if role == "provider":
+            if self.data["target"]["case_id"] is None:
+                return "identify_target"
+            if not self._has_tool({"cases.create_from_order"}):
+                return "verify_evidence"
+            if not self._has_tool({"forms.save_form_response", "docs.create_submission_bundle"}):
+                return "prepare_packet"
+            if not self._has_tool({"auth.submit_authorization", "auth.finalize_provider_determination"}):
+                return "submit_or_defer"
+            return "verify_and_close"
+        if role == "payer":
+            if not self._has_tool({"payer_intake_hub.get_intake_case"}):
+                return "intake_review"
+            if not self._has_tool({"review.get_nurse_review_data", "review.get_md_review_data"}):
+                return "verify_documents"
+            if not self._has_tool({"review.save_criteria_evaluation"}):
+                return "assess_criteria"
+            if not self._has_tool({"determination.finalize"}):
+                return "choose_disposition"
+            if not self._has_tool({"payer_letter_center.generate_approval",
+                                   "payer_letter_center.generate_partial_approval",
+                                   "payer_letter_center.generate_denial",
+                                   "payer_letter_center.generate_pend",
+                                   "payer_letter_center.generate_notification"}):
+                return "produce_letter"
+            return "finalize_and_readback"
+        if not self._has_tool({"cm_intake.get_referral"}):
+            return "open_case"
+        if not self._has_tool({"cm_chart.get_chart_data"}):
+            return "chart_review"
+        if not self._has_tool({"cm_outreach.start_outreach_call", "cm_outreach.send_message"}):
+            return "outreach"
+        if not self._has_tool({"cm_assessment.complete_assessment"}):
+            return "assessment"
+        if not self._has_tool({"cm_care_plan.finalize"}):
+            return "care_plan"
+        return "close_or_report"
+
+    def anchor(self) -> dict:
+        """Return the deterministic wire-only intent anchor for this state."""
+        from go_chi_guidance import guidance
+        summary = self.summary()
+        stage_id = self._current_stage()
+        stages = guidance(self.data["role"], summary).get("stages", [])
+        stage = next((item for item in stages if item.get("id") == stage_id), None)
+        if stage is None:
+            raise GoFailure("chi_anchor_invalid")
+        payload = {
+            "schema": ANCHOR_SCHEMA,
+            "role": self.data["role"],
+            "goal": stage.get("goal"),
+            "target": dict(self.data["target"]),
+            "non_goals": list(stage.get("stop_if", [])),
+            "current_step": stage_id,
+            "acceptance": list(stage.get("readback", [])),
+            "forbidden": [
+                "do not invent identifiers or evidence",
+                "do not write a different patient/case than the observed target",
+                "do not continue after an unknown write effect",
+                "do not claim completion without a returned business readback",
+            ],
+        }
+        text = json.dumps(payload, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":"))
+        return {"text": text, "sha256": _sha(payload), "stage": stage_id,
+                "schema": ANCHOR_SCHEMA}
+
     def summary(self) -> dict:
         data = self.data
         observations = data["observations"][-LIMITS["observations_in_summary"]:]
@@ -963,6 +1144,7 @@ class TaskState:
                 for item in observations
             ],
             "observation_count": len(data["observations"]),
+            "drift": data.get("drift"),
             "limits": dict(LIMITS),
         }
         if self._requirements_enabled:
