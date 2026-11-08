@@ -8,7 +8,7 @@
 ## 结论
 
 - 五项能力均有离线实现和定向测试：预算 v3、工具截断/reducer/投影、事实分层/锚点/漂移、完成门禁、检索 L0。
-- 全量 `unittest discover`：**738 tests / 22 skipped / 3 个既有 import error**，无新增失败。
+- 全量 `unittest discover`：**742 tests / 22 skipped / 3 个既有 import error**，无新增失败。
 - 旧 v1/v2 预算与旧 journal 证据保留只读分支；新 v3 证据的 `inspect_history` 回归通过。
 - bundle/runtime 身份已改变：新增 `go_chi_assembly.py`、`go_chi_completion.py`、`go_chi_index.py` 进入 `PACKAGE_FILES`；预算常量、工具 schema、锚点/完成 schema 也改变哈希。**未重建 bundle、未跑新 B。**
 
@@ -70,7 +70,7 @@ docker run --rm --network none \
   /opt/venv/bin/python -m unittest discover -s tests
 ```
 
-结果：**Ran 738 tests, skipped 22, errors 3**。
+结果：**Ran 742 tests, skipped 22, errors 3**。
 
 3 个既有 import error：
 
@@ -95,9 +95,10 @@ docker run --rm --network none \
 
 - **未跑真实 B/C、judge、Trial、发布**；所有结论仅离线。
 - `messages[2]` 锚点对真实 SDK/DeepSeek 的兼容性未验证；只做了离线契约/回放。
+- entry/transport/profile 固定 `deepseek-v4.1-flash`；没有运行时模型选择，换模型必须同时改 profile、bundle、B。
 - 锚点与 `input_summary`/`output_recovery` 的组合未实现；两者默认关闭，组合场景未验证。
 - ~~wire 投影阈值使用 40%（设计文字举例 50%）~~：复审已改回 50%。
-- reducer 只保守处理 `items` 列表；详情/未知工具的字段级 reducer 未展开。
+- reducer 支持 `items`/`result`/`data`/`records`/`rows`；详情/未知工具的字段级 reducer 仍未展开。
 - 漂移硬规则目前覆盖未读先写（文件写/授权提交）；跨患者仍由 patient binding 负责，其他危险 mutation 未穷举。
 - 完成门禁的必要步骤/终态对象按角色固定，可能过度拦截；需开发集校准。
 - 240s 读超时未改；本变更不解决真实长请求超时。
@@ -137,7 +138,25 @@ docker run --rm --network none \
 
 ### 最新验证
 
-- 定向：64 tests OK（新增/更新 11 个测试文件，覆盖 P1-1 至 P1-7 及 P2-1/P2-2/P2-4）。
-- 全量：**738 tests / 22 skipped / 3 个既有 import error**，无新增失败。
+- 定向：33 tests OK（本轮 projection/assembly/truncation/diagnostics 模块）。
+- 全量：**742 tests / 22 skipped / 3 个既有 import error**，无新增失败。
 - `role_operator` 测试在带 controller 依赖的离线容器中：10 tests OK。
 - 旧 v2 兼容、projection/drift inspect、锚点 wire 校验均回归通过。
+
+## 合并后残余修复（2026-11-08）
+
+- 锚点不再绕过 50% 投影阈值：`project_messages` 新增 `project_results`；低压力时只注入锚点，旧结果保持原样；高压力才替换。`replaced`/`deduped` 在只注入锚点时为 0，`saved_bytes` 可为负。
+- `full_results` 新增总量上限 64MB（单结果仍 8MB）；超限 fail closed，错误码 `chi_context_assembly_limit`，已注册 diagnostics cause；不用截断结果冒充完整 evidence。
+- 文档明确 entry/transport/profile 固定 `deepseek-v4.1-flash`；没有运行时模型选择。
+- 未改 REQUIRED 表、240s、默认 `main_max_tokens=8192`。
+
+### 静态必要步骤校准结果（用户提供，未重跑）
+
+用现有 BDE 状态跑新 `evaluate`：
+
+- t015 / t016 / t021 / t023：`True`
+- cm-anorexia / cm-asthma：`True`
+- t022：`False (missing triage.get)`
+- t024：`False (terminal missing)`
+
+结论：当前静态必要步骤表没有拦截已知成功题（t015/t016/t021/t023/cm-anorexia/cm-asthma）；t022/t024 的拒绝分别对应缺 triage 读取和缺终态对象，属于已知失败/未完成状态，不是误拦。该结果只作为离线校准证据，不改变 REQUIREMENTS/REQUIRED 表。

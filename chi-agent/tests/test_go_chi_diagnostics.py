@@ -43,7 +43,8 @@ class CauseTests(unittest.TestCase):
     def test_context_engineering_codes_are_registered(self):
         for code in ("chi_claim_required", "chi_drift_hard", "chi_drift_event_invalid",
                      "chi_anchor_invalid", "chi_context_profile_invalid",
-                     "chi_state_program_owned", "chi_context_policy_incompatible"):
+                     "chi_state_program_owned", "chi_context_policy_incompatible",
+                     "chi_context_assembly_limit"):
             with self.subTest(code=code):
                 self.assertTrue(diag.is_safe_error_code(code))
                 cause = diag.cause_for_code(code)

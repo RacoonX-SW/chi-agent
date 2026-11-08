@@ -30,7 +30,8 @@ STAGES = {
     "summary": frozenset({"rejected"}),
     "recovery": frozenset({"rejected"}),
     "completion": frozenset({"claim_required", "drift_hard", "anchor_invalid",
-                            "profile_invalid", "state_program_owned", "policy_incompatible"}),
+                            "profile_invalid", "state_program_owned", "policy_incompatible",
+                            "assembly_limit"}),
     "other": frozenset({"unspecified"}),
 }
 
@@ -75,6 +76,7 @@ _CODE_CAUSES = {
     "chi_context_profile_invalid": ("completion", "profile_invalid"),
     "chi_state_program_owned": ("completion", "state_program_owned"),
     "chi_context_policy_incompatible": ("completion", "policy_incompatible"),
+    "chi_context_assembly_limit": ("completion", "assembly_limit"),
 }
 
 
@@ -105,6 +107,7 @@ chi_claim_violation
 chi_cleanup_failed
 chi_config_invalid
 chi_confirmation_limit
+chi_context_assembly_limit
 chi_context_budget_invalid
 chi_context_persistence_failed
 chi_context_policy_incompatible

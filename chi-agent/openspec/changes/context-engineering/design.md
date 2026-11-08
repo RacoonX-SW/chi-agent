@@ -117,6 +117,8 @@ L6 LLM 摘要（最后手段）
 - 工具层与 reducer 始终启用；
 - wire 投影只在超过预算阈值（如 50%）时启用；
 - 投影必须确定性：相同历史 + 相同策略 → 相同 wire，并记录投影 hash。
+- v3 的锚点每次请求都注入，但旧工具结果只在预算达到 50% 阈值时才投影；低压力时只增加锚点，不替换旧结果。
+- `full_results` 单结果上限 8MB、总量上限 64MB；超限 fail closed（`chi_context_assembly_limit`），不得用截断结果冒充完整 evidence。
 
 **v3 与 recovery/summary 的兼容边界（2026-11-08 复审）：** 本阶段不实现投影与 `output_recovery`/`input_summary` 的组合。entry、journal 和 guard 对 `context_policy=chi-context-v3` + 任一 recovery/summary 选项显式拒绝（`chi_context_policy_incompatible`），不得静默降级。现有带 recovery 的 config 必须先移除 recovery，或等组合实现后再运行。
 
