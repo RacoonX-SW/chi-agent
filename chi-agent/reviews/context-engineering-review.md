@@ -98,7 +98,7 @@ docker run --rm --network none \
 - entry/transport/profile 固定 `deepseek-v4.1-flash`；没有运行时模型选择，换模型必须同时改 profile、bundle、B。
 - 锚点与 `input_summary`/`output_recovery` 的组合未实现；两者默认关闭，组合场景未验证。
 - ~~wire 投影阈值使用 40%（设计文字举例 50%）~~：复审已改回 50%。
-- reducer 只保守处理 `items` 列表；详情/未知工具的字段级 reducer 未展开。
+- reducer 支持 `items`/`result`/`data`/`records`/`rows`；详情/未知工具的字段级 reducer 仍未展开。
 - 漂移硬规则目前覆盖未读先写（文件写/授权提交）；跨患者仍由 patient binding 负责，其他危险 mutation 未穷举。
 - 完成门禁的必要步骤/终态对象按角色固定，可能过度拦截；需开发集校准。
 - 240s 读超时未改；本变更不解决真实长请求超时。
