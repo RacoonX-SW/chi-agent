@@ -28,7 +28,7 @@ STAGES = {
     "transport": frozenset({"cancelled", "timeout", "request_error", "unknown"}),
     "persistence": frozenset({"evidence_write", "state_write", "log_write"}),
     "summary": frozenset({"rejected"}),
-    "recovery": frozenset({"rejected"}),
+    "recovery": frozenset({"rejected", "view_mismatch", "policy_incompatible"}),
     "completion": frozenset({"claim_required", "drift_hard", "anchor_invalid",
                             "profile_invalid", "state_program_owned", "policy_incompatible",
                             "assembly_limit"}),
@@ -69,6 +69,8 @@ _CODE_CAUSES = {
     "chi_recovery_history_changed": ("recovery", "rejected"),
     "chi_recovery_limit": ("recovery", "rejected"),
     "chi_recovery_persistence_failed": ("recovery", "rejected"),
+    "chi_recovery_view_mismatch": ("recovery", "view_mismatch"),
+    "chi_recovery_policy_incompatible": ("recovery", "policy_incompatible"),
     "chi_claim_required": ("completion", "claim_required"),
     "chi_drift_hard": ("completion", "drift_hard"),
     "chi_drift_event_invalid": ("completion", "drift_hard"),
@@ -193,6 +195,8 @@ chi_recovery_history_changed
 chi_recovery_invalid
 chi_recovery_limit
 chi_recovery_persistence_failed
+chi_recovery_policy_incompatible
+chi_recovery_view_mismatch
 chi_reference_invalid
 chi_reference_required
 chi_request_invalid

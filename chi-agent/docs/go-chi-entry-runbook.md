@@ -144,7 +144,8 @@ payer/UM 与 CM 分别使用 `--role payer` / `--role cm` 和相应角色 MCP；
 - `drift_events` 只在新 v3 run 出现；旧 journal 读取不要求该键。
 - 包内新增 `go_chi_assembly.py`、`go_chi_completion.py`、`go_chi_index.py`；必须重新导出 bundle 并取得新 B，旧 bundle 不能解释 v3 run。
 - `--context-max-estimated-tokens` 保留字节语义（1..3,500,000）；`--context-max-input-tokens` 是新增 token 参数（1..1,000,000），两者不能同时给。
-- v3 暂不支持 `output_recovery`/`input_summary`；entry/journal/guard 以 `chi_context_policy_incompatible` 显式拒绝。现有带 recovery 的 config 需先移除该字段，或等组合实现后再启用。
+- v3 与 `output_recovery` 默认互斥；只有显式 `recovery_view_policy=canonical-v1` 才允许组合。未设置时仍以 `chi_context_policy_incompatible` 拒绝。`input_summary` 仍不支持组合。
+- 启用组合时，config 同时带 `output_recovery` 和 `recovery_view_policy`；`role_operator` 传 `--recovery-view-policy canonical-v1`。partial 冻结视图，regenerate 从 L0 重放并记录新 view hash。
 - v3 每次请求注入锚点，但旧工具结果只在预算达到 50% 时投影；低压力时只增加锚点。`full_results` 单结果上限 8MB、总量上限 64MB，超限以 `chi_context_assembly_limit` fail closed。
 - entry 固定 `deepseek-v4.1-flash` 及其 profile；没有运行时模型选择，更换主模型必须同时改 profile、bundle 和 B。
 - 真实 SDK/DeepSeek 对 `messages[2]` 锚点的兼容性、真实长上下文收益和 240s 读超时均未在本阶段验证。

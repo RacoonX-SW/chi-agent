@@ -107,6 +107,26 @@ class RoleOperatorConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.check(both)
 
+    def test_recovery_view_policy_requires_output_recovery(self):
+        value = dict(self.base)
+        value["output_recovery"] = "chi-output-recovery-v1"
+        value["recovery_view_policy"] = "canonical-v1"
+        config = self.check(value)
+        self.assertEqual(role_operator._validation_flags(config),
+                         ["--output-recovery", "chi-output-recovery-v1",
+                          "--recovery-view-policy", "canonical-v1"])
+        for bad in (None, "other", True):
+            with self.subTest(bad=bad):
+                value = dict(self.base)
+                value["output_recovery"] = "chi-output-recovery-v1"
+                value["recovery_view_policy"] = bad
+                with self.assertRaises(ValueError):
+                    self.check(value)
+        value = dict(self.base)
+        value["recovery_view_policy"] = "canonical-v1"
+        with self.assertRaises(ValueError):
+            self.check(value)
+
     def test_main_max_tokens_override(self):
         value = dict(self.base)
         value["main_max_tokens"] = 16384
