@@ -500,7 +500,7 @@ docker run --rm --network none \
 
 **v3 与 recovery 的当前关系：** 默认仍互斥；只有显式设置 `recovery_view_policy=canonical-v1` 时，entry/journal/guard 才允许 `chi-context-v3` + `output_recovery`。未设置时仍以 `chi_context_policy_incompatible` 拒绝。`input_summary` 仍不支持组合。
 
-启用方式：config 同时包含 `output_recovery: chi-output-recovery-v1` 和 `recovery_view_policy: canonical-v1`；`role_operator` 会传 `--recovery-view-policy canonical-v1`。partial 会冻结视图，regenerate 从 L0 重新派生并记录新 view hash；mutation 不重放。
+启用方式：config 同时包含 `output_recovery: chi-output-recovery-v1` 和 `recovery_view_policy: canonical-v1`；`role_operator` 会传 `--recovery-view-policy canonical-v1`。partial 会冻结视图；regenerate 使用 `chi-context-projection-regenerate-v1`（`keep_recent_batches=1`、强制投影旧结果）从 L0 重新派生并记录 `parent_view_sha256` / 新 `view_sha256`；mutation 不重放。
 
 现有 5 题 config 若只想先验证 v3 基础链路，可移除 `output_recovery`；若要保留 recovery，则显式加入 `recovery_view_policy: canonical-v1`。
 

@@ -8,7 +8,13 @@
 
 ## Q2 regenerate 的视图
 
-允许从 L0 重新派生一个**新的**视图，允许与超时那次不同（例如压力变化后更小）。必须记录新的 `view_sha256`、`source_sha256`、`anchor_sha256`、`pressure` 和投影规则；不重放已执行 mutation。
+允许从 L0 重新派生一个**新的**视图，使用 regenerate 专用策略：
+
+- `projection_rule = "chi-context-projection-regenerate-v1"`
+- `keep_recent_batches = 1`（父请求默认 2）
+- `project_results = True`（即使父请求低压力也压缩旧结果）
+
+必须记录新的 `view_sha256`、`source_sha256`、`anchor_sha256`、`pressure`、`parent_view_sha256` 和投影规则；不重放已执行 mutation。新视图与父视图 hash 必须不同（有旧结果可压缩时）。
 
 ## Q3 permit v1 兼容
 

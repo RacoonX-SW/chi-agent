@@ -324,7 +324,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
                               "refusals": self.contract.refusals})
 
     def _make_view_identity(self, source_body, wire_body, anchor, pressure, *, mode,
-                            parent_round=None, frozen_view=False):
+                            parent_round=None, frozen_view=False,
+                            projection_rule="chi-context-projection-v1"):
         from go_chi_recovery import canonical_sha
         return {
             "schema": "chi-view-identity-v1",
@@ -335,7 +336,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             "recovery_mode": mode,
             "parent_round": parent_round,
             "frozen_view": bool(frozen_view),
-            "projection_rule": "chi-context-projection-v1",
+            "projection_rule": projection_rule,
             "pressure": bool(pressure),
         }
 
@@ -578,7 +579,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                         projected, _report = project_messages(
                             source['messages'], records=records, events=events,
                             canonical_tools=self.canonical_tools, anchor=anchor,
-                            project_results=pressure)
+                            keep_recent_batches=1, project_results=True)
                         view_parent = dict(source)
                         view_parent['messages'] = projected
                     else:
@@ -601,11 +602,15 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                        extensions=dict(request.extensions))
                 self._active_permit = {"index": permit, "request": follow,
                     "body_sha256": hashlib.sha256(wire).hexdigest(), "view_sha256": canonical_sha(view),
+                    "parent_view_sha256": (canonical_sha(self._active_projection['wire_body'])
+                                           if self._active_projection is not None else canonical_sha(original)),
                     "history_length": len(view["messages"]), "source_body": original,
                     "anchor": anchor, "pressure": pressure, "mode": mode}
                 self._active_view = (self._make_view_identity(
                     original, view, anchor, pressure, mode='continuation',
-                    parent_round=used + 1, frozen_view=(mode == 'partial'))
+                    parent_round=used + 1, frozen_view=(mode == 'partial'),
+                    projection_rule=('chi-context-projection-regenerate-v1'
+                                     if mode == 'regenerate' else 'chi-context-projection-v1'))
                     if self.context_policy == 'chi-context-v3' else None)
                 async with self.billing_lock:
                     self._recovery_check(snapshot, raw_hash, request, used, claimed, issued=True)

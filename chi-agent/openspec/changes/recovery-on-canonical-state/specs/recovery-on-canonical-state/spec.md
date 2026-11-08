@@ -24,7 +24,7 @@
 ### B1 新视图记录
 - Given `mode=regenerate`、`source_sha256=S`；
 - When 从 L0 重新派生视图；
-- Then 允许 `view_sha256` 变化，但必须记录新的 `view_sha256` 与投影规则。
+- Then 使用 `chi-context-projection-regenerate-v1`（`keep_recent_batches=1`、`project_results=true`），允许 `view_sha256` 与父 `parent_view_sha256` 不同，但必须记录新的 `view_sha256`、`parent_view_sha256` 与投影规则。
 
 ### B2 不完整输出丢弃
 - Given 上一次响应是 length、content 为空或 tool batch 未执行；

@@ -951,7 +951,9 @@ class ChiJournal:
                                 or (vi.get('parent_round') is not None
                                     and (type(vi['parent_round']) is not int or vi['parent_round'] < 1))
                                 or type(vi.get('frozen_view')) is not bool
-                                or vi.get('projection_rule') != 'chi-context-projection-v1'
+                                or vi.get('projection_rule') not in {
+                                    'chi-context-projection-v1',
+                                    'chi-context-projection-regenerate-v1'}
                                 or type(vi.get('pressure')) is not bool):
                             raise ValueError
                     if item.get("status") == "settled":
@@ -1402,14 +1404,21 @@ class ChiJournal:
         try:
             request_body, response_body, response_sha, old_used, claimed, view = _recovery_source(
                 self.root, self.run, number, anchor=anchor)
-            if claimed != self.run["claim_done"] or canonical_sha(view_body) != canonical_sha(view):
-                raise ValueError
             mode, _ = mode_and_fragment(response_body)
             canonical_policy = self.run["launch"].get("recovery_view_policy") == "canonical-v1"
             if canonical_policy:
                 source = source_body if type(source_body) is dict else request_body
                 if (type(source) is not dict or type(source.get("messages")) is not list):
                     raise ValueError
+                parent_view_sha = canonical_sha(request_body)
+                view_sha = canonical_sha(view_body)
+                if mode == 'partial':
+                    if canonical_sha(view_body) != canonical_sha(view):
+                        raise ValueError
+                    parent_view_sha = view_sha
+                    projection_rule = "chi-context-projection-v1"
+                else:
+                    projection_rule = "chi-context-projection-regenerate-v1"
                 permit = {
                     "schema": "chi-recovery-permit-v2", "policy": POLICY,
                     "identity": self.state["identity"],
@@ -1419,20 +1428,23 @@ class ChiJournal:
                     "chain_ordinal": 1, "history_version": "chi-tool-history-v1",
                     "history_sha256": canonical_sha(request_body["messages"]),
                     "instruction_version": INSTRUCTION_VERSION, "view_version": VIEW,
-                    "view_sha256": canonical_sha(view), "view_body": view,
+                    "view_sha256": view_sha, "view_body": view_body,
                     "continuation_round": None, "decision": "issued", "result": "pending",
                     "source_sha256": canonical_sha(source["messages"]),
                     "anchor_sha256": (anchor["sha256"] if type(anchor) is dict else None),
-                    "history_length": len(view["messages"]),
+                    "history_length": len(view_body["messages"]),
                     "frozen_view": mode == "partial",
-                    "projection_rule": "chi-context-projection-v1",
+                    "projection_rule": projection_rule,
                     "pressure": bool(pressure),
+                    "parent_view_sha256": parent_view_sha,
                 }
                 validate_permit(permit, identity=self.state["identity"], run=self.run,
                                 parent_round=number, parent_request=request_body,
                                 parent_response=response_body, response_sha256=response_sha,
                                 old_used=old_used, claimed=claimed)
             else:
+                if canonical_sha(view_body) != canonical_sha(view):
+                    raise ValueError
                 permit = {"schema": "chi-recovery-permit-v1", "policy": POLICY, "identity": self.state["identity"],
                           **{k: self.run[k] for k in ("evaluation", "task", "attempt", "run")},
                           "root_round": number, "parent_round": number, "parent_response_sha256": response_sha,
@@ -1820,7 +1832,9 @@ class ChiJournal:
                         and (type(view_identity['parent_round']) is not int
                              or view_identity['parent_round'] < 1))
                     or type(view_identity.get('frozen_view')) is not bool
-                    or view_identity.get('projection_rule') != 'chi-context-projection-v1'
+                    or view_identity.get('projection_rule') not in {
+                        'chi-context-projection-v1',
+                        'chi-context-projection-regenerate-v1'}
                     or type(view_identity.get('pressure')) is not bool):
                 raise GoFailure('chi_reservation_invalid')
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")

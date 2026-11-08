@@ -64,6 +64,7 @@ class RecoveryViewBindingTests(unittest.TestCase):
             self.assertEqual(permit["schema"], "chi-recovery-permit-v2")
             self.assertEqual(permit["mode"], "partial")
             self.assertTrue(permit["frozen_view"])
+            self.assertEqual(permit["parent_view_sha256"], permit["view_sha256"])
             self.assertIsNotNone(permit["anchor_sha256"])
             self.assertEqual(permit["history_length"], len(permit["view_body"]["messages"]))
             self.assertEqual(canonical_sha(sent[1]), permit["view_sha256"])
@@ -88,9 +89,45 @@ class RecoveryViewBindingTests(unittest.TestCase):
             permit = json.loads((root / "wire-evidence" / "r" / "001-recovery.json").read_text())
             self.assertEqual(permit["mode"], "regenerate")
             self.assertFalse(permit["frozen_view"])
-            self.assertEqual(canonical_sha(sent[1]), permit["view_sha256"])
+            self.assertEqual(permit["projection_rule"], "chi-context-projection-regenerate-v1")
+            self.assertEqual(permit["parent_view_sha256"], canonical_sha(sent[0]))
+            self.assertEqual(permit["view_sha256"], canonical_sha(sent[1]))
+            self.assertNotEqual(permit["parent_view_sha256"], permit["view_sha256"])
             journal.finish("failed")
             journal.close()
+
+    def test_regenerate_reprojects_older_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            call = {"id": "new", "type": "function",
+                    "function": {"name": "read", "arguments": "{}"}}
+            journal, guard, sent = setup(root, [
+                response({"tool_calls": [call]}, "length"),
+                response({"content": "done"}, "stop"),
+            ])
+            data = body()
+            data["messages"].extend([
+                {"role": "assistant", "content": None,
+                 "tool_calls": [{"id": "old1", "type": "function",
+                                 "function": {"name": "read", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "old1", "content": "old1 " + "x" * 2000},
+                {"role": "assistant", "content": None,
+                 "tool_calls": [{"id": "old2", "type": "function",
+                                 "function": {"name": "read", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "old2", "content": "old2 " + "x" * 2000},
+            ])
+            for index, text in ((1, "old1 " + "x" * 2000), (2, "old2 " + "x" * 2000)):
+                guard.contract.accept_batch(data["messages"][2 * index])
+                guard.contract.record_result(f"old{index}", text)
+            asyncio.run(guard.handle_async_request(request(data)))
+            permit = json.loads((root / "wire-evidence" / "r" / "001-recovery.json").read_text())
+            self.assertNotEqual(permit["parent_view_sha256"], permit["view_sha256"])
+            self.assertIn("chi-tool-result-ref-v1", json.dumps(sent[1]["messages"]))
+            journal.finish("failed")
+            journal.close()
+            raw = (root / "chi-accounting.json").read_bytes()
+            self.assertEqual(inspect_history(root, "a" * 64,
+                                             hashlib.sha256(raw).hexdigest())["status"], "inspected")
 
     def test_missing_view_fields_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

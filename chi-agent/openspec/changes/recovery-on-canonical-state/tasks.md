@@ -14,7 +14,7 @@
 
 - [x] `go_chi_entry.py`：新增显式组合策略（默认关闭）；只有显式启用才允许 v3 + recovery。
 - [x] `go_chi_guard.py`：`partial` 校验冻结视图；视图不一致拒绝。
-- [x] `go_chi_guard.py`：`regenerate` 从 L0 重放，记录新视图。
+- [x] `go_chi_guard.py`：`regenerate` 从 L0 重放，记录新视图（`chi-context-projection-regenerate-v1`，`keep_recent_batches=1`，强制投影）。
 - [x] `go_chi_recovery.py`：mode 判定与视图绑定。
 - [x] `go_chi_diagnostics.py`：新错误码与 cause。
 - [x] 测试：A1–A3、B1–B3、C1–C2、D1–D2、F3、G1–G3。

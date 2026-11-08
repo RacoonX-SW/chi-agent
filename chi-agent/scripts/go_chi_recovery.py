@@ -211,7 +211,8 @@ def _validate_permit_v2(doc, *, identity, run, parent_round, parent_request, par
               'root_round', 'parent_round', 'parent_response_sha256', 'mode', 'chain_ordinal',
               'history_version', 'history_sha256', 'instruction_version', 'view_version', 'view_sha256',
               'continuation_round', 'decision', 'result', 'view_body', 'source_sha256',
-              'anchor_sha256', 'history_length', 'frozen_view', 'projection_rule', 'pressure'}
+              'anchor_sha256', 'history_length', 'frozen_view', 'projection_rule', 'pressure',
+              'parent_view_sha256'}
     if (type(doc) is not dict or set(doc) != fields or doc['schema'] != 'chi-recovery-permit-v2'
             or doc['policy'] != POLICY or doc['identity'] != identity
             or any(doc[k] != run[k] for k in ('evaluation', 'task', 'attempt', 'run'))
@@ -230,13 +231,21 @@ def _validate_permit_v2(doc, *, identity, run, parent_round, parent_request, par
                 and (type(doc['anchor_sha256']) is not str or not DIGEST.fullmatch(doc['anchor_sha256'])))
             or type(doc['history_length']) is not int or doc['history_length'] < 3
             or type(doc['frozen_view']) is not bool or type(doc['pressure']) is not bool
-            or doc['projection_rule'] != 'chi-context-projection-v1'):
+            or type(doc['parent_view_sha256']) is not str or not DIGEST.fullmatch(doc['parent_view_sha256'])
+            or doc['projection_rule'] not in {'chi-context-projection-v1',
+                                             'chi-context-projection-regenerate-v1'}):
         raise ValueError('chi_recovery_invalid')
     expected_mode, _ = mode_and_fragment(parent_response)
     if doc['mode'] != expected_mode:
         raise ValueError('chi_recovery_history_changed')
-    if (doc['mode'] == 'partial') != doc['frozen_view']:
-        raise ValueError('chi_recovery_view_mismatch')
+    if doc['mode'] == 'partial':
+        if not doc['frozen_view'] or doc['parent_view_sha256'] != doc['view_sha256'] \
+                or doc['projection_rule'] != 'chi-context-projection-v1':
+            raise ValueError('chi_recovery_view_mismatch')
+    else:
+        if doc['frozen_view'] or doc['projection_rule'] != 'chi-context-projection-regenerate-v1' \
+                or doc['parent_view_sha256'] != canonical_sha(parent_request):
+            raise ValueError('chi_recovery_view_mismatch')
     view = doc['view_body']
     if type(view) is not dict or type(view.get('messages')) is not list:
         raise ValueError('chi_recovery_invalid')
