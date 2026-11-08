@@ -250,16 +250,28 @@ class ToolContract:
         return _same(definitions, self.definitions)
 
     def validate_history(self, messages: list[dict], *, system: str, instruction: str,
-                         used: int, claimed: bool, coding_probe: bool = False) -> None:
-        """Reject stale budget feedback or history not produced by accepted calls."""
+                         used: int, claimed: bool, coding_probe: bool = False,
+                         anchor: dict | None = None) -> None:
+        """Reject stale budget feedback or history not produced by accepted calls.
+
+        ``anchor`` is the optional program-generated intent anchor. When given,
+        exactly one fixed-schema user message must sit at index 2 and batches
+        start after it. Callers validating the SDK source history pass no anchor.
+        """
         try:
             suffix = "" if coding_probe else feedback(used, claimed)[0]
             if (type(messages) is not list or len(messages) < 2
                     or not _same(messages[0], {"role": "system", "content": system + suffix})
                     or not _same(messages[1], {"role": "user", "content": instruction})):
                 raise ValueError
-            by_id = {record["id"]: record for record in self.records}
             index = 2
+            if anchor is not None:
+                if (type(anchor) is not dict or type(anchor.get("text")) is not str
+                        or index >= len(messages)
+                        or not _same(messages[index], {"role": "user", "content": anchor["text"]})):
+                    raise ValueError
+                index += 1
+            by_id = {record["id"]: record for record in self.records}
             for batch in self.batches:
                 if index >= len(messages) or not _same_assistant(messages[index], batch["message"]):
                     raise ValueError
