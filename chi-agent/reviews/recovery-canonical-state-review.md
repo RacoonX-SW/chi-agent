@@ -66,6 +66,10 @@
 - P2-2：new v3 launch 写 `source_evidence_policy=canonical-v1`；journal/reader 要求 main 有 source，continuation 的 parent 必须有 source，否则 `chi_source_evidence_missing`。旧 v3 无 policy 只读兼容。
 - P2-3 未做：source 文件先写后 entry；若后续失败可能留下孤儿文件；source 总存储未设上限，保留为残余风险。
 - 全量更新为 **754 tests / 23 skipped / 3 个既有 import error**；48 recovery pytest 通过。
+
+## 收口审计
+
+矩阵审计见 [source-evidence-replay-matrix.md](source-evidence-replay-matrix.md)。当前候选矩阵中无 P1；剩余为 source 存储治理、少量测试缺口、字段语义/交叉校验和真实运行限制（P2）。建议冻结 `7a585f8`，不再扩展功能。
 - 未实现 P3（LLM 摘要 + recovery）、任务级 resume、RAG/L1/L2、reasoning 压缩。
 - 未改 240s、默认 `main_max_tokens=8192`、REQUIRED 表。
 - 未重建 bundle、未取得新 B。
