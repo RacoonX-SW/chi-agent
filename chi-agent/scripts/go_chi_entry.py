@@ -689,6 +689,7 @@ def _parser():
     parser.add_argument("--expected-request-sha256")
     parser.add_argument("--acknowledgement-reason")
     parser.add_argument("--output-recovery", choices=(RECOVERY_POLICY["version"],), default=None)
+    parser.add_argument("--recovery-view-policy", choices=("canonical-v1",), default=None)
     parser.add_argument("--input-summary", choices=SUMMARY_VERSIONS, default=None)
     parser.add_argument("--requirements", choices=(REQUIREMENTS_POLICY,), default=None)
     parser.add_argument("--context-max-estimated-tokens", type=int, default=None)
@@ -752,7 +753,10 @@ def main(argv=None, *, development=None):
                 args.mode != "live" or not 1024 <= args.main_max_tokens <= 32768):
             raise GoFailure("chi_context_budget_invalid")
         if args.mode == "live" and (args.output_recovery is not None or args.input_summary is not None):
-            raise GoFailure("chi_context_policy_incompatible")
+            if not (args.recovery_view_policy == "canonical-v1"
+                    and args.output_recovery is not None
+                    and args.input_summary is None):
+                raise GoFailure("chi_context_policy_incompatible")
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
             import importlib
@@ -860,6 +864,8 @@ def main(argv=None, *, development=None):
                       "context_policy": "chi-context-v3"}
             if args.output_recovery is not None:
                 launch['output_recovery'] = args.output_recovery
+            if args.recovery_view_policy is not None:
+                launch['recovery_view_policy'] = args.recovery_view_policy
             if args.input_summary is not None:
                 launch['input_summary'] = args.input_summary
             if args.requirements is not None:

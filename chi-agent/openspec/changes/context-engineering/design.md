@@ -120,7 +120,7 @@ L6 LLM 摘要（最后手段）
 - v3 的锚点每次请求都注入，但旧工具结果只在预算达到 50% 阈值时才投影；低压力时只增加锚点，不替换旧结果。
 - `full_results` 单结果上限 8MB、总量上限 64MB；超限 fail closed（`chi_context_assembly_limit`），不得用截断结果冒充完整 evidence。
 
-**v3 与 recovery/summary 的兼容边界（2026-11-08 复审）：** 本阶段不实现投影与 `output_recovery`/`input_summary` 的组合。entry、journal 和 guard 对 `context_policy=chi-context-v3` + 任一 recovery/summary 选项显式拒绝（`chi_context_policy_incompatible`），不得静默降级。现有带 recovery 的 config 必须先移除 recovery，或等组合实现后再运行。
+**v3 与 recovery/summary 的兼容边界（2026-11-08 复审）：** 默认仍互斥；只有显式 `recovery_view_policy=canonical-v1` 时，entry、journal 和 guard 才允许 `context_policy=chi-context-v3` + `output_recovery`。未设置时仍以 `chi_context_policy_incompatible` 拒绝。`input_summary` 仍不支持组合。partial 冻结视图，regenerate 从 L0 重放并记录新 view hash；mutation 不重放。
 
 ### 2.8 预期收益
 

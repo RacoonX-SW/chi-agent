@@ -55,7 +55,8 @@ def _config(path, expected):
             'bundle_sha256', 'runtime_identity', 'runner_image_id', 'world_image_id', 'dataset_relative',
             'manifest_relative', 'manifest_sha256', 'output_relative', 'dev_sha256', 'operator_timeout_seconds'}
     optional = {'history_mode', 'state_relative', 'local_q_root', 'input_summary', 'output_recovery',
-                'requirements', 'context_max_estimated_tokens', 'context_max_input_tokens', 'main_max_tokens'}
+                'recovery_view_policy', 'requirements', 'context_max_estimated_tokens',
+                'context_max_input_tokens', 'main_max_tokens'}
     if (type(c) is not dict or not keys <= set(c) <= keys | optional
             or c['schema'] != 'chi-role-operator-v1'):
         raise ValueError('config_invalid')
@@ -67,6 +68,10 @@ def _config(path, expected):
             raise ValueError('config_invalid')
     if 'input_summary' in c and 'output_recovery' in c:
         raise ValueError('config_invalid')
+    if 'recovery_view_policy' in c:
+        if (c['recovery_view_policy'] != 'canonical-v1'
+                or 'output_recovery' not in c or 'input_summary' in c):
+            raise ValueError('config_invalid')
     if 'requirements' in c and (c['requirements'] != 'chi-requirements-v1'
                                 or 'input_summary' in c or 'output_recovery' in c):
         raise ValueError('config_invalid')
@@ -130,6 +135,8 @@ def _validation_flags(c):
         flags += ['--input-summary', c['input_summary']]
     if c.get('output_recovery') is not None:
         flags += ['--output-recovery', c['output_recovery']]
+    if c.get('recovery_view_policy') is not None:
+        flags += ['--recovery-view-policy', c['recovery_view_policy']]
     if c.get('requirements') is not None:
         flags += ['--requirements', c['requirements']]
     if c.get('context_max_estimated_tokens') is not None:

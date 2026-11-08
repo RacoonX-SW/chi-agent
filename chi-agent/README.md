@@ -498,10 +498,11 @@ docker run --rm --network none \
 - `--context-max-input-tokens` 是新增的 token 语义参数，范围 `1..1,000,000`；不能与旧的字节参数同时提供。
 - 现有 `nine-rerun*` config 的 `1500000` 仍会被 `role_operator._config` 接受，并映射为 500,000 input tokens。
 
-**v3 与 recovery/summary 的当前关系：** `chi-context-v3` 暂不支持 `output_recovery` 或 `input_summary`；entry、journal 和 guard 会以 `chi_context_policy_incompatible` **显式拒绝**，不会静默降级。现有 5 题 config 都带 `output_recovery=chi-output-recovery-v1`，重跑前必须二选一：
+**v3 与 recovery 的当前关系：** 默认仍互斥；只有显式设置 `recovery_view_policy=canonical-v1` 时，entry/journal/guard 才允许 `chi-context-v3` + `output_recovery`。未设置时仍以 `chi_context_policy_incompatible` 拒绝。`input_summary` 仍不支持组合。
 
-1. 从 config 移除 `output_recovery`（并让 `role_operator` 不再传该 flag），先验证 v3 基础链路；或
-2. 等 recovery 与投影的组合另行实现并审核后，再启用 recovery。
+启用方式：config 同时包含 `output_recovery: chi-output-recovery-v1` 和 `recovery_view_policy: canonical-v1`；`role_operator` 会传 `--recovery-view-policy canonical-v1`。partial 会冻结视图；regenerate 使用 `chi-context-projection-regenerate-v1`（`keep_recent_batches=1`、强制投影旧结果）从 L0 重新派生并记录 `parent_view_sha256` / 新 `view_sha256`；mutation 不重放。
+
+现有 5 题 config 若只想先验证 v3 基础链路，可移除 `output_recovery`；若要保留 recovery，则显式加入 `recovery_view_policy: canonical-v1`。
 
 v3 每次请求都注入锚点，但旧工具结果只在预算达到 **50%** 时投影；低压力时只增加锚点。`full_results` 单结果上限 8MB、总量上限 64MB，超限以 `chi_context_assembly_limit` fail closed。
 

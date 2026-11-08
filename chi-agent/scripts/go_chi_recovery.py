@@ -94,10 +94,12 @@ def mode_and_fragment(payload):
     return 'partial', fragment
 
 
-def derive_view(parent_body, response, *, old_used, claimed):
+def derive_view(parent_body, response, *, old_used, claimed, anchor=None):
     """Derive a wire body from the persisted parent; no arbitrary history accepted.
 
     Guard remains responsible for proving SDK history against ToolContract.
+    ``anchor`` is the optional program anchor at messages[2]; when present, the
+    parent view is already frozen/projected and batches start after it.
     """
     import copy
     from request_budget import feedback
@@ -111,9 +113,16 @@ def derive_view(parent_body, response, *, old_used, claimed):
             or type(messages[1]) is not dict or set(messages[1]) != {'role', 'content'}
             or messages[1]['role'] != 'user' or type(messages[1]['content']) is not str):
         raise ValueError('chi_recovery_invalid')
+    index = 2
+    if anchor is not None:
+        if (type(anchor) is not dict or type(anchor.get('text')) is not str
+                or len(messages) < 3
+                or not _same_message(messages[2], {'role': 'user', 'content': anchor['text']})):
+            raise ValueError('chi_recovery_invalid')
+        index = 3
     pending = set()
     seen = set()
-    for msg in messages[2:]:
+    for msg in messages[index:]:
         if type(msg) is not dict:
             raise ValueError('chi_recovery_invalid')
         if msg.get('role') == 'assistant':
@@ -143,12 +152,34 @@ def derive_view(parent_body, response, *, old_used, claimed):
     return result
 
 
+def _same_message(left, right):
+    return (type(left) is dict and type(right) is dict and left.keys() == right.keys()
+            and all(type(left[key]) is type(right[key]) and left[key] == right[key]
+                    for key in left))
+
+
 def validate_permit(doc, *, identity, run, parent_round, parent_request, parent_response, response_sha256, old_used, claimed):
     """Validate a permit against already verified, restricted wire evidence.
 
     The caller must independently verify journal identity, parent settlement,
     raw evidence hashes, no intervening request and the SDK ToolContract.
+    v1 permits keep their original semantics; v2 adds view identity.
     """
+    if type(doc) is not dict:
+        raise ValueError('chi_recovery_invalid')
+    if doc.get('schema') == 'chi-recovery-permit-v1':
+        return _validate_permit_v1(doc, identity=identity, run=run, parent_round=parent_round,
+                                   parent_request=parent_request, parent_response=parent_response,
+                                   response_sha256=response_sha256, old_used=old_used, claimed=claimed)
+    if doc.get('schema') == 'chi-recovery-permit-v2':
+        return _validate_permit_v2(doc, identity=identity, run=run, parent_round=parent_round,
+                                   parent_request=parent_request, parent_response=parent_response,
+                                   response_sha256=response_sha256, old_used=old_used, claimed=claimed)
+    raise ValueError('chi_recovery_invalid')
+
+
+def _validate_permit_v1(doc, *, identity, run, parent_round, parent_request, parent_response,
+                        response_sha256, old_used, claimed):
     fields = {'schema', 'policy', 'identity', 'evaluation', 'task', 'attempt', 'run',
               'root_round', 'parent_round', 'parent_response_sha256', 'mode', 'chain_ordinal',
               'history_version', 'history_sha256', 'instruction_version', 'view_version', 'view_sha256',
@@ -172,3 +203,69 @@ def validate_permit(doc, *, identity, run, parent_round, parent_request, parent_
     if (doc['mode'] != expected_mode or doc['history_sha256'] != canonical_sha(parent_request['messages'])
             or doc['view_sha256'] != canonical_sha(view) or canonical_sha(doc['view_body']) != canonical_sha(view)):
         raise ValueError('chi_recovery_history_changed')
+
+
+def _validate_permit_v2(doc, *, identity, run, parent_round, parent_request, parent_response,
+                        response_sha256, old_used, claimed):
+    fields = {'schema', 'policy', 'identity', 'evaluation', 'task', 'attempt', 'run',
+              'root_round', 'parent_round', 'parent_response_sha256', 'mode', 'chain_ordinal',
+              'history_version', 'history_sha256', 'instruction_version', 'view_version', 'view_sha256',
+              'continuation_round', 'decision', 'result', 'view_body', 'source_sha256',
+              'anchor_sha256', 'history_length', 'frozen_view', 'projection_rule', 'pressure',
+              'parent_view_sha256'}
+    if (type(doc) is not dict or set(doc) != fields or doc['schema'] != 'chi-recovery-permit-v2'
+            or doc['policy'] != POLICY or doc['identity'] != identity
+            or any(doc[k] != run[k] for k in ('evaluation', 'task', 'attempt', 'run'))
+            or type(parent_round) is not int or parent_round < 1
+            or type(doc['root_round']) is not int or doc['root_round'] != parent_round
+            or type(doc['parent_round']) is not int or doc['parent_round'] != parent_round
+            or doc['parent_response_sha256'] != response_sha256
+            or type(response_sha256) is not str or not DIGEST.fullmatch(response_sha256)
+            or type(doc['chain_ordinal']) is not int or doc['chain_ordinal'] != 1
+            or doc['history_version'] != 'chi-tool-history-v1'
+            or doc['instruction_version'] != INSTRUCTION_VERSION or doc['view_version'] != VIEW
+            or doc['continuation_round'] is not None or doc['decision'] != 'issued'
+            or doc['result'] != 'pending'
+            or type(doc['source_sha256']) is not str or not DIGEST.fullmatch(doc['source_sha256'])
+            or (doc['anchor_sha256'] is not None
+                and (type(doc['anchor_sha256']) is not str or not DIGEST.fullmatch(doc['anchor_sha256'])))
+            or type(doc['history_length']) is not int or doc['history_length'] < 3
+            or type(doc['frozen_view']) is not bool or type(doc['pressure']) is not bool
+            or type(doc['parent_view_sha256']) is not str or not DIGEST.fullmatch(doc['parent_view_sha256'])
+            or doc['projection_rule'] not in {'chi-context-projection-v1',
+                                             'chi-context-projection-regenerate-v1'}):
+        raise ValueError('chi_recovery_invalid')
+    expected_mode, _ = mode_and_fragment(parent_response)
+    if doc['mode'] != expected_mode:
+        raise ValueError('chi_recovery_history_changed')
+    if doc['mode'] == 'partial':
+        if not doc['frozen_view'] or doc['parent_view_sha256'] != doc['view_sha256'] \
+                or doc['projection_rule'] != 'chi-context-projection-v1':
+            raise ValueError('chi_recovery_view_mismatch')
+    else:
+        if doc['frozen_view'] or doc['projection_rule'] != 'chi-context-projection-regenerate-v1' \
+                or doc['parent_view_sha256'] != canonical_sha(parent_request):
+            raise ValueError('chi_recovery_view_mismatch')
+    view = doc['view_body']
+    if type(view) is not dict or type(view.get('messages')) is not list:
+        raise ValueError('chi_recovery_invalid')
+    if (doc['history_sha256'] != canonical_sha(parent_request['messages'])
+            or doc['view_sha256'] != canonical_sha(view)
+            or doc['history_length'] != len(view['messages'])):
+        raise ValueError('chi_recovery_history_changed')
+    if doc['anchor_sha256'] is not None:
+        messages = view['messages']
+        if (len(messages) < 3 or type(messages[2]) is not dict
+                or messages[2].get('role') != 'user'
+                or type(messages[2].get('content')) is not str
+                or hashlib.sha256(messages[2]['content'].encode('utf-8')).hexdigest() != doc['anchor_sha256']):
+            raise ValueError('chi_recovery_view_mismatch')
+    if doc['mode'] == 'partial':
+        anchor_doc = None
+        if doc['anchor_sha256'] is not None:
+            anchor_doc = {"text": view['messages'][2]['content'],
+                          "sha256": doc['anchor_sha256']}
+        expected = derive_view(parent_request, parent_response,
+                               old_used=old_used, claimed=claimed, anchor=anchor_doc)
+        if canonical_sha(expected) != canonical_sha(view):
+            raise ValueError('chi_recovery_view_mismatch')

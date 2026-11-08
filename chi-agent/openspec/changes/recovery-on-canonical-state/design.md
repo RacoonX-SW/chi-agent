@@ -50,6 +50,7 @@
   "mode": "partial|regenerate",
   "source_sha256": "<64 hex>",
   "view_sha256": "<64 hex>",
+  "parent_view_sha256": "<64 hex>",
   "anchor_sha256": "<64 hex|null>",
   "history_length": 42,
   "frozen_view": true,
@@ -58,14 +59,15 @@
 }
 ```
 
-- `partial`：`frozen_view=true`，continuation 的 `view_sha256` 必须等于该值；
-- `regenerate`：`frozen_view=false`，从 `source_sha256` 重放并记录新视图。
+- `partial`：`frozen_view=true`，`parent_view_sha256 == view_sha256`，continuation 的 `view_sha256` 必须等于该值；
+- `regenerate`：`frozen_view=false`，`parent_view_sha256` 是父 wire 的 hash，`view_sha256` 来自 `chi-context-projection-regenerate-v1`（`keep_recent_batches=1`、`project_results=True`），允许与父视图不同。
+- `pressure` 表示本视图是否使用了结果投影：partial 沿用父请求；regenerate 强制为 `true`。
 
 ### 3.2 journal 请求条目
 
 在现有 `projection` 字段之外，新增/复用：
 
-- `source_sha256`、`view_sha256`、`anchor_sha256`；
+- `source_sha256`、`view_sha256`、`parent_view_sha256`、`anchor_sha256`；
 - `recovery_mode`、`parent_round`、`frozen_view`；
 - reader 能按规则复算 `view_sha256`。
 
