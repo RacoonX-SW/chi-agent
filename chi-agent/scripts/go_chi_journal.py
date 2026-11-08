@@ -499,7 +499,7 @@ def reconcile_provider_timeout(root: Path, *, identity: str, accounting_sha256: 
         os.close(lock)
 
 
-def _recovery_source(root: Path, run: dict, parent_round: int):
+def _recovery_source(root: Path, run: dict, parent_round: int, *, anchor=None):
     """Reconstruct a recovery source only from verified, settled evidence."""
     from b_provider_transport import GuardedTransport
     from go_chi_recovery import derive_view, mode_and_fragment
@@ -541,7 +541,8 @@ def _recovery_source(root: Path, run: dict, parent_round: int):
     candidates = []
     for claimed in (False, True):
         try:
-            view = derive_view(request_body, response_body, old_used=old_used, claimed=claimed)
+            view = derive_view(request_body, response_body, old_used=old_used, claimed=claimed,
+                               anchor=anchor)
             candidates.append((claimed, view))
         except ValueError:
             pass
@@ -624,7 +625,10 @@ class ChiJournal:
             if ((launch or {}).get("context_policy") == "chi-context-v3"
                     and (launch.get("output_recovery") is not None
                          or launch.get("input_summary") is not None)):
-                raise GoFailure("chi_context_policy_incompatible")
+                if not (launch.get("recovery_view_policy") == "canonical-v1"
+                        and launch.get("output_recovery") is not None
+                        and launch.get("input_summary") is None):
+                    raise GoFailure("chi_context_policy_incompatible")
             self.run = {"evaluation": evaluation, "task": task, "attempt": attempt, "run": run,
                         "kind": kind, "status": "started", "requests": [], "patient_binding_events": [],
                         "claim_done": False, "tool_events": [], "safe_error_code": None,
@@ -929,6 +933,27 @@ class ChiJournal:
                                 or type(projection.get('keep_recent_batches')) is not int
                                 or projection['keep_recent_batches'] < 0):
                             raise ValueError
+                    if 'view_identity' in item:
+                        required.add('view_identity')
+                        vi = item['view_identity']
+                        fields = {'schema', 'source_sha256', 'view_sha256', 'anchor_sha256',
+                                  'history_length', 'recovery_mode', 'parent_round', 'frozen_view',
+                                  'projection_rule', 'pressure'}
+                        if (type(vi) is not dict or set(vi) != fields
+                                or vi.get('schema') != 'chi-view-identity-v1'
+                                or any(type(vi.get(k)) is not str or not DIGEST.fullmatch(vi[k])
+                                       for k in ('source_sha256', 'view_sha256'))
+                                or (vi.get('anchor_sha256') is not None
+                                    and (type(vi['anchor_sha256']) is not str
+                                         or not DIGEST.fullmatch(vi['anchor_sha256'])))
+                                or type(vi.get('history_length')) is not int or vi['history_length'] < 2
+                                or vi.get('recovery_mode') not in {'main', 'continuation'}
+                                or (vi.get('parent_round') is not None
+                                    and (type(vi['parent_round']) is not int or vi['parent_round'] < 1))
+                                or type(vi.get('frozen_view')) is not bool
+                                or vi.get('projection_rule') != 'chi-context-projection-v1'
+                                or type(vi.get('pressure')) is not bool):
+                            raise ValueError
                     if item.get("status") == "settled":
                         required |= {"usage", "billing", "billing_error"}
                     if set(item) != required:
@@ -940,6 +965,17 @@ class ChiJournal:
                             or req.get("raw_sha256") != item["request_sha256"]): raise ValueError
                     if req.get("body_utf8") is not None and hashlib.sha256(req["body_utf8"].encode()).hexdigest() != req["raw_sha256"]:
                         raise ValueError
+                    if 'view_identity' in item:
+                        from go_chi_recovery import canonical_sha
+                        body = json.loads(req["body_utf8"], object_pairs_hook=_unique)
+                        vi = item['view_identity']
+                        if (canonical_sha(body) != vi['view_sha256']
+                                or vi['history_length'] != len(body.get('messages', []))
+                                or (vi['anchor_sha256'] is not None
+                                    and (len(body.get('messages', [])) < 3
+                                         or hashlib.sha256(body['messages'][2]['content'].encode()).hexdigest()
+                                         != vi['anchor_sha256']))):
+                            raise ValueError
                     if ('dispatch' in req) != ('dispatch_version' in item): raise ValueError
                     if 'dispatch' in req:
                         dispatch = req['dispatch']
@@ -1024,8 +1060,21 @@ class ChiJournal:
                             raise ValueError
                         number = event["parent_round"]
                         seen_parents.add(number)
-                        request_body, response_body, response_sha, old_used, claimed, _ = _recovery_source(self.root, a, number)
                         permit = verify_evidence(self.root, a["run"], number, "recovery", event["permit_sha256"])
+                        anchor = None
+                        if permit.get("schema") == "chi-recovery-permit-v2" and permit.get("anchor_sha256") is not None:
+                            parent = a["requests"][number - 1]
+                            request_doc = verify_evidence(self.root, a["run"], number, "request",
+                                                          parent["request_evidence_sha256"])
+                            body = json.loads(request_doc["body_utf8"], object_pairs_hook=_unique)
+                            if (len(body.get("messages", [])) < 3
+                                    or hashlib.sha256(body["messages"][2]["content"].encode()).hexdigest()
+                                    != permit["anchor_sha256"]):
+                                raise ValueError
+                            anchor = {"text": body["messages"][2]["content"],
+                                      "sha256": permit["anchor_sha256"]}
+                        request_body, response_body, response_sha, old_used, claimed, _ = _recovery_source(
+                            self.root, a, number, anchor=anchor)
                         validate_permit(permit, identity=run_identities.get(a["run"], identity), run=a,
                                         parent_round=number, parent_request=request_body, parent_response=response_body,
                                         response_sha256=response_sha, old_used=old_used, claimed=claimed)
@@ -1333,7 +1382,8 @@ class ChiJournal:
         except Exception:
             raise GoFailure("chi_evidence_persistence_failed") from None
 
-    def issue_recovery(self, view_body: dict, *, secrets: tuple[str, ...] = ()) -> int:
+    def issue_recovery(self, view_body: dict, *, source_body=None, anchor=None, pressure=False,
+                       secrets: tuple[str, ...] = ()) -> int:
         """Persist one consumed, immutable permit without issuing a request."""
         from go_chi_recovery import (POLICY, VIEW, INSTRUCTION_VERSION, canonical_sha,
                                      mode_and_fragment, validate_permit)
@@ -1350,21 +1400,50 @@ class ChiJournal:
         if any(event["parent_round"] == number for event in events):
             raise GoFailure("chi_recovery_limit")
         try:
-            request_body, response_body, response_sha, old_used, claimed, view = _recovery_source(self.root, self.run, number)
+            request_body, response_body, response_sha, old_used, claimed, view = _recovery_source(
+                self.root, self.run, number, anchor=anchor)
             if claimed != self.run["claim_done"] or canonical_sha(view_body) != canonical_sha(view):
                 raise ValueError
             mode, _ = mode_and_fragment(response_body)
-            permit = {"schema": "chi-recovery-permit-v1", "policy": POLICY, "identity": self.state["identity"],
-                      **{k: self.run[k] for k in ("evaluation", "task", "attempt", "run")},
-                      "root_round": number, "parent_round": number, "parent_response_sha256": response_sha,
-                      "mode": mode, "chain_ordinal": 1, "history_version": "chi-tool-history-v1",
-                      "history_sha256": canonical_sha(request_body["messages"]),
-                      "instruction_version": INSTRUCTION_VERSION, "view_version": VIEW,
-                      "view_sha256": canonical_sha(view), "view_body": view,
-                      "continuation_round": None, "decision": "issued", "result": "pending"}
-            validate_permit(permit, identity=self.state["identity"], run=self.run, parent_round=number,
-                            parent_request=request_body, parent_response=response_body, response_sha256=response_sha,
-                            old_used=old_used, claimed=claimed)
+            canonical_policy = self.run["launch"].get("recovery_view_policy") == "canonical-v1"
+            if canonical_policy:
+                source = source_body if type(source_body) is dict else request_body
+                if (type(source) is not dict or type(source.get("messages")) is not list):
+                    raise ValueError
+                permit = {
+                    "schema": "chi-recovery-permit-v2", "policy": POLICY,
+                    "identity": self.state["identity"],
+                    **{k: self.run[k] for k in ("evaluation", "task", "attempt", "run")},
+                    "root_round": number, "parent_round": number,
+                    "parent_response_sha256": response_sha, "mode": mode,
+                    "chain_ordinal": 1, "history_version": "chi-tool-history-v1",
+                    "history_sha256": canonical_sha(request_body["messages"]),
+                    "instruction_version": INSTRUCTION_VERSION, "view_version": VIEW,
+                    "view_sha256": canonical_sha(view), "view_body": view,
+                    "continuation_round": None, "decision": "issued", "result": "pending",
+                    "source_sha256": canonical_sha(source["messages"]),
+                    "anchor_sha256": (anchor["sha256"] if type(anchor) is dict else None),
+                    "history_length": len(view["messages"]),
+                    "frozen_view": mode == "partial",
+                    "projection_rule": "chi-context-projection-v1",
+                    "pressure": bool(pressure),
+                }
+                validate_permit(permit, identity=self.state["identity"], run=self.run,
+                                parent_round=number, parent_request=request_body,
+                                parent_response=response_body, response_sha256=response_sha,
+                                old_used=old_used, claimed=claimed)
+            else:
+                permit = {"schema": "chi-recovery-permit-v1", "policy": POLICY, "identity": self.state["identity"],
+                          **{k: self.run[k] for k in ("evaluation", "task", "attempt", "run")},
+                          "root_round": number, "parent_round": number, "parent_response_sha256": response_sha,
+                          "mode": mode, "chain_ordinal": 1, "history_version": "chi-tool-history-v1",
+                          "history_sha256": canonical_sha(request_body["messages"]),
+                          "instruction_version": INSTRUCTION_VERSION, "view_version": VIEW,
+                          "view_sha256": canonical_sha(view), "view_body": view,
+                          "continuation_round": None, "decision": "issued", "result": "pending"}
+                validate_permit(permit, identity=self.state["identity"], run=self.run, parent_round=number,
+                                parent_request=request_body, parent_response=response_body, response_sha256=response_sha,
+                                old_used=old_used, claimed=claimed)
             raw = json.dumps(permit, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
             if (_contains_secret(permit, *secrets) or any(secret and secret in raw for secret in secrets)):
                 raise ValueError
@@ -1381,11 +1460,12 @@ class ChiJournal:
 
     def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
                 parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None,
-                context_projection=None) -> None:
+                context_projection=None, view_identity=None) -> None:
         try:
             self._reserve(raw, purpose, secrets=secrets, dispatch=dispatch, parent_call_id=parent_call_id,
                           recovery_permit=recovery_permit, summary_permit=summary_permit,
-                          summary_projection=summary_projection, context_projection=context_projection)
+                          summary_projection=summary_projection, context_projection=context_projection,
+                          view_identity=view_identity)
         except BaseException:
             if purpose == "continuation": self._recovery_persistence_failed = True
             if purpose == "summary": self._summary_persistence_failed = True
@@ -1574,7 +1654,7 @@ class ChiJournal:
 
     def _reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
                  parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None,
-                 context_projection=None) -> None:
+                 context_projection=None, view_identity=None) -> None:
         if getattr(self, "_recovery_persistence_failed", False):
             raise GoFailure("chi_recovery_persistence_failed")
         if self.state["pending"] is not None or self.state["halted"] is not None:
@@ -1654,8 +1734,21 @@ class ChiJournal:
                 raise GoFailure("chi_recovery_invalid")
             try:
                 number = selected["parent_round"]
-                parent_request, parent_response, response_sha, old_used, claimed, _ = _recovery_source(self.root, self.run, number)
                 permit = verify_evidence(self.root, self.run_id, number, "recovery", selected["permit_sha256"])
+                anchor = None
+                if permit.get("schema") == "chi-recovery-permit-v2" and permit.get("anchor_sha256") is not None:
+                    parent = self.run["requests"][number - 1]
+                    request_doc = verify_evidence(self.root, self.run_id, number, "request",
+                                                  parent["request_evidence_sha256"])
+                    parent_body = json.loads(request_doc["body_utf8"], object_pairs_hook=_unique)
+                    if (len(parent_body.get("messages", [])) < 3
+                            or hashlib.sha256(parent_body["messages"][2]["content"].encode()).hexdigest()
+                            != permit["anchor_sha256"]):
+                        raise ValueError
+                    anchor = {"text": parent_body["messages"][2]["content"],
+                              "sha256": permit["anchor_sha256"]}
+                parent_request, parent_response, response_sha, old_used, claimed, _ = _recovery_source(
+                    self.root, self.run, number, anchor=anchor)
                 validate_permit(permit, identity=self.state["identity"], run=self.run, parent_round=number,
                                 parent_request=parent_request, parent_response=parent_response,
                                 response_sha256=response_sha, old_used=old_used, claimed=claimed)
@@ -1709,6 +1802,27 @@ class ChiJournal:
                     or len(json.dumps(context_projection, ensure_ascii=False, sort_keys=True,
                                       separators=(',', ':'), allow_nan=False)) > 4096):
                 raise GoFailure('chi_reservation_invalid')
+        if view_identity is not None:
+            fields = {'schema', 'source_sha256', 'view_sha256', 'anchor_sha256',
+                      'history_length', 'recovery_mode', 'parent_round', 'frozen_view',
+                      'projection_rule', 'pressure'}
+            if (type(view_identity) is not dict or set(view_identity) != fields
+                    or view_identity.get('schema') != 'chi-view-identity-v1'
+                    or any(type(view_identity.get(k)) is not str or not DIGEST.fullmatch(view_identity[k])
+                           for k in ('source_sha256', 'view_sha256'))
+                    or (view_identity.get('anchor_sha256') is not None
+                        and (type(view_identity['anchor_sha256']) is not str
+                             or not DIGEST.fullmatch(view_identity['anchor_sha256'])))
+                    or type(view_identity.get('history_length')) is not int
+                    or view_identity['history_length'] < 2
+                    or view_identity.get('recovery_mode') not in {'main', 'continuation'}
+                    or (view_identity.get('parent_round') is not None
+                        and (type(view_identity['parent_round']) is not int
+                             or view_identity['parent_round'] < 1))
+                    or type(view_identity.get('frozen_view')) is not bool
+                    or view_identity.get('projection_rule') != 'chi-context-projection-v1'
+                    or type(view_identity.get('pressure')) is not bool):
+                raise GoFailure('chi_reservation_invalid')
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
         entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
                  "max_tokens": (_main_max_tokens(self.run['launch'])
@@ -1720,6 +1834,7 @@ class ChiJournal:
         if purpose == 'patient_simulator': entry['parent_call_id'] = parent_call_id
         if dispatch is not None: entry['dispatch_version'] = 'chi-go-dispatch-v1'
         if context_projection is not None: entry['projection'] = context_projection
+        if view_identity is not None: entry['view_identity'] = view_identity
         request_doc = envelope(raw, kind="request", secrets=secrets, dispatch=dispatch)
         entry["request_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "request", request_doc)
         self.run["requests"].append(entry)

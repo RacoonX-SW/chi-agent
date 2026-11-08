@@ -67,13 +67,18 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self._active_permit = None
         self._active_summary = None
         self._active_projection = None
+        self._active_view = None
         self.full_results = {}
         self.full_result_bytes = 0
         self.context_policy = journal.run['launch'].get('context_policy')
+        self.recovery_view_policy = journal.run['launch'].get('recovery_view_policy')
         if (self.context_policy == 'chi-context-v3'
                 and (journal.run['launch'].get('output_recovery') is not None
                      or journal.run['launch'].get('input_summary') is not None)):
-            raise GoFailure('chi_context_policy_incompatible')
+            if not (self.recovery_view_policy == 'canonical-v1'
+                    and journal.run['launch'].get('output_recovery') is not None
+                    and journal.run['launch'].get('input_summary') is None):
+                raise GoFailure('chi_context_policy_incompatible')
         self.summary_snapshot = summary_snapshot
         if journal.run['launch'].get('input_summary') is not None:
             if (journal.run['launch'].get('input_summary') not in SUMMARY_VERSIONS
@@ -176,9 +181,11 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 if continuation:
                     from go_chi_recovery import canonical_sha
                     if (hashlib.sha256(raw).hexdigest() != active["body_sha256"]
-                            or canonical_sha(body) != active["view_sha256"]):
-                        raise GoFailure("chi_recovery_history_changed")
-                    messages = messages[:active["history_length"]]
+                            or canonical_sha(body) != active["view_sha256"]
+                            or canonical_sha(body) != canonical_sha(json.loads(raw, object_pairs_hook=_unique))):
+                        raise GoFailure("chi_recovery_view_mismatch")
+                    messages = active["source_body"]["messages"]
+                    source_used = max(0, used - 1)
                 try:
                     self.contract.validate_history(messages, system=self.system, instruction=self.instruction,
                                                    used=source_used, claimed=self.claimed(),
@@ -187,6 +194,11 @@ class ChiGuard(httpx.AsyncBaseTransport):
                     failure = GoFailure("chi_request_invalid")
                     failure.cause = build_cause("request", "history_invalid")
                     raise failure from None
+                if continuation and active.get("anchor") is not None:
+                    try:
+                        validate_anchor(body["messages"], active["anchor"])
+                    except ContractFailure:
+                        raise GoFailure("chi_recovery_view_mismatch") from None
                 if projected and projection.get("anchor") is not None:
                     try:
                         validate_anchor(body["messages"], projection["anchor"])
@@ -310,6 +322,22 @@ class ChiGuard(httpx.AsyncBaseTransport):
         return canonical_sha({"definitions": self.contract.definitions, "records": self.contract.records,
                               "batches": self.contract.batches, "seen": sorted(self.contract.seen),
                               "refusals": self.contract.refusals})
+
+    def _make_view_identity(self, source_body, wire_body, anchor, pressure, *, mode,
+                            parent_round=None, frozen_view=False):
+        from go_chi_recovery import canonical_sha
+        return {
+            "schema": "chi-view-identity-v1",
+            "source_sha256": canonical_sha(source_body["messages"]),
+            "view_sha256": canonical_sha(wire_body),
+            "anchor_sha256": anchor["sha256"] if type(anchor) is dict else None,
+            "history_length": len(wire_body["messages"]),
+            "recovery_mode": mode,
+            "parent_round": parent_round,
+            "frozen_view": bool(frozen_view),
+            "projection_rule": "chi-context-projection-v1",
+            "pressure": bool(pressure),
+        }
 
     def _recovery_check(self, snapshot, raw_hash, request, used, claimed, *, issued=False):
         fatal = self.fatal_getter()
@@ -451,7 +479,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             self._active_summary = None
 
     async def handle_async_request(self, request):
-        from go_chi_recovery import canonical_sha, derive_view
+        from go_chi_recovery import canonical_sha, derive_view, mode_and_fragment
         async with self._control_lock:
             handled, summary_response = await self._handle_input_summary(request)
             if handled:
@@ -460,8 +488,10 @@ class ChiGuard(httpx.AsyncBaseTransport):
             self._active_projection = None
             if (self.context_policy == "chi-context-v3"
                     and self.confirmation() is None
-                    and self.journal.run['launch'].get('output_recovery') is None
-                    and self.journal.run['launch'].get('input_summary') is None):
+                    and self._active_permit is None
+                    and self.journal.run['launch'].get('input_summary') is None
+                    and (self.journal.run['launch'].get('output_recovery') is None
+                         or self.recovery_view_policy == 'canonical-v1')):
                 try:
                     source_body = json.loads(request.content, object_pairs_hook=_unique,
                                              parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
@@ -496,13 +526,25 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                 request.method, request.url, headers=headers, content=wire_raw,
                                 extensions=dict(request.extensions))
                             self._active_projection = {
-                                'source_body': source_body, 'wire_raw': wire_raw,
+                                'source_body': source_body, 'wire_body': wire_body,
+                                'wire_raw': wire_raw,
                                 'report': report, 'request': projection_request,
-                                'anchor': anchor,
+                                'anchor': anchor, 'pressure': pressure,
                             }
                 except (ValueError, KeyError, TypeError):
                     self._active_projection = None
                     projection_request = request
+            source_body = (self._active_projection['source_body']
+                           if self._active_projection is not None else
+                           json.loads(request.content, object_pairs_hook=_unique,
+                                      parse_constant=lambda _: (_ for _ in ()).throw(ValueError())))
+            wire_body = (self._active_projection['wire_body']
+                         if self._active_projection is not None else source_body)
+            anchor = self._active_projection['anchor'] if self._active_projection is not None else None
+            pressure = self._active_projection['pressure'] if self._active_projection is not None else False
+            self._active_view = (self._make_view_identity(source_body, wire_body, anchor, pressure,
+                                                          mode='main')
+                                 if self.context_policy == 'chi-context-v3' else None)
             snapshot = self._contract_snapshot()
             raw_hash = hashlib.sha256(request.content).hexdigest()
             used = sum(x['purpose'] != 'patient_simulator' for x in self.journal.run['requests'])
@@ -517,19 +559,54 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                       parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
                 self.contract.validate_history(original["messages"], system=self.system, instruction=self.instruction,
                                                used=used, claimed=claimed)
-                view = derive_view(original, candidate, old_used=used, claimed=claimed)
+                mode, _fragment = mode_and_fragment(candidate)
+                if self._active_projection is not None:
+                    anchor = self._active_projection.get('anchor')
+                    pressure = self._active_projection.get('pressure', False)
+                    if mode == 'regenerate':
+                        source = self._active_projection['source_body']
+                        records = {}
+                        for record in self.contract.records:
+                            value = dict(record)
+                            if record["id"] in self.full_results:
+                                value["result"] = self.full_results[record["id"]]
+                            records[record["id"]] = value
+                        events = {}
+                        for event in self.journal.run['tool_events']:
+                            if event.get('event') in {'returned', 'returned_error', 'refused', 'failed'}:
+                                events[event['call_id']] = event['event']
+                        projected, _report = project_messages(
+                            source['messages'], records=records, events=events,
+                            canonical_tools=self.canonical_tools, anchor=anchor,
+                            project_results=pressure)
+                        view_parent = dict(source)
+                        view_parent['messages'] = projected
+                    else:
+                        view_parent = self._active_projection['wire_body']
+                else:
+                    view_parent = original
+                    anchor = None
+                    pressure = False
+                view = derive_view(view_parent, candidate, old_used=used, claimed=claimed, anchor=anchor)
                 wire = json.dumps(view, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode()
                 blocked = check_budget(measure_request(view, wire, self.context_limit), self.context_limit)
                 if blocked: raise GoFailure(blocked)
                 self._recovery_check(snapshot, raw_hash, request, used, claimed)
-                permit = self.journal.issue_recovery(view, secrets=(self.secret, self.session))
+                permit = self.journal.issue_recovery(view, source_body=original, anchor=anchor,
+                                                     pressure=pressure,
+                                                     secrets=(self.secret, self.session))
                 headers = httpx.Headers(request.headers)
                 if "content-length" in headers: del headers["content-length"]
                 follow = httpx.Request(request.method, request.url, headers=headers, content=wire,
                                        extensions=dict(request.extensions))
                 self._active_permit = {"index": permit, "request": follow,
                     "body_sha256": hashlib.sha256(wire).hexdigest(), "view_sha256": canonical_sha(view),
-                    "history_length": len(original["messages"])}
+                    "history_length": len(view["messages"]), "source_body": original,
+                    "anchor": anchor, "pressure": pressure, "mode": mode}
+                self._active_view = (self._make_view_identity(
+                    original, view, anchor, pressure, mode='continuation',
+                    parent_round=used + 1, frozen_view=(mode == 'partial'))
+                    if self.context_policy == 'chi-context-v3' else None)
                 async with self.billing_lock:
                     self._recovery_check(snapshot, raw_hash, request, used, claimed, issued=True)
                     final, _ = await self._handle_serialized(follow)
@@ -544,6 +621,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             finally:
                 self._active_permit = None
                 self._active_projection = None
+                self._active_view = None
 
     async def _handle_serialized(self, request):
         try:
@@ -562,7 +640,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                                      and self._active_summary is not None else None),
                                  context_projection=(self._active_projection["report"]
                                                      if self._active_projection is not None and purpose == 'main'
-                                                     else None))
+                                                     else None),
+                                 view_identity=self._active_view)
         except Exception as exc:
             self.error = exc.code if isinstance(exc, GoFailure) else "chi_persistence_failed"
             self.safe_cause = getattr(exc, "cause", None) or cause_for_code(self.error)
