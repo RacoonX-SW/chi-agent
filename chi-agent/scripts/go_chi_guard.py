@@ -68,6 +68,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self._active_summary = None
         self._active_projection = None
         self._active_view = None
+        self._active_source_body = None
         self.full_results = {}
         self.full_result_bytes = 0
         self.context_policy = journal.run['launch'].get('context_policy')
@@ -338,6 +339,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             "frozen_view": bool(frozen_view),
             "projection_rule": projection_rule,
             "pressure": bool(pressure),
+            "claimed": bool(self.claimed()),
         }
 
     def _recovery_check(self, snapshot, raw_hash, request, used, claimed, *, issued=False):
@@ -546,6 +548,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             self._active_view = (self._make_view_identity(source_body, wire_body, anchor, pressure,
                                                           mode='main')
                                  if self.context_policy == 'chi-context-v3' else None)
+            self._active_source_body = source_body if self.context_policy == 'chi-context-v3' else None
             snapshot = self._contract_snapshot()
             raw_hash = hashlib.sha256(request.content).hexdigest()
             used = sum(x['purpose'] != 'patient_simulator' for x in self.journal.run['requests'])
@@ -628,6 +631,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 self._active_permit = None
                 self._active_projection = None
                 self._active_view = None
+                self._active_source_body = None
 
     async def _handle_serialized(self, request):
         try:
@@ -647,7 +651,10 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                  context_projection=(self._active_projection["report"]
                                                      if self._active_projection is not None and purpose == 'main'
                                                      else None),
-                                 view_identity=self._active_view)
+                                 view_identity=self._active_view,
+                                 source_body=(self._active_source_body
+                                              if purpose == 'main' and self.context_policy == 'chi-context-v3'
+                                              else None))
         except Exception as exc:
             self.error = exc.code if isinstance(exc, GoFailure) else "chi_persistence_failed"
             self.safe_cause = getattr(exc, "cause", None) or cause_for_code(self.error)

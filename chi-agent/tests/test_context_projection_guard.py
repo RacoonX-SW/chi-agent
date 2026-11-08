@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import hashlib
 import json
 import tempfile
@@ -61,8 +62,11 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
             for index in range(1, 4):
                 call_id = f"c{index}"
                 message = assistant(call_id)
+                text = f"tool result {index} " + "x" * 4000
                 guard.contract.accept_batch(message)
-                guard.contract.record_result(call_id, f"tool result {index} " + "x" * 4000)
+                guard.contract.record_result(call_id, text)
+                journal.start_tool(call_id, "read", {})
+                journal.record_tool(call_id, "read", text)
             await guard.handle_async_request(request(data))
             self.assertEqual(len(sent), 1)
             wire = sent[0]
@@ -80,6 +84,73 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(inspect_history(root, "a" * 64,
                                              __import__("hashlib").sha256(raw).hexdigest())["status"],
                              "inspected")
+
+    async def test_replay_includes_refused_and_failed_tool_events(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal = ChiJournal(root, identity="a" * 64, evaluation="e", task="t",
+                                 attempt="a", run="r",
+                                 launch={"context_policy": "chi-context-v3",
+                                         "source_evidence_policy": "canonical-v1"})
+            data = source_body()
+            # Replace the three read batches with one refused mutation and one failed read.
+            data["messages"] = data["messages"][:2]
+            data["messages"].extend([
+                {"role": "assistant", "content": None,
+                 "tool_calls": [{"id": "bad1", "type": "function",
+                                 "function": {"name": "write", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "bad1", "content": "REFUSED: blocked"},
+                {"role": "assistant", "content": None,
+                 "tool_calls": [{"id": "bad2", "type": "function",
+                                 "function": {"name": "read", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "bad2", "content": "ERROR: unavailable"},
+                {"role": "assistant", "content": None,
+                 "tool_calls": [{"id": "ok3", "type": "function",
+                                 "function": {"name": "read", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "ok3", "content": "latest result"},
+            ])
+            tools = copy.deepcopy(TOOLS)
+            tools.append({"type": "function", "function": {
+                "name": "write", "description": "Write", "strict": False,
+                "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}})
+            data["tools"] = tools
+            sent = []
+
+            async def answer(req):
+                sent.append(json.loads(req.content))
+                return httpx.Response(200, request=req, json={
+                    "model": "deepseek-v4.1-flash", "usage": USAGE,
+                    "choices": [{"finish_reason": "stop",
+                                 "message": {"role": "assistant", "content": "done"}}]})
+
+            anchor_doc = {"text": '{"schema":"chi-intent-anchor-v1"}',
+                          "sha256": hashlib.sha256(b'{"schema":"chi-intent-anchor-v1"}').hexdigest()}
+            guard = ChiGuard(journal, SECRET, SESSION, httpx.MockTransport(answer),
+                             tools=tools, system="system", instruction="instruction",
+                             claimed=lambda: False, confirmation=lambda: None,
+                             canonical_tools={"read": "local-fs-read", "write": "local-fs-write"},
+                             context_limit=dict(DEFAULT_BUDGET_V3,
+                                                max_input_tokens=measure_request(
+                                                    data, budget=DEFAULT_BUDGET_V3)["estimated_tokens_upper"] * 2),
+                             anchor_getter=lambda: anchor_doc)
+            guard.contract.accept_batch(data["messages"][2])
+            guard.contract.record_result("bad1", "REFUSED: blocked")
+            journal.refuse_tool("bad1", "write", {}, "REFUSED: blocked")
+            guard.contract.accept_batch(data["messages"][4])
+            guard.contract.record_result("bad2", "ERROR: unavailable")
+            journal.start_tool("bad2", "local-fs-read", {})
+            journal.record_tool("bad2", "local-fs-read", "ERROR: unavailable", event="failed")
+            guard.contract.accept_batch(data["messages"][6])
+            guard.contract.record_result("ok3", "latest result")
+            journal.start_tool("ok3", "local-fs-read", {})
+            journal.record_tool("ok3", "local-fs-read", "latest result")
+            await guard.handle_async_request(request(data))
+            journal.finish("failed")
+            journal.close()
+            raw = (root / "chi-accounting.json").read_bytes()
+            from go_chi_journal import inspect_history
+            self.assertEqual(inspect_history(root, "a" * 64,
+                                             hashlib.sha256(raw).hexdigest())["status"], "inspected")
 
     async def test_projection_uses_full_evidence_hash_not_visible_result(self):
         with tempfile.TemporaryDirectory() as directory:

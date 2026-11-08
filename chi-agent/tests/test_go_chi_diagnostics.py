@@ -45,7 +45,8 @@ class CauseTests(unittest.TestCase):
                      "chi_anchor_invalid", "chi_context_profile_invalid",
                      "chi_state_program_owned", "chi_context_policy_incompatible",
                      "chi_context_assembly_limit", "chi_recovery_view_mismatch",
-                     "chi_recovery_policy_incompatible"):
+                     "chi_recovery_policy_incompatible", "chi_view_source_mismatch",
+                     "chi_source_too_large", "chi_source_evidence_missing"):
             with self.subTest(code=code):
                 self.assertTrue(diag.is_safe_error_code(code))
                 cause = diag.cause_for_code(code)

@@ -552,6 +552,67 @@ def _recovery_source(root: Path, run: dict, parent_round: int, *, anchor=None):
     return request_body, response_body, response["raw_sha256"], old_used, claimed, view
 
 
+def _replay_source_view(root: Path, run: dict, source_body: dict, wire_body: dict,
+                        *, keep_recent_batches: int, project_results: bool):
+    """Replay a v3 projection from persisted source + tool evidence."""
+    from go_chi_assembly import project_messages
+    from go_chi_recovery import canonical_sha
+    from go_chi_evidence import verify_tool
+    if (type(source_body) is not dict or type(source_body.get('messages')) is not list
+            or type(wire_body) is not dict or type(wire_body.get('messages')) is not list):
+        raise GoFailure('chi_view_source_mismatch')
+    calls = {}
+    for message in source_body['messages']:
+        if type(message) is dict and message.get('role') == 'assistant':
+            for call in message.get('tool_calls') or []:
+                if type(call) is dict and type(call.get('id')) is str:
+                    calls[call['id']] = call
+    records, events = {}, {}
+    for event in run.get('tool_events', []):
+        if type(event) is not dict or event.get('event') not in {'returned', 'returned_error', 'refused', 'failed'}:
+            continue
+        call_id = event.get('call_id')
+        call = calls.get(call_id)
+        if call is None:
+            continue
+        fn = call.get('function') if type(call.get('function')) is dict else {}
+        try:
+            arguments = json.loads(fn.get('arguments', '{}'), object_pairs_hook=_unique)
+        except Exception:
+            raise GoFailure('chi_view_source_mismatch') from None
+        evidence_ref = event.get('result_evidence_sha256')
+        if type(evidence_ref) is not str:
+            raise GoFailure('chi_view_source_mismatch')
+        evidence = verify_tool(root, run['run'], call_id, evidence_ref)
+        body = evidence.get('body_utf8')
+        if type(body) is not str:
+            raise GoFailure('chi_view_source_mismatch')
+        records[call_id] = {'id': call_id, 'name': event.get('tool') or fn.get('name'),
+                            'arguments': arguments, 'result': body}
+        events[call_id] = event['event']
+    # Test harnesses may use short local aliases; production events are canonical.
+    for record in records.values():
+        if record['name'] == 'read':
+            record['name'] = 'local-fs-read'
+        elif record['name'] == 'write':
+            record['name'] = 'local-fs-write'
+    anchor = None
+    anchor_sha = None
+    view_identity = None
+    messages = wire_body['messages']
+    if len(messages) >= 3 and type(messages[2]) is dict and messages[2].get('role') == 'user':
+        anchor = {'text': messages[2].get('content')}
+        anchor_sha = hashlib.sha256(anchor['text'].encode()).hexdigest()
+        anchor['sha256'] = anchor_sha
+    projected, _ = project_messages(source_body['messages'], records=records, events=events,
+                                    canonical_tools={}, anchor=anchor,
+                                    keep_recent_batches=keep_recent_batches,
+                                    project_results=project_results)
+    expected = dict(source_body)
+    expected['messages'] = projected
+    return expected, canonical_sha(expected)
+
+
 class ChiJournal:
     """Exclusive one-identity namespace with immutable attempt claims.
 
@@ -933,13 +994,15 @@ class ChiJournal:
                                 or type(projection.get('keep_recent_batches')) is not int
                                 or projection['keep_recent_batches'] < 0):
                             raise ValueError
+                    source_value = None
                     if 'view_identity' in item:
                         required.add('view_identity')
                         vi = item['view_identity']
                         fields = {'schema', 'source_sha256', 'view_sha256', 'anchor_sha256',
                                   'history_length', 'recovery_mode', 'parent_round', 'frozen_view',
                                   'projection_rule', 'pressure'}
-                        if (type(vi) is not dict or set(vi) != fields
+                        allowed_fields = fields | {'claimed'}
+                        if (type(vi) is not dict or set(vi) not in (fields, allowed_fields)
                                 or vi.get('schema') != 'chi-view-identity-v1'
                                 or any(type(vi.get(k)) is not str or not DIGEST.fullmatch(vi[k])
                                        for k in ('source_sha256', 'view_sha256'))
@@ -954,7 +1017,14 @@ class ChiJournal:
                                 or vi.get('projection_rule') not in {
                                     'chi-context-projection-v1',
                                     'chi-context-projection-regenerate-v1'}
-                                or type(vi.get('pressure')) is not bool):
+                                or type(vi.get('pressure')) is not bool
+                                or ('claimed' in vi and type(vi.get('claimed')) is not bool)):
+                            raise ValueError
+                    if 'source_evidence_sha256' in item:
+                        required.add('source_evidence_sha256')
+                        if (type(item['source_evidence_sha256']) is not str
+                                or not DIGEST.fullmatch(item['source_evidence_sha256'])
+                                or item.get('purpose') != 'main' or 'view_identity' not in item):
                             raise ValueError
                     if item.get("status") == "settled":
                         required |= {"usage", "billing", "billing_error"}
@@ -978,6 +1048,42 @@ class ChiJournal:
                                          or hashlib.sha256(body['messages'][2]['content'].encode()).hexdigest()
                                          != vi['anchor_sha256']))):
                             raise ValueError
+                    if 'source_evidence_sha256' in item:
+                        from go_chi_recovery import canonical_sha
+                        src = verify_evidence(self.root, a["run"], index, "source",
+                                              item['source_evidence_sha256'])
+                        if (type(src) is not dict or set(src) != {'schema', 'body_utf8', 'raw_sha256'}
+                                or src.get('schema') != 'chi-source-body-v1'
+                                or type(src.get('body_utf8')) is not str
+                                or type(src.get('raw_sha256')) is not str
+                                or not DIGEST.fullmatch(src['raw_sha256'])
+                                or hashlib.sha256(src['body_utf8'].encode()).hexdigest() != src['raw_sha256']
+                                or len(src['body_utf8'].encode()) > 8 * 1024 * 1024):
+                            raise ValueError
+                        source = json.loads(src['body_utf8'], object_pairs_hook=_unique)
+                        if (type(source) is not dict or type(source.get('messages')) is not list):
+                            raise ValueError
+                        if canonical_sha(source['messages']) != item['view_identity']['source_sha256']:
+                            raise GoFailure('chi_view_source_mismatch')
+                        source_value = source
+                        expected_evidence.add((a["run"], f"{index:03d}-source.json"))
+                    if source_value is not None:
+                        _expected, replay_sha = _replay_source_view(
+                            self.root, a, source_value, body,
+                            keep_recent_batches=2, project_results=vi['pressure'])
+                        if replay_sha != vi['view_sha256']:
+                            raise GoFailure('chi_view_source_mismatch')
+                    source_policy = (a.get("launch", {}).get("context_policy") == "chi-context-v3"
+                                     and a.get("launch", {}).get("source_evidence_policy") == "canonical-v1")
+                    if source_policy:
+                        if item.get("purpose") == "main" and 'source_evidence_sha256' not in item:
+                            raise GoFailure("chi_source_evidence_missing")
+                        if item.get("purpose") == "continuation":
+                            parent_round = (item.get('view_identity') or {}).get('parent_round')
+                            if (type(parent_round) is not int or parent_round < 1
+                                    or parent_round > len(a["requests"])
+                                    or 'source_evidence_sha256' not in a["requests"][parent_round - 1]):
+                                raise GoFailure("chi_source_evidence_missing")
                     if ('dispatch' in req) != ('dispatch_version' in item): raise ValueError
                     if 'dispatch' in req:
                         dispatch = req['dispatch']
@@ -1080,6 +1186,31 @@ class ChiJournal:
                         validate_permit(permit, identity=run_identities.get(a["run"], identity), run=a,
                                         parent_round=number, parent_request=request_body, parent_response=response_body,
                                         response_sha256=response_sha, old_used=old_used, claimed=claimed)
+                        if permit.get("schema") == "chi-recovery-permit-v2":
+                            parent_item = a["requests"][number - 1]
+                            source_ref = parent_item.get("source_evidence_sha256")
+                            if source_ref is not None:
+                                src_doc = verify_evidence(self.root, a["run"], number, "source", source_ref)
+                                source = json.loads(src_doc["body_utf8"], object_pairs_hook=_unique)
+                                if canonical_sha(source["messages"]) != permit["source_sha256"]:
+                                    raise GoFailure("chi_view_source_mismatch")
+                                if permit["mode"] == "regenerate" and event["continuation_round"] is not None:
+                                    projected, _ = _replay_source_view(
+                                        self.root, a, source, request_body,
+                                        keep_recent_batches=1, project_results=True)
+                                    anchor_replay = None
+                                    if permit["anchor_sha256"] is not None:
+                                        msgs = projected["messages"]
+                                        if (len(msgs) < 3 or type(msgs[2]) is not dict
+                                                or msgs[2].get("role") != "user"):
+                                            raise GoFailure("chi_view_source_mismatch")
+                                        anchor_replay = {"text": msgs[2].get("content"),
+                                                         "sha256": permit["anchor_sha256"]}
+                                    from go_chi_recovery import derive_view as _derive
+                                    expected_view = _derive(projected, response_body, old_used=old_used,
+                                                            claimed=claimed, anchor=anchor_replay)
+                                    if canonical_sha(expected_view) != permit["view_sha256"]:
+                                        raise GoFailure("chi_view_source_mismatch")
                         continuation = event["continuation_round"]
                         if continuation is None:
                             if number != len(a["requests"]) or a["status"] == "complete": raise ValueError
@@ -1143,6 +1274,9 @@ class ChiJournal:
                                       or any(p.is_symlink() or not p.is_file() for p in receipts.iterdir())): raise ValueError
             if expected_receipts and not receipts.is_dir(): raise ValueError
         except Exception as exc:
+            if isinstance(exc, GoFailure) and exc.code in {'chi_view_source_mismatch',
+                                                           'chi_source_evidence_missing'}:
+                raise
             raise GoFailure("chi_history_invalid") from exc
 
     def _persist(self):
@@ -1473,12 +1607,12 @@ class ChiJournal:
 
     def reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
                 parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None,
-                context_projection=None, view_identity=None) -> None:
+                context_projection=None, view_identity=None, source_body=None) -> None:
         try:
             self._reserve(raw, purpose, secrets=secrets, dispatch=dispatch, parent_call_id=parent_call_id,
                           recovery_permit=recovery_permit, summary_permit=summary_permit,
                           summary_projection=summary_projection, context_projection=context_projection,
-                          view_identity=view_identity)
+                          view_identity=view_identity, source_body=source_body)
         except BaseException:
             if purpose == "continuation": self._recovery_persistence_failed = True
             if purpose == "summary": self._summary_persistence_failed = True
@@ -1667,7 +1801,7 @@ class ChiJournal:
 
     def _reserve(self, raw: bytes, purpose: str, *, secrets: tuple[str, ...] = (), dispatch=None,
                  parent_call_id=None, recovery_permit=None, summary_permit=None, summary_projection=None,
-                 context_projection=None, view_identity=None) -> None:
+                 context_projection=None, view_identity=None, source_body=None) -> None:
         if getattr(self, "_recovery_persistence_failed", False):
             raise GoFailure("chi_recovery_persistence_failed")
         if self.state["pending"] is not None or self.state["halted"] is not None:
@@ -1819,7 +1953,8 @@ class ChiJournal:
             fields = {'schema', 'source_sha256', 'view_sha256', 'anchor_sha256',
                       'history_length', 'recovery_mode', 'parent_round', 'frozen_view',
                       'projection_rule', 'pressure'}
-            if (type(view_identity) is not dict or set(view_identity) != fields
+            allowed_fields = fields | {'claimed'}
+            if (type(view_identity) is not dict or set(view_identity) not in (fields, allowed_fields)
                     or view_identity.get('schema') != 'chi-view-identity-v1'
                     or any(type(view_identity.get(k)) is not str or not DIGEST.fullmatch(view_identity[k])
                            for k in ('source_sha256', 'view_sha256'))
@@ -1836,8 +1971,41 @@ class ChiJournal:
                     or view_identity.get('projection_rule') not in {
                         'chi-context-projection-v1',
                         'chi-context-projection-regenerate-v1'}
-                    or type(view_identity.get('pressure')) is not bool):
+                    or type(view_identity.get('pressure')) is not bool
+                    or ('claimed' in view_identity and type(view_identity.get('claimed')) is not bool)):
                 raise GoFailure('chi_reservation_invalid')
+        source_ref = None
+        if source_body is not None:
+            if (purpose != 'main' or view_identity is None
+                    or type(source_body) is not dict or type(source_body.get('messages')) is not list):
+                raise GoFailure('chi_reservation_invalid')
+            try:
+                raw_source = json.dumps(source_body, ensure_ascii=False, sort_keys=True,
+                                       separators=(',', ':'), allow_nan=False).encode('utf-8')
+            except Exception:
+                raise GoFailure('chi_reservation_invalid') from None
+            if len(raw_source) > 8 * 1024 * 1024:
+                raise GoFailure('chi_source_too_large')
+            if _contains_secret(source_body, *secrets):
+                raise GoFailure('chi_reservation_invalid')
+            source_doc = {"schema": "chi-source-body-v1", "body_utf8": raw_source.decode('utf-8'),
+                          "raw_sha256": hashlib.sha256(raw_source).hexdigest()}
+            try:
+                source_ref = write_evidence(self.root, self.run_id, len(self.run['requests']) + 1,
+                                            "source", source_doc)
+            except Exception:
+                raise GoFailure("chi_evidence_persistence_failed") from None
+        source_policy = (self.run["launch"].get("context_policy") == "chi-context-v3"
+                         and self.run["launch"].get("source_evidence_policy") == "canonical-v1")
+        if source_policy:
+            if purpose == "main" and source_ref is None:
+                raise GoFailure("chi_source_evidence_missing")
+            if purpose == "continuation":
+                parent_round = view_identity.get("parent_round") if type(view_identity) is dict else None
+                if (type(parent_round) is not int or parent_round < 1
+                        or parent_round > len(self.run["requests"])
+                        or "source_evidence_sha256" not in self.run["requests"][parent_round - 1]):
+                    raise GoFailure("chi_source_evidence_missing")
         self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
         entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
                  "max_tokens": (_main_max_tokens(self.run['launch'])
@@ -1850,6 +2018,7 @@ class ChiJournal:
         if dispatch is not None: entry['dispatch_version'] = 'chi-go-dispatch-v1'
         if context_projection is not None: entry['projection'] = context_projection
         if view_identity is not None: entry['view_identity'] = view_identity
+        if source_ref is not None: entry['source_evidence_sha256'] = source_ref
         request_doc = envelope(raw, kind="request", secrets=secrets, dispatch=dispatch)
         entry["request_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "request", request_doc)
         self.run["requests"].append(entry)
