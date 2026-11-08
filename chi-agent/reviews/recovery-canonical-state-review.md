@@ -8,7 +8,7 @@
 ## 结论
 
 - permit v2 记录 `source_sha256`、`view_sha256`、`parent_view_sha256`、`anchor_sha256`、`history_length`、`frozen_view`、`projection_rule`、`pressure`；`pressure` 表示本视图是否使用了结果投影（regenerate 强制 true，partial 沿用父请求）。
-- journal 请求条目记录 `view_identity`；reader 复算 `view_sha256` 并核对 anchor/history。
+- journal 请求条目记录 `view_identity`；v3 main 写 `NNN-source.json`（≤8MB）并记录 `source_evidence_sha256`；reader 从 source + tool evidence 重放 main/regenerate 投影，并核对 anchor/history。
 - v3 + `output_recovery` 只有显式 `recovery_view_policy=canonical-v1` 才允许；默认仍拒绝。
 - partial 冻结视图；regenerate 使用 `chi-context-projection-regenerate-v1` 从 L0 重新投影并记录新 hash；mutation 不重放。
 - 旧 v1 permit、v2 行为、v3-without-recovery 行为保持不变。
@@ -37,7 +37,7 @@
 既有：
 
 - `tests.test_go_chi_recovery_journal` + `tests.test_go_chi_guard_recovery`：48 passed（pytest）。
-- 全量 `unittest discover`：**749 tests / 23 skipped / 3 个既有 import error**。
+- 全量 `unittest discover`：**750 tests / 23 skipped / 3 个既有 import error**。
 - `role_operator` 离线容器：11 tests OK。
 
 ## 旧 v1 兼容
@@ -57,7 +57,7 @@
 
 - `messages[2]` 锚点与真实 SDK/DeepSeek 的兼容性仍未实测；需要真实最小 length + continuation 验证。
 - regenerate 从 L0 source body 使用 `chi-context-projection-regenerate-v1`（`keep_recent_batches=1`、`project_results=True`）重新投影并记录 `parent_view_sha256` / 新 `view_sha256`；不重放 mutation。
-- reader 不复算 source body 的投影（journal 不保存完整 source）；source hash 只比对记录，view hash 复算。
+- reader 现在保存并重放 v3 main source 投影；旧 run 没有 source evidence 时仍按旧证据只读兼容。
 - 未实现 P3（LLM 摘要 + recovery）、任务级 resume、RAG/L1/L2、reasoning 压缩。
 - 未改 240s、默认 `main_max_tokens=8192`、REQUIRED 表。
 - 未重建 bundle、未取得新 B。

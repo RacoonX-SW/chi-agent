@@ -68,8 +68,10 @@
 在现有 `projection` 字段之外，新增/复用：
 
 - `source_sha256`、`view_sha256`、`parent_view_sha256`、`anchor_sha256`；
-- `recovery_mode`、`parent_round`、`frozen_view`；
-- reader 能按规则复算 `view_sha256`。
+- `recovery_mode`、`parent_round`、`frozen_view`、`claimed`；
+- v3 main 请求新增 `source_evidence_sha256`，对应 `NNN-source.json`（`chi-source-body-v1`，≤8MB）；
+- continuation 通过 `view_identity.parent_round` 引用父 main 的 source；
+- reader 能按规则复算 `view_sha256`，并能从 source + tool evidence 重放 main/regenerate。
 
 ### 3.3 校验分层
 

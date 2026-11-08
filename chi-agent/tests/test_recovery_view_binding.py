@@ -15,6 +15,16 @@ from go_chi_recovery import canonical_sha, validate_permit
 from opencode_go_provider import GoFailure
 from test_go_chi_guard import SECRET, SESSION, TOOLS, USAGE, URL, body, request
 
+LOCAL_TOOLS = [{"type": "function", "function": {
+    "name": "local-fs-read", "description": "Read", "strict": False,
+    "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}}]
+
+
+def local_body():
+    data = body()
+    data["tools"] = LOCAL_TOOLS
+    return data
+
 
 def anchor(text='{"schema":"chi-intent-anchor-v1"}'):
     return {"text": text, "sha256": hashlib.sha256(text.encode()).hexdigest()}
@@ -41,9 +51,9 @@ def setup(root, payloads):
         return httpx.Response(200, request=req, json=item)
 
     guard = ChiGuard(journal, SECRET, SESSION, httpx.MockTransport(answer),
-                     tools=TOOLS, system="system", instruction="instruction",
+                     tools=LOCAL_TOOLS, system="system", instruction="instruction",
                      claimed=lambda: False, confirmation=lambda: None,
-                     canonical_tools={"read": "local-fs-read"},
+                     canonical_tools={"local-fs-read": "local-fs-read"},
                      context_limit=DEFAULT_BUDGET_V3,
                      anchor_getter=lambda: anchor())
     return journal, guard, sent
@@ -57,7 +67,7 @@ class RecoveryViewBindingTests(unittest.TestCase):
                 response({"content": "part"}, "length"),
                 response({"content": "done"}, "stop"),
             ])
-            asyncio.run(guard.handle_async_request(request(body())))
+            asyncio.run(guard.handle_async_request(request(local_body())))
             self.assertEqual(len(sent), 2)
             self.assertEqual(sent[0]["messages"][2]["role"], "user")
             permit = json.loads((root / "wire-evidence" / "r" / "001-recovery.json").read_text())
@@ -72,6 +82,8 @@ class RecoveryViewBindingTests(unittest.TestCase):
             self.assertEqual(journal.run["requests"][0]["view_identity"]["recovery_mode"], "main")
             self.assertEqual(journal.run["requests"][1]["view_identity"]["recovery_mode"], "continuation")
             self.assertFalse(journal.run["requests"][1]["view_identity"]["pressure"])
+            self.assertTrue((root / "wire-evidence" / "r" / "001-source.json").is_file())
+            self.assertIn("source_evidence_sha256", journal.run["requests"][0])
             journal.finish("failed")
             journal.close()
             raw = (root / "chi-accounting.json").read_bytes()
@@ -82,12 +94,12 @@ class RecoveryViewBindingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             call = {"id": "new", "type": "function",
-                    "function": {"name": "read", "arguments": "{}"}}
+                    "function": {"name": "local-fs-read", "arguments": "{}"}}
             journal, guard, sent = setup(root, [
                 response({"tool_calls": [call]}, "length"),
                 response({"content": "done"}, "stop"),
             ])
-            asyncio.run(guard.handle_async_request(request(body())))
+            asyncio.run(guard.handle_async_request(request(local_body())))
             permit = json.loads((root / "wire-evidence" / "r" / "001-recovery.json").read_text())
             self.assertEqual(permit["mode"], "regenerate")
             self.assertFalse(permit["frozen_view"])
@@ -104,25 +116,27 @@ class RecoveryViewBindingTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             call = {"id": "new", "type": "function",
-                    "function": {"name": "read", "arguments": "{}"}}
+                    "function": {"name": "local-fs-read", "arguments": "{}"}}
             journal, guard, sent = setup(root, [
                 response({"tool_calls": [call]}, "length"),
                 response({"content": "done"}, "stop"),
             ])
-            data = body()
+            data = local_body()
             data["messages"].extend([
                 {"role": "assistant", "content": None,
                  "tool_calls": [{"id": "old1", "type": "function",
-                                 "function": {"name": "read", "arguments": "{}"}}]},
+                                 "function": {"name": "local-fs-read", "arguments": "{}"}}]},
                 {"role": "tool", "tool_call_id": "old1", "content": "old1 " + "x" * 2000},
                 {"role": "assistant", "content": None,
                  "tool_calls": [{"id": "old2", "type": "function",
-                                 "function": {"name": "read", "arguments": "{}"}}]},
+                                 "function": {"name": "local-fs-read", "arguments": "{}"}}]},
                 {"role": "tool", "tool_call_id": "old2", "content": "old2 " + "x" * 2000},
             ])
             for index, text in ((1, "old1 " + "x" * 2000), (2, "old2 " + "x" * 2000)):
                 guard.contract.accept_batch(data["messages"][2 * index])
                 guard.contract.record_result(f"old{index}", text)
+                journal.start_tool(f"old{index}", "local-fs-read", {})
+                journal.record_tool(f"old{index}", "local-fs-read", text)
             asyncio.run(guard.handle_async_request(request(data)))
             permit = json.loads((root / "wire-evidence" / "r" / "001-recovery.json").read_text())
             self.assertNotEqual(permit["parent_view_sha256"], permit["view_sha256"])
@@ -133,11 +147,38 @@ class RecoveryViewBindingTests(unittest.TestCase):
             self.assertEqual(inspect_history(root, "a" * 64,
                                              hashlib.sha256(raw).hexdigest())["status"], "inspected")
 
+    def test_tampered_source_body_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal, guard, sent = setup(root, [
+                response({"content": "part"}, "length"),
+                response({"content": "done"}, "stop"),
+            ])
+            asyncio.run(guard.handle_async_request(request(local_body())))
+            source_path = root / "wire-evidence" / "r" / "001-source.json"
+            doc = json.loads(source_path.read_text())
+            body_value = json.loads(doc["body_utf8"])
+            body_value["messages"][1]["content"] = "tampered"
+            raw = json.dumps(body_value, ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":")).encode()
+            doc["body_utf8"] = raw.decode()
+            doc["raw_sha256"] = hashlib.sha256(raw).hexdigest()
+            payload = (json.dumps(doc, ensure_ascii=False, sort_keys=True,
+                                  separators=(",", ":")) + "\n").encode()
+            source_path.write_bytes(payload)
+            journal.run["requests"][0]["source_evidence_sha256"] = hashlib.sha256(payload).hexdigest()
+            journal.finish("failed")
+            journal.close()
+            state_path = root / "chi-accounting.json"
+            raw_state = state_path.read_bytes()
+            with self.assertRaisesRegex(GoFailure, "chi_view_source_mismatch"):
+                inspect_history(root, "a" * 64, hashlib.sha256(raw_state).hexdigest())
+
     def test_missing_view_fields_are_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             journal, guard, sent = setup(Path(directory), [response({"content": "part"}),
                                                            response({"content": "done"}, "stop")])
-            asyncio.run(guard.handle_async_request(request(body())))
+            asyncio.run(guard.handle_async_request(request(local_body())))
             permit = json.loads((Path(directory) / "wire-evidence" / "r" / "001-recovery.json").read_text())
             broken = copy.deepcopy(permit)
             del broken["source_sha256"]

@@ -68,9 +68,14 @@
 - Then 记录 `source_sha256`、`view_sha256`、`anchor_sha256`、`history_length`、`recovery_mode`。
 
 ### E2 reader 复算
-- Given 旧请求证据；
+- Given 旧请求证据与 v3 main 的 source evidence；
 - When reader 校验；
-- Then 能按投影规则复算 `view_sha256` 并比对；不一致即拒绝。
+- Then 加载 source，校验 `source_sha256`，从 tool evidence 重放投影并核对 `view_sha256`；regenerate 从 source + regenerate 策略重放；不一致即拒绝。
+
+### E4 source evidence
+- Given v3 main 请求；
+- When 写入 journal；
+- Then 保存 `NNN-source.json`（`chi-source-body-v1`，≤8MB）并记录 `source_evidence_sha256`；continuation 复用父 main 的 source。
 
 ### E3 旧 permit 兼容
 - Given 旧 v1 permit（无 view/anchor 字段）；

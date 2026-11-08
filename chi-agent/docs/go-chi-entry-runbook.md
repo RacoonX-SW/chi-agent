@@ -147,5 +147,6 @@ payer/UM 与 CM 分别使用 `--role payer` / `--role cm` 和相应角色 MCP；
 - v3 与 `output_recovery` 默认互斥；只有显式 `recovery_view_policy=canonical-v1` 才允许组合。未设置时仍以 `chi_context_policy_incompatible` 拒绝。`input_summary` 仍不支持组合。
 - 启用组合时，config 同时带 `output_recovery` 和 `recovery_view_policy`；`role_operator` 传 `--recovery-view-policy canonical-v1`。partial 冻结视图；regenerate 使用 `chi-context-projection-regenerate-v1`（`keep_recent_batches=1`、强制投影旧结果）从 L0 重放并记录 `parent_view_sha256` / 新 `view_sha256`。
 - v3 每次请求注入锚点，但旧工具结果只在预算达到 50% 时投影；低压力时只增加锚点。`full_results` 单结果上限 8MB、总量上限 64MB，超限以 `chi_context_assembly_limit` fail closed。
+- v3 main 请求持久化 `NNN-source.json`（`chi-source-body-v1`，≤8MB），请求条目记录 `source_evidence_sha256`；continuation 复用父 main 的 source。reader 可从 source + tool evidence 重放 main/regenerate 投影。
 - entry 固定 `deepseek-v4.1-flash` 及其 profile；没有运行时模型选择，更换主模型必须同时改 profile、bundle 和 B。
 - 真实 SDK/DeepSeek 对 `messages[2]` 锚点的兼容性、真实长上下文收益和 240s 读超时均未在本阶段验证。

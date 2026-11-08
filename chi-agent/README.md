@@ -504,7 +504,7 @@ docker run --rm --network none \
 
 现有 5 题 config 若只想先验证 v3 基础链路，可移除 `output_recovery`；若要保留 recovery，则显式加入 `recovery_view_policy: canonical-v1`。
 
-v3 每次请求都注入锚点，但旧工具结果只在预算达到 **50%** 时投影；低压力时只增加锚点。`full_results` 单结果上限 8MB、总量上限 64MB，超限以 `chi_context_assembly_limit` fail closed。
+v3 每次请求都注入锚点，但旧工具结果只在预算达到 **50%** 时投影；低压力时只增加锚点。`full_results` 单结果上限 8MB、总量上限 64MB，超限以 `chi_context_assembly_limit` fail closed。v3 main 请求持久化 `NNN-source.json`（`chi-source-body-v1`，≤8MB），reader 可从 source + tool evidence 重放 main/regenerate 投影。
 
 entry 当前仍固定 `deepseek-v4.1-flash` / 对应 profile；没有运行时模型选择，更换主模型需要同时更新 profile、bundle 和 B。
 

@@ -61,8 +61,11 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
             for index in range(1, 4):
                 call_id = f"c{index}"
                 message = assistant(call_id)
+                text = f"tool result {index} " + "x" * 4000
                 guard.contract.accept_batch(message)
-                guard.contract.record_result(call_id, f"tool result {index} " + "x" * 4000)
+                guard.contract.record_result(call_id, text)
+                journal.start_tool(call_id, "read", {})
+                journal.record_tool(call_id, "read", text)
             await guard.handle_async_request(request(data))
             self.assertEqual(len(sent), 1)
             wire = sent[0]
