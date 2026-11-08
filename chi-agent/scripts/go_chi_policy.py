@@ -13,6 +13,31 @@ TIME_POLICY = {"connect_seconds": 30, "main_read_seconds": 240, "confirmation_re
                "b_operator_seconds": 360, "chi_operator_seconds": 1380, "operator_max_seconds": 3600}
 FEE_POLICY = 'go-chi-record-incomplete-fees-v1'
 
+# Main-agent context profiles. These constants are part of the frozen bundle
+# profile: changing them requires rebuilding the bundle and a new B admission.
+# The judge and patient simulator are separate processes and do not share this
+# budget.
+CONTEXT_PROFILES = {
+    "deepseek-v4.1-flash": {
+        "model": "deepseek-v4.1-flash",
+        "provider_context_tokens": 1_000_000,
+        "window_safety_fraction": 0.6,
+        "output_reserve_tokens": 16_384,
+        "bytes_per_token_floor": 3.0,
+        "bytes_per_token_observed": 3.9,
+        "max_context_bytes": 1_500_000,
+        "max_input_tokens": 500_000,
+    },
+}
+DEFAULT_CONTEXT_MODEL = "deepseek-v4.1-flash"
+
+
+def context_profile(model):
+    """Return the immutable context profile for an exact runtime model id."""
+    if type(model) is not str or model not in CONTEXT_PROFILES:
+        raise ValueError("chi_context_profile_invalid")
+    return dict(CONTEXT_PROFILES[model])
+
 RECOVERY_POLICY = {"version": "chi-output-recovery-v1", "default_enabled": False,
                    "max_per_chain": 1, "max_per_run": 2, "max_output_tokens": 8192,
                    "shared_max_requests": 50, "instruction_version": "chi-recovery-instruction-v1",
