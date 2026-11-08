@@ -65,11 +65,13 @@ class RecoveryViewBindingTests(unittest.TestCase):
             self.assertEqual(permit["mode"], "partial")
             self.assertTrue(permit["frozen_view"])
             self.assertEqual(permit["parent_view_sha256"], permit["view_sha256"])
+            self.assertFalse(permit["pressure"])
             self.assertIsNotNone(permit["anchor_sha256"])
             self.assertEqual(permit["history_length"], len(permit["view_body"]["messages"]))
             self.assertEqual(canonical_sha(sent[1]), permit["view_sha256"])
             self.assertEqual(journal.run["requests"][0]["view_identity"]["recovery_mode"], "main")
             self.assertEqual(journal.run["requests"][1]["view_identity"]["recovery_mode"], "continuation")
+            self.assertFalse(journal.run["requests"][1]["view_identity"]["pressure"])
             journal.finish("failed")
             journal.close()
             raw = (root / "chi-accounting.json").read_bytes()
@@ -89,7 +91,9 @@ class RecoveryViewBindingTests(unittest.TestCase):
             permit = json.loads((root / "wire-evidence" / "r" / "001-recovery.json").read_text())
             self.assertEqual(permit["mode"], "regenerate")
             self.assertFalse(permit["frozen_view"])
+            self.assertTrue(permit["pressure"])
             self.assertEqual(permit["projection_rule"], "chi-context-projection-regenerate-v1")
+            self.assertTrue(journal.run["requests"][1]["view_identity"]["pressure"])
             self.assertEqual(permit["parent_view_sha256"], canonical_sha(sent[0]))
             self.assertEqual(permit["view_sha256"], canonical_sha(sent[1]))
             self.assertNotEqual(permit["parent_view_sha256"], permit["view_sha256"])
@@ -173,14 +177,19 @@ class RecoveryViewBindingTests(unittest.TestCase):
             "anchor_sha256": "0" * 64, "history_length": len(view["messages"]),
             "frozen_view": True, "projection_rule": "chi-context-projection-v1",
             "pressure": False,
+            "parent_view_sha256": canonical_sha(view),
         }
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "chi_recovery_view_mismatch"):
             validate_permit(permit, identity="a" * 64, run=run, parent_round=1,
                             parent_request=parent, parent_response=response,
                             response_sha256="b" * 64, old_used=0, claimed=False)
         broken = copy.deepcopy(permit)
+        broken["anchor_sha256"] = anchor_doc["sha256"]
         broken["view_body"]["messages"][-1]["content"] = "changed"
-        with self.assertRaises(ValueError):
+        broken["view_sha256"] = canonical_sha(broken["view_body"])
+        broken["parent_view_sha256"] = broken["view_sha256"]
+        broken["history_length"] = len(broken["view_body"]["messages"])
+        with self.assertRaisesRegex(ValueError, "chi_recovery_view_mismatch"):
             validate_permit(broken, identity="a" * 64, run=run, parent_round=1,
                             parent_request=parent, parent_response=response,
                             response_sha256="b" * 64, old_used=0, claimed=False)

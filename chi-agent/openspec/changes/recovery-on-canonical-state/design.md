@@ -61,6 +61,7 @@
 
 - `partial`：`frozen_view=true`，`parent_view_sha256 == view_sha256`，continuation 的 `view_sha256` 必须等于该值；
 - `regenerate`：`frozen_view=false`，`parent_view_sha256` 是父 wire 的 hash，`view_sha256` 来自 `chi-context-projection-regenerate-v1`（`keep_recent_batches=1`、`project_results=True`），允许与父视图不同。
+- `pressure` 表示本视图是否使用了结果投影：partial 沿用父请求；regenerate 强制为 `true`。
 
 ### 3.2 journal 请求条目
 

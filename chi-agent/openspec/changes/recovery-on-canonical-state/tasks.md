@@ -18,6 +18,8 @@
 - [x] `go_chi_recovery.py`：mode 判定与视图绑定。
 - [x] `go_chi_diagnostics.py`：新错误码与 cause。
 - [x] 测试：A1–A3、B1–B3、C1–C2、D1–D2、F3、G1–G3。
+- [x] 复审修复：partial v2 用父请求重新派生视图并比较；regenerate 不重放 source 投影。
+- [x] 复审修复：`pressure` 表示视图是否使用结果投影；regenerate 强制 true。
 - [x] 文档：design/runbook/README；明确默认关闭。
 
 ## P3：摘要 + recovery（另行评估）

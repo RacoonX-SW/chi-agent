@@ -260,3 +260,12 @@ def _validate_permit_v2(doc, *, identity, run, parent_round, parent_request, par
                 or type(messages[2].get('content')) is not str
                 or hashlib.sha256(messages[2]['content'].encode('utf-8')).hexdigest() != doc['anchor_sha256']):
             raise ValueError('chi_recovery_view_mismatch')
+    if doc['mode'] == 'partial':
+        anchor_doc = None
+        if doc['anchor_sha256'] is not None:
+            anchor_doc = {"text": view['messages'][2]['content'],
+                          "sha256": doc['anchor_sha256']}
+        expected = derive_view(parent_request, parent_response,
+                               old_used=old_used, claimed=claimed, anchor=anchor_doc)
+        if canonical_sha(expected) != canonical_sha(view):
+            raise ValueError('chi_recovery_view_mismatch')

@@ -561,6 +561,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 self.contract.validate_history(original["messages"], system=self.system, instruction=self.instruction,
                                                used=used, claimed=claimed)
                 mode, _fragment = mode_and_fragment(candidate)
+                effective_pressure = bool(pressure) or (mode == 'regenerate')
                 if self._active_projection is not None:
                     anchor = self._active_projection.get('anchor')
                     pressure = self._active_projection.get('pressure', False)
@@ -605,9 +606,9 @@ class ChiGuard(httpx.AsyncBaseTransport):
                     "parent_view_sha256": (canonical_sha(self._active_projection['wire_body'])
                                            if self._active_projection is not None else canonical_sha(original)),
                     "history_length": len(view["messages"]), "source_body": original,
-                    "anchor": anchor, "pressure": pressure, "mode": mode}
+                    "anchor": anchor, "pressure": effective_pressure, "mode": mode}
                 self._active_view = (self._make_view_identity(
-                    original, view, anchor, pressure, mode='continuation',
+                    original, view, anchor, effective_pressure, mode='continuation',
                     parent_round=used + 1, frozen_view=(mode == 'partial'),
                     projection_rule=('chi-context-projection-regenerate-v1'
                                      if mode == 'regenerate' else 'chi-context-projection-v1'))

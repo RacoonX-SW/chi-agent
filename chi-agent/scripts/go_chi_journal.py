@@ -1412,6 +1412,7 @@ class ChiJournal:
                     raise ValueError
                 parent_view_sha = canonical_sha(request_body)
                 view_sha = canonical_sha(view_body)
+                effective_pressure = bool(pressure) or (mode == 'regenerate')
                 if mode == 'partial':
                     if canonical_sha(view_body) != canonical_sha(view):
                         raise ValueError
@@ -1435,7 +1436,7 @@ class ChiJournal:
                     "history_length": len(view_body["messages"]),
                     "frozen_view": mode == "partial",
                     "projection_rule": projection_rule,
-                    "pressure": bool(pressure),
+                    "pressure": effective_pressure,
                     "parent_view_sha256": parent_view_sha,
                 }
                 validate_permit(permit, identity=self.state["identity"], run=self.run,

@@ -16,6 +16,8 @@
 
 必须记录新的 `view_sha256`、`source_sha256`、`anchor_sha256`、`pressure`、`parent_view_sha256` 和投影规则；不重放已执行 mutation。新视图与父视图 hash 必须不同（有旧结果可压缩时）。
 
+`pressure` 统一定义为“本视图是否使用了结果投影”：partial 沿用父请求；regenerate 强制为 `true`。
+
 ## Q3 permit v1 兼容
 
 旧 `chi-recovery-permit-v1` 继续只读：校验仍按 v1 字段和旧 `derive_view` 语义，不迁移、不改写。只有新 `recovery_view_policy=canonical-v1` 的 v3 run 签发 v2 permit；v2/v3-without-recovery 继续签发/读取 v1。

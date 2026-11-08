@@ -7,7 +7,7 @@
 
 ## 结论
 
-- permit v2 记录 `source_sha256`、`view_sha256`、`anchor_sha256`、`history_length`、`frozen_view`、`projection_rule`、`pressure`。
+- permit v2 记录 `source_sha256`、`view_sha256`、`parent_view_sha256`、`anchor_sha256`、`history_length`、`frozen_view`、`projection_rule`、`pressure`；`pressure` 表示本视图是否使用了结果投影（regenerate 强制 true，partial 沿用父请求）。
 - journal 请求条目记录 `view_identity`；reader 复算 `view_sha256` 并核对 anchor/history。
 - v3 + `output_recovery` 只有显式 `recovery_view_policy=canonical-v1` 才允许；默认仍拒绝。
 - partial 冻结视图；regenerate 使用 `chi-context-projection-regenerate-v1` 从 L0 重新投影并记录新 hash；mutation 不重放。
