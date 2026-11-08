@@ -1,0 +1,118 @@
+import asyncio
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+import httpx
+
+from go_chi_context import DEFAULT_BUDGET_V3, measure_request
+from go_chi_guard import ChiGuard
+from go_chi_journal import ChiJournal
+from request_budget import feedback
+from test_go_chi_guard import SECRET, SESSION, TOOLS, USAGE, URL, body, request
+
+
+def assistant(call_id):
+    return {"role": "assistant", "content": None,
+            "tool_calls": [{"id": call_id, "type": "function",
+                            "function": {"name": "read", "arguments": "{}"}}]}
+
+
+def source_body():
+    data = body()
+    data["messages"] = data["messages"][:2]
+    for index in range(1, 4):
+        data["messages"].append(assistant(f"c{index}"))
+        data["messages"].append({"role": "tool", "tool_call_id": f"c{index}",
+                                 "content": f"tool result {index} " + "x" * 4000})
+    return data
+
+
+class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_projection_preserves_source_validation_and_records_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal = ChiJournal(root, identity="a" * 64, evaluation="e", task="t",
+                                 attempt="a", run="r",
+                                 launch={"context_policy": "chi-context-v3"})
+            data = source_body()
+            limit = dict(DEFAULT_BUDGET_V3)
+            upper = measure_request(data, budget=limit)["estimated_tokens_upper"]
+            limit["max_input_tokens"] = upper - 1
+            sent = []
+
+            async def answer(req):
+                sent.append(json.loads(req.content))
+                return httpx.Response(200, request=req, json={
+                    "model": "deepseek-v4.1-flash", "usage": USAGE,
+                    "choices": [{"finish_reason": "stop",
+                                 "message": {"role": "assistant", "content": "done"}}]})
+
+            guard = ChiGuard(journal, SECRET, SESSION, httpx.MockTransport(answer),
+                             tools=TOOLS, system="system", instruction="instruction",
+                             claimed=lambda: False, confirmation=lambda: None,
+                             canonical_tools={"read": "local-fs-read"},
+                             context_limit=limit)
+            for index in range(1, 4):
+                call_id = f"c{index}"
+                message = assistant(call_id)
+                guard.contract.accept_batch(message)
+                guard.contract.record_result(call_id, f"tool result {index} " + "x" * 4000)
+            await guard.handle_async_request(request(data))
+            self.assertEqual(len(sent), 1)
+            wire = sent[0]
+            self.assertEqual(wire["messages"][-1]["role"], "tool")
+            self.assertIn("chi-tool-result-ref-v1", wire["messages"][3]["content"])
+            self.assertIn("tool result 2", wire["messages"][5]["content"])
+            entry = journal.run["requests"][0]
+            self.assertIn("projection", entry)
+            self.assertEqual(entry["projection"]["schema"], "chi-context-assembly-v1")
+            self.assertGreater(entry["projection"]["saved_bytes"], 0)
+            journal.finish("failed")
+            journal.close()
+            raw = (root / "chi-accounting.json").read_bytes()
+            from go_chi_journal import inspect_history
+            self.assertEqual(inspect_history(root, "a" * 64,
+                                             __import__("hashlib").sha256(raw).hexdigest())["status"],
+                             "inspected")
+
+    async def test_anchor_is_injected_at_index_two_without_changing_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            journal = ChiJournal(root, identity="a" * 64, evaluation="e", task="t",
+                                 attempt="a", run="r",
+                                 launch={"context_policy": "chi-context-v3"})
+            data = source_body()
+            sent = []
+            anchor = {"text": '{"schema":"chi-intent-anchor-v1","current_step":"x"}',
+                      "sha256": "b" * 64}
+
+            async def answer(req):
+                sent.append(json.loads(req.content))
+                return httpx.Response(200, request=req, json={
+                    "model": "deepseek-v4.1-flash", "usage": USAGE,
+                    "choices": [{"finish_reason": "stop",
+                                 "message": {"role": "assistant", "content": "done"}}]})
+
+            guard = ChiGuard(journal, SECRET, SESSION, httpx.MockTransport(answer),
+                             tools=TOOLS, system="system", instruction="instruction",
+                             claimed=lambda: False, confirmation=lambda: None,
+                             canonical_tools={"read": "local-fs-read"},
+                             context_limit=DEFAULT_BUDGET_V3,
+                             anchor_getter=lambda: anchor)
+            for index in range(1, 4):
+                call_id = f"c{index}"
+                guard.contract.accept_batch(assistant(call_id))
+                guard.contract.record_result(call_id, f"tool result {index} " + "x" * 4000)
+            await guard.handle_async_request(request(data))
+            self.assertEqual(sent[0]["messages"][2],
+                             {"role": "user", "content": anchor["text"]})
+            entry = journal.run["requests"][0]
+            self.assertEqual(entry["projection"]["anchor_sha256"], anchor["sha256"])
+            journal.finish("failed")
+            journal.close()
+
+
+if __name__ == "__main__":
+    unittest.main()

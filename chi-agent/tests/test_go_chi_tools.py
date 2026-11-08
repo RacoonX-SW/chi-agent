@@ -118,6 +118,27 @@ class ToolTests(unittest.IsolatedAsyncioTestCase):
                 recover_schema=True)
             self.assertIn("patient_id", guard.contract.refusals["d"])
 
+    async def test_context_v3_state_update_schema_is_model_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            workspace = root / "workspace"; workspace.mkdir()
+            handbook = root / "handbook"; handbook.mkdir()
+            instruction = root / "instruction.md"; instruction.write_text("synthetic")
+            state = TaskState(root / "state", run="run", role="payer",
+                              context_policy="chi-context-v3")
+            holder = {}
+            tools = local_tools(role="payer", workspace_root=workspace, instruction_path=instruction,
+                tool_references=[], handbook_root=handbook, journal=Journal(), binding=None,
+                guard_getter=lambda: holder["guard"], client_getter=lambda: None,
+                confirmation_context=contextvars.ContextVar("test", default=None), exchanges=[],
+                dispatch_lock=asyncio.Lock(), state=state, capabilities="f0-f3-v1",
+                context_policy="chi-context-v3")
+            update = next(t for t in tools if t.name == "local-state-update")
+            props = update.params_json_schema["properties"]
+            self.assertNotIn("facts", props)
+            self.assertNotIn("target", props)
+            self.assertIn("plans", props)
+
     async def test_provider_target_schema_includes_patient_id(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
