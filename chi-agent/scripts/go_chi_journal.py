@@ -27,6 +27,7 @@ from go_chi_policy import FEE_POLICY, SUMMARY_VERSIONS, output_limit
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
 MAX_STATE_BYTES = 32 * 1024 * 1024
+MAX_SOURCE_TOTAL_BYTES = 64 * 1024 * 1024
 RECOVERY_POLICY = "chi-output-recovery-v1"
 SUMMARY_POLICY = "chi-input-summary-v1"
 REQUIREMENTS_POLICY = "chi-requirements-v1"
@@ -1017,6 +1018,18 @@ class ChiJournal:
                                 or vi.get('projection_rule') not in {
                                     'chi-context-projection-v1',
                                     'chi-context-projection-regenerate-v1'}
+                                or (vi.get('recovery_mode') == 'main'
+                                    and (vi.get('frozen_view') or vi.get('parent_round') is not None))
+                                or (vi.get('recovery_mode') == 'continuation'
+                                    and type(vi.get('parent_round')) is not int)
+                                or (vi.get('recovery_mode') == 'main'
+                                    and vi.get('projection_rule') != 'chi-context-projection-v1')
+                                or (vi.get('recovery_mode') == 'continuation'
+                                    and vi.get('frozen_view')
+                                    and vi.get('projection_rule') != 'chi-context-projection-v1')
+                                or (vi.get('recovery_mode') == 'continuation'
+                                    and not vi.get('frozen_view')
+                                    and vi.get('projection_rule') != 'chi-context-projection-regenerate-v1')
                                 or type(vi.get('pressure')) is not bool
                                 or ('claimed' in vi and type(vi.get('claimed')) is not bool)):
                             raise ValueError
@@ -1025,6 +1038,11 @@ class ChiJournal:
                         if (type(item['source_evidence_sha256']) is not str
                                 or not DIGEST.fullmatch(item['source_evidence_sha256'])
                                 or item.get('purpose') != 'main' or 'view_identity' not in item):
+                            raise ValueError
+                    if 'source_bytes' in item:
+                        required.add('source_bytes')
+                        if (type(item['source_bytes']) is not int or item['source_bytes'] < 0
+                                or 'source_evidence_sha256' not in item):
                             raise ValueError
                     if item.get("status") == "settled":
                         required |= {"usage", "billing", "billing_error"}
@@ -1971,64 +1989,98 @@ class ChiJournal:
                     or view_identity.get('projection_rule') not in {
                         'chi-context-projection-v1',
                         'chi-context-projection-regenerate-v1'}
+                    or (view_identity.get('recovery_mode') == 'main'
+                        and (view_identity.get('frozen_view')
+                             or view_identity.get('parent_round') is not None))
+                    or (view_identity.get('recovery_mode') == 'continuation'
+                        and type(view_identity.get('parent_round')) is not int)
+                    or (view_identity.get('recovery_mode') == 'main'
+                        and view_identity.get('projection_rule') != 'chi-context-projection-v1')
+                    or (view_identity.get('recovery_mode') == 'continuation'
+                        and view_identity.get('frozen_view')
+                        and view_identity.get('projection_rule') != 'chi-context-projection-v1')
+                    or (view_identity.get('recovery_mode') == 'continuation'
+                        and not view_identity.get('frozen_view')
+                        and view_identity.get('projection_rule') != 'chi-context-projection-regenerate-v1')
                     or type(view_identity.get('pressure')) is not bool
                     or ('claimed' in view_identity and type(view_identity.get('claimed')) is not bool)):
                 raise GoFailure('chi_reservation_invalid')
+        round_number = len(self.run['requests']) + 1
         source_ref = None
-        if source_body is not None:
-            if (purpose != 'main' or view_identity is None
-                    or type(source_body) is not dict or type(source_body.get('messages')) is not list):
-                raise GoFailure('chi_reservation_invalid')
-            try:
-                raw_source = json.dumps(source_body, ensure_ascii=False, sort_keys=True,
-                                       separators=(',', ':'), allow_nan=False).encode('utf-8')
-            except Exception:
-                raise GoFailure('chi_reservation_invalid') from None
-            if len(raw_source) > 8 * 1024 * 1024:
-                raise GoFailure('chi_source_too_large')
-            if _contains_secret(source_body, *secrets):
-                raise GoFailure('chi_reservation_invalid')
-            source_doc = {"schema": "chi-source-body-v1", "body_utf8": raw_source.decode('utf-8'),
-                          "raw_sha256": hashlib.sha256(raw_source).hexdigest()}
-            try:
-                source_ref = write_evidence(self.root, self.run_id, len(self.run['requests']) + 1,
-                                            "source", source_doc)
-            except Exception:
-                raise GoFailure("chi_evidence_persistence_failed") from None
-        source_policy = (self.run["launch"].get("context_policy") == "chi-context-v3"
-                         and self.run["launch"].get("source_evidence_policy") == "canonical-v1")
-        if source_policy:
-            if purpose == "main" and source_ref is None:
-                raise GoFailure("chi_source_evidence_missing")
-            if purpose == "continuation":
-                parent_round = view_identity.get("parent_round") if type(view_identity) is dict else None
-                if (type(parent_round) is not int or parent_round < 1
-                        or parent_round > len(self.run["requests"])
-                        or "source_evidence_sha256" not in self.run["requests"][parent_round - 1]):
+        source_path = None
+        source_bytes = 0
+        committed = False
+        try:
+            if source_body is not None:
+                if (purpose != 'main' or view_identity is None
+                        or type(source_body) is not dict or type(source_body.get('messages')) is not list):
+                    raise GoFailure('chi_reservation_invalid')
+                try:
+                    raw_source = json.dumps(source_body, ensure_ascii=False, sort_keys=True,
+                                           separators=(',', ':'), allow_nan=False).encode('utf-8')
+                except Exception:
+                    raise GoFailure('chi_reservation_invalid') from None
+                if len(raw_source) > 8 * 1024 * 1024:
+                    raise GoFailure('chi_source_too_large')
+                used_source = sum(item.get('source_bytes', 0) for item in self.run['requests'])
+                if used_source + len(raw_source) > MAX_SOURCE_TOTAL_BYTES:
+                    raise GoFailure('chi_source_too_large')
+                if _contains_secret(source_body, *secrets):
+                    raise GoFailure('chi_reservation_invalid')
+                source_doc = {"schema": "chi-source-body-v1", "body_utf8": raw_source.decode('utf-8'),
+                              "raw_sha256": hashlib.sha256(raw_source).hexdigest()}
+                try:
+                    source_ref = write_evidence(self.root, self.run_id, round_number,
+                                                "source", source_doc)
+                except Exception:
+                    raise GoFailure("chi_evidence_persistence_failed") from None
+                source_path = (self.root / 'wire-evidence' / self.run_id
+                               / f"{round_number:03d}-source.json")
+                source_bytes = len(raw_source)
+            source_policy = (self.run["launch"].get("context_policy") == "chi-context-v3"
+                             and self.run["launch"].get("source_evidence_policy") == "canonical-v1")
+            if source_policy:
+                if purpose == "main" and source_ref is None:
                     raise GoFailure("chi_source_evidence_missing")
-        self._mark_tool_inflight(f"__wire_{len(self.run['requests']) + 1:03d}")
-        entry = {"round": len(self.run["requests"]) + 1, "purpose": purpose,
-                 "max_tokens": (_main_max_tokens(self.run['launch'])
-                                if self.run['kind'] == 'chi' and purpose in {'main', 'continuation'}
-                                else output_limit(self.run['kind'], purpose, self.run['launch'].get('input_summary'))),
-                 "request_sha256": hashlib.sha256(raw).hexdigest(), "status": "pending",
-                 "request_evidence_sha256": None, "response_evidence_sha256": None,
-                 "diagnostic_evidence_sha256": None}
-        if purpose == 'patient_simulator': entry['parent_call_id'] = parent_call_id
-        if dispatch is not None: entry['dispatch_version'] = 'chi-go-dispatch-v1'
-        if context_projection is not None: entry['projection'] = context_projection
-        if view_identity is not None: entry['view_identity'] = view_identity
-        if source_ref is not None: entry['source_evidence_sha256'] = source_ref
-        request_doc = envelope(raw, kind="request", secrets=secrets, dispatch=dispatch)
-        entry["request_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "request", request_doc)
-        self.run["requests"].append(entry)
-        if selected is not None:
-            selected["continuation_round"] = entry["round"]
-        if purpose == 'summary':
-            summary_event['summary_round'] = entry['round']
-            summary_event['status'] = 'requested'
-        self.state["pending"] = {"run": self.run["run"], "round": entry["round"]}
-        self._persist()
+                if purpose == "continuation":
+                    parent_round = view_identity.get("parent_round") if type(view_identity) is dict else None
+                    if (type(parent_round) is not int or parent_round < 1
+                            or parent_round > len(self.run["requests"])
+                            or "source_evidence_sha256" not in self.run["requests"][parent_round - 1]):
+                        raise GoFailure("chi_source_evidence_missing")
+            self._mark_tool_inflight(f"__wire_{round_number:03d}")
+            entry = {"round": round_number, "purpose": purpose,
+                     "max_tokens": (_main_max_tokens(self.run['launch'])
+                                    if self.run['kind'] == 'chi' and purpose in {'main', 'continuation'}
+                                    else output_limit(self.run['kind'], purpose, self.run['launch'].get('input_summary'))),
+                     "request_sha256": hashlib.sha256(raw).hexdigest(), "status": "pending",
+                     "request_evidence_sha256": None, "response_evidence_sha256": None,
+                     "diagnostic_evidence_sha256": None}
+            if purpose == 'patient_simulator': entry['parent_call_id'] = parent_call_id
+            if dispatch is not None: entry['dispatch_version'] = 'chi-go-dispatch-v1'
+            if context_projection is not None: entry['projection'] = context_projection
+            if view_identity is not None: entry['view_identity'] = view_identity
+            if source_ref is not None:
+                entry['source_evidence_sha256'] = source_ref
+                entry['source_bytes'] = source_bytes
+            request_doc = envelope(raw, kind="request", secrets=secrets, dispatch=dispatch)
+            entry["request_evidence_sha256"] = write_evidence(self.root, self.run_id, entry["round"], "request", request_doc)
+            self.run["requests"].append(entry)
+            committed = True
+            if selected is not None:
+                selected["continuation_round"] = entry["round"]
+            if purpose == 'summary':
+                summary_event['summary_round'] = entry['round']
+                summary_event['status'] = 'requested'
+            self.state["pending"] = {"run": self.run["run"], "round": entry["round"]}
+            self._persist()
+        except BaseException:
+            if source_path is not None and not committed:
+                try:
+                    source_path.unlink()
+                except OSError:
+                    pass
+            raise
 
     def record_response(self, raw: bytes, status: int, elapsed_ms: int, *, secrets: tuple[str, ...] = ()) -> None:
         entry = self.run["requests"][-1]

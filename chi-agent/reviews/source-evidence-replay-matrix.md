@@ -62,14 +62,16 @@
 | 诊断 | 新错误码 / run_log | 通过 | `test_go_chi_diagnostics`、`test_context_error_run_log` |
 | 旧证据 | v1/v2 旧 run | 通过 | 48 pytest + 全量 |
 
-## 剩余 P2
+## 剩余 P2（2026-11-09 修复后）
 
-1. **source 存储治理**：source 文件先写、entry 后写，失败可能留下孤儿文件；source 总存储未设上限。
-2. **测试缺口**：`returned_error` 的 v3 source 重放、redacted tool evidence 的 fail-closed、v3 mutation replay 没有独立用例；目前依赖共享代码路径和 v1 回归。
-3. **字段语义**：`history_length` 实际是视图长度，不是源历史长度；`_active_permit["parent_view_sha256"]` 是未使用字段。
-4. **mode/rule 交叉校验**：`view_identity.projection_rule` 允许两种规则，但未按 `recovery_mode` 强制 main 只能 v1、continuation regenerate 只能 regenerate。
-5. **真实运行限制**：`messages[2]` 锚点与真实 SDK/DeepSeek 兼容性、真实 source 重放收益未验证；未重建 bundle、未取得新 B。
-6. **范围外**：P3、RAG/L1/L2、任务级 resume、reasoning 压缩未实现。
+1. **source 存储治理 — 已修**：单 source 8MB；总上限 64MB；`source_bytes`；总超限在写文件前 fail closed；reserve 未提交时清理孤儿 source。测试见 `test_context_source_governance`。
+2. **测试缺口 — 已修**：新增 `returned_error` + mutation 的 v3 source 重放、redacted tool evidence fail-closed、source 总上限/孤儿清理测试。
+3. **字段语义 — 部分修**：删除未使用的 `_active_permit["parent_view_sha256"]`；`history_length` 明确为视图消息数，改名 `view_length` 因会破坏现有证据而延后。
+4. **mode/rule 交叉校验 — 已修**：main 只能 v1/frozen=false/parent=null；continuation+frozen 只能 v1；continuation 非 frozen 只能 regenerate；`_validate` 与 `_reserve` 一致。
+5. **真实运行限制 — 保留**：`messages[2]` 锚点与更广任务/模型兼容性、真实 source 重放收益未验证；C-002 的 t024 已接受锚点，但不等同全兼容；未重建修复后 bundle、未取得新 B。
+6. **范围外 — 保留**：P3、RAG/L1/L2、任务级 resume、reasoning 压缩未实现。
+
+P2 修复记录：[`context-engineering-p2-fixes-20261109.md`](context-engineering-p2-fixes-20261109.md)。
 
 ## 冻结建议
 
