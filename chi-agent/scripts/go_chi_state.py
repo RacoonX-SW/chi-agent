@@ -944,7 +944,14 @@ class TaskState:
                         "blocked", "not_verified", "business_status")
             source = next((item for item in self.data["observations"]
                            if item["call_id"] == status["source_call_id"]), None)
-            if self._context_v3 and (source is None or source.get("scope") != last.get("scope")):
+            # An unattributed mutation (for example a letter delivery that only
+            # takes letter_id) cannot be matched by scope; _apply_status has
+            # already restricted the status source to the target case, so a
+            # later business-status read is a valid readback.
+            if self._context_v3 and (
+                    source is None
+                    or (last.get("scope") != "unattributed"
+                        and source.get("scope") != last.get("scope"))):
                 return (False, "completion_readback_required:" + last["call_id"],
                         "blocked", "not_verified", "business_status")
         if status is None:

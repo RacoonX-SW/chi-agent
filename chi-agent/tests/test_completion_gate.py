@@ -81,6 +81,40 @@ class CompletionGateTests(unittest.TestCase):
             self.assertFalse(allowed)
             self.assertTrue(reason.startswith("completion_business_write_failed:"))
 
+    def test_unattributed_delivery_readback_by_case_status_allows_claim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = self._state(directory)
+            self._bind(state)
+            self._observe(state, "c1", "payer_intake_hub.get_intake_case")
+            self._observe(state, "c2", "triage.get")
+            self._observe(state, "c3", "review.get_nurse_review_data")
+            self._observe(state, "c4", "review.submit_nurse_case_recommendation")
+            state.observe(call_id="deliver", tool="payer_letter_center.deliver",
+                          kind="mcp", arguments={"letter_id": "LET-1", "channel": "portal"},
+                          result="{}", event="returned", scope="unattributed")
+            self._observe(state, "c5", "payer_letter_center.list")
+            state.propose({"latest_business_status": {
+                "text": "letter delivered", "source_call_id": "c5"}})
+            allowed, reason = state.can_claim()
+            self.assertTrue(allowed, reason)
+
+    def test_unattributed_mutation_still_requires_later_readback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = self._state(directory)
+            self._bind(state)
+            self._observe(state, "c1", "payer_intake_hub.get_intake_case")
+            self._observe(state, "c2", "triage.get")
+            self._observe(state, "c3", "review.get_nurse_review_data")
+            self._observe(state, "c4", "review.submit_nurse_case_recommendation")
+            state.propose({"latest_business_status": {
+                "text": "nurse recommendation submitted", "source_call_id": "c1"}})
+            state.observe(call_id="deliver", tool="payer_letter_center.deliver",
+                          kind="mcp", arguments={"letter_id": "LET-1", "channel": "portal"},
+                          result="{}", event="returned", scope="unattributed")
+            allowed, reason = state.can_claim()
+            self.assertFalse(allowed)
+            self.assertTrue(reason.startswith("completion_readback_required:"))
+
     def test_completion_report_marks_mandatory_claim(self):
         with tempfile.TemporaryDirectory() as directory:
             state = self._state(directory)
