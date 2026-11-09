@@ -4,11 +4,20 @@ Runs in the controller image because role_operator imports Docker/verifier
 dependencies. No Docker call, world, model or credential is used.
 """
 import hashlib
+import importlib.util
 import tempfile
 import unittest
 from pathlib import Path
 
-import role_operator
+HAVE_DOCKER = False
+try:
+    HAVE_DOCKER = importlib.util.find_spec("docker.types") is not None
+except (ImportError, ModuleNotFoundError, ValueError):
+    HAVE_DOCKER = False
+if HAVE_DOCKER:
+    import role_operator
+else:
+    role_operator = None
 import make_role_manifest
 import role_resource_preflight
 from evaluation_bundle import BundleFailure
@@ -38,6 +47,7 @@ def write(path, content):
     path.write_bytes(content if isinstance(content, bytes) else content.encode())
 
 
+@unittest.skipUnless(HAVE_DOCKER, "role_operator needs the controller image with the Docker client")
 class PayerProjectionTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

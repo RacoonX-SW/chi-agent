@@ -1,18 +1,26 @@
 import asyncio
+import importlib.util
 from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
+import unittest
 
 import httpx
 
-from chi_bench.conversation.message import STOP_SIGNAL
-from chi_bench.conversation.persona import build_system_prompt
-from chi_bench.conversation.patient_simulator import PatientSimulator
-from chi_bench.conversation.session import ConversationSession
-from dev_patient_adapter import adapter_class
-from dev_patient_bootstrap import install
+HAVE_ANTHROPIC = importlib.util.find_spec("anthropic") is not None
+if HAVE_ANTHROPIC:
+    from chi_bench.conversation.message import STOP_SIGNAL
+    from chi_bench.conversation.persona import build_system_prompt
+    from chi_bench.conversation.patient_simulator import PatientSimulator
+    from chi_bench.conversation.session import ConversationSession
+    from dev_patient_adapter import adapter_class
+    from dev_patient_bootstrap import install
+else:
+    STOP_SIGNAL = build_system_prompt = PatientSimulator = ConversationSession = None
+    adapter_class = install = None
 
 
+@unittest.skipUnless(HAVE_ANTHROPIC, "anthropic is not installed")
 def test_official_prompt_role_flip_and_stop_without_anthropic():
     asyncio.run(_test_adapter())
 
@@ -38,6 +46,7 @@ async def _test_adapter():
     assert answer.content == 'Goodbye' and answer.stopped and answer.token_usage == 4
 
 
+@unittest.skipUnless(HAVE_ANTHROPIC, "anthropic is not installed")
 def test_bootstrap_is_explicit_and_reversible():
     from chi_bench.conversation import patient_simulator
     assert patient_simulator.PatientSimulator is PatientSimulator
@@ -47,10 +56,12 @@ def test_bootstrap_is_explicit_and_reversible():
     assert patient_simulator.PatientSimulator is PatientSimulator
 
 
+@unittest.skipUnless(HAVE_ANTHROPIC, "anthropic is not installed")
 def test_synthetic_probe_stops_without_second_call():
     asyncio.run(_test_probe())
 
 
+@unittest.skipUnless(HAVE_ANTHROPIC, "anthropic is not installed")
 def test_world_cb_installs_before_same_process_serve():
     import os
     import runpy

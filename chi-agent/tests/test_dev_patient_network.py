@@ -1,8 +1,10 @@
 """Synthetic loopback MCP -> official CM service -> development broker."""
 import asyncio
+import importlib.util
 import json
 import socket
 import tempfile
+import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,24 +14,32 @@ import uvicorn
 from agents.models.openai_chatcompletions import Converter
 from mcp.server.fastmcp import FastMCP
 
-from chi_bench.conversation.message import STOP_SIGNAL
-from chi_bench.conversation.session import ConversationSession
-from chi_bench.services.cm_outreach import CMOutreachService
-from dev_patient_bootstrap import install
-from dev_patient_broker import PatientBroker
+HAVE_ANTHROPIC = importlib.util.find_spec("anthropic") is not None
+if HAVE_ANTHROPIC:
+    from chi_bench.conversation.message import STOP_SIGNAL
+    from chi_bench.conversation.session import ConversationSession
+    from chi_bench.services.cm_outreach import CMOutreachService
+    from dev_patient_bootstrap import install
+    from dev_patient_broker import PatientBroker
+else:
+    STOP_SIGNAL = ConversationSession = CMOutreachService = None
+    install = PatientBroker = None
 from go_chi_contract import ToolContract
 from go_chi_journal import ChiJournal
 from go_chi_mcp import MCPBridge, selected_server
 
 
+@unittest.skipUnless(HAVE_ANTHROPIC, "anthropic is not installed")
 def test_network_chain():
     asyncio.run(_network_chain())
 
 
+@unittest.skipUnless(HAVE_ANTHROPIC, "anthropic is not installed")
 def test_network_failure_rolls_back_and_blocks():
     asyncio.run(_network_chain(fail=True))
 
 
+@unittest.skipUnless(HAVE_ANTHROPIC, "anthropic is not installed")
 def test_network_wait_exceeds_original_five_seconds():
     asyncio.run(_network_chain(delay=6))
 

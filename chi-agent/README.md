@@ -462,6 +462,15 @@ docker run --rm --network none -v "$PWD:/workspace:rw" \
   /opt/venv/bin/python -m unittest discover -s tests
 ```
 
+一条可重复的离线验证（全量测试 + controller-only 测试 + bundle build/validate/preflight）：
+
+```bash
+cd chi-agent
+./scripts/dev_verify.sh
+```
+
+脚本默认要求工作树干净，`--allow-dirty` 可跳过该检查；所有步骤在 Docker 内执行，bundle 只写到临时目录并在结束时删除。`anthropic` 未安装时开发患者适配器测试会明确 skip；`test_role_payer_projection` 在 dev 镜像 skip，由脚本在 controller 镜像单独运行。
+
 ## 上下文工程 v3：预算、投影、锚点、完成门禁与 L0 检索
 
 `scripts/` 新增离线能力，默认只在 `launch.context_policy = "chi-context-v3"` 的新 run 启用；旧 v2 launch 与旧证据保持原语义。
