@@ -146,7 +146,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         raise GoFailure("chi_requirements_configuration_invalid")
     if type(main_max_tokens) is not int or not 1024 <= main_max_tokens <= 32768:
         raise GoFailure("chi_context_budget_invalid")
-    if check_budget(measure_request({"messages": [], "max_tokens": main_max_tokens}), context_budget) == "chi_context_budget_invalid":
+    if check_budget(measure_request({"messages": [], "max_tokens": main_max_tokens}, budget=context_budget), context_budget) == "chi_context_budget_invalid":
         raise GoFailure("chi_context_budget_invalid")
     logs_dir = __import__("pathlib").Path(logs_dir)
     logs_dir.mkdir(mode=0o700, parents=False, exist_ok=False)

@@ -8,7 +8,7 @@ import httpx
 
 import go_chi_entry
 
-from go_chi_context import DEFAULT_BUDGET
+from go_chi_context import DEFAULT_BUDGET, DEFAULT_BUDGET_V3
 from go_chi_journal import ChiJournal
 from go_chi_runtime import run_chi
 from opencode_go_provider import GoFailure
@@ -112,6 +112,12 @@ class CapabilityRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(output, "done")
         self.assertEqual(journal.run["requests"][0]["max_tokens"], 16384)
         self.assertEqual(journal.run["launch"]["main_max_tokens"], 16384)
+
+    async def test_v3_budget_with_small_main_max_tokens_passes_precheck(self):
+        output, observed, server, journal = await self.exercise(
+            [completion()], context_budget=DEFAULT_BUDGET_V3, main_max_tokens=1024)
+        self.assertEqual(output, "done")
+        self.assertEqual(journal.run["requests"][0]["max_tokens"], 1024)
 
     async def test_invalid_tool_arguments_are_refused_and_run_continues(self):
         responses = [
