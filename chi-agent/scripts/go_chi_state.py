@@ -393,12 +393,15 @@ class TaskState:
         return observation
 
     def _bind_target_from_observation(self, observation: dict) -> None:
-        # Bind only from the task-scoped local workspace. An arbitrary MCP case
-        # read (for example one of several same-name queue cases) must never
-        # select the target; the local workspace path is what the task owns.
+        # Bind only from a successful task-scoped local workspace read. An
+        # arbitrary MCP case read (for example one of several same-name queue
+        # cases) must never select the target, and neither may a failed list or
+        # read of a case directory that does not exist in this task workspace.
         scope = observation.get("scope")
-        if (observation.get("kind") == "local" and type(scope) is str
-                and scope.startswith("case:")):
+        if (observation.get("kind") == "local"
+                and observation.get("effect") == "read"
+                and observation.get("event") == "returned"
+                and type(scope) is str and scope.startswith("case:")):
             case_id = scope[5:]
             if CASE_ID.fullmatch(case_id) and self.data["target"]["case_id"] is None:
                 self.data["target"]["case_id"] = case_id
