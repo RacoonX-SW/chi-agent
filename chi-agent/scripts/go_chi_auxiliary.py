@@ -52,7 +52,7 @@ class AuxiliaryTransport(httpx.AsyncBaseTransport):
                         or any(m['role'] == 'system' for m in body['messages'][1:])
                         or _contains_secret(body, self.secret, self.session)):
                     raise GoFailure('chi_aux_request_invalid')
-                metric = measure_request(body, raw)
+                metric = measure_request(body, raw, self.context_limit)
                 blocked = check_budget(metric, self.context_limit)
                 if blocked is not None: raise GoFailure(blocked)
                 if self.context_recorder is not None: self.context_recorder(metric, "patient_simulator")

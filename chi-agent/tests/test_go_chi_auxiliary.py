@@ -192,6 +192,25 @@ def test_patient_context_budget_records_actual_wire_and_blocks_before_send():
     asyncio.run(exercise())
 
 
+def test_patient_context_budget_accepts_v3_budget():
+    async def exercise():
+        from go_chi_context import DEFAULT_BUDGET_V3, budget_from_bytes
+        with tempfile.TemporaryDirectory() as d:
+            j = ChiJournal(Path(d), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',
+                           kind='patient_probe', launch={'aux_contract': 'patient-simulator-v1'})
+            sent = []
+            async def reply(req):
+                sent.append(req)
+                return httpx.Response(200, request=req, json={'usage': USAGE, 'model': 'deepseek-v4.1-flash',
+                    'choices': [{'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': 'hello'}}]})
+            transport = AuxiliaryTransport(j, SECRET, SESSION, httpx.MockTransport(reply), asyncio.Lock(), lambda: None,
+                context_limit=budget_from_bytes(1500000, DEFAULT_BUDGET_V3))
+            await transport.handle_async_request(request())
+            assert len(sent) == 1 and len(j.run['requests']) == 1
+            j.finish('failed'); j.close()
+    asyncio.run(exercise())
+
+
 @pytest.mark.parametrize("mode", ["cancelled", "network", "unknown_usage", "invalid_response"])
 def test_auxiliary_failures_keep_code_cause_and_diagnostic(mode):
     asyncio.run(_auxiliary_failure(mode))
