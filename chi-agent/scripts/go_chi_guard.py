@@ -606,8 +606,6 @@ class ChiGuard(httpx.AsyncBaseTransport):
                                        extensions=dict(request.extensions))
                 self._active_permit = {"index": permit, "request": follow,
                     "body_sha256": hashlib.sha256(wire).hexdigest(), "view_sha256": canonical_sha(view),
-                    "parent_view_sha256": (canonical_sha(self._active_projection['wire_body'])
-                                           if self._active_projection is not None else canonical_sha(original)),
                     "history_length": len(view["messages"]), "source_body": original,
                     "anchor": anchor, "pressure": effective_pressure, "mode": mode}
                 self._active_view = (self._make_view_identity(

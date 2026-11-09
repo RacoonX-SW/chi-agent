@@ -8,9 +8,11 @@ from pathlib import Path
 
 import httpx
 
+from go_chi_assembly import project_messages
 from go_chi_context import DEFAULT_BUDGET_V3
+from go_chi_evidence import write_tool
 from go_chi_guard import ChiGuard
-from go_chi_journal import ChiJournal, inspect_history
+from go_chi_journal import ChiJournal, _replay_source_view, inspect_history
 from go_chi_recovery import canonical_sha, validate_permit
 from opencode_go_provider import GoFailure
 from test_go_chi_guard import SECRET, SESSION, TOOLS, USAGE, URL, body, request
@@ -210,6 +212,7 @@ class RecoveryViewBindingTests(unittest.TestCase):
             ])
             asyncio.run(guard.handle_async_request(request(local_body())))
             journal.run["requests"][0].pop("source_evidence_sha256", None)
+            journal.run["requests"][0].pop("source_bytes", None)
             journal.finish("failed")
             journal.close()
             raw = (root / "chi-accounting.json").read_bytes()
@@ -285,6 +288,77 @@ class RecoveryViewBindingTests(unittest.TestCase):
                            launch={"context_policy": "chi-context-v3",
                                    "output_recovery": "chi-output-recovery-v1"})
             self.assertEqual(caught.exception.code, "chi_context_policy_incompatible")
+
+
+class SourceReplayEdgeTests(unittest.TestCase):
+    def test_replay_includes_returned_error_and_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ref1 = write_tool(root, "r", "c1", "ERROR: failed", ())
+            ref2 = write_tool(root, "r", "c2", "read result", ())
+            source = {"model": "deepseek-v4.1-flash", "max_tokens": 1024, "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "instruction"},
+                {"role": "assistant", "content": None, "tool_calls": [
+                    {"id": "c1", "type": "function",
+                     "function": {"name": "local-fs-write", "arguments": "{\"path\":\"/a\"}"}}]},
+                {"role": "tool", "tool_call_id": "c1", "content": "ERROR: failed"},
+                {"role": "assistant", "content": None, "tool_calls": [
+                    {"id": "c2", "type": "function",
+                     "function": {"name": "local-fs-read", "arguments": "{\"path\":\"/b\"}"}}]},
+                {"role": "tool", "tool_call_id": "c2", "content": "read result"},
+            ]}
+            records = {
+                "c1": {"id": "c1", "name": "local-fs-write",
+                       "arguments": {"path": "/a"}, "result": "ERROR: failed"},
+                "c2": {"id": "c2", "name": "local-fs-read",
+                       "arguments": {"path": "/b"}, "result": "read result"},
+            }
+            events = {"c1": "returned_error", "c2": "returned"}
+            projected, _ = project_messages(
+                source["messages"], records=records, events=events,
+                canonical_tools={}, keep_recent_batches=1, project_results=True)
+            wire = dict(source)
+            wire["messages"] = projected
+            run = {"run": "r", "tool_events": [
+                {"call_id": "c1", "tool": "local-fs-write", "event": "returned_error",
+                 "result_evidence_sha256": ref1},
+                {"call_id": "c2", "tool": "local-fs-read", "event": "returned",
+                 "result_evidence_sha256": ref2},
+            ]}
+            expected, sha = _replay_source_view(
+                root, run, source, wire, keep_recent_batches=1, project_results=True)
+            self.assertEqual(sha, canonical_sha(wire))
+            self.assertEqual(json.loads(expected["messages"][3]["content"])["schema"],
+                             "chi-tool-record-v1")
+
+    def test_replay_redacted_tool_evidence_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "tool-evidence" / "r" / "c1.json"
+            path.parent.mkdir(parents=True)
+            path.write_text(json.dumps({
+                "schema": "chi-go-tool-evidence-v1", "kind": "tool",
+                "raw_sha256": "a" * 64, "body_utf8": None,
+                "redaction": "body_too_large"}))
+            ref = hashlib.sha256(path.read_bytes()).hexdigest()
+            source = {"model": "deepseek-v4.1-flash", "max_tokens": 1024, "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "instruction"},
+                {"role": "assistant", "content": None, "tool_calls": [
+                    {"id": "c1", "type": "function",
+                     "function": {"name": "local-fs-read", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "c1", "content": "redacted"},
+            ]}
+            wire = dict(source)
+            run = {"run": "r", "tool_events": [
+                {"call_id": "c1", "tool": "local-fs-read", "event": "returned",
+                 "result_evidence_sha256": ref},
+            ]}
+            with self.assertRaises(GoFailure) as caught:
+                _replay_source_view(root, run, source, wire,
+                                    keep_recent_batches=1, project_results=True)
+            self.assertEqual(caught.exception.code, "chi_view_source_mismatch")
 
 
 if __name__ == "__main__":
