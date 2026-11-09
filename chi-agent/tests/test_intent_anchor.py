@@ -25,6 +25,9 @@ class AnchorStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             state = TaskState(Path(directory) / "state", run="r", role="payer",
                               context_policy=CONTEXT_POLICY_V3)
+            state.observe(call_id="bind", tool="local-fs-read", kind="local",
+                          arguments={"path": "/workspace/CASE-A/payer/in.txt"},
+                          result="read", event="returned", scope="case:CASE-A")
             state.observe(call_id="c1", tool="payer_intake_hub.get_intake_case",
                           kind="mcp", arguments={"case_id": "CASE-A"},
                           result="{}", event="returned", scope="case:CASE-A")

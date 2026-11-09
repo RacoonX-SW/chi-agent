@@ -36,6 +36,39 @@ class DriftTests(unittest.TestCase):
             self.assertEqual(second, "SOFT:repeat_call:2")
             self.assertEqual(third, "HARD:repeat_call")
 
+    def test_target_mismatch_mcp_mutation_is_hard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = self._state(directory)
+            state.observe(call_id="c1", tool="local-fs-read", kind="local",
+                          arguments={"path": "/workspace/CASE-A/payer/in.txt"},
+                          result="read", event="returned", scope="case:CASE-A")
+            self.assertEqual(state.data["target"]["case_id"], "CASE-A")
+            result = state.drift_check("triage.set_disposition", "mcp",
+                                       {"case_id": "CASE-B"})
+            self.assertEqual(result, "HARD:target_mismatch")
+
+    def test_target_mismatch_local_write_is_hard(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = self._state(directory)
+            state.observe(call_id="c1", tool="local-fs-read", kind="local",
+                          arguments={"path": "/workspace/CASE-A/payer/in.txt"},
+                          result="read", event="returned", scope="case:CASE-A")
+            state.observe(call_id="c2", tool="local-fs-read", kind="local",
+                          arguments={"path": "/workspace/CASE-B/payer/in.txt"},
+                          result="read", event="returned", scope="case:CASE-B")
+            result = state.drift_check("local-fs-write", "local",
+                                       {"path": "/workspace/CASE-B/payer/out.txt"})
+            self.assertEqual(result, "HARD:target_mismatch")
+
+    def test_matching_target_mutation_is_allowed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = self._state(directory)
+            state.observe(call_id="c1", tool="local-fs-read", kind="local",
+                          arguments={"path": "/workspace/CASE-A/payer/in.txt"},
+                          result="read", event="returned", scope="case:CASE-A")
+            self.assertIsNone(state.drift_check("triage.set_disposition", "mcp",
+                                                {"case_id": "CASE-A"}))
+
     def test_legacy_state_has_no_drift(self):
         with tempfile.TemporaryDirectory() as directory:
             state = TaskState(Path(directory) / "state", run="r", role="payer")

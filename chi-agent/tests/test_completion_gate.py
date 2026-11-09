@@ -15,6 +15,11 @@ class CompletionGateTests(unittest.TestCase):
                       arguments={"case_id": "CASE-A"}, result=result,
                       event=event, scope="case:CASE-A")
 
+    def _bind(self, state):
+        state.observe(call_id="bind", tool="local-fs-read", kind="local",
+                      arguments={"path": "/workspace/CASE-A/payer/in.txt"},
+                      result="read", event="returned", scope="case:CASE-A")
+
     def test_missing_steps_block_claim(self):
         with tempfile.TemporaryDirectory() as directory:
             state = self._state(directory)
@@ -25,6 +30,7 @@ class CompletionGateTests(unittest.TestCase):
     def test_terminal_and_readback_allow_claim(self):
         with tempfile.TemporaryDirectory() as directory:
             state = self._state(directory)
+            self._bind(state)
             self._observe(state, "c1", "payer_intake_hub.get_intake_case")
             self._observe(state, "c2", "triage.get")
             self._observe(state, "c3", "review.get_nurse_review_data")
@@ -39,6 +45,7 @@ class CompletionGateTests(unittest.TestCase):
     def test_fake_claim_without_terminal_object_is_refused(self):
         with tempfile.TemporaryDirectory() as directory:
             state = self._state(directory)
+            self._bind(state)
             self._observe(state, "c1", "payer_intake_hub.get_intake_case")
             self._observe(state, "c2", "triage.get")
             self._observe(state, "c3", "review.get_nurse_review_data")
@@ -62,6 +69,7 @@ class CompletionGateTests(unittest.TestCase):
     def test_failed_terminal_write_does_not_count(self):
         with tempfile.TemporaryDirectory() as directory:
             state = self._state(directory)
+            self._bind(state)
             self._observe(state, "c1", "payer_intake_hub.get_intake_case")
             self._observe(state, "c2", "triage.get")
             self._observe(state, "c3", "review.get_nurse_review_data")
