@@ -5,8 +5,8 @@ from pathlib import Path
 from unittest import mock
 
 from opencode_go_provider import GoFailure
-from go_chi_state import (LIMITS, MAX_STATE_BYTES, StateRefusal, TaskState,
-                          effect_for)
+from go_chi_state import (CONTEXT_POLICY_V3, LIMITS, MAX_STATE_BYTES, StateRefusal,
+                          TaskState, effect_for)
 
 
 class Binding:
@@ -482,6 +482,46 @@ class StateTests(unittest.TestCase):
         allowed = role_allowlists()
         for role, names in expected.items():
             self.assertTrue(names <= allowed[role], (role, names - allowed[role]))
+
+
+class TargetBindingTests(unittest.TestCase):
+    """The target binds only from task-scoped local workspace observations."""
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name) / "task-state"
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def state(self):
+        return TaskState(self.root, run="run_1", role="payer",
+                         context_policy=CONTEXT_POLICY_V3)
+
+    def test_mcp_case_read_does_not_bind_target(self):
+        state = self.state()
+        read_call(state, "call_1", case_id="CASE-WRONG")
+        self.assertIsNone(state.data["target"]["case_id"])
+
+    def test_local_workspace_read_binds_target(self):
+        state = self.state()
+        file_call(state, "call_f1", tool="local-fs-read", scope="case:CASE-RIGHT",
+                  path="/workspace/CASE-RIGHT/payer/incoming/request.pdf")
+        self.assertEqual(state.data["target"]["case_id"], "CASE-RIGHT")
+
+    def test_wrong_mcp_case_then_workspace_read_binds_workspace_case(self):
+        state = self.state()
+        read_call(state, "call_1", case_id="CASE-WRONG")
+        file_call(state, "call_f1", tool="local-fs-read", scope="case:CASE-RIGHT",
+                  path="/workspace/CASE-RIGHT/payer/incoming/request.pdf")
+        self.assertEqual(state.data["target"]["case_id"], "CASE-RIGHT")
+
+    def test_no_workspace_read_leaves_target_null(self):
+        state = self.state()
+        state.observe(call_id="call_1", tool="local-fs-read", kind="local",
+                      arguments={"path": "/handbook/policy.md"}, result="policy",
+                      event="returned", scope="shared_public")
+        self.assertIsNone(state.data["target"]["case_id"])
 
 
 if __name__ == "__main__":

@@ -187,6 +187,32 @@ def source_kind_for(role: str, tool: str, kind: str, scope: str, effect: str | N
     return "business_evidence"
 
 
+def _mutation_case_id(tool: str, kind: str, arguments) -> str | None:
+    """Return the case a mutation targets, when the program can derive it.
+
+    MCP mutations carry an explicit ``case_id``. Local file mutations derive the
+    case from the workspace path ``<root>/<case>/<role|shared>/...``. A mutation
+    whose case cannot be derived is left to the other gates.
+    """
+    if type(arguments) is not dict:
+        return None
+    if kind == "mcp":
+        value = arguments.get("case_id")
+        return value if type(value) is str and CASE_ID.fullmatch(value) else None
+    if kind == "local" and tool in {"local-fs-write", "local-fs-edit"}:
+        path = arguments.get("path")
+        if type(path) is not str or not path.startswith("/") or len(path) > 2048:
+            return None
+        parts = Path(path).parts
+        for index, part in enumerate(parts):
+            if index >= 1 and part in {"provider", "payer", "cm", "shared"}:
+                candidate = parts[index - 1]
+                if CASE_ID.fullmatch(candidate):
+                    return candidate
+        return None
+    return None
+
+
 def file_resource(tool: str, kind: str, arguments) -> str | None:
     """Return a bounded program-owned file resource id for delivery evidence.
 
@@ -367,10 +393,14 @@ class TaskState:
         return observation
 
     def _bind_target_from_observation(self, observation: dict) -> None:
+        # Bind only from the task-scoped local workspace. An arbitrary MCP case
+        # read (for example one of several same-name queue cases) must never
+        # select the target; the local workspace path is what the task owns.
         scope = observation.get("scope")
-        if type(scope) is str and scope.startswith("case:"):
+        if (observation.get("kind") == "local" and type(scope) is str
+                and scope.startswith("case:")):
             case_id = scope[5:]
-            if self.data["target"]["case_id"] is None:
+            if CASE_ID.fullmatch(case_id) and self.data["target"]["case_id"] is None:
                 self.data["target"]["case_id"] = case_id
         if self.data["role"] == "provider":
             bound = getattr(self.binding, "bound", None)
@@ -737,14 +767,13 @@ class TaskState:
         effect = effect_for(tool, kind)
         rule = None
         if effect == "mutation":
-            if tool in {"local-fs-write", "local-fs-edit"}:
-                args = arguments if type(arguments) is dict else {}
-                path = args.get("path")
-                case_id = None
-                if type(path) is str and "/" in path:
-                    parts = Path(path).parts
-                    if len(parts) >= 3:
-                        case_id = parts[-3] if parts[-2] in {"provider", "payer", "cm", "shared"} else None
+            target_case = self.data["target"]["case_id"]
+            mutation_case = _mutation_case_id(tool, kind, arguments)
+            if (target_case is not None and mutation_case is not None
+                    and mutation_case != target_case):
+                rule = "target_mismatch"
+            elif tool in {"local-fs-write", "local-fs-edit"}:
+                case_id = mutation_case
                 if case_id is not None and not any(
                         item.get("event") == "returned" and item.get("effect") == "read"
                         and item.get("scope") == "case:" + case_id
@@ -763,7 +792,7 @@ class TaskState:
         if rule is None:
             return None
         drift = self.data.setdefault("drift", {"classes": {}, "total": 0, "events": []})
-        hard = rule == "unread_write"
+        hard = rule in {"unread_write", "target_mismatch"}
         count = int(drift["classes"].get(rule, 0)) + 1
         if hard or count > DRIFT_CLASS_LIMIT or drift["total"] >= DRIFT_RUN_LIMIT:
             drift["classes"][rule] = count
