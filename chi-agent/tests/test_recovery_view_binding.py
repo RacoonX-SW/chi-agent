@@ -10,7 +10,7 @@ import httpx
 
 from go_chi_assembly import project_messages
 from go_chi_context import DEFAULT_BUDGET_V3
-from go_chi_evidence import write_tool
+from go_chi_evidence import verify_tool, write_tool
 from go_chi_guard import ChiGuard
 from go_chi_journal import ChiJournal, _replay_source_view, inspect_history
 from go_chi_recovery import canonical_sha, validate_permit
@@ -331,6 +331,43 @@ class SourceReplayEdgeTests(unittest.TestCase):
             self.assertEqual(sha, canonical_sha(wire))
             self.assertEqual(json.loads(expected["messages"][3]["content"])["schema"],
                              "chi-tool-record-v1")
+
+    def test_tool_evidence_keeps_non_json_text_with_backslashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = "policy \\* text"
+            ref = write_tool(root, "r", "c1", result, ())
+            doc = json.loads((root / "tool-evidence" / "r" / "c1.json").read_text())
+            self.assertIsNone(doc["redaction"])
+            self.assertEqual(doc["body_utf8"], result)
+            self.assertEqual(verify_tool(root, "r", "c1", ref)["body_utf8"], result)
+
+    def test_replay_accepts_non_json_text_with_backslashes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result = "policy \\* text"
+            ref = write_tool(root, "r", "c1", result, ())
+            source = {"model": "deepseek-v4.1-flash", "max_tokens": 1024, "messages": [
+                {"role": "system", "content": "system"},
+                {"role": "user", "content": "instruction"},
+                {"role": "assistant", "content": None, "tool_calls": [
+                    {"id": "c1", "type": "function",
+                     "function": {"name": "local-fs-read", "arguments": "{}"}}]},
+                {"role": "tool", "tool_call_id": "c1", "content": result},
+            ]}
+            records = {"c1": {"id": "c1", "name": "local-fs-read",
+                              "arguments": {}, "result": result}}
+            projected, _ = project_messages(source["messages"], records=records,
+                                            events={"c1": "returned"}, canonical_tools={},
+                                            keep_recent_batches=1, project_results=True)
+            wire = dict(source)
+            wire["messages"] = projected
+            run = {"run": "r", "tool_events": [
+                {"call_id": "c1", "tool": "local-fs-read", "event": "returned",
+                 "result_evidence_sha256": ref}]}
+            _expected, sha = _replay_source_view(
+                root, run, source, wire, keep_recent_batches=1, project_results=True)
+            self.assertEqual(sha, canonical_sha(wire))
 
     def test_replay_redacted_tool_evidence_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
