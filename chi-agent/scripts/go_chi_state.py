@@ -393,18 +393,24 @@ class TaskState:
         return observation
 
     def _bind_target_from_observation(self, observation: dict) -> None:
-        # Bind only from a successful task-scoped local workspace read. An
-        # arbitrary MCP case read (for example one of several same-name queue
-        # cases) must never select the target, and neither may a failed list or
-        # read of a case directory that does not exist in this task workspace.
+        # Bind only from a successful task-scoped read. Payer/provider use the
+        # local workspace; CM charts commonly have no readable case file, so the
+        # canonical cm_chart.get_chart_data read is the CM task-scope signal.
+        # Arbitrary queue reads (for example payer_intake_hub.get_intake_case)
+        # never select the target.
         scope = observation.get("scope")
-        if (observation.get("kind") == "local"
-                and observation.get("effect") == "read"
+        case_scoped = type(scope) is str and scope.startswith("case:")
+        if (case_scoped and observation.get("effect") == "read"
                 and observation.get("event") == "returned"
-                and type(scope) is str and scope.startswith("case:")):
-            case_id = scope[5:]
-            if CASE_ID.fullmatch(case_id) and self.data["target"]["case_id"] is None:
-                self.data["target"]["case_id"] = case_id
+                and self.data["target"]["case_id"] is None):
+            local_read = observation.get("kind") == "local"
+            cm_chart_read = (self.data["role"] == "cm"
+                             and observation.get("kind") == "mcp"
+                             and observation.get("tool") == "cm_chart.get_chart_data")
+            if local_read or cm_chart_read:
+                case_id = scope[5:]
+                if CASE_ID.fullmatch(case_id):
+                    self.data["target"]["case_id"] = case_id
         if self.data["role"] == "provider":
             bound = getattr(self.binding, "bound", None)
             if type(bound) is str and bound and self.data["target"]["patient_id"] is None:
