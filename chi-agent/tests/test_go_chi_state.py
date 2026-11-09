@@ -523,6 +523,23 @@ class TargetBindingTests(unittest.TestCase):
                       event="returned", scope="shared_public")
         self.assertIsNone(state.data["target"]["case_id"])
 
+    def test_failed_local_workspace_read_does_not_bind_target(self):
+        state = self.state()
+        state.observe(call_id="call_1", tool="local-fs-list", kind="local",
+                      arguments={"path": "/workspace/CASE-WRONG/payer"},
+                      result="ERROR: not found", event="returned_error",
+                      scope="case:CASE-WRONG")
+        self.assertIsNone(state.data["target"]["case_id"])
+        file_call(state, "call_f2", tool="local-fs-list", scope="case:CASE-RIGHT",
+                  path="/workspace/CASE-RIGHT/payer")
+        self.assertEqual(state.data["target"]["case_id"], "CASE-RIGHT")
+
+    def test_successful_local_list_binds_target(self):
+        state = self.state()
+        file_call(state, "call_f1", tool="local-fs-list", scope="case:CASE-RIGHT",
+                  path="/workspace/CASE-RIGHT/payer")
+        self.assertEqual(state.data["target"]["case_id"], "CASE-RIGHT")
+
 
 if __name__ == "__main__":
     unittest.main()
