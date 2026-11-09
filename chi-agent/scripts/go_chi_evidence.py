@@ -94,11 +94,13 @@ def write_tool(root: Path, run: str, call_id: str, result: str, secrets: tuple[s
                                 parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
             unsafe = unsafe or _contains_secret(parsed, *secrets)
         except Exception:
-            if "\\" in result:
-                doc["redaction"] = "unparseable_escaped_body"
+            # Non-JSON text is screened by the raw-string check above. Store it
+            # verbatim so the v3 source replay can reproduce what the model saw;
+            # policy/PDF text commonly contains backslashes.
+            pass
         if unsafe:
             doc["redaction"] = "secret_detected"
-        elif doc["redaction"] is None:
+        else:
             doc["body_utf8"] = result
     directory = Path(root) / "tool-evidence" / run
     try:
