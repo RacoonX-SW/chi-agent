@@ -14,6 +14,27 @@ def call(call_id, arguments):
     return {"id": call_id, "type": "function", "function": {"name": "read", "arguments": arguments}}
 
 
+def provenance_definitions():
+    return [
+        {"type": "function", "function": {
+            "name": "start", "description": "Start", "strict": False,
+            "parameters": {"type": "object", "properties": {},
+                           "required": [], "additionalProperties": False}}},
+        {"type": "function", "function": {
+            "name": "send", "description": "Send", "strict": False,
+            "parameters": {"type": "object",
+                           "properties": {"session_id": {"type": "string"},
+                                          "message": {"type": "string"}},
+                           "required": ["session_id", "message"],
+                           "additionalProperties": False}}},
+    ]
+
+
+def tool_call(call_id, name, arguments):
+    return {"id": call_id, "type": "function",
+            "function": {"name": name, "arguments": arguments}}
+
+
 def message(calls):
     return {"role": "assistant", "content": None, "reasoning_content": "think", "tool_calls": calls}
 
@@ -64,6 +85,41 @@ class ContractTests(unittest.TestCase):
             contract.record_result(call_id, "REFUSED: " + contract.refusals[call_id])
         with self.assertRaises(ContractFailure):
             contract.accept_batch(message([call("overflow", '{}')]), recover_schema=True)
+
+    def test_missing_argument_hint_uses_prior_result(self):
+        contract = ToolContract(provenance_definitions())
+        contract.accept_batch(message([tool_call("s1", "start", "{}")]))
+        contract.record_result("s1", '{"session_id":"SES-6046D5EC","status":"active"}')
+        contract.accept_batch(message([tool_call("m1", "send", '{"message":"hello"}')]),
+                              recover_schema=True)
+        refusal = contract.refusals["m1"]
+        self.assertIn("missing required field(s) session_id", refusal)
+        self.assertIn("session_id=SES-6046D5EC", refusal)
+        self.assertIn("from start (s1)", refusal)
+
+    def test_missing_argument_hint_accepts_text_block_results(self):
+        contract = ToolContract(provenance_definitions())
+        contract.accept_batch(message([tool_call("s1", "start", "{}")]))
+        contract.record_result("s1", [{"type": "text",
+                                       "text": '{"session_id":"SES-TEXT","status":"active"}'}])
+        contract.accept_batch(message([tool_call("m1", "send", '{"message":"hello"}')]),
+                              recover_schema=True)
+        self.assertIn("session_id=SES-TEXT", contract.refusals["m1"])
+
+    def test_missing_argument_hint_absent_without_prior_value(self):
+        contract = ToolContract(provenance_definitions())
+        contract.accept_batch(message([tool_call("m1", "send", '{"message":"hello"}')]),
+                              recover_schema=True)
+        self.assertIn("missing required field(s) session_id", contract.refusals["m1"])
+        self.assertNotIn("observed ", contract.refusals["m1"])
+
+    def test_missing_argument_hint_ignores_non_json_results(self):
+        contract = ToolContract(provenance_definitions())
+        contract.accept_batch(message([tool_call("s1", "start", "{}")]))
+        contract.record_result("s1", "not json")
+        contract.accept_batch(message([tool_call("m1", "send", '{"message":"hello"}')]),
+                              recover_schema=True)
+        self.assertNotIn("observed ", contract.refusals["m1"])
 
     def test_json_syntax_error_is_refused_atomically(self):
         contract = ToolContract(definition())

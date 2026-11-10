@@ -101,6 +101,12 @@ class GuidanceTests(unittest.TestCase):
             self.assertIn("patient_id is provider-only", text)
             self.assertIn("target.case_id", text)
 
+    def test_argument_provenance_is_stated_for_every_role(self):
+        for role in ("provider", "payer", "cm"):
+            text = " ".join(guidance(role)["invariants"]).lower()
+            self.assertIn("reuse the exact value", text)
+            self.assertIn("missing required field", text)
+
     def test_invalid_role_is_rejected(self):
         with self.assertRaises(ValueError):
             guidance("admin")
