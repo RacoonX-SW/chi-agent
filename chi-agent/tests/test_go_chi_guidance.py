@@ -101,6 +101,11 @@ class GuidanceTests(unittest.TestCase):
             self.assertIn("patient_id is provider-only", text)
             self.assertIn("target.case_id", text)
 
+    def test_cm_consent_is_not_terminal(self):
+        text = " ".join(guidance("cm")["invariants"]).lower()
+        self.assertIn("consent or enrollment is not a terminal state", text)
+        self.assertIn("continue to the assessment and care plan", text)
+
     def test_argument_provenance_is_stated_for_every_role(self):
         for role in ("provider", "payer", "cm"):
             text = " ".join(guidance(role)["invariants"]).lower()
