@@ -43,6 +43,7 @@ _INVARIANTS = {
     ],
     "cm": [
         "Respect patient STOP and contact preferences; stop outreach when the patient declines or cannot be reached.",
+        "Patient consent or enrollment is not a terminal state; unless the patient declines, STOPs or cannot be reached, continue to the assessment and care plan.",
         "Keep chart facts, outreach statements, assessment sections and the care plan separately sourced.",
         "Do not claim a completed assessment or plan without the corresponding save/finalize result.",
         "After a finalize write, read the case/plan state back before claiming completion.",
