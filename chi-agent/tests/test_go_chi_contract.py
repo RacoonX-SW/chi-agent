@@ -146,7 +146,7 @@ class ContractTests(unittest.TestCase):
             contract.record_result(call_id, "REFUSED: " + contract.refusals[call_id])
         calls = contract.accept_batch(message([call("j0", '{"id":')]), recover_schema=True)
         contract.record_result("j0", "REFUSED: " + contract.refusals["j0"])
-        self.assertEqual(contract.total_refusals, 3)
+        self.assertEqual(contract.total_refusals, ToolContract.RECOVERABLE_TOTAL_LIMIT)
         with self.assertRaises(ContractFailure):
             contract.accept_batch(message([call("overflow", '{"id":1,"extra":2}')]), recover_schema=True)
 
