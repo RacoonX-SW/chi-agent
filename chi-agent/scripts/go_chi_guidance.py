@@ -59,6 +59,11 @@ _BUSINESS_READBACK = (
 _WORKSPACE_INVARIANT = ("Write artifacts only under '<case_id>/<role>/' or '<case_id>/shared/' in the role workspace; "
                         "the role directory is the exact role id (provider, payer or cm), not a job title.")
 
+_ARGUMENT_PROVENANCE_INVARIANT = (
+    "When a later tool needs an identifier returned by an earlier tool, reuse the exact value; "
+    "if a call is refused for a missing required field, check the prior tool result instead of guessing."
+)
+
 _STAGES = {
     "provider": [
         {"id": "identify_target", "goal": "Identify the patient and the service supported by the public chart.",
@@ -156,7 +161,8 @@ _STAGES = {
 
 def delivered_invariants(requirements=None) -> dict[str, list[str]]:
     """Invariants exactly as delivered, including shared evidence rules."""
-    result = {role: _INVARIANTS[role] + [_BUSINESS_READBACK, _WORKSPACE_INVARIANT]
+    result = {role: _INVARIANTS[role] + [_ARGUMENT_PROVENANCE_INVARIANT,
+                                         _BUSINESS_READBACK, _WORKSPACE_INVARIANT]
               for role in _INVARIANTS}
     if requirements == REQUIREMENTS_POLICY:
         for role in result:

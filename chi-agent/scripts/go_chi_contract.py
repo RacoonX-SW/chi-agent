@@ -236,12 +236,12 @@ class ToolContract:
         self.batches.append({"message": stored, "ids": [c["id"] for c in calls]})
         return copy.deepcopy(calls)
 
-    @staticmethod
-    def _schema_refusal(tool: str, error) -> str:
+    def _schema_refusal(self, tool: str, error) -> str:
         path = ".".join(str(part) for part in error.absolute_path) or "$"
         if error.validator == "required" and isinstance(error.instance, dict):
             missing = [name for name in error.validator_value if name not in error.instance]
             detail = "missing required field(s) " + ", ".join(missing)
+            detail += self._missing_argument_hint(missing)
         elif error.validator == "additionalProperties" and isinstance(error.instance, dict):
             allowed = set(error.schema.get("properties", {}))
             unexpected = [name for name in error.instance if name not in allowed]
@@ -254,6 +254,49 @@ class ToolContract:
         else:
             detail = "failed " + str(error.validator)
         return f"chi_tool_arguments_invalid: {tool}: {detail} at {path}"
+
+    @staticmethod
+    def _result_object(result):
+        """Return a prior tool result as a dict when it is a JSON object."""
+        if type(result) is str:
+            text = result
+        elif (type(result) is list and result and all(
+                type(item) is dict and set(item) == {"type", "text"}
+                and item["type"] == "text" and type(item["text"]) is str for item in result)):
+            text = "\n".join(item["text"] for item in result)
+        else:
+            return None
+        try:
+            parsed = json.loads(text)
+        except Exception:
+            return None
+        return parsed if type(parsed) is dict else None
+
+    def _missing_argument_hint(self, fields: list[str]) -> str:
+        """Point at the most recent successful result that returned a field.
+
+        This is generic provenance, not a per-tool repair: it only reports
+        values the model has already seen, so a missing identifier such as a
+        session, case or letter id can be copied from the tool that created it.
+        """
+        hints: dict[str, str] = {}
+        for record in reversed(self.records):
+            value = self._result_object(record.get("result"))
+            if value is None:
+                continue
+            for field in fields:
+                if field in hints or field not in value:
+                    continue
+                candidate = value[field]
+                if type(candidate) is bool or type(candidate) in {str, int, float}:
+                    rendered = str(candidate)
+                    if len(rendered) > 80:
+                        rendered = rendered[:77] + "..."
+                    hints[field] = (f"{field}={rendered} from "
+                                    f"{record.get('name')} ({record.get('id')})")
+        if not hints:
+            return ""
+        return "; observed " + "; ".join(hints[field] for field in fields if field in hints)
 
     def record_result(self, call_id: str, result: Any) -> None:
         pending = [record for record in self.records if record["id"] == call_id and record["result"] is None]
