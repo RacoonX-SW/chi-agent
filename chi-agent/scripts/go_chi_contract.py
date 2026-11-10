@@ -116,9 +116,9 @@ def validate_anchor(messages: list[dict], anchor: dict) -> None:
 class ToolContract:
     """Freeze tool definitions and validate each whole batch before dispatch."""
 
-    RECOVERABLE_SCHEMA_LIMIT = 2
+    RECOVERABLE_SCHEMA_LIMIT = 3
     RECOVERABLE_JSON_LIMIT = 2
-    RECOVERABLE_TOTAL_LIMIT = 3
+    RECOVERABLE_TOTAL_LIMIT = 4
 
     def __init__(self, definitions: list[dict[str, Any]]):
         self.definitions = copy.deepcopy(definitions)
