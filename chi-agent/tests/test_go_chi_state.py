@@ -485,7 +485,7 @@ class StateTests(unittest.TestCase):
 
 
 class TargetBindingTests(unittest.TestCase):
-    """The target binds only from task-scoped local workspace observations."""
+    """The target binds only from a successful task-scoped read."""
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -494,8 +494,8 @@ class TargetBindingTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def state(self):
-        return TaskState(self.root, run="run_1", role="payer",
+    def state(self, role="payer"):
+        return TaskState(self.root, run="run_1", role=role,
                          context_policy=CONTEXT_POLICY_V3)
 
     def test_mcp_case_read_does_not_bind_target(self):
@@ -539,6 +539,34 @@ class TargetBindingTests(unittest.TestCase):
         file_call(state, "call_f1", tool="local-fs-list", scope="case:CASE-RIGHT",
                   path="/workspace/CASE-RIGHT/payer")
         self.assertEqual(state.data["target"]["case_id"], "CASE-RIGHT")
+
+    def test_cm_chart_read_binds_target(self):
+        state = self.state(role="cm")
+        state.observe(call_id="call_1", tool="cm_chart.get_chart_data", kind="mcp",
+                      arguments={"case_id": "CM-CASE-RIGHT"}, result="{}",
+                      event="returned", scope="case:CM-CASE-RIGHT")
+        self.assertEqual(state.data["target"]["case_id"], "CM-CASE-RIGHT")
+
+    def test_cm_failed_chart_read_does_not_bind_target(self):
+        state = self.state(role="cm")
+        state.observe(call_id="call_1", tool="cm_chart.get_chart_data", kind="mcp",
+                      arguments={"case_id": "CM-CASE-WRONG"}, result="ERROR",
+                      event="returned_error", scope="case:CM-CASE-WRONG")
+        self.assertIsNone(state.data["target"]["case_id"])
+
+    def test_cm_other_mcp_case_read_does_not_bind_target(self):
+        state = self.state(role="cm")
+        state.observe(call_id="call_1", tool="cm_intake.get_referral", kind="mcp",
+                      arguments={"case_id": "CM-CASE-WRONG"}, result="{}",
+                      event="returned", scope="case:CM-CASE-WRONG")
+        self.assertIsNone(state.data["target"]["case_id"])
+
+    def test_payer_intake_read_does_not_bind_target(self):
+        state = self.state(role="payer")
+        state.observe(call_id="call_1", tool="payer_intake_hub.get_intake_case", kind="mcp",
+                      arguments={"case_id": "CASE-WRONG"}, result="{}",
+                      event="returned", scope="case:CASE-WRONG")
+        self.assertIsNone(state.data["target"]["case_id"])
 
 
 if __name__ == "__main__":
