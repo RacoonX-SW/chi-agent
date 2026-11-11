@@ -104,7 +104,7 @@ entry在runtime已写有效run_log时，保留已有受支持版本、有限安�
 
 摘要是一次独立模型调用：旧历史作为输入，模型生成摘要作为输出，然后下一main才能采用。大输入窗口和单次输出8192是两个约束；本次input=212561，而output=8192且reasoning=8192、最终content为空。不是输入被截成8192，也不是程序把输入上限改成输出上限。尚未产生可验证摘要，所以没有安装checkpoint，原历史未被替换。
 
-既有输出恢复适用CHI主请求，默认关闭；仅在可信完整length响应、usage已结算、工具未派发且历史/预算满足时生成许可。无工具保留合法部分上下文再请求，有工具整批零接受/派发并从闭合历史重新生成；每链≤1、每run≤2，均占50，不保证模型语义连续。摘要用途明确排除，且首版与input_summary互斥。S探针只开摘要，故不能据本次失败判断恢复无效。[固定恢复契约](../project-completion/output-recovery.md)及[摘要观测](../../../reviews/summary-failure-diagnosis.md)保留各自含义。
+既有输出恢复适用CHI主请求，默认关闭；仅在可信完整length响应、usage已结算、工具未派发且历史/预算满足时生成许可。无工具保留合法部分上下文再请求，有工具整批零接受/派发并从闭合历史重新生成；每链≤1、每run≤2，均占50，不保证模型语义连续。摘要用途明确排除，且首版与input_summary互斥。S探针只开摘要，故不能据本次失败判断恢复无效。[固定恢复契约](../project-completion/output-recovery.md)及[摘要观测](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/summary-failure-diagnosis.md)保留各自含义。
 
 方案B是限制送去摘要的选区体量，尚未实施；缩小输入不保证减少reasoning或得到正文，不在A–D范围。用户后续明确撤销本PR原E摘要接续卡，改由GPT主代理和一个Terra/high子代理另做摘要专用生成预算修正；A–D不实施接续、不增加用途或额外请求，也不修改该独立预算策略。旧S失败及已用许可不回写，不因剩余额度追加探针。
 

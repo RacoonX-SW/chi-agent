@@ -1,12 +1,12 @@
 ## Context
 
-当前增量为 K：GPT-6.1 Terra / high 实现、多次真实 C 开发尝试及旧账目/源码身份接续；当前授权和验收身份见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。复用 Python 3.12 镜像、固定官方环境与已锁 SDK，不重写模拟器或评测器。历史章节中的 G/H/J 范围与旧暂停、5 元、单次限制只表示当时的授权；本轮新授权不启用官方判分，也不代表 F.5 最终冻结。
+当前增量为 K：GPT-6.1 Terra / high 实现、多次真实 C 开发尝试及旧账目/源码身份接续；当前授权和验收身份见 [REVIEW_STATE](../../REVIEW_STATE.md)。复用 Python 3.12 镜像、固定官方环境与已锁 SDK，不重写模拟器或评测器。历史章节中的 G/H/J 范围与旧暂停、5 元、单次限制只表示当时的授权；本轮新授权不启用官方判分，也不代表 F.5 最终冻结。
 
 规划基线任务为 `pa_t018_t018_o001_p01_new_referral_provider`。其输入、静态工具和运行限制见 `docs/task-walkthrough-pa-t018.md`。该文档没有真实评分，不能充当完成基线的证据。
 
 最新安排：用户当前暂缓本地 Anthropic 官方判分，先验证离线就绪、真实工具接入和无评分的 Agent 执行；正式判分留作单独暂缓项。部分 Claude 模拟对话也存在依赖缺口。以下涉及官方 reward/scorecard 的收集仅适用于确实运行了原版评分器的模式。参见 `docs/development-preparation-2026-10-21.md`。
 
-2026-10-24 最新环境约束：项目依赖、下载与执行全部进入 Docker，宿主机不安装项目运行/测试依赖。Docker 内开发、任务调度与可交付镜像的设计见 [Docker 工作流](../../../docs/docker-workflow.md)，覆盖此前宿主机 `.venv` 方案；D0 的开发容器与离线检查在本次恢复范围内。
+2026-10-24 最新环境约束：项目依赖、下载与执行全部进入 Docker，宿主机不安装项目运行/测试依赖。Docker 内开发、任务调度与可交付镜像的设计见 [Docker 工作流](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/docker-workflow.md)，覆盖此前宿主机 `.venv` 方案；D0 的开发容器与离线检查在本次恢复范围内。
 
 ## Decisions
 

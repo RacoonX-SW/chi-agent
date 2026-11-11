@@ -1,6 +1,6 @@
 # F0–F3 接口与行为冻结（待外部 Gemini 契约审查）
 
-状态：**已实现离线候选，待外部 Gemini 审查**。本页冻结最小接口、权限边界、失败语义和检查项；实现与自测证据见 [阶段报告](../../../reviews/f0-f3-agent-capabilities-review.md)，实现偏差见第 10 节。接口变更须回到本页并重新审查。
+状态：**已实现离线候选，待外部 Gemini 审查**。本页冻结最小接口、权限边界、失败语义和检查项；实现与自测证据见 [阶段报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/f0-f3-agent-capabilities-review.md)，实现偏差见第 10 节。接口变更须回到本页并重新审查。
 
 ## 1. 基线、候选与不变项
 

@@ -1,6 +1,6 @@
 # CHI-Bench 全项目收尾计划
 
-建立：2026-10-31（Asia/Shanghai）。用户要求扩大规划，让 DeepSeek/Gemini 连续推进整个项目的剩余工作，下周完成。**本轮交付规划和协作文件，不开始功能编码或项目模型调用。** 当前授权、实际候选和进度只见 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。
+建立：2026-10-31（Asia/Shanghai）。用户要求扩大规划，让 DeepSeek/Gemini 连续推进整个项目的剩余工作，下周完成。**本轮交付规划和协作文件，不开始功能编码或项目模型调用。** 当前授权、实际候选和进度只见 [REVIEW_STATE](../../REVIEW_STATE.md)。
 
 ## 目标
 

@@ -40,7 +40,7 @@
 - [ ] t024 / cm-anorexia / cm-asthma / cm-ckd 未启动，无新证据。
 - [ ] 按设计决策规则判断：保留 16384 / reasoning medium / 3 倍 + 调 read/IO（需等 429 缓解后重跑）。
 - [x] 不自动重跑、不换题、不换根；出现 pending 即停止（4 个 429 pending 保留）。
-- [x] 记录见 [BDE 执行记录第 6 节](../../../reviews/nine-task-bde-execution-20261107.md#6-失败题重跑16384-主输出预算2026-11-07)。
+- [x] 记录见 [BDE 执行记录第 6 节](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/nine-task-bde-execution-20261107.md#6-失败题重跑16384-主输出预算2026-11-07)。
 
 ## 4. 文档与复审
 

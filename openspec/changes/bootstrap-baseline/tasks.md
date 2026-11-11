@@ -1,4 +1,4 @@
-当前阶段、授权与已通过身份以 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md) 为准。以下已勾选项保留其历史验收范围；旧双代理人数与开发版本不覆盖现行协作约定。
+当前阶段、授权与已通过身份以 [REVIEW_STATE](../../REVIEW_STATE.md) 为准。以下已勾选项保留其历史验收范围；旧双代理人数与开发版本不覆盖现行协作约定。
 
 ## K. Terra implementation and repeated ungraded C development
 
@@ -44,9 +44,9 @@
 
 最新取舍：本地官方评分暂缓，先做离线与无评分开发验证；缺 Anthropic 不阻塞全部开发。已核对的 cb CLI 未见直接跳过 judge 的开关，开发入口需实际验证。见 `docs/development-preparation-2026-10-21.md`。
 
-执行顺序以 [分段交接包](handoff.md) 为准，不按编号误把付费兼容性验证提前到离线修复之前。D0 先完成包装、配置和离线证据；A 验证实际环境/工具与入口；B 验证候选模型往返；C 才做一次任务执行。每段交付稳定候选，由 Codex 验收，未授权阶段不自动启动。
+执行顺序以 [分段交接包](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/openspec/changes/bootstrap-baseline/handoff.md) 为准，不按编号误把付费兼容性验证提前到离线修复之前。D0 先完成包装、配置和离线证据；A 验证实际环境/工具与入口；B 验证候选模型往返；C 才做一次任务执行。每段交付稳定候选，由 Codex 验收，未授权阶段不自动启动。
 
-2026-10-24 环境方式按用户要求改为 Docker 内开发；依赖安装、下载和测试均在容器执行，宿主机不配置项目环境。D0 可构建/启动开发容器，不启动官方任务世界。详见 [Docker 工作流](../../../docs/docker-workflow.md)。勾选仅表示所注明阶段的实现或证据，不能代替独立审核及未运行的真实阶段。
+2026-10-24 环境方式按用户要求改为 Docker 内开发；依赖安装、下载和测试均在容器执行，宿主机不配置项目环境。D0 可构建/启动开发容器，不启动官方任务世界。详见 [Docker 工作流](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/docker-workflow.md)。勾选仅表示所注明阶段的实现或证据，不能代替独立审核及未运行的真实阶段。
 
 ## A. Model-free official environment and read-only tools (verified 2026-10-25)
 
@@ -151,7 +151,7 @@ Do not mark combined Agent execution tasks complete based on these stage A check
 - [ ] J.7 Only after real B success and sufficient known budget, claim and execute one fresh-world C autonomously, retain artifacts and cleanup evidence with official reward null; otherwise record the concrete prerequisite failure without consuming a C attempt.
 - [x] J.8 Update the learning ledger and one phase report, push and create a base=main PR for user review/merge; disclose actual-run versus offline-only scope, keeping official grading and F.5 deferred.
 
-J.7 原授权的唯一尝试在官方 bootstrap 失败、模型未启动，历史 checkbox 不改成通过；原失败 claim 保留。用户后续另行授权的 K 已完成新世界自主无评分执行，见 K 任务与 [K 审核](../../../reviews/c-development-retry-review.md)；J 原记录见 [J 审核](../../../reviews/real-b-c-ungraded-review.md)。
+J.7 原授权的唯一尝试在官方 bootstrap 失败、模型未启动，历史 checkbox 不改成通过；原失败 claim 保留。用户后续另行授权的 K 已完成新世界自主无评分执行，见 K 任务与 [K 审核](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/c-development-retry-review.md)；J 原记录见 [J 审核](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/real-b-c-ungraded-review.md)。
 
 ## L. DeepSeek local development judging
 

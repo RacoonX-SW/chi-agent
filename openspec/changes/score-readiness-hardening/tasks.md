@@ -1,6 +1,6 @@
 # 计分相关离线加固执行清单
 
-本清单只勾工作完成；当前候选/许可只见[REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。实施以[proposal](proposal.md)及[design](design.md)为准，文档通过不代表生产实现或真实运行已获准。
+本清单只勾工作完成；当前候选/许可只见[REVIEW_STATE](../../REVIEW_STATE.md)。实施以[proposal](proposal.md)及[design](design.md)为准，文档通过不代表生产实现或真实运行已获准。
 
 ## 0. 本轮规划交付
 

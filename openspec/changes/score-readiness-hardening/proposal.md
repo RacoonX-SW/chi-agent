@@ -6,11 +6,11 @@
 
 目标是在最终验证前修复可由公开契约与独立离线反例确认的缺陷，降低错误拒绝、提前结束及正式配送差异的风险；不承诺分数提升，不把功能实现、进程complete或局部检查当官方通过。
 
-只覆盖75题的三条track：`prior_auth_provider`、`prior_auth_um`、`care_management`，各25题；私有评测约75题、同三track。不扩展E2E、marathon、multi-agent或跨run长期记忆。公开计分口径见固定vendor的[挑战说明](../../../vendor/chi-bench/docs/kaggle-challenge-overview.md)和[公开规则参考](../../../vendor/chi-bench/docs/competition-rules-draft.md)；不从隐藏expectations、solution、verifier实现推导改动或预期结果。
+只覆盖75题的三条track：`prior_auth_provider`、`prior_auth_um`、`care_management`，各25题；私有评测约75题、同三track。不扩展E2E、marathon、multi-agent或跨run长期记忆。公开计分口径见固定vendor的[挑战说明](https://github.com/actava-ai/chi-bench/blob/4444a07fa68a4f1623f841a292a54e284fc8e7f7/docs/kaggle-challenge-overview.md)和[公开规则参考](https://github.com/actava-ai/chi-bench/blob/4444a07fa68a4f1623f841a292a54e284fc8e7f7/docs/competition-rules-draft.md)；不从隐藏expectations、solution、verifier实现推导改动或预期结果。
 
 本轮规划开工核实[PR56](https://github.com/xsw932187210-cell/chi-agent/pull/56)已合并，main=`6702cf2eb39b98a2ea39f5f6f60f042d460c9e10`，从其新建`codex/score-readiness-hardening-plan`。原checkout干净，未见匹配的项目Python/测试进程或运行中Docker容器；其他worktree保留。此为开工快照，不保证不存在编辑器写入者，后续实施仍须重新核对。
 
-当前身份、阶段和许可只见[REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。具体背景见[摘要失败运行](../../../reviews/summary-endpoint-probe-review.md)、[经返工的摘要观测](../../../reviews/summary-failure-diagnosis.md)、[已见开发记录](../../../reviews/real-external-batch-a-review.md)及[学习账本的后继定位](../../../docs/learning-agreement.md)。旧报告的早期归因保留历史意义，不能跳过后继更正重新当根因。
+当前身份、阶段和许可只见[REVIEW_STATE](../../REVIEW_STATE.md)。具体背景见[摘要失败运行](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/summary-endpoint-probe-review.md)、[经返工的摘要观测](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/summary-failure-diagnosis.md)、[已见开发记录](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/real-external-batch-a-review.md)及[学习账本的后继定位](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/learning-agreement.md)。旧报告的早期归因保留历史意义，不能跳过后继更正重新当根因。
 
 ## 2. P0–P5的取舍
 

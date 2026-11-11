@@ -6,5 +6,5 @@
 - [x] M.4 Terra Docker 合成自测，固定候选，由主代理独立审核并关闭有证据的问题。
 - [x] M.5 按新 participant 身份 rebind/完成必要 B，再对两题各执行新世界自主 C、完整终态、确定性部分检查和 DeepSeek 开发评审；保留所有成功/失败及费用。
 
-基线验证已实际完成，t019 的 runner_failed、错患者提交及局部评审限制保留，不把本项勾选解释为两题全成功。实际身份、完整调用/费用与下一通用改进仅见 [M 报告](../../../reviews/provider-two-task-baseline-review.md)。
+基线验证已实际完成，t019 的 runner_failed、错患者提交及局部评审限制保留，不把本项勾选解释为两题全成功。实际身份、完整调用/费用与下一通用改进仅见 [M 报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/provider-two-task-baseline-review.md)。
 - [x] M.6 根据证据区分工程故障与决策错误，提出下一项通用改进及固定条件验证方法；按职责更新文档，推送并创建 base=main PR 交用户合并。

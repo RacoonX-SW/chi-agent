@@ -47,7 +47,7 @@ PR76 合并（`526fd10`）后重建 bundle `11d5a5c2…` / runtime `4f797f2d…`
 - `nine-rerun4` 的 wire 证据确认实际请求体 `max_tokens=16384`，journal 亦记录 `launch.main_max_tokens=16384`。
 - 其余 5 次请求（含 `nine-rerun3` round2）均被提供方 `429 prefill_cap_refused` 拒绝，发生在模型执行前（`usage=null`），响应体 SHA 五次相同。
 - 结论：16384 **解决了 8192 的 reasoning 吃满问题**（round1 不再 length）；但**未获得全程证据**，无法判断后续轮次是否仍会 length 或超 240s。
-- 4 个 429 pending 保留；未自动重试。详见 [BDE 执行记录第 6 节](../../../reviews/nine-task-bde-execution-20261107.md#6-失败题重跑16384-主输出预算2026-11-07)。
+- 4 个 429 pending 保留；未自动重试。详见 [BDE 执行记录第 6 节](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/nine-task-bde-execution-20261107.md#6-失败题重跑16384-主输出预算2026-11-07)。
 
 ### 决策规则
 

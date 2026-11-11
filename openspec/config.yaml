@@ -1,18 +1,9 @@
 schema: spec-driven
 
 context: |
-  项目当前以 Kaggle CHI-Bench / IEEE Big Data Cup 竞赛为主，先理解官方任务，再建立可信基线并按失败证据改进 Agent。
-  当前已有未通过独立验收的离线候选，没有真实评测；编码暂停，后续由用户新开对话后再恢复。
-  已完成手册本机下载及一个公开任务的只读拆解；规划基线任务为 pa_t018_t018_o001_p01_new_referral_provider。
-  静态工具说明不等于已验证的实时 MCP schema，尚未运行的任务不能填写官方 reward。
-  用户当前暂缓本地 Anthropic 官方判分，最终私有评分交主办方；先进行离线、工具接入与无评分开发执行，详见 docs/development-preparation-2026-10-21.md。
-  缺少判分凭据不阻塞全部开发；部分 Claude 模拟对话仍需单独核查依赖。无评分执行的 reward 为 null，工程诊断不能冒充官方成功率。
-  当前变更沿用 bootstrap-baseline；先固定环境、单任务入口、版本和有限配置，再选择实际可用的 harness、模型及预算。
-  不提前加入网页工作台或冻结 Agent 框架。医院侧是起步调试方向，最终竞赛还评价保险方与照护管理。
-  竞赛路线见 competition-route.md；最终材料为 Kaggle Writeup、私有可运行程序包和技术报告。
-  用户负责业务方向与最终验收；Codex 负责规格和独立验收；外部执行器负责实现。
-  用户同时要求边参赛边学习 Agent 开发。重要设计、tool 调用、实现和验收需讲解并记录理解进度，遵循 docs/learning-agreement.md；不以代码交付代替用户掌握。
-  上游模拟器、工具、判分器与我们开发的 Agent 必须区分归属。
-  受限手册、凭据和未授权披露的产物保留在忽略目录，真实运行需要相应访问权限。
-  Agent 的输入不得包含 tasks.jsonl 中的评测预期、隐藏 expectations、参考解答或 verifier-only 文件。
-  需求使用可观察行为和 Given/When/Then 场景；实现细节写入 design 和 tasks。
+  CHI Agent 为 CHI-Bench 提供 Provider、Payer 与 CM 三角色的自主 Agent、开发操作者和独立导出包。
+  当前授权、累计结果、候选身份和未决事项见 openspec/REVIEW_STATE.md。开发完成声明、确定性检查与官方评分分别记录。
+  安装、下载、测试和执行在 Docker 内进行，基线 Python 3.12。运行命令见根 README 和 docs 里的两份包手册。
+  根 AGENTS.md 记录协作、提案审批、GitHub 交付及资源约定。运行用凭据、原始轨迹、数据、手册和 vendor 留在本地。
+  Agent 输入只含调用方授权的公开任务材料和当前工作区。评分期望、隐藏参考和 verifier 材料留在评审侧。
+  规格定义可观察行为和 Given/When/Then 场景。设计取舍写入 design.md，实施和验证只在 tasks.md 跟踪。

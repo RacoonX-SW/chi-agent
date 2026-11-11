@@ -17,7 +17,7 @@
 | 评测改进 | 原终态、部分确定性检查、逐阶段开发实验 | 三角色一致的实验清单/检查适用性/失败分类/对照和完整分母汇总 |
 | 参赛交付 | 独立包、Harbor 组件/合成演练和历史安装证据 | 正式供给/真实启动、最终独立复现及材料，仍由 Z1/Z6/Z8 完成 |
 
-源码核对入口：`scripts/go_chi_runtime.py`、`scripts/go_chi_tools.py`、`scripts/go_chi_contract.py`、`scripts/go_chi_guard.py`。历史设计依据见[执行循环讨论](../../../docs/agent-loop-discussion-2026-10-21.md)、[上下文研究](../../../docs/codex-context-compaction-study-2026-10-21.md)及[开发讨论](../../../docs/development-discussion-2026-10-21.md)。这些历史提案没有自动变成冻结实现规格；下面对每项给出建设任务和独立验收。
+源码核对入口：`scripts/go_chi_runtime.py`、`scripts/go_chi_tools.py`、`scripts/go_chi_contract.py`、`scripts/go_chi_guard.py`。历史设计依据见[执行循环讨论](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/agent-loop-discussion-2026-10-21.md)、[上下文研究](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/codex-context-compaction-study-2026-10-21.md)及[开发讨论](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/development-discussion-2026-10-21.md)。这些历史提案没有自动变成冻结实现规格；下面对每项给出建设任务和独立验收。
 
 ## 2. 功能建设的共同边界
 

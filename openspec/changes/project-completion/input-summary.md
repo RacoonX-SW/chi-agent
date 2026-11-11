@@ -1,6 +1,6 @@
 # 输入摘要首版实施契约（P0–P3）
 
-后继说明（2026-11-05）：本文件的v1/8192及一次摘要语义保持历史含义。[摘要生成预算专项](../summary-generation-budget/proposal.md)新增显式v2，仅summary生成上限32768，默认关闭、不续写；原选区/候选/保护/时限不变。实际通过身份、测试和真实授权仍只查REVIEW_STATE及该专项报告，不把离线修正写成本次真实S失败已恢复。
+后继说明（2026-11-05）：本文件的v1/8192及一次摘要语义保持历史含义。[摘要生成预算专项](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/openspec/changes/summary-generation-budget/proposal.md)新增显式v2，仅summary生成上限32768，默认关闭、不续写；原选区/候选/保护/时限不变。实际通过身份、测试和真实授权仍只查REVIEW_STATE及该专项报告，不把离线修正写成本次真实S失败已恢复。
 
 冻结：2026-11-03。接续[输入设计](input-context.md)，由主代理冻结边界、唯一Terra/high实现和Docker自测、主代理独立审核/Git。用户已授权本包连续离线开发、返工、文档及PR，不逐字段等确认；真实请求不在授权内。本包默认关闭，不换模型/思考强度，不改现有主/确认/辅助上限，不覆盖旧证据或清账。
 

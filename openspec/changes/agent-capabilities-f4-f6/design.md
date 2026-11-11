@@ -1,6 +1,6 @@
 # F4–F6 接口与行为冻结（待外部 Gemini 审查）
 
-状态：**离线实现候选，已自测，待独立复审**。基线 `066c9ae`，实现候选 `efc90190ff3b3ce2b313f119aa2c2abd7471366a`。本页冻结接口；实现证据见 [阶段报告](../../../reviews/f4-f6-context-completion-review.md)。
+状态：**离线实现候选，已自测，待独立复审**。基线 `066c9ae`，实现候选 `efc90190ff3b3ce2b313f119aa2c2abd7471366a`。本页冻结接口；实现证据见 [阶段报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/f4-f6-context-completion-review.md)。
 
 ## 1. 不变项
 

@@ -1,6 +1,6 @@
 # Y：交给DeepSeek的五步离线工作计划
 
-规划日期：2026-10-31（Asia/Shanghai）。本文件是执行契约，实际进度、授权与审核身份只查[REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。它取代X中“后续方案尚未分配实现”的接续安排，不改写X当时仅分析/提案的历史。
+规划日期：2026-10-31（Asia/Shanghai）。本文件是执行契约，实际进度、授权与审核身份只查[REVIEW_STATE](../../REVIEW_STATE.md)。它取代X中“后续方案尚未分配实现”的接续安排，不改写X当时仅分析/提案的历史。
 
 ## 接手前提与分工
 
@@ -14,7 +14,7 @@ AGENTS.md与COLLABORATION.md当前两项用户改动保留，接手时以实际d
 
 ## 必读与问题边界
 
-按AGENTS入口读协作约定、学习约定的教学/当前进度/下一入口、唯一REVIEW_STATE、README，再读本变更及[X报告](../../../reviews/payer-offline-diagnosis-review.md)。按需补[W报告](../../../reviews/unified-role-cm-lifecycle-review.md)的真实调用链、历史审计与Docker身份，不泛读整个旧轨迹。
+按AGENTS入口读协作约定、学习约定的教学/当前进度/下一入口、唯一REVIEW_STATE、README，再读本变更及[X报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/payer-offline-diagnosis-review.md)。按需补[W报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/unified-role-cm-lifecycle-review.md)的真实调用链、历史审计与Docker身份，不泛读整个旧轨迹。
 
 X已经证明公开PDF进入了模型请求，模型也看见了缺项；原汇总的零documentation_gaps从模型填写的met计数派生。当前公开依据不能证明“缺咨询必挂起”或“所有批准必须有MD”，因此不得把它们写成新规则。没有证据证明来源核对能改变t011终态，本任务的收益假设只限**可检测的引用/身份/先后关系错误，以及主张与推断的显式区分**。
 

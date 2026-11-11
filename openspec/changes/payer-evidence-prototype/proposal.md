@@ -1,6 +1,6 @@
 # Y：payer证据核对原型与离线交接
 
-用户要求将后续五步先交给DeepSeek完成，再交回Codex独立审核。本变更承接[X离线诊断](../payer-offline-diagnosis/design.md)，限定为一项机制的离线开发，不恢复付费验证或正式交付。
+用户要求将后续五步先交给DeepSeek完成，再交回Codex独立审核。本变更承接[X离线诊断](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/openspec/changes/payer-offline-diagnosis/design.md)，限定为一项机制的离线开发，不恢复付费验证或正式交付。
 
 目标是检验：能否在现有工具循环中，让关键主张的来源、适用规则和未解决项可追溯，并识别程序确实能检测的引用错误。引用有效不代表临床解释正确；t011终态不符的充分原因仍未解释，原型不是已经确定的修复。
 

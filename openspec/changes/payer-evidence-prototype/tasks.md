@@ -8,4 +8,4 @@
 - [x] 4. go后做payer默认关闭的开发shadow接线与合成SDK/MCP/包检查。
 - [x] 5. 停写、本地固定候选，完成单份待审报告/必要文档，回传用户；不push/PR/真实调用/自行验收。
 
-勾选只表示实现者完成自测与交付，不代替Codex独立审核；真实B/C/患者/评审请求为0。证据、失败与未验证项见[Y报告](../../../reviews/payer-evidence-prototype-review.md)。
+勾选只表示实现者完成自测与交付，不代替Codex独立审核；真实B/C/患者/评审请求为0。证据、失败与未验证项见[Y报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/payer-evidence-prototype-review.md)。

@@ -1,6 +1,6 @@
 # F0–F3 执行清单
 
-当前：F0–F3 契约与实现候选已完成离线自测，等待外部 Gemini 审查与用户合并决定。证据见 [阶段报告](../../../reviews/f0-f3-agent-capabilities-review.md)；状态只查 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。
+当前：F0–F3 契约与实现候选已完成离线自测，等待外部 Gemini 审查与用户合并决定。证据见 [阶段报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/f0-f3-agent-capabilities-review.md)；状态只查 [REVIEW_STATE](../../REVIEW_STATE.md)。
 
 ## 0. 现场与基线
 

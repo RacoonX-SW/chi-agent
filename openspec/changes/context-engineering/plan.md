@@ -35,7 +35,7 @@
 - [x] **Q5 max_results 单文件上限**：50 是否会破坏 context 预算？与 8K 截断如何叠加。
 - [x] **Q6 身份变化**：哪些常量/schema 进入 bundle/runtime 身份；旧证据如何只读兼容。
 
-结论与实施取舍见 [decisions.md](decisions.md)；阶段证据见 [报告](../../../reviews/context-engineering-review.md)。
+结论与实施取舍见 [decisions.md](decisions.md)；阶段证据见 [报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/context-engineering-review.md)。
 
 ## 2. 标准测试命令
 

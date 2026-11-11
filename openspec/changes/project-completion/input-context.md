@@ -4,7 +4,7 @@
 
 ## 依据及适用边界
 
-既有 [Codex 研究](../../../docs/codex-context-compaction-study-2026-10-21.md)记录固定公开源码；本次另核对 DeepSeek 官方 Harness 提交 `ce7073d51254c26cd63b22a60835b8f948deb447`（2026-10-29）。只阅读文档、源码和测试，未安装或运行 Harness，也未发起其摘要调用。
+既有 [Codex 研究](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/codex-context-compaction-study-2026-10-21.md)记录固定公开源码；本次另核对 DeepSeek 官方 Harness 提交 `ce7073d51254c26cd63b22a60835b8f948deb447`（2026-10-29）。只阅读文档、源码和测试，未安装或运行 Harness，也未发起其摘要调用。
 
 - [Harness 压力检查与恢复](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/compaction/compaction-basic/src/index.ts)：压力达到阈值后先调用可选的工具结果缩减器，再计量，必要时摘要；包含默认溢出自动重试。
 - [选区及替换事务](https://github.com/deepseek-ai/deepseek-harness/blob/ce7073d51254c26cd63b22a60835b8f948deb447/packages/compaction/compaction-basic/src/region.ts)：原始日志保留，选区不能拆工具调用/结果；以替换事件改变当前 surface；检查摘要实际缩小和历史稳定性。
@@ -42,7 +42,7 @@
 
 ## 4. 首版同步、有界摘要及检查点
 
-概念流程（S0–S3 已实现并默认关闭；离线边界见[输入摘要报告](../../../reviews/input-summary-review.md)）：构造并验证最终请求 → 计量及输出预留 → 必要时按已批准规则缩减资料投影 → 再计量 → 为可压缩的旧闭合批次取快照 → 生成摘要候选 → 校验 → 保存/采用新视图 → 再走完整发送门禁。
+概念流程（S0–S3 已实现并默认关闭；离线边界见[输入摘要报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/input-summary-review.md)）：构造并验证最终请求 → 计量及输出预留 → 必要时按已批准规则缩减资料投影 → 再计量 → 为可压缩的旧闭合批次取快照 → 生成摘要候选 → 校验 → 保存/采用新视图 → 再走完整发送门禁。
 
 只选取闭合工具批次，保留最近完整往返；未收到结果的工具批次不能拆开。system/工具定义和保护状态由程序重建。历史 reasoning 的保留/省略、摘要检查点能否开始合法新上下文，需要在实际使用的 OpenCode Go chat-completions 协议上验证；Harness 适配器的行为不能直接充当兼容证明。
 

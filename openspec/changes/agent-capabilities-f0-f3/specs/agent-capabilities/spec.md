@@ -1,6 +1,6 @@
 # F0–F3 行为契约
 
-本契约定义可验收行为，不授予真实调用、官方判分或发布权限。接口细节见 [design](../../design.md)，实际权限见 [REVIEW_STATE](../../../../../reviews/REVIEW_STATE.md)。
+本契约定义可验收行为，不授予真实调用、官方判分或发布权限。接口细节见 [design](../../design.md)，实际权限见 [REVIEW_STATE](../../../../REVIEW_STATE.md)。
 
 ## 需求：任务支持范围必须可核对
 

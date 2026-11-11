@@ -6,7 +6,7 @@
 
 GitHub 已核实 PR26 merged，merge commit 为 `5a621dc67afd8f0e26088b3b993615066a993229`；本轮 fetch 与 ls-remote 核实最新 origin/main 仍为该 SHA，而非仅采用交接摘要。新分支 `codex/unified-role-cm-lifecycle`。开始时已有 AGENTS.md、COLLABORATION.md 两项用户文档改动，保存原 patch 并完整保留，不将其算作 W 实现。
 
-V 的固定实现、失败与有限通过范围只查 [V报告](../../../reviews/representative-role-baseline-review.md)。固定官方源码 `4444a07fa68a4f1623f841a292a54e284fc8e7f7`、数据 revision `5ce88104df2a91e057619eb70fb51f56fc5949eb`，复用 V 的三角色资源 manifest、shared worlds、公开 PDF 投影、Python3.12 镜像及原 SDK/PDF 锁和卷。不更新 vendor 或依赖，不重做 G/H。
+V 的固定实现、失败与有限通过范围只查 [V报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/representative-role-baseline-review.md)。固定官方源码 `4444a07fa68a4f1623f841a292a54e284fc8e7f7`、数据 revision `5ce88104df2a91e057619eb70fb51f56fc5949eb`，复用 V 的三角色资源 manifest、shared worlds、公开 PDF 投影、Python3.12 镜像及原 SDK/PDF 锁和卷。不更新 vendor 或依赖，不重做 G/H。
 
 ## 目标与接口
 

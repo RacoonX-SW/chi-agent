@@ -1,6 +1,6 @@
 # 全项目收尾执行清单
 
-状态口径（2026-11-01）：本清单区分**实现/离线验证**与**真实运行/官方材料**。勾选只表示该项工作本身完成，不表示真实模型、业务终态或官方评分通过。执行依 [design](design.md)，验收依 [契约](specs/project-closeout/spec.md)，唯一状态/权限在 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。
+状态口径（2026-11-01）：本清单区分**实现/离线验证**与**真实运行/官方材料**。勾选只表示该项工作本身完成，不表示真实模型、业务终态或官方评分通过。执行依 [design](design.md)，验收依 [契约](specs/project-closeout/spec.md)，唯一状态/权限在 [REVIEW_STATE](../../REVIEW_STATE.md)。
 
 已合并 main 的历史交付：F0–F3（PR32）、F4–F6（PR34）、F7（PR35）、Z1（PR36）、Z6离线包（PR37）；2026-11-02已现场确认PR38亦合并。以下早期勾选/未勾选保留对应任务含义，当前候选、PR与授权只查REVIEW_STATE；未合并A/B分支的新记录不能冒充主线实现或Codex验收。
 
@@ -69,10 +69,10 @@
 
 ## Z7 累计审核与冻结
 
-- [x] GPT对PR49合并主线完成[累计初审](../../../reviews/project-cumulative-review.md)，发现R1/R2，该次候选未通过冻结；历史阶段验收不回写。
-- [x] 提供固定候选；用户指定GPT直接复审R1/R2、不再重复Gemini，实际累计差异/必要调用链及Docker证据见[累计报告第6节](../../../reviews/project-cumulative-review.md#6-r1r2独立复审2026-11-04)。
+- [x] GPT对PR49合并主线完成[累计初审](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/project-cumulative-review.md)，发现R1/R2，该次候选未通过冻结；历史阶段验收不回写。
+- [x] 提供固定候选；用户指定GPT直接复审R1/R2、不再重复Gemini，实际累计差异/必要调用链及Docker证据见[累计报告第6节](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/project-cumulative-review.md#6-r1r2独立复审2026-11-04)。
 - [x] 仅按实际GPT复审记完成，不将作者自测或未发生审核作证据。
-- [x] 固定模型/提示/工具来源/依赖/入口的离线候选，清单与必要动态供应缺口见[冻结准备报告](../../../reviews/validation-preparation-review.md)。
+- [x] 固定模型/提示/工具来源/依赖/入口的离线候选，清单与必要动态供应缺口见[冻结准备报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/validation-preparation-review.md)。
 - [ ] 关闭真实准入、最终采用配置、正式配送及完整交付所需剩余阻断；离线冻结不等于正式验收。
 
 ## Z8 材料、用户验收与交付
@@ -87,27 +87,27 @@
 
 ## 可靠性治理与分阶段重构
 
-本节最初为文档规划；后续实际启动和候选验收只查 REVIEW_STATE。优先级/核对证据见[架构评审](../../../docs/architecture-review.md)，完整范围/验收只见[设计第15节](design.md#15-可靠性治理与分阶段重构)及对应spec；不在本清单复制当前SHA或测试数量，作者交付不自动勾成验收完成。
+本节最初为文档规划；后续实际启动和候选验收只查 REVIEW_STATE。优先级/核对证据见[架构评审](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/architecture-review.md)，完整范围/验收只见[设计第15节](design.md#15-可靠性治理与分阶段重构)及对应spec；不在本清单复制当前SHA或测试数量，作者交付不自动勾成验收完成。
 
 最终验证前的计分讨论及额外接缝已另立[有界离线加固规格](../score-readiness-hardening/proposal.md)；改法/反例见其design，执行勾选只在其tasks。该文档不改写下列历史勾选，也不启动功能实现或真实调用。
 
 ### Codex关键项
 
-- [x] C1 只读核对payer-010旧/新state、evaluation、授权、未知及后继准入关系，不修改原账；事实核查完成，未知结算/后继授权证据仍未闭合，不恢复真实准入。见[C1/C3阶段报告](../../../reviews/c1-c3-admission-package-review.md)。
+- [x] C1 只读核对payer-010旧/新state、evaluation、授权、未知及后继准入关系，不修改原账；事实核查完成，未知结算/后继授权证据仍未闭合，不恢复真实准入。见[C1/C3阶段报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/c1-c3-admission-package-review.md)。
 - [x] C2 记录用户认可的[输入治理设计](input-context.md)及Codex/Harness来源、分工与验收边界；仅文档。
 - [x] C2 保存[输出截断实施方案](output-recovery.md)：有界恢复、用途/次数、工具整批、SDK/历史/记账及失败验收；原规划与下列实际实施分列。
 - [x] C2 P0 核对固定SDK/历史/读写分类、实际接缝，冻结字段、固定提示及安全错误码，见[输出恢复契约](output-recovery.md)。
 - [x] C2 P1 最终wire完整输入计量与用途预留；旧v1证据语义保留，独立反例核对。
 - [x] C2 P2 一次性许可、两种恢复模式、同账计数、严格派生视图、原Runner与追踪/旧证据兼容；固定候选独立验收。
 - [x] C2 P3 固定快照的真实SDK+MockTransport、故障与隔离包复验、阶段报告和PR交付；用户最终验收/合并，不自动发真实请求。
-- [x] C2 独立冻结输入摘要schema/用途/额度并实现同步压缩，限定离线验收见[阶段报告](../../../reviews/input-summary-review.md)；真实端点兼容/语义收益另验，不回写F4旧结论。
+- [x] C2 独立冻结输入摘要schema/用途/额度并实现同步压缩，限定离线验收见[阶段报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/input-summary-review.md)；真实端点兼容/语义收益另验，不回写F4旧结论。
 - [x] 输入摘要S0 按[实施契约](input-summary.md)冻结首版schema、程序保护、选区/映射、一次共享用途、组合互斥和失败边界；用户启动离线实现。
 - [x] 输入摘要S1 严格纯schema/选区/保护快照及合法wire投影，不放宽完整SDK历史校验。
 - [x] 输入摘要S2 同账summary许可/检查点及旧证据兼容，Guard/Runner/入口/trace接线，默认关闭。
 - [x] 输入摘要S3 固定候选独立Docker/SDK+MockTransport、故障/旧证据/隔离包复验，报告及PR交付；真实兼容另验。
 - [x] C3 隔离包复现局部导入缺口，提取纯预算函数并补两种包和身份清单；固定候选独立等价性/隔离包复验通过，见同一阶段报告。无真实请求。
 - [x] C4 按[参数边界契约](policy-boundaries.md)登记用途、来源与独立门禁；真实配置漂移、wire/用途额度/预留/超时及混合账回放检查已固定候选独立复验。保持原数值及包身份，不把源码计时核对冒充外部编排动态验收。
-- [x] C5 只读核对两次t027实际P2P完成及解析来源链，新增公开服务合成反例并独立复验。请求completed不证明讨论真实发生，原false/交流来源缺口保持；见[C5报告](../../../reviews/c5-p2p-public-path-review.md)，不改Agent/verifier或发明强制签核规则。
+- [x] C5 只读核对两次t027实际P2P完成及解析来源链，新增公开服务合成反例并独立复验。请求completed不证明讨论真实发生，原false/交流来源缺口保持；见[C5报告](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/c5-p2p-public-path-review.md)，不改Agent/verifier或发明强制签核规则。
 
 ### DeepSeek有界项
 

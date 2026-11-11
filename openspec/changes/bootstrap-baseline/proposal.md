@@ -1,10 +1,10 @@
-当前范围：用户于 2026-10-27 在 J 后明确要求 **K：先将实现子代理改为 GPT-6.1 Terra 并同步现行文档，再继续官方任务 C，允许多次开发尝试，API 费用不再受旧 5 元上限阻挡**。一个 `gpt-6.1-terra` / `high` 实现，主代理负责规格、独立审核、教学、真实运行和 GitHub。旧账目/失败 claim 保留；新授权使用独立可追溯的接续记录、逐尝试身份、费用累计及源码变更记录，不清零历史或重演同一 attempt。先固定代码并独立验收，再由模型自主执行新世界任务；旧 HTTP 请求仍不自动重发。参赛模型仍为既有 DeepSeek；正式评测入口 record_only/null cap 保留，官方判分暂停，F.5 未冻结。阶段与验收身份只维护在 [审核状态](../../../reviews/REVIEW_STATE.md)。
+当前范围：用户于 2026-10-27 在 J 后明确要求 **K：先将实现子代理改为 GPT-6.1 Terra 并同步现行文档，再继续官方任务 C，允许多次开发尝试，API 费用不再受旧 5 元上限阻挡**。一个 `gpt-6.1-terra` / `high` 实现，主代理负责规格、独立审核、教学、真实运行和 GitHub。旧账目/失败 claim 保留；新授权使用独立可追溯的接续记录、逐尝试身份、费用累计及源码变更记录，不清零历史或重演同一 attempt。先固定代码并独立验收，再由模型自主执行新世界任务；旧 HTTP 请求仍不自动重发。参赛模型仍为既有 DeepSeek；正式评测入口 record_only/null cap 保留，官方判分暂停，F.5 未冻结。阶段与验收身份只维护在 [审核状态](../../REVIEW_STATE.md)。
 
-同日最新取舍：用户暂缓本地官方判分，先建立环境与无评分的单任务真实执行证据，最终私有评分交主办方。该安排覆盖下文最初的先评分顺序；本变更分别报告离线、真实开发执行与正式判分，不以缺 Anthropic 阻塞全部开发。见 [开发准备](../../../docs/development-preparation-2026-10-21.md)。
+同日最新取舍：用户暂缓本地官方判分，先建立环境与无评分的单任务真实执行证据，最终私有评分交主办方。该安排覆盖下文最初的先评分顺序；本变更分别报告离线、真实开发执行与正式判分，不以缺 Anthropic 阻塞全部开发。见 [开发准备](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/development-preparation-2026-10-21.md)。
 
-依赖、下载、测试与执行都在 Docker 中完成，宿主机只用于编辑、Git 与 Docker。开发/调度 Python 对齐固定官方环境的 3.12，复用现有镜像和缓存；受限手册不进入自有交付镜像。参见 [Docker 工作流](../../../docs/docker-workflow.md)。
+依赖、下载、测试与执行都在 Docker 中完成，宿主机只用于编辑、Git 与 Docker。开发/调度 Python 对齐固定官方环境的 3.12，复用现有镜像和缓存；受限手册不进入自有交付镜像。参见 [Docker 工作流](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/docker-workflow.md)。
 
-A 的既有证据见 [A 审核](../../../reviews/bootstrap-baseline-a-review.md)。本轮合成探针的请求适配、历史保留与错误处理单独取证，不把离线替身升级为真实模型或官方 runner 已接通。
+A 的既有证据见 [A 审核](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/bootstrap-baseline-a-review.md)。本轮合成探针的请求适配、历史保留与错误处理单独取证，不把离线替身升级为真实模型或官方 runner 已接通。
 
 ## Why
 

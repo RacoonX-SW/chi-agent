@@ -1,6 +1,6 @@
 # 整个剩余项目的连续执行计划
 
-建立：2026-10-31（Asia/Shanghai）。这是 Z0–Z8 的执行设计；实际状态/授权只维护在 [REVIEW_STATE](../../../reviews/REVIEW_STATE.md)。本轮只制定计划，任务尚未开始，不新增实现验收结论。验收行为见 [完成契约](specs/project-closeout/spec.md)，执行勾选见 [tasks](tasks.md)。
+建立：2026-10-31（Asia/Shanghai）。这是 Z0–Z8 的执行设计；实际状态/授权只维护在 [REVIEW_STATE](../../REVIEW_STATE.md)。本轮只制定计划，任务尚未开始，不新增实现验收结论。验收行为见 [完成契约](specs/project-closeout/spec.md)，执行勾选见 [tasks](tasks.md)。
 
 用户指出首版遗漏了功能层的展开；本次修订将 Z3 明确拆为[F0–F7能力建设](capabilities.md)。原24次C/六题未见集是首版收尾规模，不足以承载这些新增的独立功能验证；现改为第11节的40次C待审提案/九题未见集，仍未启动。剩余项目包括建设、测量和取舍，不只是打包已有原型。
 
@@ -241,7 +241,7 @@ GPT 暂不可用时，Gemini 的实际独立复验与用户验收仍可支持工
 
 ## 15. 可靠性治理与分阶段重构
 
-2026-11-02补充。原规划按用户要求先讨论并保存重构判断、问题分工及DeepSeek计划；本节保存工作包和验收，不凭文档启动实现、修改代码/账目或实现截断续写。后续实际启动和验收状态只查 REVIEW_STATE，问题证据和负责人见[架构评审第12节起](../../../docs/architecture-review.md#12-codex结论需要分阶段整理暂不全面搬目录)，不改写既有F/Z实现结果。
+2026-11-02补充。原规划按用户要求先讨论并保存重构判断、问题分工及DeepSeek计划；本节保存工作包和验收，不凭文档启动实现、修改代码/账目或实现截断续写。后续实际启动和验收状态只查 REVIEW_STATE，问题证据和负责人见[架构评审第12节起](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/docs/architecture-review.md#12-codex结论需要分阶段整理暂不全面搬目录)，不改写既有F/Z实现结果。
 
 ### Codex负责的关键核对/后续修正
 
