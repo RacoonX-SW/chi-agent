@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import go_chi_bundle as bundle
+import chi_agent.bundle as bundle
 
 
 class BundleTests(unittest.TestCase):
@@ -20,6 +20,6 @@ class BundleTests(unittest.TestCase):
             built = bundle.build_bundle(destination, source_root=source)
             self.assertEqual(bundle.validate_bundle(destination).manifest_sha256, built.manifest_sha256)
             self.assertFalse((destination / ".env").exists())
-            (destination / "scripts" / "go_chi_guard.py").write_text("tampered", encoding="utf-8")
+            (destination / "scripts" / "chi_agent" / "request_guard.py").write_text("tampered", encoding="utf-8")
             with self.assertRaisesRegex(bundle.BundleFailure, "bundle_file_digest_mismatch"):
                 bundle.validate_bundle(destination)

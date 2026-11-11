@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from go_chi_journal import ChiJournal, _recovery_enabled, inspect_history
-from opencode_go_provider import GoFailure
+from chi_agent.journal import ChiJournal, _recovery_enabled, inspect_history
+from chi_agent.opencode_go_provider import GoFailure
 
 IDENTITY = 'a' * 64
 POLICY = 'chi-output-recovery-v1'

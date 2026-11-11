@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import httpx
 
-from go_chi_journal import ChiJournal
-from go_chi_policy import TIME_POLICY
-from go_chi_runtime import run_chi
+from chi_agent.journal import ChiJournal
+from chi_agent.runtime_policy import TIME_POLICY
+from chi_agent.runtime import run_chi
 
 
 class Result:

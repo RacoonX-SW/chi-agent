@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 
 spec = importlib.util.spec_from_file_location(
-    "readiness_inventory", Path(__file__).parents[1] / "scripts/go_chi_readiness_inventory.py")
+    "readiness_inventory", Path(__file__).parents[1] / "scripts/tools/inspect_readiness.py")
 inv = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(inv)
 

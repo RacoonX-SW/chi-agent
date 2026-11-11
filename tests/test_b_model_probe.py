@@ -12,8 +12,8 @@ from unittest.mock import patch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
-import b_model_probe as probe
-from b_model_adapter import CANDIDATE_PROFILE, make_assistant_message
+import scripts.experiments.probe_model_tools as probe
+from chi_agent.model_adapter import CANDIDATE_PROFILE, make_assistant_message
 
 
 class TestBModelProbe(unittest.TestCase):

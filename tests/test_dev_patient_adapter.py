@@ -13,8 +13,8 @@ if HAVE_ANTHROPIC:
     from chi_bench.conversation.persona import build_system_prompt
     from chi_bench.conversation.patient_simulator import PatientSimulator
     from chi_bench.conversation.session import ConversationSession
-    from dev_patient_adapter import adapter_class
-    from dev_patient_bootstrap import install
+    from scripts.development.patient_adapter import adapter_class
+    from scripts.development.patient_bootstrap import install
 else:
     STOP_SIGNAL = build_system_prompt = PatientSimulator = ConversationSession = None
     adapter_class = install = None
@@ -76,7 +76,7 @@ def test_world_cb_installs_before_same_process_serve():
         cap = Path(d) / 'cap'; cap.write_text('c' * 32)
         env = {'CHI_DEV_PATIENT_SIMULATOR': 'go-v1', 'CHI_DEV_CAPABILITY_FILE': str(cap),
                'CHI_DEV_RUN_ID': 'r', 'CHI_DEV_BROKER_URL': 'http://broker:8000/patient'}
-        script = Path(__file__).resolve().parents[1] / 'scripts/dev_patient_cb'
+        script = Path(__file__).resolve().parents[1] / 'scripts/development/patient_cb'
         argv = [str(script), 'serve', '--host', '0.0.0.0', '--port', '8023', '--no-frontend']
         try:
             with patch.dict(os.environ, env, clear=True), patch.dict(sys.modules, {'chi_bench.cli': fake}), patch.object(sys, 'argv', argv):
@@ -87,8 +87,8 @@ def test_world_cb_installs_before_same_process_serve():
 
 
 async def _test_probe():
-    from dev_patient_probe import _run
-    from go_chi_journal import ChiJournal
+    from scripts.experiments.probe_patient_simulator import _run
+    from chi_agent.journal import ChiJournal
     with tempfile.TemporaryDirectory() as d:
         journal = ChiJournal(Path(d), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',
                              kind='patient_probe', launch={'aux_contract': 'patient-simulator-v1'})

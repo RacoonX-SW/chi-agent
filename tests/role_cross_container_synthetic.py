@@ -30,7 +30,8 @@ def copy(src, dst):
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(src, dst, symlinks=True)
 def digest(path): return hashlib.sha256(path.read_bytes()).hexdigest()
-copy(source / 'scripts', root / 'scripts')
+for name in ('scripts', 'src', 'docker/entrypoints'):
+    copy(source / name, root / name)
 copy(source / 'tests', root / 'tests')
 copy(source / 'vendor/chi-bench', root / 'vendor/chi-bench')
 copy(source / 'data/skills/managed-care-operations-handbook', root / 'data/skills/managed-care-operations-handbook')
@@ -43,9 +44,9 @@ for name in ('profiles', 'docs'):
     copy(source / name, root / name)
 for name in ('requirements-model.lock', 'requirements-pdf.lock'):
     shutil.copyfile(source / name, root / name)
-sys.path.insert(0, str(root / 'scripts'))
+sys.path[:0] = [str(root), str(root / 'src')]
 sys.path.insert(0, str(root / 'vendor/chi-bench/src'))
-from go_chi_bundle import build_bundle
+from chi_agent.bundle import build_bundle
 bundle = root / 'bundle'
 bundle_hash = build_bundle(bundle, source_root=root).manifest_sha256
 client = docker.from_env()
@@ -71,15 +72,15 @@ client.containers.run(image.id, rebind, volumes=volumes, environment=env, networ
 logs = root / 'b-logs'; logs.mkdir()
 volumes.update({hostpath(logs): {'bind': '/logs', 'mode': 'rw'},
     hostpath(root / 'tests/role_synthetic_runner.py'): {'bind': '/dev-scripts/synthetic.py', 'mode': 'ro'},
-    hostpath(root / 'scripts/role_runner.py'): {'bind': '/dev-scripts/role_runner.py', 'mode': 'ro'},
-    hostpath(root / 'scripts/dev_patient_broker.py'): {'bind': '/dev-scripts/dev_patient_broker.py', 'mode': 'ro'}})
+    hostpath(root / 'scripts/development/run_role_in_bundle.py'): {'bind': '/dev-scripts/scripts/development/run_role_in_bundle.py', 'mode': 'ro'},
+    hostpath(root / 'scripts/development/patient_broker.py'): {'bind': '/dev-scripts/scripts/development/patient_broker.py', 'mode': 'ro'}})
 b_command = ['/usr/local/bin/python', '-S', '/dev-scripts/synthetic.py', 'coding-b', '--bundle-sha256', bundle_hash,
              '--evaluation-id', 'synthetic-eval', '--task-id', 'synthetic-coding-b', '--attempt-id', 'b1', '--run-id', 'synthetic-b',
              '--output-root', '/prior-go/chi-evaluation', '--logs-dir', '/logs/result', '--history-mode', 'local', '--local-q-root', '/prior-go']
-b_env = dict(env, OPENCODE_API_KEY='synthetic-key')
+b_env = dict(env, PYTHONPATH=env['PYTHONPATH'] + ':/dev-scripts', OPENCODE_API_KEY='synthetic-key')
 client.containers.run(image.id, b_command, volumes=volumes, environment=b_env, network_disabled=True, remove=True)
 
-import role_operator
+import scripts.development.run_role as role_operator
 class Containers:
     def __init__(self, real): self.real = real
     def __getattr__(self, name): return getattr(self.real, name)
@@ -115,7 +116,8 @@ config = {'schema': 'chi-role-operator-v1', 'run_id': run_id, 'evaluation_id': '
           'dataset_relative': 'runs/representative-role-baseline-root/resources/dataset',
           'manifest_relative': f'runs/representative-role-baseline-root/evidence/role-resources-{role}.json',
           'manifest_sha256': digest(manifest), 'output_relative': 'result',
-          'dev_sha256': {n: digest(root / 'scripts' / n) for n in role_operator.DEV_FILES}, 'operator_timeout_seconds': 2040}
+          'dev_sha256': {name: digest(root / 'scripts/development' / file)
+                         for name, file in role_operator.DEV_FILES.items()}, 'operator_timeout_seconds': 2040}
 config_path = root / 'config.json'; config_path.write_text(json.dumps(config, sort_keys=True))
 code = role_operator.main(['--config', str(config_path), '--config-sha256', digest(config_path)])
 result = json.loads((root / 'result/orchestration.json').read_bytes())

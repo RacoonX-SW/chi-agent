@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-import run_baseline as rb
+import scripts.experiments.run_baseline as rb
 
 
 class TestBudgetDecision(unittest.TestCase):

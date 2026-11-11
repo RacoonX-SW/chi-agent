@@ -1,9 +1,9 @@
 import asyncio,copy,hashlib,json,shutil,tempfile,unittest
 from pathlib import Path
-from go_chi_journal import inspect_history
-from go_chi_summary import validate_saved_source
-from opencode_go_provider import GoFailure
-from request_budget import feedback
+from chi_agent.journal import inspect_history
+from chi_agent.input_summary import validate_saved_source
+from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.request_budget import feedback
 from test_go_chi_summary_review import Flow
 
 class ReaderMatrix(unittest.TestCase):

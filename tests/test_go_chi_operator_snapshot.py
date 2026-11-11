@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from unittest.mock import patch
 from pathlib import Path
 
-from go_chi_operator_snapshot import capture_resources
+from scripts.development.capture_resources import capture_resources
 
 
 class World:
@@ -19,7 +19,7 @@ class World:
 class SnapshotTests(unittest.TestCase):
     def test_partial_failure_is_not_empty_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
-            with patch('go_chi_operator_snapshot._api_timeout', return_value=nullcontext()):
+            with patch('scripts.development.capture_resources._api_timeout', return_value=nullcontext()):
                 result = capture_resources(World(), Path(directory), "before")
             self.assertEqual(result["provider"]["count"], 1)
             self.assertEqual(result["payer"]["status"], "unavailable")

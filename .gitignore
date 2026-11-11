@@ -16,31 +16,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.DS_Store
-# --- Upstream source (cloned at a pinned commit; do not commit) ---
-vendor/
-
-# --- Downloaded datasets and restricted content ---
-data/
-
-# --- Real run outputs, trajectories, and verifier evidence ---
-runs/
-
-# --- Credentials ---
-.env
-*.env
-
-# --- Python ---
-__pycache__/
-*.py[cod]
 *.egg-info/
-.venv/
-.venv-hf/
 dist/
-
-# --- OS ---
+build/
 .DS_Store
-.coordination/
 
 # Legacy local checkout and its data remain outside the new project root
 /chi-agent/

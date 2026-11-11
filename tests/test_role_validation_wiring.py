@@ -4,8 +4,8 @@ import sys
 import unittest
 from unittest.mock import patch
 
-import go_chi_entry
-import role_runner
+import chi_agent.cli as go_chi_entry
+import scripts.development.run_role_in_bundle as role_runner
 
 
 class ValidationWiringTests(unittest.TestCase):
@@ -77,7 +77,7 @@ class ValidationWiringTests(unittest.TestCase):
 
     def test_actual_runner_script_stops_before_entry(self):
         env = dict(os.environ, CHI_DEV_EVIDENCE_SHADOW="shadow")
-        completed = subprocess.run([sys.executable, "scripts/role_runner.py", "live",
+        completed = subprocess.run([sys.executable, "-m", "scripts.development.run_role_in_bundle", "live",
                                     "--input-s=chi-input-summary-v1"],
                                    cwd=str(role_runner.Path(__file__).resolve().parents[1]),
                                    env=env, capture_output=True, text=True, timeout=60)

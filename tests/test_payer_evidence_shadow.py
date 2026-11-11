@@ -12,14 +12,14 @@ from unittest import mock
 
 import httpx
 
-import go_chi_bundle as bundle
-import payer_evidence
-from go_chi_contract import ToolContract
-from go_chi_guard import ChiGuard
-from go_chi_journal import ChiJournal
-from go_chi_runtime import run_chi
-from go_chi_tools import local_tools
-from opencode_go_provider import GoFailure
+import chi_agent.bundle as bundle
+import chi_agent.payer_evidence as payer_evidence
+from chi_agent.tool_contract import ToolContract
+from chi_agent.request_guard import ChiGuard
+from chi_agent.journal import ChiJournal
+from chi_agent.runtime import run_chi
+from chi_agent.local_tools import local_tools
+from chi_agent.opencode_go_provider import GoFailure
 from agents.models.openai_chatcompletions import Converter
 
 INSTRUCTION = ("Synthetic payer instruction for case-synthetic-001. "
@@ -420,14 +420,14 @@ class BundleTests(unittest.TestCase):
             built = bundle.build_bundle(destination)
             identity = bundle.validate_bundle(destination)
             self.assertEqual(identity.manifest_sha256, built.manifest_sha256)
-            self.assertIn("scripts/payer_evidence.py", identity.files)
+            self.assertIn("scripts/chi_agent/payer_evidence.py", identity.files)
             self.assertFalse((destination / "scripts" / "role_runner.py").exists())
             self.assertFalse((destination / "tests").exists())
             env = dict(os.environ)
             env["PYTHONPATH"] = str(destination / "scripts") + ":" + env.get("PYTHONPATH", "")
             env["PYTHONDONTWRITEBYTECODE"] = "1"
             completed = subprocess.run(
-                [sys.executable, "-c", "import go_chi_tools, payer_evidence; print('ok')"],
+                [sys.executable, "-c", "from chi_agent import local_tools, payer_evidence; print('ok')"],
                 cwd=destination, env=env, capture_output=True, text=True, timeout=60)
             self.assertEqual(completed.returncode, 0, completed.stderr)
             self.assertEqual(completed.stdout.strip(), "ok")

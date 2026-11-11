@@ -6,12 +6,12 @@ from types import SimpleNamespace
 
 import httpx
 
-import go_chi_entry
+import chi_agent.cli as go_chi_entry
 
-from go_chi_context import DEFAULT_BUDGET, DEFAULT_BUDGET_V3
-from go_chi_journal import ChiJournal
-from go_chi_runtime import run_chi
-from opencode_go_provider import GoFailure
+from chi_agent.context_budget import DEFAULT_BUDGET, DEFAULT_BUDGET_V3
+from chi_agent.journal import ChiJournal
+from chi_agent.runtime import run_chi
+from chi_agent.opencode_go_provider import GoFailure
 
 
 class Result:

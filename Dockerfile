@@ -20,7 +20,10 @@ WORKDIR /workspace
 
 # Copy dependency definition and install locked dependencies in /opt/venv
 COPY pyproject.toml requirements.lock /workspace/
-RUN uv venv /opt/venv && uv pip install --no-cache -r requirements.lock && uv pip install --no-deps -e .
+RUN uv venv /opt/venv && uv pip install --no-cache -r requirements.lock
+COPY README.md /workspace/
+COPY src /workspace/src/
+RUN uv pip install --no-deps -e .
 
 # Default command runs offline tests
 CMD ["python3", "-m", "unittest", "discover", "-s", "tests", "-v"]

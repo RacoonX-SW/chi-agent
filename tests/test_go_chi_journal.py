@@ -4,8 +4,8 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-from go_chi_journal import ChiJournal, publish_b_receipt
-from opencode_go_provider import GoFailure
+from chi_agent.journal import ChiJournal, publish_b_receipt
+from chi_agent.opencode_go_provider import GoFailure
 
 IDENTITY = "a" * 64
 USAGE = {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5, "cost": 0,
@@ -29,7 +29,7 @@ def settle(j, usage):
 class JournalTests(unittest.TestCase):
     def test_rebind_preserves_old_identity_and_blocks_tampering(self):
         import hashlib
-        from go_chi_journal import audit_or_rebind
+        from chi_agent.journal import audit_or_rebind
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             j = journal(root); j.finish("failed"); j.close()
@@ -50,12 +50,12 @@ class JournalTests(unittest.TestCase):
 
     def test_rebind_interruption_is_durable(self):
         import hashlib
-        from go_chi_journal import audit_or_rebind
+        from chi_agent.journal import audit_or_rebind
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             j = journal(root); j.finish("failed"); j.close()
             digest = hashlib.sha256((root / "chi-accounting.json").read_bytes()).hexdigest()
-            with patch("go_chi_journal._atomic", side_effect=OSError("synthetic failure")):
+            with patch('chi_agent.journal._atomic', side_effect=OSError("synthetic failure")):
                 with self.assertRaises(OSError): audit_or_rebind(root, IDENTITY, digest, "b" * 64, "test")
             with self.assertRaisesRegex(GoFailure, "chi_history_invalid"):
                 journal(root, attempt="b", run="s")
@@ -63,7 +63,7 @@ class JournalTests(unittest.TestCase):
     def test_old_b_receipt_does_not_authorize_new_identity(self):
         import copy
         import hashlib
-        from go_chi_journal import audit_or_rebind
+        from chi_agent.journal import audit_or_rebind
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             b = ChiJournal(root, identity=IDENTITY, evaluation="e", task="synthetic-coding-b", attempt="b", run="b", kind="coding_b", launch={"kind": "coding_b"})
@@ -86,7 +86,7 @@ class JournalTests(unittest.TestCase):
             root = Path(directory)
             b = ChiJournal(root, identity=IDENTITY, evaluation="e", task="synthetic-coding-b", attempt="a", run="r", kind="coding_b")
             b.finish("complete"); b.prepare_b_receipt(); saved = copy.deepcopy(b.run); b.close()
-            with patch("go_chi_journal._atomic", side_effect=OSError("synthetic receipt write failure")):
+            with patch('chi_agent.journal._atomic', side_effect=OSError("synthetic receipt write failure")):
                 with self.assertRaises(OSError):
                     publish_b_receipt(root, IDENTITY, saved)
             self.assertTrue((root / "tool-inflight" / "r" / "__b_receipt__.pending").is_file())
@@ -131,7 +131,7 @@ class JournalTests(unittest.TestCase):
                 journal(root, attempt="b", run="s")
 
     def test_billing_cannot_disagree_with_recorded_provider_usage(self):
-        from go_chi_journal import _seal
+        from chi_agent.journal import _seal
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             j = journal(root); j.reserve(b"request", "main"); settle(j, USAGE); j.finish("failed"); j.close()

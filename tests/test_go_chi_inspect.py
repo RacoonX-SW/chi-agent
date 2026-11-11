@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from go_chi_inspect import inspect_provider
-from go_chi_journal import ChiJournal, inspect_history, audit_or_rebind
-from opencode_go_provider import GoFailure
+from chi_agent.provider_inspection import inspect_provider
+from chi_agent.journal import ChiJournal, inspect_history, audit_or_rebind
+from chi_agent.opencode_go_provider import GoFailure
 
 
 def event():
@@ -74,7 +74,7 @@ class InspectionTests(unittest.TestCase):
                 self.assertEqual(state.read_bytes(), before)
 
     def test_dispatch_tampering_is_rejected(self):
-        from go_chi_journal import _seal
+        from chi_agent.journal import _seal
         with tempfile.TemporaryDirectory() as d:
             root = Path(d); identity = 'a' * 64
             j = ChiJournal(root, identity=identity, evaluation='e', task='t', attempt='a', run='r')

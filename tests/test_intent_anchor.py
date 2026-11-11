@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from go_chi_contract import ContractFailure, ToolContract, validate_anchor
-from go_chi_state import ANCHOR_SCHEMA, CONTEXT_POLICY_V3, StateRefusal, TaskState
-from request_budget import feedback
+from chi_agent.tool_contract import ContractFailure, ToolContract, validate_anchor
+from chi_agent.task_state import ANCHOR_SCHEMA, CONTEXT_POLICY_V3, StateRefusal, TaskState
+from chi_agent.request_budget import feedback
 
 SYSTEM = "system"
 INSTRUCTION = "instruction"

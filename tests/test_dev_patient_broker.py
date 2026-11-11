@@ -5,8 +5,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from dev_patient_broker import PatientBroker
-from go_chi_journal import ChiJournal
+from scripts.development.patient_broker import PatientBroker
+from chi_agent.journal import ChiJournal
 
 
 def test_broker_authorizes_parent_and_rejects_replay():
@@ -50,8 +50,8 @@ def test_bridge_callback_does_not_reenter_dispatch_lock():
 async def _callback():
     from types import SimpleNamespace
     from agents.models.openai_chatcompletions import Converter
-    from go_chi_contract import ToolContract
-    from go_chi_mcp import MCPBridge
+    from chi_agent.tool_contract import ToolContract
+    from chi_agent.mcp_tools import MCPBridge
     from mcp.types import CallToolResult, TextContent
     with tempfile.TemporaryDirectory() as d:
         journal = ChiJournal(Path(d), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',
@@ -86,11 +86,11 @@ def test_concurrent_broker_call_refused_before_dispatch():
 def test_auxiliary_failure_blocks_remaining_batch_dispatches():
     from types import SimpleNamespace
     from agents.models.openai_chatcompletions import Converter
-    from go_chi_contract import ToolContract
-    from go_chi_mcp import MCPBridge
-    from go_chi_tools import local_tools
+    from chi_agent.tool_contract import ToolContract
+    from chi_agent.mcp_tools import MCPBridge
+    from chi_agent.local_tools import local_tools
     from mcp.types import CallToolResult, TextContent
-    from opencode_go_provider import GoFailure
+    from chi_agent.opencode_go_provider import GoFailure
 
     async def scenario(root):
         journal = ChiJournal(root / 'state', identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',

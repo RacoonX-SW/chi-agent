@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from role_resource_preflight import validate
+from scripts.development.role_resource_preflight import validate
 
 
 def _case(tmp_path, count):

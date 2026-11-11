@@ -8,8 +8,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import go_chi_entry
-from opencode_go_provider import GoFailure
+import chi_agent.cli as go_chi_entry
+from chi_agent.opencode_go_provider import GoFailure
 
 
 def rich_log():

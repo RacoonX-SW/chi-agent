@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from go_chi_evidence import write_tool
-from go_chi_journal import ChiJournal, inspect_history
-from go_chi_recovery import canonical_sha
-from go_chi_summary import (derive_view, protected_snapshot, select_closed, validate_candidate,
+from chi_agent.evidence import write_tool
+from chi_agent.journal import ChiJournal, inspect_history
+from chi_agent.output_recovery import canonical_sha
+from chi_agent.input_summary import (derive_view, protected_snapshot, select_closed, validate_candidate,
                             validate_source, verify_tool_actions)
-from opencode_go_provider import GoFailure
-from request_budget import feedback
+from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.request_budget import feedback
 
 
 class SummaryPrimitives(unittest.TestCase):
@@ -174,7 +174,7 @@ class SummaryPrimitives(unittest.TestCase):
             journal.record_response(json.dumps(response).encode(), 200, 1)
             journal.settle(usage)
             journal.record_diagnostic('ok', 1)
-            from go_chi_context import DEFAULT_BUDGET
+            from chi_agent.context_budget import DEFAULT_BUDGET
             journal.install_summary(protected, context_limit=DEFAULT_BUDGET)
             projection, wire = journal.project_summary(body, json.dumps(body).encode(), protected,
                                                        source_used=3, context_limit=DEFAULT_BUDGET)

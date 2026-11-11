@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import go_chi_entry
+import chi_agent.cli as go_chi_entry
 
 
 class ErrorCodeRunLogTests(unittest.TestCase):

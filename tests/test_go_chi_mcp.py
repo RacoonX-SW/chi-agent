@@ -3,9 +3,9 @@ import unittest
 from types import SimpleNamespace
 
 from agents.models.openai_chatcompletions import Converter
-from go_chi_contract import ToolContract
-from go_chi_mcp import MCPBridge, selected_server
-from opencode_go_provider import GoFailure
+from chi_agent.tool_contract import ToolContract
+from chi_agent.mcp_tools import MCPBridge, selected_server
+from chi_agent.opencode_go_provider import GoFailure
 
 
 class FakeResult:
@@ -44,7 +44,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         from pathlib import Path
         from tempfile import TemporaryDirectory
         from mcp.types import CallToolResult, TextContent
-        from go_chi_journal import ChiJournal
+        from chi_agent.journal import ChiJournal
         class BusinessError(FakeServer):
             async def call_tool(self, name, arguments):
                 self.calls.append((name, arguments))
@@ -68,7 +68,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         from pathlib import Path
         from tempfile import TemporaryDirectory
         from mcp.types import CallToolResult, TextContent
-        from go_chi_journal import ChiJournal
+        from chi_agent.journal import ChiJournal
         payload = {"items": [{"id": "PAT-1", "name": "A"}], "total": 1}
         text = json.dumps(payload, indent=2)
         class Rich(FakeServer):
@@ -97,7 +97,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
         from pathlib import Path
         from tempfile import TemporaryDirectory
         from mcp.types import CallToolResult, TextContent
-        from go_chi_journal import ChiJournal
+        from chi_agent.journal import ChiJournal
         payload = {"items": [], "total": 0}
         text = "human summary"
         class Mixed(FakeServer):
@@ -122,7 +122,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
     async def test_uncertain_backend_failure_records_start_and_failure_and_poisons(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory
-        from go_chi_journal import ChiJournal
+        from chi_agent.journal import ChiJournal
         class Broken(FakeServer):
             async def call_tool(self, name, arguments):
                 self.calls.append((name, arguments))
@@ -142,7 +142,7 @@ class MCPTests(unittest.IsolatedAsyncioTestCase):
             journal.finish("failed"); journal.close()
 
     async def test_unbound_provider_write_is_refused_without_backend_effect(self):
-        from patient_identity_binding import PatientBinding
+        from chi_agent.patient_identity_binding import PatientBinding
         class Journal:
             run_doc = {}
             def _persist(self): pass

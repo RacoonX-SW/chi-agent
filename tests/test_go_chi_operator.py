@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 try:
-    import go_chi_operator as operator
+    import scripts.experiments.run_provider_legacy as operator
 except ModuleNotFoundError as exc:
     if exc.name not in {'docker', 'docker.types'}: raise
     operator = None

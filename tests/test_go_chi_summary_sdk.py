@@ -6,8 +6,8 @@ import httpx
 import pytest
 from jsonschema import Draft202012Validator
 
-from go_chi_journal import ChiJournal, inspect_history
-from go_chi_runtime import run_chi
+from chi_agent.journal import ChiJournal, inspect_history
+from chi_agent.runtime import run_chi
 from test_go_chi_capabilities_runtime import Result, Server, completion
 
 
@@ -79,7 +79,7 @@ def test_real_sdk_long_history_with_summary(tmp_path, version, summary_output, e
             payload = completion()
         return httpx.Response(200, request=request, json=payload)
     budget = {'schema': 'chi-context-budget-v2', 'max_chars': 100000,
-              'max_estimated_tokens': 65000, 'output_reserve_tokens': 8192, 'basis': 'synthetic'}
+              'max_estimated_tokens': 50000, 'output_reserve_tokens': 8192, 'basis': 'synthetic'}
     async def run():
         return await run_chi(journal, 'synthetic-secret', role='payer', instruction='Synthetic task',
             mcp_url='http://synthetic.invalid/mcp', instruction_path=instruction, logs_dir=tmp_path / 'logs',

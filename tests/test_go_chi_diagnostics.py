@@ -1,6 +1,6 @@
 import unittest
 
-import go_chi_diagnostics as diag
+import chi_agent.diagnostics as diag
 
 
 class CauseTests(unittest.TestCase):

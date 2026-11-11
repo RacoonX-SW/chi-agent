@@ -12,10 +12,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from agents.models.openai_chatcompletions import Converter
-from go_chi_contract import ContractFailure, ToolContract
-from go_chi_guidance import VERSION as GUIDANCE_VERSION
-from go_chi_state import TaskState
-from go_chi_tools import local_tools
+from chi_agent.tool_contract import ContractFailure, ToolContract
+from chi_agent.role_guidance import VERSION as GUIDANCE_VERSION
+from chi_agent.task_state import TaskState
+from chi_agent.local_tools import local_tools
 
 
 class Journal:
@@ -206,7 +206,7 @@ class LocalContractTests(unittest.IsolatedAsyncioTestCase):
                      "payer_letter_center.list", "cm_chart.get_chart_data"):
             self.assertIn(name, description)
         self.assertIn("not proof of care-plan finalize", description)
-        from go_chi_state import source_kind_for
+        from chi_agent.task_state import source_kind_for
         self.assertEqual(source_kind_for("payer", "payer_letter_center.list", "mcp", "case:CASE-A"),
                          "business_status")
         self.assertEqual(source_kind_for("payer", "payer_letter_center.get", "mcp", "case:CASE-A"),

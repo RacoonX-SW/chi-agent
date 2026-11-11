@@ -8,7 +8,7 @@ from pathlib import Path
 HAS_OPERATOR_DEPS = (importlib.util.find_spec("docker.types") is not None
                      and importlib.util.find_spec("chi_bench") is not None)
 if HAS_OPERATOR_DEPS:
-    import role_operator
+    import scripts.development.run_role as role_operator
 
 
 @unittest.skipUnless(HAS_OPERATOR_DEPS, "role operator dependencies are only in the controller image")

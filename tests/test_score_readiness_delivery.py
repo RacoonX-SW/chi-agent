@@ -14,16 +14,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import go_chi_delivery as delivery
-import go_chi_entry
-from go_chi_policy import RECOVERY_POLICY, SUMMARY_POLICY
+import chi_agent.delivery as delivery
+import chi_agent.cli as go_chi_entry
+from chi_agent.runtime_policy import RECOVERY_POLICY, SUMMARY_POLICY
 
 HARBOR_AVAILABLE = importlib.util.find_spec("harbor") is not None
 if HARBOR_AVAILABLE:
     from harbor.agents.factory import AgentFactory
     from harbor.models.agent.context import AgentContext
     from harbor.models.task.config import MCPServerConfig
-    from go_chi_harness import GoChiHarness
+    from chi_agent.harbor_adapter import GoChiHarness
 
 
 class FakeEnvironment:
@@ -85,12 +85,12 @@ class StaticDeliveryTests(unittest.TestCase):
             delivery.validate_plan(plan)
 
     def test_formal_package_excludes_the_development_patient_simulator(self):
-        from go_chi_bundle import PACKAGE_FILES
+        from chi_agent.bundle import PACKAGE_FILES
         self.assertNotIn("scripts/dev_patient_adapter.py", PACKAGE_FILES)
         self.assertNotIn("scripts/dev_patient_broker.py", PACKAGE_FILES)
         self.assertNotIn("scripts/role_operator.py", PACKAGE_FILES)
         self.assertIn("scripts/go_chi_harness.py", PACKAGE_FILES)
-        self.assertIn("scripts/go_chi_delivery.py", PACKAGE_FILES)
+        self.assertIn("scripts/chi_agent/delivery.py", PACKAGE_FILES)
 
     def test_summary_and_recovery_are_mutually_exclusive_and_off_by_default(self):
         parser = go_chi_entry._parser()
@@ -113,14 +113,14 @@ class DeliveryConsistencyTests(unittest.IsolatedAsyncioTestCase):
         if extra is not None:
             values.update(extra)
         agent = AgentFactory.create_agent_from_import_path(
-            "go_chi_harness:GoChiHarness", root, extra_env=values,
+            "chi_agent.harbor_adapter:GoChiHarness", root, extra_env=values,
             mcp_servers=[MCPServerConfig(name=role, url=url)])
         agent.logs_dir = root / "logs"
         agent.logs_dir.mkdir(parents=True, exist_ok=True)
         return agent
 
     def test_harness_uses_the_same_forbidden_credential_set(self):
-        from go_chi_harness import FORBIDDEN_ENV
+        from chi_agent.harbor_adapter import FORBIDDEN_ENV
         self.assertIs(FORBIDDEN_ENV, delivery.FORBIDDEN_ENV)
 
     async def test_three_roles_assemble_the_real_entry_with_defaults_off(self):
@@ -185,7 +185,7 @@ class DeliveryConsistencyTests(unittest.IsolatedAsyncioTestCase):
             values = env_for("provider", "http://world:8020/mcp")
             values.pop("OPENCODE_API_KEY")
             agent = AgentFactory.create_agent_from_import_path(
-                "go_chi_harness:GoChiHarness", root, extra_env=values,
+                "chi_agent.harbor_adapter:GoChiHarness", root, extra_env=values,
                 mcp_servers=[MCPServerConfig(name="provider", url="http://world:8020/mcp")])
             agent.logs_dir = root / "logs"
             agent.logs_dir.mkdir()

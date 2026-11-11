@@ -2,11 +2,11 @@ import json
 import math
 import unittest
 
-from go_chi_context import (DEFAULT_BUDGET, DEFAULT_BUDGET_V3, BUDGET_SCHEMA,
+from chi_agent.context_budget import (DEFAULT_BUDGET, DEFAULT_BUDGET_V3, BUDGET_SCHEMA,
                             SCHEMA, budget_from_bytes, budget_from_input_tokens,
                             budget_pressure, calibration, check_budget,
                             measure_request)
-from go_chi_policy import context_profile
+from chi_agent.runtime_policy import context_profile
 
 
 def body(size=0):

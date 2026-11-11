@@ -11,8 +11,8 @@ import httpx
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-import development_review as dr
-import live_development as live
+import scripts.development.review_run as dr
+import scripts.development.run_development_legacy as live
 
 
 @pytest.fixture
@@ -80,7 +80,7 @@ def verdict(passed=True, ref="source_context/chart_slice.json:1"):
 
 
 def test_failed_new_task_review_requires_settled_provenance(capture, monkeypatch):
-    import provider_task_resources as resources
+    import scripts.development.provider_task_resources as resources
     folder, kwargs, _ = capture
     c_root = kwargs["c_root"]
     task = next(iter(resources.TASK_FILES))
@@ -347,10 +347,10 @@ def test_read_fifo_rejected_without_blocking(tmp_path):
     import sys
     fifo = tmp_path / "fifo"
     os.mkfifo(fifo)
-    proc = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
-                           "import development_review as d; "
-                           "\ntry: d._read(d.Path(sys.argv[2]),100)\nexcept d.ReviewError: sys.exit(0)\nsys.exit(1)",
-                           str(Path(dr.__file__).parent), str(fifo)], timeout=3, capture_output=True)
+    proc = subprocess.run([sys.executable, "-c", "import sys; "
+                           "from scripts.development import review_run as d; "
+                           "\ntry: d._read(d.Path(sys.argv[1]),100)\nexcept d.ReviewError: sys.exit(0)\nsys.exit(1)",
+                           str(fifo)], timeout=3, capture_output=True)
     assert proc.returncode == 0
 
 

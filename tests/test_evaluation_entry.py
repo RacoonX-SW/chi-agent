@@ -17,9 +17,9 @@ from unittest.mock import patch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
-import b_provider_profile
-import evaluation_bundle as bundle
-import evaluation_entry as entry
+import chi_agent.provider_profile as b_provider_profile
+import chi_agent.evaluation_bundle as bundle
+import chi_agent.evaluation_cli as entry
 
 
 class EvaluationEntryBundleTests(unittest.TestCase):
@@ -256,8 +256,8 @@ class EvaluationEntryBundleTests(unittest.TestCase):
             logs_parent.mkdir()
             command = (
                 "import sys; from pathlib import Path; "
-                "sys.path.insert(0, sys.argv[1]); import evaluation_entry as e; "
-                "import b_provider_profile as p; "
+                "sys.path.insert(0, sys.argv[1]); import chi_agent.evaluation_cli as e; "
+                "import chi_agent.provider_profile as p; "
                 "e.ROOT=Path(sys.argv[2]); e.ENTRY_CONFIG_PATH=Path(sys.argv[2])/'profiles/evaluation-entry.json'; "
                 "p.PROFILE_PATH=Path(sys.argv[2])/'profiles/deepseek-flash-prepared.json'; "
                 "raise SystemExit(e.main(['launch-rehearse','--evaluation-id','fifo-test',"
@@ -266,7 +266,7 @@ class EvaluationEntryBundleTests(unittest.TestCase):
                 "'--mcp-url','http://localhost:8020/mcp','--logs-dir',sys.argv[5]]))"
             )
             completed = subprocess.run(
-                [sys.executable, "-c", command, str(PROJECT_ROOT / "scripts"), str(root),
+                [sys.executable, "-c", command, str(PROJECT_ROOT / "src"), str(root),
                  str(Path(temp) / "output"), str(fifo), str(logs_parent / "runner")],
                 capture_output=True, text=True, timeout=3,
             )

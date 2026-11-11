@@ -1,6 +1,6 @@
 import unittest
 
-from go_chi_context import DEFAULT_BUDGET, check_budget, measure_request
+from chi_agent.context_budget import DEFAULT_BUDGET, check_budget, measure_request
 
 
 def body():

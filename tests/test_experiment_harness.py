@@ -6,10 +6,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import experiment_manifest
-import experiment_summary
-from experiment_manifest import ManifestError, freeze_manifest, validate_manifest
-from experiment_summary import SummaryError, summarize
+import scripts.experiments.validate_experiment_manifest as experiment_manifest
+import scripts.experiments.summarize_experiments as experiment_summary
+from scripts.experiments.validate_experiment_manifest import ManifestError, freeze_manifest, validate_manifest
+from scripts.experiments.summarize_experiments import SummaryError, summarize
 
 TASKS = ["pa_t013_t013_o002_p01_new_referral_provider"]
 

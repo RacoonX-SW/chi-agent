@@ -8,8 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import httpx
-import go_chi_entry as entry
-import opencode_go_provider as go
+import chi_agent.cli as entry
+import chi_agent.opencode_go_provider as go
 
 
 class EntryTests(unittest.TestCase):

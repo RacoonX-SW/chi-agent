@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import make_role_manifest as gen
-import role_resource_preflight
+import scripts.tools.build_role_manifest as gen
+import scripts.development.role_resource_preflight as role_resource_preflight
 
 
 def write(path: Path, content: bytes | str) -> None:
@@ -203,7 +203,7 @@ class ManifestTests(unittest.TestCase):
         from unittest.mock import patch
         manifest = gen.build_manifest(self.root, "prior_auth_um", self.payer)
         target = self.root / "out/fail.json"
-        with patch("make_role_manifest.os.link", side_effect=OSError("boom")):
+        with patch('scripts.tools.build_role_manifest.os.link', side_effect=OSError("boom")):
             with self.assertRaises(gen.ManifestError) as caught:
                 gen.write_manifest(manifest, target, self.root)
         self.assertEqual(caught.exception.code, "manifest_write_failed")

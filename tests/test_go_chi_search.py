@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from go_chi_search import MAX_FILE_BYTES, MAX_RESULTS, SearchRefusal, search
+from chi_agent.text_search import MAX_FILE_BYTES, MAX_RESULTS, SearchRefusal, search
 
 
 class SearchTests(unittest.TestCase):

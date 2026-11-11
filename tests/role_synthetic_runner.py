@@ -8,9 +8,9 @@ from pathlib import Path
 
 import httpx
 
-import go_chi_entry
-import opencode_go_provider
-import role_runner
+import chi_agent.cli as go_chi_entry
+import chi_agent.opencode_go_provider as opencode_go_provider
+import scripts.development.run_role_in_bundle as role_runner
 
 
 def response(request, message, finish='stop'):

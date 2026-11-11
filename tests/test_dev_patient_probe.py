@@ -5,10 +5,10 @@ from pathlib import Path
 
 import pytest
 
-import dev_patient_probe as probe
-import go_chi_entry
-import go_chi_journal
-import go_chi_local
+import scripts.experiments.probe_patient_simulator as probe
+import chi_agent.cli as go_chi_entry
+import chi_agent.journal as go_chi_journal
+import chi_agent.local_history as go_chi_local
 
 
 def test_missing_credential_leaves_safe_failure(tmp_path, monkeypatch):
@@ -19,8 +19,8 @@ def test_missing_credential_leaves_safe_failure(tmp_path, monkeypatch):
     source_hash = lambda name: hashlib.sha256((root / name).read_bytes()).hexdigest()
     config = {'schema': 'chi-synthetic-patient-probe-v1', 'bundle': str(bundle), 'bundle_sha256': 'a' * 64,
         'runtime_identity': 'b' * 64, 'q_root': str(qroot), 'run': 'r', 'evaluation': 'e', 'attempt': 'a',
-        'output': str(output), 'probe_sha256': source_hash('dev_patient_probe.py'),
-        'adapter_sha256': source_hash('dev_patient_adapter.py')}
+        'output': str(output), 'probe_sha256': source_hash('probe_patient_simulator.py'),
+        'adapter_sha256': source_hash('../development/patient_adapter.py')}
     path = tmp_path / 'config.json'; raw = json.dumps(config).encode(); path.write_bytes(raw)
     monkeypatch.setattr(go_chi_entry, '_identity', lambda _: ('b' * 64, {}))
     q = type('Q', (), {'close': lambda self: None})()

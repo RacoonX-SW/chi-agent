@@ -14,11 +14,11 @@ from pathlib import Path
 
 import httpx
 
-import go_chi_entry as entry
-from go_chi_guard import ChiGuard
-from go_chi_journal import ChiJournal
-from opencode_go_provider import GoFailure
-from request_budget import feedback
+import chi_agent.cli as entry
+from chi_agent.request_guard import ChiGuard
+from chi_agent.journal import ChiJournal
+from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.request_budget import feedback
 
 URL = "https://opencode.ai/inference/go/openai/v1/chat/completions"
 SECRET = "synthetic-test-secret"

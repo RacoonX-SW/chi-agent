@@ -2,7 +2,7 @@ import hashlib
 import json
 import unittest
 
-from payer_evidence import EvidenceRegistry, LIMITS
+from chi_agent.payer_evidence import EvidenceRegistry, LIMITS
 
 INSTRUCTION = ("Synthetic payer instruction for case-synthetic-001. "
                "Review the referral, cite the observed material and prepare a determination.")

@@ -41,11 +41,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # ---------------------------------------------------------------------------
-# Make scripts importable
 # ---------------------------------------------------------------------------
 PROJECT_ROOT = Path(__file__).parent.parent
-SCRIPTS_DIR = PROJECT_ROOT / "scripts"
-sys.path.insert(0, str(SCRIPTS_DIR))
 
 
 # ===========================================================================
@@ -55,7 +52,7 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 class TestReadinessChecks(unittest.TestCase):
 
     def test_python_ok_when_current_version_sufficient(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         result = cr.check_python()
         if sys.version_info >= (3, 12):
             self.assertTrue(result["ok"])
@@ -64,27 +61,27 @@ class TestReadinessChecks(unittest.TestCase):
             self.assertIsNotNone(result["fix"])
 
     def test_uv_missing_reports_fix(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with patch("shutil.which", return_value=None):
             result = cr.check_uv()
         self.assertFalse(result["ok"])
         self.assertIsNotNone(result["fix"])
 
     def test_uv_present_reports_ok(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with patch("shutil.which", return_value="/usr/local/bin/uv"):
             result = cr.check_uv()
         self.assertTrue(result["ok"])
 
     def test_docker_cli_missing_fails(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with patch("shutil.which", return_value=None):
             result = cr.check_docker()
         self.assertFalse(result["ok"])
         self.assertIsNotNone(result["fix"])
 
     def test_docker_daemon_down_fails(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         mock_result = MagicMock()
         mock_result.returncode = 1
         mock_result.stderr = "Cannot connect to the Docker daemon"
@@ -94,7 +91,7 @@ class TestReadinessChecks(unittest.TestCase):
         self.assertFalse(result["ok"])
 
     def test_docker_daemon_up_ok(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         mock_result = MagicMock()
         mock_result.returncode = 0
         with patch("shutil.which", return_value="/usr/bin/docker"), \
@@ -103,7 +100,7 @@ class TestReadinessChecks(unittest.TestCase):
         self.assertTrue(result["ok"])
 
     def test_handbook_detected_from_disk_files(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with tempfile.TemporaryDirectory() as td:
             skill_dir = Path(td) / "skills" / "managed-care-operations-handbook"
             skill_dir.mkdir(parents=True)
@@ -118,7 +115,7 @@ class TestReadinessChecks(unittest.TestCase):
 
     def test_handbook_granted_via_env_flag_alone_fails(self):
         """R5: Authorization flag alone is NOT downloaded/versioned handbook files."""
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with tempfile.TemporaryDirectory() as td:
             empty_dir = Path(td) / "empty"
             empty_dir.mkdir()
@@ -129,7 +126,7 @@ class TestReadinessChecks(unittest.TestCase):
                 self.assertIn("not downloaded", res["detail"].lower())
 
     def test_handbook_missing_when_not_on_disk_and_no_flag(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with tempfile.TemporaryDirectory() as td:
             empty_dir = Path(td) / "empty"
             empty_dir.mkdir()
@@ -138,21 +135,21 @@ class TestReadinessChecks(unittest.TestCase):
                 self.assertFalse(res["ok"])
 
     def test_credentials_check_does_not_expose_value(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         secret = "sk-super-secret-key-12345"
         creds = cr.check_credentials(env={"ANTHROPIC_API_KEY": secret})
         self.assertTrue(creds["ANTHROPIC_API_KEY"]["ok"])
         self.assertNotIn(secret, creds["ANTHROPIC_API_KEY"]["detail"])
 
     def test_credentials_presence_distinguished_from_connectivity(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         creds = cr.check_credentials(env={"ANTHROPIC_API_KEY": "sk-test"})
         note = (creds["ANTHROPIC_API_KEY"].get("note") or "").lower()
         self.assertIn("not verified", note)
 
     def test_offline_mode_does_not_require_docker_or_api_keys(self):
         """R4: Offline mode is READY with python, git, and uv; does NOT require docker daemon/socket or keys."""
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
              patch.object(cr, "check_docker", side_effect=AssertionError("offline must not contact Docker")), \
              patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
@@ -162,7 +159,7 @@ class TestReadinessChecks(unittest.TestCase):
             self.assertEqual(modes["offline"]["failures"], [])
 
     def test_offline_evaluation_does_not_call_real_mode_gate(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
              patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_uv", return_value={"ok": True, "detail": "OK"}), \
@@ -173,7 +170,7 @@ class TestReadinessChecks(unittest.TestCase):
         self.assertTrue(report["offline"]["ready"])
 
     def test_scored_readiness_cannot_claim_ready_without_budget_accounting(self):
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         good = {"ready": True, "failures": [], "evidence": {"synthetic": True}}
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
              patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
@@ -190,7 +187,7 @@ class TestReadinessChecks(unittest.TestCase):
 
     def test_ungraded_mode_requires_vendor_checkout(self):
         """R5: Ungraded mode requires vendor checkout at pinned commit."""
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
              patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
@@ -205,7 +202,7 @@ class TestReadinessChecks(unittest.TestCase):
 
     def test_ungraded_mode_does_not_require_anthropic_key(self):
         """Ungraded mode requires a runner key (e.g. DeepSeek/Gemini), NOT Anthropic key."""
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
              patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
@@ -222,7 +219,7 @@ class TestReadinessChecks(unittest.TestCase):
 
     def test_scored_mode_requires_anthropic_key(self):
         """Scored mode requires ANTHROPIC_API_KEY."""
-        import check_readiness as cr
+        import scripts.experiments.check_readiness as cr
         with patch.object(cr, "check_python", return_value={"ok": True, "detail": "3.13"}), \
              patch.object(cr, "check_docker", return_value={"ok": True, "detail": "OK"}), \
              patch.object(cr, "check_git", return_value={"ok": True, "detail": "OK"}), \
@@ -239,7 +236,7 @@ class TestReadinessChecks(unittest.TestCase):
         result = subprocess.run(
             [
                 sys.executable,
-                str(SCRIPTS_DIR / "check_readiness.py"),
+                "-m", "scripts.experiments.check_readiness",
                 "--mode", "offline",
                 "--env-file", "/tmp/chi-agent-no-env-test",
                 "--json",
@@ -264,7 +261,7 @@ class TestReadinessChecks(unittest.TestCase):
 class TestRunBaselineHelpers(unittest.TestCase):
 
     def setUp(self):
-        import run_baseline as rb
+        import scripts.experiments.run_baseline as rb
         self.rb = rb
 
     def test_run_id_is_lowercase_slug_safe(self):
@@ -551,7 +548,7 @@ class TestRunBaselineMain(unittest.TestCase):
         extra_args: list[str] | None = None,
     ) -> tuple[int, dict | None, Path]:
         """Drive run_baseline.main() and return (exit_code, manifest_dict, runs_dir)."""
-        import run_baseline as rb
+        import scripts.experiments.run_baseline as rb
 
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
@@ -627,7 +624,7 @@ class TestRunBaselineMain(unittest.TestCase):
 
     def test_ungraded_real_execution_blocked_before_subprocess(self):
         """R1: Ungraded real execution is explicitly blocked before subprocess launch."""
-        import run_baseline as rb
+        import scripts.experiments.run_baseline as rb
 
         with tempfile.TemporaryDirectory() as td:
             td_path = Path(td)
@@ -738,7 +735,7 @@ class TestRunBaselineMain(unittest.TestCase):
 
     def test_generated_config_is_single_task_experiment_yaml(self):
         """Verify the written YAML conforms to ExperimentConfig with single task bound and limits forwarded."""
-        import run_baseline as rb
+        import scripts.experiments.run_baseline as rb
         import yaml
 
         with tempfile.TemporaryDirectory() as td:
@@ -787,7 +784,7 @@ class TestRunBaselineMain(unittest.TestCase):
 
     def test_relative_env_file_resolves_to_absolute_path(self):
         """R8: Relative --env-file is resolved to absolute path so child process in vendor/ loads the same file."""
-        import run_baseline as rb
+        import scripts.experiments.run_baseline as rb
         import yaml
 
         with tempfile.TemporaryDirectory() as td:
@@ -837,7 +834,7 @@ class TestRunBaselineMain(unittest.TestCase):
             self.assertTrue(resolved_env.is_file(), f"resolved env file must exist: {resolved_env}")
 
     def test_dry_run_exits_zero_without_subprocess_or_started_manifest(self):
-        import run_baseline as rb
+        import scripts.experiments.run_baseline as rb
 
         with tempfile.TemporaryDirectory() as td:
             runs_dir = Path(td) / "runs"
@@ -865,7 +862,7 @@ class TestRunBaselineMain(unittest.TestCase):
 
     def test_budget_parameters_and_validation(self):
         result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
+            [sys.executable, "-m", "scripts.experiments.run_baseline",
              "--agent", "a", "--model", "m", "--task-name", "t",
              "--budget-cny", "0"],
             capture_output=True, text=True, timeout=10,
@@ -875,7 +872,7 @@ class TestRunBaselineMain(unittest.TestCase):
 
     def test_outer_timeout_validation(self):
         result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
+            [sys.executable, "-m", "scripts.experiments.run_baseline",
              "--agent", "a", "--model", "m", "--task-name", "t",
              "--outer-timeout", "0"],
             capture_output=True, text=True, timeout=10,
@@ -885,7 +882,7 @@ class TestRunBaselineMain(unittest.TestCase):
 
     def test_timeout_multiplier_validation(self):
         result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
+            [sys.executable, "-m", "scripts.experiments.run_baseline",
              "--agent", "a", "--model", "m", "--task-name", "t",
              "--timeout-multiplier", "0"],
             capture_output=True, text=True, timeout=10,
@@ -898,7 +895,7 @@ class TestRunBaselineMain(unittest.TestCase):
         for flag in ["--budget-cny", "--timeout-multiplier"]:
             for bad_val in ["nan", "inf", "-inf"]:
                 result = subprocess.run(
-                    [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
+                    [sys.executable, "-m", "scripts.experiments.run_baseline",
                      "--agent", "a", "--model", "m", "--task-name", "t",
                      "--dry-run", f"{flag}={bad_val}"],
                     capture_output=True, text=True, timeout=10,
@@ -911,14 +908,14 @@ class TestRunBaselineMain(unittest.TestCase):
 
     def test_missing_task_name_rejected(self):
         result = subprocess.run(
-            [sys.executable, str(SCRIPTS_DIR / "run_baseline.py"),
+            [sys.executable, "-m", "scripts.experiments.run_baseline",
              "--agent", "a", "--model", "m"],
             capture_output=True, text=True, timeout=10,
         )
         self.assertNotEqual(result.returncode, 0)
 
     def test_secret_never_leaks_into_manifest(self):
-        import run_baseline as rb
+        import scripts.experiments.run_baseline as rb
 
         secret_str = "SUPER_SECRET_ANTHROPIC_KEY_9999"
         with tempfile.TemporaryDirectory() as td:

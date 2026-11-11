@@ -6,7 +6,7 @@ from contextlib import nullcontext
 
 import pytest
 
-import role_cm_capture as capture
+import scripts.development.capture_cm_state as capture
 
 
 def _tar(name, raw):

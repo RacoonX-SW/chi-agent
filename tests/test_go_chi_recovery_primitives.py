@@ -2,8 +2,8 @@ from copy import deepcopy
 
 import pytest
 
-from go_chi_recovery import PARTIAL, REGENERATE, classify, derive_view, mode_and_fragment
-from request_budget import feedback
+from chi_agent.output_recovery import PARTIAL, REGENERATE, classify, derive_view, mode_and_fragment
+from chi_agent.request_budget import feedback
 
 
 def parent():

@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import httpx
 
-import live_development as live
+import scripts.development.run_development_legacy as live
 
 
 def test_capture_review_input_bounded_and_fail_closed(tmp_path):
@@ -316,8 +316,8 @@ class LiveDevelopmentTests(unittest.TestCase):
         import hashlib
         from types import SimpleNamespace
         identity = live._execution_identity()
-        source = live.ROOT / "scripts" / "pdf_resource_reader.py"
-        self.assertEqual(identity["application_files_sha256"]["scripts/pdf_resource_reader.py"],
+        source = live.ROOT / "src" / "chi_agent" / "pdf_resource_reader.py"
+        self.assertEqual(identity["application_files_sha256"]["src/chi_agent/pdf_resource_reader.py"],
                          hashlib.sha256(source.read_bytes()).hexdigest())
         self.assertNotIn("pdf_dependency", identity)
         with tempfile.TemporaryDirectory() as temp:
@@ -351,8 +351,8 @@ class LiveDevelopmentTests(unittest.TestCase):
         self.assertEqual(unsupported.exception.code, "response_model_mismatch")
 
     def test_unknown_real_usage_blocks_restart_and_one_c_claim_cannot_replay(self):
-        from b_execution_policy import load_local_policy
-        from b_provider_profile import load_profile
+        from chi_agent.execution_policy import load_local_policy
+        from chi_agent.provider_profile import load_profile
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -382,8 +382,8 @@ class LiveDevelopmentTests(unittest.TestCase):
 
     def test_unknown_usage_keeps_known_prefix_and_never_reports_zero_total(self):
         from decimal import Decimal
-        from b_execution_policy import load_local_policy
-        from b_provider_profile import load_profile
+        from chi_agent.execution_policy import load_local_policy
+        from chi_agent.provider_profile import load_profile
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -414,8 +414,8 @@ class LiveDevelopmentTests(unittest.TestCase):
 
     def test_real_only_text_block_tool_history_is_strict_and_legacy_default_stays_closed(self):
         from types import SimpleNamespace
-        from b_provider_profile import load_profile
-        from b_provider_transport import GuardedTransport, GuardFailure
+        from chi_agent.provider_profile import load_profile
+        from chi_agent.provider_transport import GuardedTransport, GuardFailure
 
         body = {
             "model": "deepseek-flash", "max_tokens": 128, "reasoning_effort": "high",
@@ -481,7 +481,7 @@ class LiveDevelopmentTests(unittest.TestCase):
         fake_docker = FakeDocker(test_root)
         fake_mcp_factory = lambda *args, **kwargs: FakeMCP(mcp_calls)
 
-        from b_provider_transport import GuardedTransport
+        from chi_agent.provider_transport import GuardedTransport
         original_validate_request = GuardedTransport._validate_request
 
         def capture_guard_shape(transport, request, raw):
@@ -507,12 +507,12 @@ class LiveDevelopmentTests(unittest.TestCase):
         monkeypatches = [
             patch.object(live, "_model_key", return_value="mock-secret-never-real"),
             patch("httpx.AsyncHTTPTransport", side_effect=fake_transport_factory),
-            patch("a_environment._docker", return_value=fake_docker),
-            patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)),
-            patch("a_environment._check_resource_slots", return_value=None),
-            patch("a_environment.wait_world", return_value=0.0),
-            patch("a_environment.cleanup", return_value={"container_removed": True, "network_removed": True}),
-            patch("a_environment._capture_logs", return_value=True),
+            patch('scripts.development.world_environment._docker', return_value=fake_docker),
+            patch('scripts.development.world_environment._daemon_path', side_effect=lambda _root, path: str(path)),
+            patch('scripts.development.world_environment._check_resource_slots', return_value=None),
+            patch('scripts.development.world_environment.wait_world', return_value=0.0),
+            patch('scripts.development.world_environment.cleanup', return_value={"container_removed": True, "network_removed": True}),
+            patch('scripts.development.world_environment._capture_logs', return_value=True),
             patch.object(live, "_official_world_run_dir",
                          side_effect=lambda run_id: test_root / "runs" / "a-environment" / run_id),
             patch.object(live, "_projection_run_dir",
@@ -531,7 +531,7 @@ class LiveDevelopmentTests(unittest.TestCase):
                                  msg=f"result={result_b}; transport_factories={transport_factories}; "
                                      f"mock runner error: {fake_docker.containers.created[-1].error}")
                 self.assertEqual(len(wire_by_kind["b-smoke"].requests), 3)
-                from referral_field_guidance import MARKER
+                from chi_agent.referral_field_guidance import MARKER
                 for body in wire_by_kind["b-smoke"].requests:
                     assert all(MARKER not in item["function"].get("description", "") for item in body.get("tools", []))
                 runner_b = fake_docker.containers.created[-1]
@@ -605,11 +605,11 @@ class LiveDevelopmentTests(unittest.TestCase):
         tools = [
             patch.object(live, "_model_key", return_value="mock-secret-never-real"),
             patch.dict(os.environ, {"DEEPSEEK_API_KEY": "mock-secret-never-real"}),
-            patch("a_environment._docker", return_value=docker),
-            patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)),
-            patch("a_environment._check_resource_slots", return_value=None),
-            patch("a_environment.wait_world", return_value=0.0),
-            patch("a_environment._capture_logs", return_value=True),
+            patch('scripts.development.world_environment._docker', return_value=docker),
+            patch('scripts.development.world_environment._daemon_path', side_effect=lambda _root, path: str(path)),
+            patch('scripts.development.world_environment._check_resource_slots', return_value=None),
+            patch('scripts.development.world_environment.wait_world', return_value=0.0),
+            patch('scripts.development.world_environment._capture_logs', return_value=True),
             patch.object(live, "_official_world_run_dir",
                          side_effect=lambda run_id: test_root / "runs" / "a-environment" / run_id),
             patch.object(live, "_projection_run_dir",
@@ -620,9 +620,9 @@ class LiveDevelopmentTests(unittest.TestCase):
              patch.object(live, "_model_key", return_value="mock-secret-never-real"), \
              patch.dict(os.environ, {"DEEPSEEK_API_KEY": "mock-secret-never-real"}):
             # Create an authentic B receipt using the offline provider fixture first.
-            with patch("a_environment._docker", return_value=docker), \
-                 patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)), \
-                 patch("a_environment.cleanup", return_value={"container_removed": True, "network_removed": True}):
+            with patch('scripts.development.world_environment._docker', return_value=docker), \
+                 patch('scripts.development.world_environment._daemon_path', side_effect=lambda _root, path: str(path)), \
+                 patch('scripts.development.world_environment.cleanup', return_value={"container_removed": True, "network_removed": True}):
                 self.assertEqual(live._orchestrate("b-smoke", "partial-b", test_root,
                                                    _test_context=live._MOCK_ORCHESTRATION_TEST)["status"], "smoke_completed")
         original_atomic = live._atomic_json
@@ -717,8 +717,8 @@ class LiveDevelopmentTests(unittest.TestCase):
         with patch.object(live, "_model_key", return_value="mock-secret-never-real"), \
              patch.dict(os.environ, {"DEEPSEEK_API_KEY": "mock-secret-never-real"}), \
              patch("httpx.AsyncHTTPTransport", side_effect=lambda **_kwargs: httpx.MockTransport(FakeWire("b-smoke"))), \
-             patch("a_environment._docker", return_value=docker), \
-             patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)), \
+             patch('scripts.development.world_environment._docker', return_value=docker), \
+             patch('scripts.development.world_environment._daemon_path', side_effect=lambda _root, path: str(path)), \
              patch.object(FakeContainer, "remove", fail_runner_remove):
             result = live._orchestrate("b-smoke", "cleanup-b", test_root,
                                        _test_context=live._MOCK_ORCHESTRATION_TEST)
@@ -790,7 +790,7 @@ class ContinuedDevelopmentTests(unittest.TestCase):
             handbook.mkdir(parents=True)
             (handbook / "sample.md").write_text("synthetic")
             destination = root / "runs" / "real-c-development" / "attempt"
-            with patch("a_environment._verify_handbook"):
+            with patch('scripts.development.world_environment._verify_handbook'):
                 projection = live._copy_projection(root, "attempt", output_parent=destination)
             self.assertEqual(projection, destination / "projection")
             self.assertTrue((projection / "instruction.md").is_file())
@@ -850,11 +850,11 @@ class ContinuedDevelopmentTests(unittest.TestCase):
         patches = [patch.object(live, "_model_key", return_value="synthetic-secret"),
                    patch.dict(os.environ, {"DEEPSEEK_API_KEY": "synthetic-secret"}),
                    patch("httpx.AsyncHTTPTransport", side_effect=lambda **kw: httpx.MockTransport(wires[kind["value"]])),
-                   patch("a_environment._docker", return_value=docker),
-                   patch("a_environment._daemon_path", side_effect=lambda _root, path: str(path)),
-                   patch("a_environment._check_resource_slots", return_value=None),
-                   patch("a_environment.wait_world", return_value=0.0),
-                   patch("a_environment._capture_logs", return_value=True),
+                   patch('scripts.development.world_environment._docker', return_value=docker),
+                   patch('scripts.development.world_environment._daemon_path', side_effect=lambda _root, path: str(path)),
+                   patch('scripts.development.world_environment._check_resource_slots', return_value=None),
+                   patch('scripts.development.world_environment.wait_world', return_value=0.0),
+                   patch('scripts.development.world_environment._capture_logs', return_value=True),
                    patch.object(live, "_official_world_run_dir", side_effect=lambda run_id: root / "worlds" / run_id),
                    patch.object(live, "_copy_projection", side_effect=lambda _r, run_id, **kw: LiveDevelopmentTests._mock_projection(root, run_id)),
                    patch("agents.mcp.MCPServerStreamableHttp", side_effect=lambda *a, **kw: FakeMCP([]))]
@@ -941,7 +941,7 @@ class ContinuedDevelopmentTests(unittest.TestCase):
 
     def test_record_only_known_above_five_and_unknown_blocks(self):
         from decimal import Decimal
-        from b_execution_policy import load_real_development_policy
+        from chi_agent.execution_policy import load_real_development_policy
         profile = live.load_profile()
         policy = load_real_development_policy()
         with tempfile.TemporaryDirectory() as temp:

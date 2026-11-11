@@ -1,12 +1,12 @@
 import asyncio,copy,hashlib,json,tempfile,unittest
 from pathlib import Path
 import httpx
-from go_chi_guard import ChiGuard
-from go_chi_journal import ChiJournal,inspect_history
-from go_chi_state import TaskState
-from go_chi_context import DEFAULT_BUDGET
-from opencode_go_provider import GoFailure
-from request_budget import feedback
+from chi_agent.request_guard import ChiGuard
+from chi_agent.journal import ChiJournal,inspect_history
+from chi_agent.task_state import TaskState
+from chi_agent.context_budget import DEFAULT_BUDGET
+from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.request_budget import feedback
 
 SECRET='independent-synthetic-secret'; SESSION='chi-'+'b'*32
 MODEL='deepseek-v4.1-flash'; URL='https://opencode.ai/inference/go/openai/v1/chat/completions'

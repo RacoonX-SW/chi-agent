@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from go_chi_index import build_index, read_hit, search_index
+from chi_agent.resource_index import build_index, read_hit, search_index
 
 
 class RetrievalL0Tests(unittest.TestCase):

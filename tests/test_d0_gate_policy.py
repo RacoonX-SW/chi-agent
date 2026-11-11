@@ -12,7 +12,7 @@ from pathlib import Path
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from d0_gate_policy import evaluate_gate  # noqa: E402
+from scripts.experiments.baseline_gate_policy import evaluate_gate  # noqa: E402
 
 
 class GateFixture(unittest.TestCase):

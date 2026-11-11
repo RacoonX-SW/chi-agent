@@ -2,9 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import go_chi_entry
-from go_chi_journal import ChiJournal
-from opencode_go_provider import GoFailure
+import chi_agent.cli as go_chi_entry
+from chi_agent.journal import ChiJournal
+from chi_agent.opencode_go_provider import GoFailure
 
 
 class ContextPolicyCompatibilityTests(unittest.TestCase):

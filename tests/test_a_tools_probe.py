@@ -14,7 +14,7 @@ from types import SimpleNamespace
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-import a_tools_probe as probe  # noqa: E402
+import scripts.experiments.probe_official_tools as probe  # noqa: E402
 
 
 def live_schema():

@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import go_chi_bundle
-import import_inventory
+import chi_agent.bundle as go_chi_bundle
+import scripts.tools.inspect_imports as import_inventory
 
 
 def write(path: Path, text: str) -> None:
@@ -90,6 +90,7 @@ class RealTreeTests(unittest.TestCase):
     def test_real_tree_has_no_packaged_closure_gaps(self):
         result = import_inventory.inventory(import_inventory.ROOT)
         self.assertGreaterEqual(result["packaged_count"], 30)
+        self.assertEqual(set(result["package_counts"]), {"go", "evaluation"})
         self.assertEqual(result["closure_gaps"], [])
         self.assertEqual(result["unknown_imports"], [])
         unlocked = {name for item in result["unlocked_externals"] for name in item["imports"]}
@@ -105,15 +106,15 @@ class RealTreeTests(unittest.TestCase):
                 shutil.copyfile(source / origin, target)
             result = import_inventory.inventory(root)
             unknown = next((item for item in result["unknown_imports"]
-                            if item["module"] == "model_runner_adapter"), None)
-            self.assertTrue(unknown is None or "budget_evaluation" not in unknown["imports"])
-            self.assertNotIn({"module": "model_runner_adapter", "imports": "budget_evaluation"},
+                            if item["module"] == "chi_agent.model_runner_adapter"), None)
+            self.assertTrue(unknown is None or "chi_agent.budget_evaluation" not in unknown["imports"])
+            self.assertNotIn({"module": "chi_agent.model_runner_adapter", "imports": "chi_agent.budget_evaluation"},
                              result["closure_gaps"])
-            (root / "scripts/budget_evaluation.py").unlink()
+            (root / "scripts/chi_agent/budget_evaluation.py").unlink()
             missing = import_inventory.inventory(root)
             unknown = next(item for item in missing["unknown_imports"]
-                           if item["module"] == "model_runner_adapter")
-            self.assertIn("budget_evaluation", unknown["imports"])
+                           if item["module"] == "chi_agent.model_runner_adapter")
+            self.assertIn("chi_agent.budget_evaluation", unknown["imports"])
 
 
 if __name__ == "__main__":

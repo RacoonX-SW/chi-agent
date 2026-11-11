@@ -1,8 +1,8 @@
 import pytest
 
 from agents.tool import FunctionTool
-import live_development as live
-import referral_field_guidance as guidance
+import scripts.development.run_development_legacy as live
+import chi_agent.referral_field_guidance as guidance
 
 
 class Journal:
@@ -47,13 +47,13 @@ def test_guidance_changes_only_description_and_records_hashes(name):
 
 
 def test_unrelated_tool_and_old_identity_are_untouched():
-    import evaluation_bundle
-    import evaluation_entry
+    import chi_agent.evaluation_bundle as evaluation_bundle
+    import chi_agent.evaluation_cli as evaluation_entry
     journal = Journal()
     current = tool("chart.search_patients")
     assert live._apply_referral_guidance(current, current.name, journal) is current
     assert current.description == "original" and journal.run_doc == {} and journal.persist_count == 0
-    assert "scripts/referral_field_guidance.py" in live._execution_identity(k=True)["application_files_sha256"]
-    assert "scripts/referral_field_guidance.py" not in live._execution_identity()["application_files_sha256"]
-    assert "scripts/referral_field_guidance.py" not in evaluation_bundle.PACKAGE_FILES
-    assert "scripts/referral_field_guidance.py" not in evaluation_entry.ENTRY_RUNTIME_SOURCE_FILES
+    assert "src/chi_agent/referral_field_guidance.py" in live._execution_identity(k=True)["application_files_sha256"]
+    assert "src/chi_agent/referral_field_guidance.py" not in live._execution_identity()["application_files_sha256"]
+    assert "scripts/chi_agent/referral_field_guidance.py" not in evaluation_bundle.PACKAGE_FILES
+    assert "scripts/chi_agent/referral_field_guidance.py" not in evaluation_entry.ENTRY_RUNTIME_SOURCE_FILES

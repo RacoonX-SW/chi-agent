@@ -7,9 +7,9 @@ from pathlib import Path
 
 import httpx
 
-from go_chi_guard import ChiGuard
-from go_chi_journal import ChiJournal, inspect_history
-from request_budget import feedback
+from chi_agent.request_guard import ChiGuard
+from chi_agent.journal import ChiJournal, inspect_history
+from chi_agent.request_budget import feedback
 
 USAGE = {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5, 'cost': 0,
          'opencode': {'billing_source': 'go', 'list_cost': 0.1, 'allowance': 0.1}}

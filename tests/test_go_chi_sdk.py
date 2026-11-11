@@ -9,20 +9,20 @@ from agents.tracing import get_trace_provider
 from agents.models.openai_chatcompletions import Converter, OpenAIChatCompletionsModel
 from openai import AsyncOpenAI
 
-from go_chi_guard import ChiGuard
-from go_chi_journal import ChiJournal
-from go_chi_policy import TIME_POLICY
-from model_runner_adapter import _patch_empty_history_compatibility
-from opencode_go_provider import _same_route_reasoning
-from request_budget import feedback
+from chi_agent.request_guard import ChiGuard
+from chi_agent.journal import ChiJournal
+from chi_agent.runtime_policy import TIME_POLICY
+from chi_agent.model_runner_adapter import _patch_empty_history_compatibility
+from chi_agent.opencode_go_provider import _same_route_reasoning
+from chi_agent.request_budget import feedback
 
 
 class SDKTests(unittest.IsolatedAsyncioTestCase):
     async def test_sdk_b_continues_when_only_fee_details_missing(self):
         import json
-        from opencode_go_provider import SYSTEM, INSTRUCTION, _offline_responder
-        from go_chi_policy import FEE_POLICY
-        from go_chi_runtime import coding_tools, run_coding_b
+        from chi_agent.opencode_go_provider import SYSTEM, INSTRUCTION, _offline_responder
+        from chi_agent.runtime_policy import FEE_POLICY
+        from chi_agent.runtime import coding_tools, run_coding_b
         with tempfile.TemporaryDirectory() as directory:
             journal = ChiJournal(Path(directory), identity='a'*64, evaluation='e', task='synthetic', attempt='a', run='b',
                                  kind='coding_b', launch={'kind': 'coding_b', 'fee_policy': FEE_POLICY})
@@ -52,8 +52,8 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_coding_tool_reasoning_variants_through_sdk(self):
         import json
-        from opencode_go_provider import SYSTEM, INSTRUCTION
-        from go_chi_runtime import coding_tools, run_coding_b
+        from chi_agent.opencode_go_provider import SYSTEM, INSTRUCTION
+        from chi_agent.runtime import coding_tools, run_coding_b
         for variant in ('absent', 'null', 'empty', 'text'):
             with self.subTest(variant=variant), tempfile.TemporaryDirectory() as directory:
                 journal = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='synthetic', attempt='a', run='b', kind='coding_b')
@@ -98,8 +98,8 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
                     await client.close(); journal.close()
 
     async def test_b_sdk_preserves_guard_error_for_bad_reasoning(self):
-        from opencode_go_provider import SYSTEM, INSTRUCTION, GoFailure
-        from go_chi_runtime import coding_tools, run_coding_b
+        from chi_agent.opencode_go_provider import SYSTEM, INSTRUCTION, GoFailure
+        from chi_agent.runtime import coding_tools, run_coding_b
         with tempfile.TemporaryDirectory() as directory:
             journal = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='synthetic', attempt='a', run='b', kind='coding_b')
             holder = {}; tools = coding_tools(lambda: holder['guard'])
@@ -177,7 +177,7 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
                 set_tracing_disabled(previous_trace_state)
 
     async def test_coding_b_uses_go_chi_guard_and_sdk(self):
-        from opencode_go_provider import INSTRUCTION, SYSTEM, SCHEMAS, DESCRIPTIONS, _offline_responder, _matches_patch
+        from chi_agent.opencode_go_provider import INSTRUCTION, SYSTEM, SCHEMAS, DESCRIPTIONS, _offline_responder, _matches_patch
         with tempfile.TemporaryDirectory() as directory:
             previous_trace_state = get_trace_provider()._manual_disabled
             set_tracing_disabled(True)
@@ -222,8 +222,8 @@ class SDKTests(unittest.IsolatedAsyncioTestCase):
                 set_tracing_disabled(previous_trace_state)
 
     async def test_fixed_b_runtime(self):
-        from opencode_go_provider import INSTRUCTION, SYSTEM, _offline_responder
-        from go_chi_runtime import coding_tools, run_coding_b
+        from chi_agent.opencode_go_provider import INSTRUCTION, SYSTEM, _offline_responder
+        from chi_agent.runtime import coding_tools, run_coding_b
         with tempfile.TemporaryDirectory() as directory:
             journal = ChiJournal(Path(directory), identity="a" * 64, evaluation="e", task="synthetic", attempt="a", run="b", kind="coding_b")
             holder = {}

@@ -6,8 +6,8 @@ from types import SimpleNamespace
 from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 from chi_bench.core.context import ServiceContext
-from go_chi_resources import workspace_path
-from pdf_resource_reader import read_allowed_file
+from chi_agent.workspace_paths import workspace_path
+from chi_agent.pdf_resource_reader import read_allowed_file
 
 
 def test_payer_materialization_and_pdf_read():

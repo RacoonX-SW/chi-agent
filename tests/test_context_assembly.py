@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from go_chi_assembly import canonical_sha, project_messages
+from chi_agent.context_assembly import canonical_sha, project_messages
 
 
 def tool(call_id, result):

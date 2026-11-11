@@ -19,14 +19,14 @@ if HAVE_ANTHROPIC:
     from chi_bench.conversation.message import STOP_SIGNAL
     from chi_bench.conversation.session import ConversationSession
     from chi_bench.services.cm_outreach import CMOutreachService
-    from dev_patient_bootstrap import install
-    from dev_patient_broker import PatientBroker
+    from scripts.development.patient_bootstrap import install
+    from scripts.development.patient_broker import PatientBroker
 else:
     STOP_SIGNAL = ConversationSession = CMOutreachService = None
     install = PatientBroker = None
-from go_chi_contract import ToolContract
-from go_chi_journal import ChiJournal
-from go_chi_mcp import MCPBridge, selected_server
+from chi_agent.tool_contract import ToolContract
+from chi_agent.journal import ChiJournal
+from chi_agent.mcp_tools import MCPBridge, selected_server
 
 
 @unittest.skipUnless(HAVE_ANTHROPIC, "anthropic is not installed")

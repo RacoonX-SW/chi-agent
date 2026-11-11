@@ -6,11 +6,11 @@ import json
 import httpx
 import pytest
 
-import b_execution_policy as policies
-import b_provider_transport as transport
-import live_development as live
-import model_runner_adapter as adapter
-import patient_identity_binding as binding
+import chi_agent.execution_policy as policies
+import chi_agent.provider_transport as transport
+import scripts.development.run_development_legacy as live
+import chi_agent.model_runner_adapter as adapter
+import chi_agent.patient_identity_binding as binding
 from test_live_development import _adopt_synthetic_history
 
 

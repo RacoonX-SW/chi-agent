@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import go_chi_delivery as delivery
-from go_chi_bundle import build_bundle
+import chi_agent.delivery as delivery
+from chi_agent.bundle import build_bundle
 
 ROOT = Path(__file__).parents[1]
 

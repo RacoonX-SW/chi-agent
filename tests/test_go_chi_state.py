@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from opencode_go_provider import GoFailure
-from go_chi_state import (CONTEXT_POLICY_V3, LIMITS, MAX_STATE_BYTES, StateRefusal,
+from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.task_state import (CONTEXT_POLICY_V3, LIMITS, MAX_STATE_BYTES, StateRefusal,
                           TaskState, effect_for)
 
 
@@ -246,7 +246,7 @@ class StateTests(unittest.TestCase):
         state = self.state()
         read_call(state)
         before = state.data["version"]
-        with mock.patch("go_chi_state._atomic_write", side_effect=OSError("disk")):
+        with mock.patch('chi_agent.task_state._atomic_write', side_effect=OSError("disk")):
             with self.assertRaises(GoFailure) as caught:
                 state.propose({"plans": ["next"]})
         self.assertEqual(caught.exception.code, "chi_state_persistence_failed")
@@ -469,8 +469,8 @@ class StateTests(unittest.TestCase):
         self.assertEqual(state.data["unknowns"][0]["status"], "resolved")
 
     def test_business_status_reads_are_exact_public_canonical_names(self):
-        from go_chi_state import BUSINESS_STATUS_READS
-        from go_chi_mcp import role_allowlists
+        from chi_agent.task_state import BUSINESS_STATUS_READS
+        from chi_agent.mcp_tools import role_allowlists
         expected = {
             "provider": {"cases.get_case", "auth.check_status"},
             "payer": {"payer_intake_hub.get_intake_case", "triage.get",

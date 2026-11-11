@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 
 import httpx
-import opencode_go_provider as go
-from go_chi_local import acquire_existing_history
+import chi_agent.opencode_go_provider as go
+from chi_agent.local_history import acquire_existing_history
 
 
 class LocalHistoryTests(unittest.TestCase):

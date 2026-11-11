@@ -6,9 +6,9 @@ from decimal import Decimal
 import httpx
 import pytest
 
-import b_provider_profile as profiles
-import b_provider_transport as transport
-import model_runner_adapter as adapter
+import chi_agent.provider_profile as profiles
+import chi_agent.provider_transport as transport
+import chi_agent.model_runner_adapter as adapter
 
 
 def request():

@@ -15,12 +15,12 @@ try:
 except (ImportError, ModuleNotFoundError, ValueError):
     HAVE_DOCKER = False
 if HAVE_DOCKER:
-    import role_operator
+    import scripts.development.run_role as role_operator
 else:
     role_operator = None
-import make_role_manifest
-import role_resource_preflight
-from evaluation_bundle import BundleFailure
+import scripts.tools.build_role_manifest as make_role_manifest
+import scripts.development.role_resource_preflight as role_resource_preflight
+from chi_agent.evaluation_bundle import BundleFailure
 
 
 def make_files(root, names, *, scope='payer', content=b'pdf'):

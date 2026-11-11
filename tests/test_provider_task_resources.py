@@ -4,9 +4,9 @@ import json
 
 import pytest
 
-import a_environment
-import live_development as live
-import provider_task_resources as resources
+import scripts.development.world_environment as a_environment
+import scripts.development.run_development_legacy as live
+import scripts.development.provider_task_resources as resources
 
 
 def test_frozen_resource_verification_and_tampering(tmp_path, monkeypatch):

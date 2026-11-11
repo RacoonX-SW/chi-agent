@@ -3,8 +3,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from go_chi_journal import ChiJournal, inspect_history
-from go_chi_state import CONTEXT_POLICY_V3, TaskState
+from chi_agent.journal import ChiJournal, inspect_history
+from chi_agent.task_state import CONTEXT_POLICY_V3, TaskState
 
 
 class DriftTests(unittest.TestCase):

@@ -8,8 +8,8 @@ import sys
 import time
 import pytest
 
-import go_chi_mcp
-import role_runner
+import chi_agent.mcp_tools as go_chi_mcp
+import scripts.development.run_role_in_bundle as role_runner
 
 
 def test_normal_runner_marks_world_quiescent(tmp_path, monkeypatch):
@@ -84,7 +84,7 @@ def test_sigterm_cancels_runner_and_drains_broker(tmp_path):
     capability.write_text('c' * 48)
     script = '''
 import asyncio, os, pathlib, sys
-import role_runner
+import scripts.development.run_role_in_bundle as role_runner
 role_runner.STATUS_PATH = pathlib.Path(sys.argv[1])
 role_runner.CAPABILITY_PATH = pathlib.Path(sys.argv[3])
 os.environ['CHI_DEV_WORLD_HOST'] = '127.0.0.1'

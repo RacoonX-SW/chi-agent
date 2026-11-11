@@ -14,7 +14,7 @@ import pytest
 SCRIPTS_DIR = Path(__file__).parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-import a_environment as a  # noqa: E402
+import scripts.development.world_environment as a  # noqa: E402
 
 
 def _fixture_tree(root: Path) -> tuple[Path, Path]:
@@ -53,7 +53,7 @@ def _fixture_tree(root: Path) -> tuple[Path, Path]:
 
 
 def _probe_script(root: Path) -> Path:
-    path = root / "scripts" / "a_tools_probe.py"
+    path = root / "scripts" / "experiments" / "probe_official_tools.py"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("# synthetic reviewed probe\n")
     return path

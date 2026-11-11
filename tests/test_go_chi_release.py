@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import go_chi_release as release
-from go_chi_bundle import validate_bundle
-from go_chi_delivery import FORBIDDEN_ENV
+import scripts.tools.release_bundle as release
+from chi_agent.bundle import validate_bundle
+from chi_agent.delivery import FORBIDDEN_ENV
 
 
 ROOT = Path(__file__).parents[1]

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import role_world_preflight as operator
+import scripts.development.check_role_world as operator
 
 
 @pytest.mark.parametrize('mode,role', [('success', 'cm'), ('mcp_failure', 'cm'), ('resources_changed', 'cm'), ('success', 'provider')])

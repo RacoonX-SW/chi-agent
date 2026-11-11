@@ -8,13 +8,14 @@ from pathlib import Path
 
 import httpx
 
-from go_chi_assembly import project_messages
-from go_chi_context import DEFAULT_BUDGET_V3
-from go_chi_evidence import verify_tool, write_tool
-from go_chi_guard import ChiGuard
-from go_chi_journal import ChiJournal, _replay_source_view, inspect_history
-from go_chi_recovery import canonical_sha, validate_permit
-from opencode_go_provider import GoFailure
+from chi_agent.context_assembly import project_messages
+from chi_agent.context_budget import DEFAULT_BUDGET_V3
+from chi_agent.evidence import verify_tool, write_tool
+from chi_agent.request_budget import feedback
+from chi_agent.request_guard import ChiGuard
+from chi_agent.journal import ChiJournal, _replay_source_view, inspect_history
+from chi_agent.output_recovery import canonical_sha, validate_permit
+from chi_agent.opencode_go_provider import GoFailure
 from test_go_chi_guard import SECRET, SESSION, TOOLS, USAGE, URL, body, request
 
 LOCAL_TOOLS = [{"type": "function", "function": {
@@ -239,13 +240,13 @@ class RecoveryViewBindingTests(unittest.TestCase):
         text = '{"schema":"chi-intent-anchor-v1"}'
         anchor_doc = {"text": text, "sha256": hashlib.sha256(text.encode()).hexdigest()}
         parent = {"messages": [
-            {"role": "system", "content": "system" + __import__("request_budget").feedback(0, False)[0]},
+            {"role": "system", "content": "system" + feedback(0, False)[0]},
             {"role": "user", "content": "instruction"},
             {"role": "user", "content": text}]}
         response = {"model": "deepseek-v4.1-flash",
                     "choices": [{"finish_reason": "length",
                                  "message": {"role": "assistant", "content": "part"}}]}
-        from go_chi_recovery import derive_view
+        from chi_agent.output_recovery import derive_view
         view = derive_view(parent, response, old_used=0, claimed=False, anchor=anchor_doc)
         run = {"evaluation": "e", "task": "t", "attempt": "a", "run": "r"}
         permit = {

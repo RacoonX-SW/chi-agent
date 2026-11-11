@@ -35,8 +35,8 @@ def adapter_class():
     stub.OpenAIAgentsHarness = FakeHarness
     sys.modules[name] = stub
     try:
-        path = Path(__file__).parents[1] / "scripts" / "go_chi_harness.py"
-        spec = importlib.util.spec_from_file_location("go_chi_harness_stub_test", path)
+        path = Path(__file__).parents[1] / "src" / "chi_agent" / "harbor_adapter.py"
+        spec = importlib.util.spec_from_file_location("chi_agent._harbor_adapter_stub_test", path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         return module.GoChiHarness

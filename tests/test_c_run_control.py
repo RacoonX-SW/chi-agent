@@ -15,7 +15,7 @@ from unittest.mock import patch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
-import c_run_control as control
+import scripts.experiments.rehearse_single_run as control
 
 
 class RecordingBackend:

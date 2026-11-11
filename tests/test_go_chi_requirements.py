@@ -8,17 +8,17 @@ from types import SimpleNamespace
 
 import httpx
 
-from go_chi_entry import REQUIREMENTS_POLICY as ENTRY_POLICY
-from go_chi_entry import _is_completion, _read_run_log_checked, main as entry_main
-from go_chi_guidance import VERSION, VERSION_REQUIREMENTS, digest, guidance
-from go_chi_journal import ChiJournal
-from go_chi_readiness_inventory import _completion_state
-from go_chi_runtime import run_chi
-from go_chi_state import (MAX_REQUIREMENTS, MAX_STATE_BYTES, MAX_TEXT,
+from chi_agent.cli import REQUIREMENTS_POLICY as ENTRY_POLICY
+from chi_agent.cli import _is_completion, _read_run_log_checked, main as entry_main
+from chi_agent.role_guidance import VERSION, VERSION_REQUIREMENTS, digest, guidance
+from chi_agent.journal import ChiJournal
+from scripts.tools.inspect_readiness import _completion_state
+from chi_agent.runtime import run_chi
+from chi_agent.task_state import (MAX_REQUIREMENTS, MAX_STATE_BYTES, MAX_TEXT,
                           REQUIREMENTS_POLICY, StateRefusal, TaskState, _atomic_write)
-from go_chi_tools import local_tools
-from opencode_go_provider import GoFailure
-from role_runner import reject_shadow_with_validation_flags, selected_validation_flags
+from chi_agent.local_tools import local_tools
+from chi_agent.opencode_go_provider import GoFailure
+from scripts.development.run_role_in_bundle import reject_shadow_with_validation_flags, selected_validation_flags
 
 INSTRUCTION = (
     "The member must submit a prior authorization request with supporting clinical documentation. "

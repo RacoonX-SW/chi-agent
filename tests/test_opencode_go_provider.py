@@ -5,7 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-import opencode_go_provider as go
+import chi_agent.opencode_go_provider as go
 
 
 def run(root, name, responder):
@@ -290,7 +290,7 @@ def test_stop_without_reasoning_or_with_null(tmp_path):
 def changed_identity(identity, suffix):
     import copy
     result = copy.deepcopy(identity)
-    result['files_sha256']['scripts/opencode_go_provider.py'] = suffix * 64
+    result['files_sha256']['src/chi_agent/opencode_go_provider.py'] = suffix * 64
     return result
 
 

@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-import go_chi_run_summary as summary
-from go_chi_journal import ChiJournal
-from opencode_go_provider import GoFailure
+import scripts.tools.summarize_runs as summary
+from chi_agent.journal import ChiJournal
+from chi_agent.opencode_go_provider import GoFailure
 
 IDENTITY = "a" * 64
 USAGE = {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5, "cost": 0,
@@ -115,7 +115,7 @@ class SummaryTests(unittest.TestCase):
                 state.write_bytes(state.read_bytes() + b"\n")
                 return result
 
-            with patch("go_chi_run_summary.inspect_history", side_effect=racing):
+            with patch('scripts.tools.summarize_runs.inspect_history', side_effect=racing):
                 with self.assertRaises(summary.SummaryError) as caught:
                     summary.summarize(root, IDENTITY, digest)
             self.assertEqual(caught.exception.code, "summary_snapshot_changed")

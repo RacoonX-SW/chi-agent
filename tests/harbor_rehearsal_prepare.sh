@@ -7,16 +7,17 @@ id=${2:?unique lowercase image id required}
 case "$out" in /*) ;; *) exit 2 ;; esac
 case "$id" in *[!a-z0-9-]*|'') exit 2 ;; esac
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+vendor=$(CDPATH= cd -- "${CHI_VENDOR_DIR:-$root/vendor/chi-bench}" && pwd)
 base="chi-agent-harbor-synthetic:$id-base"
 seed="chi-agent-harbor-synthetic:$id-seed"
 container="chi-harbor-b-$id"
 docker run --rm --pull=never --network none \
-  -v "$root:/work:ro" -v "$out:/out" \
+  -v "$root:/work:ro" -v "$out:/out" -v "$vendor:/vendor-input:ro" \
   -v chi-h-root-model-deps-20261027-v1:/model:ro \
   -v chi-k-pdf-deps-20261027-v1:/pdf:ro chi-agent-py312-review:dev sh -c '
     set -eu; test ! -e /out/build; mkdir /out/build; cd /work
-    python scripts/go_chi_bundle.py build --target /out/build/bundle
-    cp -a /work/vendor/chi-bench /out/build/vendor
+    PYTHONPATH=/work/src python -m chi_agent.bundle build --target /out/build/bundle
+    cp -a /vendor-input /out/build/vendor
     mkdir /out/build/model /out/build/pdf
     cp -a /model/. /out/build/model/; cp -a /pdf/. /out/build/pdf/
     cp /work/tests/harbor_synthetic_python.py /out/build/harbor_synthetic_python.py
