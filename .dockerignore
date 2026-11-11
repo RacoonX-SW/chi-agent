@@ -14,3 +14,6 @@ __pycache__
 dist/
 build/
 .DS_Store
+
+# Exclude the entire legacy local project, including ignored data
+/chi-agent/
