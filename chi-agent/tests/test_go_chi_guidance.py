@@ -101,6 +101,12 @@ class GuidanceTests(unittest.TestCase):
             self.assertIn("patient_id is provider-only", text)
             self.assertIn("target.case_id", text)
 
+    def test_cm_does_not_restart_outreach(self):
+        text = " ".join(guidance("cm")["invariants"]).lower()
+        self.assertIn("do not start a second outreach session", text)
+        self.assertIn("end_outreach_call", text)
+        self.assertIn("read the transcript", text)
+
     def test_cm_consent_is_not_terminal(self):
         text = " ".join(guidance("cm")["invariants"]).lower()
         self.assertIn("consent or enrollment is not a terminal state", text)
