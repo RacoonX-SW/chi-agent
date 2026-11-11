@@ -13,23 +13,30 @@ Git 默认分支 SHALL 在根目录提供项目说明、Docker 快速开始、�
 #### Scenario: 浏览当前阶段成果
 
 - **WHEN** 读者打开仓库首页
-- **THEN** README SHALL 展示 payer t023、t022、t024 和 CM anorexia、CKD、asthma 的六条开发基线结果，并提供每条结果的固定证据链接
-- **AND** README SHALL 注明结果对应 `16384` 开发配置和 `official_reward=null`
+- **THEN** README SHALL 展示已核对的累计开发覆盖，按公开任务 ID 去重并按 Provider、Payer、CM 汇总
+- **AND** README SHALL 概述最新 `16384` 六题基线、注明 `official_reward=null` 并链接成果证据索引
 
-#### Scenario: 从仓库根目录运行离线检查
+#### Scenario: 从仓库根目录构建并导出
 
-- **WHEN** 维护者在干净检出中按根 README 的步骤使用 Python 3.12 Docker 环境
-- **THEN** 离线检查入口 SHALL 从根目录解析源码、配置和测试，无需进入旧项目外层目录
+- **WHEN** 读者在干净检出中按根 README 的步骤使用 Python 3.12 Docker 环境
+- **THEN** 构建和导出命令 SHALL 从 Git 根目录解析源码与配置
+- **AND** 运行手册 SHALL 提供一个常规离线验证命令，覆盖开发回归、controller 专项及两种导出包的隔离预检
 
 ### Requirement: 维护记录可追溯
 
-主线文档 SHALL 提供包运行、协作和当前审核所需的入口。历史阶段材料 SHALL 可以从整理前的固定 Git 提交查阅。
+主线文档 SHALL 提供包运行、协作和当前审核所需的入口。学习材料、逐轮验证记录和历史阶段报告 SHALL 从整理前的固定 Git 提交查阅。
 
 #### Scenario: 查找结果或未决事项
 
 - **WHEN** 维护者沿 README 或 AGENTS 中的入口核对结果、授权或历史失败
 - **THEN** 链接 SHALL 解析到对应的当前材料或固定历史证据
 - **AND** 记录 SHALL 保留未决事项、旧账本的原身份及其失败或未结算状态
+
+#### Scenario: 浏览默认分支文档
+
+- **WHEN** 读者浏览当前 `docs/`
+- **THEN** 该目录 SHALL 只包含两份包运行手册
+- **AND** 重排验收详情 SHALL 集中记录于对应 PR
 
 ### Requirement: 交付入口兼容
 

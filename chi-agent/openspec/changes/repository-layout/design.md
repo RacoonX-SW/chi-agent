@@ -2,7 +2,7 @@
 
 ## Context
 
-`fdff6cf` 是 PR #101 的合并提交。当前 Git 根下有一个 `chi-agent/` 外层目录，两种 bundle 各自通过显式源路径映射构建与校验。Go 入口预检、Harbor 导入、角色开发调度及 A 阶段 Compose 还有各自的路径约定。现有六题结果对应多份冻结包，详细身份由历史报告提供。
+`fdff6cf` 是 PR #101 的合并提交。当前 Git 根下有一个 `chi-agent/` 外层目录，两种 bundle 各自通过显式源路径映射构建与校验。Go 入口预检、Harbor 导入、角色开发调度及 A 阶段 Compose 还有各自的路径约定。累计开发记录跨多个候选，最新六题基线也对应多份冻结包。
 
 ## Goals / Non-Goals
 
@@ -13,18 +13,32 @@
 ### 1. 根目录与维护资料
 
 - 将 `Dockerfile`、两份 Compose、`docker/`、`pyproject.toml`、`project.yaml`、依赖锁及输入文件、`profiles/`、`tests/`、`openspec/` 与 `.env.example` 提至 Git 根目录。合并根和原项目的 Git 忽略规则。根 Docker 忽略规则覆盖遗留的本地 `chi-agent/`、凭据和数据目录。仅迁移 Git 跟踪文件。
-- 根 README 保留项目简介、代码导航、Docker 快速开始及六题结果表。六行分别指向固定提交的 `t023-baseline-rerun-20261109.md`、`t022-baseline-rerun-20261109.md`、`t024-baseline-rerun-20261109.md`、`cm-target-binding-20261110.md` 的 anorexia 节、`cm-ckd-baseline-rerun-20261110.md` 与 `cm-asthma-baseline-rerun-20261111.md`。身份与账目详情由原报告提供。
-- `docs/` 保留 `go-chi-entry-runbook.md` 和 `evaluation-entry-runbook.md`，两份手册仍是对应包的输入。将 `COLLABORATION.md`、`REVIEW_STATE.md`、学习约定及 GitHub、Docker、子代理工作流收在 `docs/maintainers/`，保留这六个文件名与当前规则。根 `AGENTS.md` 链接当前入口。学习历史、历史协作章节和其余旧文档及审核报告通过 [固定提交](https://github.com/xsw932187210-cell/chi-agent/tree/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d) 查阅。当前审核状态保留授权、独立复审与未决账目的索引。
+- 根 README 保留项目简介、代码导航、从根目录构建和导出 Go 包的 Docker 快速开始，以及一段成果摘要。摘要给出累计覆盖和三领域数量，再用一句话记录最新六题基线，附一个成果证据索引链接。首页不列逐轮验证、测试数量或阶段过程。
+- `docs/` 仅保留 `go-chi-entry-runbook.md` 和 `evaluation-entry-runbook.md`。两份手册保留当前配置、运行前置条件、导出和使用命令，并作为对应包的输入。现行协作、Docker、GitHub 和授权规则归入根 `AGENTS.md`，短版 `REVIEW_STATE.md` 迁至 `openspec/`，记录当前授权、审核、未决事项和成果证据索引。学习约定与长账本、协作过程文档、历史复盘和 `reviews/` 阶段报告移出默认分支文件树，从 [固定提交](https://github.com/xsw932187210-cell/chi-agent/tree/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d) 查阅。
 - `openspec/` 保留配置、现有增量规格及所属变更，并保留用于当前入口和未决事项的 `chi-go-evaluation-entry`、`final-validation-admission`、`harbor-launch-coverage`、`opencode-go-provider`、`reasoning-output-budget`、`representative-role-baseline`、`score-readiness-hardening`、`unified-role-cm-lifecycle`。其余六个旧变更和 `bootstrap-baseline` 的早期交接与复审草稿通过固定提交查阅。旧待处理事项保留在其原清单，仍相关的条目从审核状态链接。更新现行入口的相对链接，将指向历史的链接固定到原路径和提交。
 
-### 2. 源码、命令与容器
+### 2. 成果口径
+
+累计覆盖按公开 `task_id` 去重。Go 运行以实际结算的主模型请求为依据，早期直连运行以正用量的 runner 结果和对应任务记录为依据。当前核对到至少 20 个，分布如下。
+
+| 领域 | 已核对任务 | 数量 |
+| --- | --- | ---: |
+| Provider | t012、t013、t014、t015、t016、t017、t018、t019、t021、t032 | 10 |
+| Payer | t011、t022、t023、t024、t027、t030 | 6 |
+| CM | AFib、anorexia、asthma、CKD | 4 |
+
+- Go 的 17 个任务各有至少一次 `complete + claim`。早期直连的 Provider t013、t018、t019 各有一次或以上 `completed_ungraded`。这些是不同版本下的开发记录，官方评分字段为 `null`。[直连 t013/t019](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/request-budget-awareness-review.md) · [直连 t018](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/deepseek-development-review.md)
+- 最近的 `16384` 基线包含 Payer t022、t023、t024 和 CM anorexia、asthma、CKD。六题均有完成声明及 `inspect_history=inspected`，已计入累计覆盖。[最新六题汇总](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/cm-asthma-baseline-rerun-20261111.md#3-当前六题状态)
+- 成果索引从固定报告追溯每批候选、结果和失败。九题 BDE 当轮有 4 个完成声明、2 个被完成检查阻断、3 个失败。原始账本和运行轨迹留在本地。[Go 三题](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/go-chi-timeout-recovery-review.md) · [三角色运行](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/unified-role-cm-lifecycle-review.md) · [九题 BDE](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/nine-task-bde-execution-20261107.md#1-结果总表) · [Payer t027](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/c5-p2p-public-path-review.md) · [Payer t030](https://github.com/xsw932187210-cell/chi-agent/blob/fdff6cff629a6c7ccd0de0d37bdc18d92ff8a57d/chi-agent/reviews/c1-c3-admission-package-review.md#3-payer-010及后继的事实链)
+
+### 3. 源码、命令与容器
 
 - `src/chi_agent/` 收两种包原显式清单中 Python 源文件的并集。包内使用相对导入，包外使用限定模块名。将源码安装路径和 Compose 的源码挂载对齐 `/workspace`。从根目录运行的包外 Python 入口使用 `python -m scripts.<目录>.<模块>`。保留两个运行环境中的路径校验与身份检查。
 - `scripts/development/` 保留当前角色调度依赖的开发功能，含仍被调度调用的旧开发采集逻辑。`scripts/experiments/` 保留早期探针、演练和旧版操作者。`scripts/tools/` 提供构建、检查与汇总命令。仓库内的旧路径以本页对照迁移，导出包的兼容入口按下节维护。
 - 按显式文件映射调整 controller、开发 runner 和 CM world 的挂载。现有 `dev_sha256` 的键继续用于验证对应的已更名文件，哈希按实际新版字节生成。继续仅挂载各容器使用的开发文件，保留 CM world 的 `cb` 入口、runner 和 world 的权限边界。同步测试用导入、动态导入、子进程命令和模块归属检查。
 - 干净检出的测试可将原 checkout 的固定 vendor 源码只读挂到容器约定路径。原目录下的本地输入和运行产物留在原处。工作流注明在新根目录使用调用方提供的有效资源路径，已有运行可用对应冻结 checkout 或只读汇总入口查阅。
 
-### 3. 两种导出包与身份兼容
+### 4. 两种导出包与身份兼容
 
 | 导出包 | 新 manifest schema | 新 bundle ID | 保留的启动入口 |
 | --- | --- | --- | --- |
@@ -36,11 +50,16 @@
 - 当前迁移基线的 v1 包可由新版工具校验。历史包继续配原导出程序、依赖与冻结的开发配置运行。新版开发调度使用新版 bundle 和匹配的配置哈希。两代包各自从其清单和依赖计算身份，新包需要独立准入。六题证据、已知失败、未结算记录和旧 B 收据继续绑定原身份。
 - `scripts/tools/inspect_imports.py` 扫描限定模块名和函数内导入，并按两个显式清单检查包内闭包。维护者可以从设计中的迁移表核对模块归属。选择显式映射可以同时审阅仓库路径和导出边界。
 
+### 5. 验证入口与记录
+
+- `scripts/tools/verify_offline.sh` 是运行手册中的常规离线入口。开发镜像内一次执行完整 pytest，收集适用的 unittest 和 pytest 用例。Controller 镜像只执行它独有的专项检查。两种包各构建、校验并做一次隔离预检。
+- 布局迁移 PR 还复验 v1 兼容、成员篡改拒绝、角色挂载和合成 Harbor 启动。复用现有测试与演练。PR 描述集中记录通过、失败、跳过和环境限制。
+
 ## Risks / Trade-offs
 
 - 路径变动分布在代码、Compose、包构建器和 Harbor 适配器中。按已固定清单完成迁移，通过隔离导出的启动测试验证路径接线。
 - 两代包的 manifest 需要保留两个成员集合。以基线生成的 v1 样本和新构建的 v2 样本验收，包含未知版本、成员不匹配及篡改反例。
-- 真实阶段结果与重排后的候选属于不同包身份。首页引用已发生的六题结果，PR 记录重排候选的离线验证。
+- 阶段结果来自不同的冻结候选。首页呈现累计开发覆盖和最新六题基线，重排候选的验证结果在 PR 中记录。
 
 ## Migration Plan
 
