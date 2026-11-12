@@ -1,0 +1,1206 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "truncated",
+      "role": "payer",
+      "options": {
+        "output_recovery": "chi-output-recovery-v1"
+      },
+      "tools": [
+        "triage.get"
+      ],
+      "events": [
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "unfinished",
+                      "type": "function",
+                      "function": {
+                        "name": "triage__get",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "length"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "model",
+          "purpose": "continuation",
+          "accepted_ids": [],
+          "no_tool_calls": true,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "fresh",
+                      "type": "function",
+                      "function": {
+                        "name": "triage__get",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "triage.get",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "fresh"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "done"
+                },
+                "finish_reason": "stop"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        }
+      ],
+      "assertions": {
+        "dispatches": [
+          "triage.get"
+        ],
+        "requests/0/status": "settled",
+        "requests/1/purpose": "continuation",
+        "tool_events/0/call_id": "fresh",
+        "claim": false,
+        "outcome": "complete",
+        "requests/0/purpose": "main",
+        "requests/1/status": "settled",
+        "tool_events/1/event": "returned"
+      }
+    },
+    {
+      "id": "unknown_write",
+      "role": "payer",
+      "options": {},
+      "tools": [
+        "payer_intake_hub.confirm_decisions"
+      ],
+      "events": [
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "write1",
+                      "type": "function",
+                      "function": {
+                        "name": "payer_intake_hub__confirm_decisions",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "payer_intake_hub.confirm_decisions",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "timeout"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "write1"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "write2",
+                      "type": "function",
+                      "function": {
+                        "name": "payer_intake_hub__confirm_decisions",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "write2"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "claim",
+                      "type": "function",
+                      "function": {
+                        "name": "local-claim_done",
+                        "arguments": "{}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "claim"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "done"
+                },
+                "finish_reason": "stop"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        }
+      ],
+      "assertions": {
+        "dispatches": [
+          "payer_intake_hub.confirm_decisions"
+        ],
+        "unknowns": [
+          "open"
+        ],
+        "claim": false,
+        "outcome": "chi_unknown_write_effect",
+        "tool_events/1/event": "failed",
+        "tool_events/2/call_id": "write2",
+        "tool_events/2/event": "refused",
+        "completion/reason": "completion_blocked_unknown:u1"
+      }
+    },
+    {
+      "id": "readback_missing",
+      "role": "payer",
+      "options": {
+        "context_policy": "chi-context-v3"
+      },
+      "tools": [
+        "payer_intake_hub.get_intake_case",
+        "triage.get",
+        "review.get_nurse_review_data",
+        "review.submit_nurse_case_recommendation",
+        "determination.get_summary"
+      ],
+      "events": [
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "bind",
+                      "type": "function",
+                      "function": {
+                        "name": "local-fs-read",
+                        "arguments": "{\"path\": \"$WORKSPACE/CASE-A/payer/input.txt\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "bind"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c1",
+                      "type": "function",
+                      "function": {
+                        "name": "payer_intake_hub__get_intake_case",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "payer_intake_hub.get_intake_case",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c1"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c2",
+                      "type": "function",
+                      "function": {
+                        "name": "triage__get",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "triage.get",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c2"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c3",
+                      "type": "function",
+                      "function": {
+                        "name": "review__get_nurse_review_data",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "review.get_nurse_review_data",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c3"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c4",
+                      "type": "function",
+                      "function": {
+                        "name": "review__submit_nurse_case_recommendation",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "review.submit_nurse_case_recommendation",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c4"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "claim",
+                      "type": "function",
+                      "function": {
+                        "name": "local-claim_done",
+                        "arguments": "{}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "claim"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "done"
+                },
+                "finish_reason": "stop"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        }
+      ],
+      "assertions": {
+        "dispatches": [
+          "payer_intake_hub.get_intake_case",
+          "triage.get",
+          "review.get_nurse_review_data",
+          "review.submit_nurse_case_recommendation"
+        ],
+        "claim": false,
+        "outcome": "chi_claim_required",
+        "completion/reason": "completion_readback_required:c4",
+        "tool_events/11/event": "refused"
+      }
+    },
+    {
+      "id": "readback_ok",
+      "role": "payer",
+      "options": {
+        "context_policy": "chi-context-v3"
+      },
+      "tools": [
+        "payer_intake_hub.get_intake_case",
+        "triage.get",
+        "review.get_nurse_review_data",
+        "review.submit_nurse_case_recommendation",
+        "determination.get_summary"
+      ],
+      "events": [
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "bind",
+                      "type": "function",
+                      "function": {
+                        "name": "local-fs-read",
+                        "arguments": "{\"path\": \"$WORKSPACE/CASE-A/payer/input.txt\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "bind"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c1",
+                      "type": "function",
+                      "function": {
+                        "name": "payer_intake_hub__get_intake_case",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "payer_intake_hub.get_intake_case",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c1"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c2",
+                      "type": "function",
+                      "function": {
+                        "name": "triage__get",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "triage.get",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c2"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c3",
+                      "type": "function",
+                      "function": {
+                        "name": "review__get_nurse_review_data",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "review.get_nurse_review_data",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c3"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c4",
+                      "type": "function",
+                      "function": {
+                        "name": "review__submit_nurse_case_recommendation",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "review.submit_nurse_case_recommendation",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c4"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "c5",
+                      "type": "function",
+                      "function": {
+                        "name": "determination__get_summary",
+                        "arguments": "{\"case_id\": \"CASE-A\"}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "mcp",
+          "tool": "determination.get_summary",
+          "arguments": {
+            "case_id": "CASE-A"
+          },
+          "result": "ok"
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "c5"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "status",
+                      "type": "function",
+                      "function": {
+                        "name": "local-state-update",
+                        "arguments": "{\"latest_business_status\": {\"text\": \"nurse recommendation submitted\", \"source_call_id\": \"c5\"}}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "status"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": null,
+                  "reasoning_content": "reason",
+                  "tool_calls": [
+                    {
+                      "id": "claim",
+                      "type": "function",
+                      "function": {
+                        "name": "local-claim_done",
+                        "arguments": "{}"
+                      }
+                    }
+                  ]
+                },
+                "finish_reason": "tool_calls"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        },
+        {
+          "type": "model",
+          "purpose": "main",
+          "accepted_ids": [
+            "claim"
+          ],
+          "no_tool_calls": false,
+          "response": {
+            "id": "synthetic",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "deepseek-v4.1-flash",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "done"
+                },
+                "finish_reason": "stop"
+              }
+            ],
+            "usage": {
+              "prompt_tokens": 3,
+              "completion_tokens": 2,
+              "total_tokens": 5,
+              "cost": 0,
+              "opencode": {
+                "billing_source": "go",
+                "list_cost": 0.1,
+                "allowance": 0.1
+              }
+            }
+          }
+        }
+      ],
+      "assertions": {
+        "dispatches": [
+          "payer_intake_hub.get_intake_case",
+          "triage.get",
+          "review.get_nurse_review_data",
+          "review.submit_nurse_case_recommendation",
+          "determination.get_summary"
+        ],
+        "claim": true,
+        "outcome": "complete",
+        "completion/verification": "mechanical_pass",
+        "verified_status_call_id": "c5",
+        "tool_events/9/event": "returned",
+        "tool_events/11/event": "returned",
+        "tool_events/15/event": "returned"
+      }
+    }
+  ]
+}
