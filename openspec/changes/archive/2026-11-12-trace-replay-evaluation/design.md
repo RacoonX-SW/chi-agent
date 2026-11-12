@@ -2,9 +2,9 @@
 
 ## Context
 
-- [`inspect-history`](../../../src/chi_agent/journal.py) 从既有账本与证据重建发送视图，服务于原运行的完整性复核。
-- [实验工具](../experiment-harness/specs/experiment-harness/spec.md) 固定对照条件、校验记录并汇总结果。本次新增的是执行用例和定位行为差异的入口。
-- [`run_chi`](../../../src/chi_agent/runtime.py) 已接受模型传输 `lower` 与 MCP `server_factory`。[SDK 恢复测试](../../../tests/test_go_chi_recovery_sdk.py) 通过这两个接缝运行实际 SDK 与程序逻辑。[完成核验测试](../../../tests/test_completion_gate.py) 提供 Payer 同案件写后回查的正反例。
+- `inspect-history` 从既有账本与证据重建发送视图，服务于原运行的完整性复核。[历史复核实现](../../../../src/chi_agent/journal.py)
+- 实验工具固定对照条件、校验记录并汇总结果。本次新增的是执行用例和定位行为差异的入口。[实验工具规格](../../experiment-harness/specs/experiment-harness/spec.md)
+- `run_chi` 已接受模型传输 `lower` 与 MCP `server_factory`。SDK 恢复测试通过这两个接缝运行实际 SDK 与程序逻辑。完成核验测试提供 Payer 同案件写后回查的正反例。[执行入口](../../../../src/chi_agent/runtime.py) · [SDK 恢复测试](../../../../tests/test_go_chi_recovery_sdk.py) · [完成核验测试](../../../../tests/test_completion_gate.py)
 
 ## Goals / Non-Goals
 
