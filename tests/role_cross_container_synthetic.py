@@ -36,7 +36,9 @@ copy(source / 'tests', root / 'tests')
 copy(source / 'vendor/chi-bench', root / 'vendor/chi-bench')
 copy(source / 'data/skills/managed-care-operations-handbook', root / 'data/skills/managed-care-operations-handbook')
 copy(source / 'runs/representative-role-baseline-root/resources/dataset', root / 'runs/representative-role-baseline-root/resources/dataset')
-copy(source / 'runs/unified-role-cm-lifecycle-root/evidence/history-copy-original', root / 'runs/opencode-go-development')
+(root / 'runs/opencode-go-development').mkdir()
+state_root = root / 'synthetic-state'
+state_root.mkdir()
 manifest_src = source / f'runs/representative-role-baseline-root/evidence/role-resources-{role}.json'
 manifest = root / f'runs/representative-role-baseline-root/evidence/role-resources-{role}.json'
 manifest.parent.mkdir(parents=True, exist_ok=True); shutil.copyfile(manifest_src, manifest)
@@ -61,14 +63,7 @@ env = {'PYTHONDONTWRITEBYTECODE': '1', 'PYTHONPATH': '/model-deps:/pdf-deps:/pac
 preflight = client.containers.run(image.id, ['/usr/local/bin/python', '-S', '/package/scripts/go_chi_entry.py', 'preflight', '--bundle-sha256', bundle_hash],
     volumes=common, environment=env, network_disabled=True, remove=True)
 identity = json.loads(preflight)['identity_sha256']
-baseline = json.loads((source / 'runs/unified-role-cm-lifecycle-root/evidence/history-baseline.json').read_bytes())
-qroot = root / 'runs/opencode-go-development'
-volumes = dict(common, **{hostpath(qroot): {'bind': '/prior-go', 'mode': 'rw'}})
-rebind = ['/usr/local/bin/python', '-S', '/package/scripts/go_chi_entry.py', 'rebind-history', '--bundle-sha256', bundle_hash,
-          '--history-mode', 'local', '--local-q-root', '/prior-go', '--output-root', '/prior-go/chi-evaluation',
-          '--expected-old-identity', baseline['identity'], '--expected-accounting-sha256', baseline['accounting_sha256'],
-          '--migration-reason', 'disposable synthetic HTTP integration copy']
-client.containers.run(image.id, rebind, volumes=volumes, environment=env, network_disabled=True, remove=True)
+volumes = dict(common, **{hostpath(state_root): {'bind': '/state', 'mode': 'rw'}})
 logs = root / 'b-logs'; logs.mkdir()
 volumes.update({hostpath(logs): {'bind': '/logs', 'mode': 'rw'},
     hostpath(root / 'tests/role_synthetic_runner.py'): {'bind': '/dev-scripts/synthetic.py', 'mode': 'ro'},
@@ -76,7 +71,7 @@ volumes.update({hostpath(logs): {'bind': '/logs', 'mode': 'rw'},
     hostpath(root / 'scripts/development/patient_broker.py'): {'bind': '/dev-scripts/scripts/development/patient_broker.py', 'mode': 'ro'}})
 b_command = ['/usr/local/bin/python', '-S', '/dev-scripts/synthetic.py', 'coding-b', '--bundle-sha256', bundle_hash,
              '--evaluation-id', 'synthetic-eval', '--task-id', 'synthetic-coding-b', '--attempt-id', 'b1', '--run-id', 'synthetic-b',
-             '--output-root', '/prior-go/chi-evaluation', '--logs-dir', '/logs/result', '--history-mode', 'local', '--local-q-root', '/prior-go']
+             '--output-root', '/state', '--logs-dir', '/logs/result', '--history-mode', 'external']
 b_env = dict(env, PYTHONPATH=env['PYTHONPATH'] + ':/dev-scripts', OPENCODE_API_KEY='synthetic-key')
 client.containers.run(image.id, b_command, volumes=volumes, environment=b_env, network_disabled=True, remove=True)
 
@@ -116,27 +111,27 @@ config = {'schema': 'chi-role-operator-v1', 'run_id': run_id, 'evaluation_id': '
           'dataset_relative': 'runs/representative-role-baseline-root/resources/dataset',
           'manifest_relative': f'runs/representative-role-baseline-root/evidence/role-resources-{role}.json',
           'manifest_sha256': digest(manifest), 'output_relative': 'result',
+          'history_mode': 'external', 'state_relative': 'synthetic-state',
           'dev_sha256': {name: digest(root / 'scripts/development' / file)
                          for name, file in role_operator.DEV_FILES.items()}, 'operator_timeout_seconds': 2040}
 config_path = root / 'config.json'; config_path.write_text(json.dumps(config, sort_keys=True))
 code = role_operator.main(['--config', str(config_path), '--config-sha256', digest(config_path)])
 result = json.loads((root / 'result/orchestration.json').read_bytes())
-if fail_patient:
-    assert code == 1 and result['status'] == 'failed' and result['primary_error'] == 'runner_failed', result
-else:
-    assert code == 0 and result['status'] == 'complete', result
+assert code == 1 and result['status'] == 'failed' and result['primary_error'] == 'runner_failed', result
 assert result['world_quiescence'] == 'confirmed' and result['cleanup'] == {'runner': 'removed', 'world': 'removed', 'network': 'removed', 'client': 'closed'}
 assert type(result['elapsed_ms']) is int and result['elapsed_ms'] >= 0
 assert result['capture_error'] is None and result['capture']['final']['status'] == 'ready'
 assert not (root / 'result/world-supply/capability').exists()
-state = json.loads((qroot / 'chi-evaluation/chi-accounting.json').read_bytes())
+state = json.loads((state_root / 'chi-accounting.json').read_bytes())
 run = next(a for a in state['attempts'] if a['run'] == run_id)
+if not fail_patient:
+    assert run['safe_error_code'] == 'chi_claim_required' and not run['claim_done']
 if role != 'cm':
     assert all(r['purpose'] == 'main' and r['status'] == 'settled' for r in run['requests'])
     assert len(run['requests']) == (2 if role == 'provider' else 3)
     if role == 'payer':
         assert result['payer_projection'] == {'status': 'ready', 'count': 4}
-        doc = json.loads((qroot / f'chi-evaluation/tool-evidence/{run_id}/call_2.json').read_bytes())
+        doc = json.loads((state_root / f'tool-evidence/{run_id}/call_2.json').read_bytes())
         assert isinstance(doc['body_utf8'], str) and doc['body_utf8'].strip() and not doc['body_utf8'].startswith('ERROR:')
     print(json.dumps({'status': 'passed', 'role': role, 'synthetic_http_only': True, 'external_network': False,
                       'bundle_sha256': bundle_hash, 'identity_sha256': identity, 'official_reward': None}))
@@ -157,7 +152,7 @@ else:
 result_metrics = json.loads((root / 'result/runner-logs/result/run_result.json').read_bytes())
 assert (result_metrics['turns'], result_metrics['input_tokens'], result_metrics['output_tokens']) == ((5, 15, 10) if fail_patient else (6, 18, 12))
 if not fail_patient:
-    wire = qroot / 'chi-evaluation/wire-evidence/synthetic-cm/007-request.json'
+    wire = state_root / 'wire-evidence/synthetic-cm/007-request.json'
     final_request = json.loads(json.loads(wire.read_bytes())['body_utf8'])
     assert 'Already sent before this request: 5.' in final_request['messages'][0]['content']
 print(json.dumps({'status': 'passed', 'synthetic_http_only': True, 'external_network': False,

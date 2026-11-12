@@ -21,7 +21,7 @@ if HARBOR_AVAILABLE:
 @unittest.skipUnless(HARBOR_AVAILABLE, "Harbor controller overlay not installed")
 class RealHarborTests(unittest.IsolatedAsyncioTestCase):
     def logs_fixture(self, root):
-        agent = AgentFactory.create_agent_from_import_path("go_chi_harness:GoChiHarness", root)
+        agent = AgentFactory.create_agent_from_import_path("chi_agent.harbor_adapter:GoChiHarness", root)
         agent._runner_succeeded = True
         agent._instruction_sha256 = hashlib.sha256(b"synthetic instruction").hexdigest()
         logs = root / "chi-run"
@@ -105,7 +105,7 @@ class RealHarborTests(unittest.IsolatedAsyncioTestCase):
                      "CHI_GO_ATTEMPT_ID": "a", "CHI_GO_RUN_ID": "r", "CHI_GO_BUNDLE_SHA256": "a" * 64,
                      "CHI_GO_HISTORY_MODE": "external"}
             agent = AgentFactory.create_agent_from_import_path(
-                "go_chi_harness:GoChiHarness", path, extra_env=extra,
+                "chi_agent.harbor_adapter:GoChiHarness", path, extra_env=extra,
                 mcp_servers=[MCPServerConfig(name="provider", url="http://world:8020/mcp")])
             self.assertIsInstance(agent, BaseInstalledAgent)
             context = AgentContext()

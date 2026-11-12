@@ -54,7 +54,7 @@ python /package/scripts/go_chi_entry.py live \
   --tool-reference /input/tool_reference.md
 ```
 
-工作区和手册的默认路径为 `/logs/artifacts/workspaces` 和 `/workspace/skills/managed-care-operations-handbook`。本地接续模式使用 `--history-mode local --local-q-root /prior-go --output-root /prior-go/chi-evaluation`。通过 `inspect-history` 只读核对原身份和主账摘要。新包身份、旧账接续和真实调用按各自审批执行。
+工作区和手册的默认路径为 `/logs/artifacts/workspaces` 和 `/workspace/skills/managed-care-operations-handbook`。本地接续模式使用 `--history-mode local --local-q-root /prior-go --output-root /prior-go/chi-evaluation`。复核历史时，用该次运行的冻结包及依赖执行 `inspect-history`，核对原身份和主账摘要。新包准入、旧账接续和真实调用按各自审批执行。
 
 Go 默认使用 `deepseek-v4.1-flash`、`record_only` 和零自动重试。主请求默认输出上限 8192，可用 `--main-max-tokens` 明确覆盖。摘要和输出恢复默认关闭。保留所有已结算用量和未知状态，出现新未知时停止后续调用。开发结果的 `official_reward` 为 `null`。
 

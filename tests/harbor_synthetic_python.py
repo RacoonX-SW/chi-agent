@@ -30,9 +30,10 @@ class SyntheticTransport(httpx.AsyncBaseTransport):
             call = ("inspect_code", {}) if prior == 0 else (
                 "verify_patch", {"code": "def add(a, b):\n    return a + b\n"}) if prior == 1 else None
         else:
-            call = ("people__list_ordering_providers", {}) if prior == 0 else None
+            calls = [("people__list_ordering_providers", {}), ("local-claim_done", {})]
+            call = calls[prior] if prior < len(calls) else None
             if call and call[0] not in names:
-                raise RuntimeError("synthetic_readonly_tool_missing")
+                raise RuntimeError("synthetic_tool_missing")
         message = {"role": "assistant", "content": "synthetic complete"}
         finish = "stop"
         if call:
@@ -56,14 +57,8 @@ target = sys.argv.pop(1)
 if "coding-b" in sys.argv:
     os.environ["OPENCODE_API_KEY"] = "synthetic-harbor-key-only"
 scenario_path = "/test/scenario"
-scenario = open(scenario_path).read().strip() if os.path.exists(scenario_path) else "success"
+scenario = open(scenario_path).read().strip() if os.path.exists(scenario_path) else "claim-blocked"
 if "live" in sys.argv and scenario == "runner-nonzero":
     raise SystemExit(23)
 sys.argv[0] = target
-try:
-    runpy.run_path(target, run_name="__main__")
-except SystemExit as exc:
-    if "live" in sys.argv and scenario == "corrupt-trace" and exc.code == 0:
-        with open("/logs/agent/chi-run/trace.jsonl", "w") as trace:
-            trace.write("synthetic-corrupt-trace\n")
-    raise
+runpy.run_path(target, run_name="__main__")

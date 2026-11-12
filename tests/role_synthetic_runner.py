@@ -47,7 +47,11 @@ async def development(journal, secret, run_chi, kwargs):
                 return response(request, {'role': 'assistant', 'content': 'Synthetic transport completed.'})
         elif main_count == 1: name, args = 'cm_intake__list_referral_queue', {}
         elif main_count == 2:
-            name, args = 'cm_intake__open_case', {'referral_id': choose('referral_id', last), 'priority': 'standard', 'program': 'chronic_disease'}
+            # The context reducer omits referral IDs in long queues. Use the
+            # synthetic world's own recorded tool result for fixture selection.
+            evidence = journal.root / 'tool-evidence' / journal.run_id / 'call_1.json'
+            referrals = json.loads(json.loads(evidence.read_bytes())['body_utf8'])['result']
+            name, args = 'cm_intake__open_case', {'referral_id': referrals[0]['referral_id'], 'priority': 'standard', 'program': 'chronic_disease'}
         elif main_count == 3:
             case = choose('case_id', last)
             name, args = 'cm_chart__submit_chart_review', {'case_id': case, 'review': {}}

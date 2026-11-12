@@ -19,7 +19,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--out", type=Path, required=True)
 parser.add_argument("--bundle", type=Path, required=True)
 parser.add_argument("--image", required=True)
-parser.add_argument("--scenario", choices=("success", "runner-nonzero", "corrupt-trace"), required=True)
+parser.add_argument("--scenario", choices=("claim-blocked", "runner-nonzero"), required=True)
 args = parser.parse_args()
 ROOT = args.out
 TASK = ROOT / "pa_t018_t018_o001_p01_new_referral_provider"
@@ -86,24 +86,13 @@ async def main():
     trial.add_hook(TrialEvent.AGENT_END, after_agent)
     old = os.environ.get("OPENCODE_API_KEY")
     os.environ["OPENCODE_API_KEY"] = "synthetic-harbor-key-only"
-    escaped = None
     try:
-        try:
-            result = await trial.run()
-        except Exception as exc:
-            escaped = exc
-            result = trial.result
+        result = await trial.run()
     finally:
         if old is None:
             os.environ.pop("OPENCODE_API_KEY", None)
         else:
             os.environ["OPENCODE_API_KEY"] = old
-    if escaped is not None and not (args.scenario == "corrupt-trace"
-            and type(escaped) is RuntimeError and str(escaped) == "chi_runner_logs_invalid"
-            and result.exception_info is not None
-            and result.exception_info.exception_type == "RuntimeError"
-            and result.exception_info.exception_message == str(escaped)):
-        raise RuntimeError("synthetic_unexpected_escaped_exception") from escaped
     if result.finished_at is None or not trial.paths.result_path.is_file():
         raise RuntimeError("synthetic_trial_not_finalized")
     persisted = TrialResult.model_validate_json(trial.paths.result_path.read_text())
@@ -126,11 +115,17 @@ async def main():
         if result.exception_info else None, "agent_result": result.agent_result.model_dump()
         if result.agent_result else None, "verifier": result.verifier_result.model_dump()
         if result.verifier_result else None, "synthetic_key_leaked": False}, default=str, sort_keys=True))
-    expected = {"runner-nonzero": "chi_runner_failed", "corrupt-trace": "chi_runner_logs_invalid"}
-    message = result.exception_info.exception_message if result.exception_info else ""
-    if (args.scenario == "success" and result.exception_info is not None
-            or args.scenario != "success" and message != expected[args.scenario]):
-        raise SystemExit(1)
+    if result.exception_info is None or result.exception_info.exception_message != "chi_runner_failed":
+        raise RuntimeError("synthetic_runner_failure_missing")
+    summary_path = trial.paths.result_path.parent / "agent/chi-exec-summary.json"
+    summary = json.loads(summary_path.read_text())
+    if args.scenario == "claim-blocked":
+        state = json.loads((ROOT / "state/chi-accounting.json").read_text())
+        run = next(attempt for attempt in state["attempts"] if attempt["run"] == "c")
+        assert summary["safe_error_code"] == "chi_claim_required" and not run["claim_done"]
+        assert len(run["requests"]) == 3 and all(req["status"] == "settled" for req in run["requests"])
+    else:
+        assert summary["return_code"] == 23
 
 
 asyncio.run(main())
