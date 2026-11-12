@@ -26,3 +26,15 @@ docker compose run --rm --no-deps dev python -m chi_agent.bundle build --target 
 | [scripts/experiments](scripts/experiments/) | 早期探针、基线和实验 |
 | [scripts/tools](scripts/tools/) | 构建、检查和运行汇总 |
 | [tests](tests/) · [openspec](openspec/) | 回归测试和行为规格 |
+
+### 离线合成轨迹回放
+
+在项目 Python 3.12 开发镜像内，按 `scripts/tools/verify_offline.sh` 的依赖和只读源码挂载方式并禁用网络，提供可写的 `/out`，按以下命令运行。
+
+```sh
+python -m scripts.tools.replay_trace run --suite tests/fixtures/trace_replay_suite.json --output-dir /out/replay-baseline
+python -m scripts.tools.replay_trace run --suite tests/fixtures/trace_replay_suite.json --output-dir /out/replay-candidate
+python -m scripts.tools.replay_trace compare --baseline /out/replay-baseline/report.json --candidate /out/replay-candidate/report.json
+```
+
+每次 `run` 必须使用尚不存在的输出目录。报告汇总合成用例分母和实际观测的派发、状态及完成声明，附源码与环境身份。
