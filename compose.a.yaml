@@ -1,0 +1,21 @@
+services:
+  a-control:
+    build:
+      context: .
+      dockerfile: docker/a/Dockerfile
+    image: chi-agent-a-control:latest
+    working_dir: /workspace
+    environment:
+      A_PROJECT_ROOT: /workspace
+      HOST_PROJECT_ROOT: ${PWD}
+      DOCKER_HOST: unix:///var/run/docker.sock
+      PYTHONPATH: /workspace
+    volumes:
+      - ./scripts/development/world_environment.py:/workspace/scripts/development/world_environment.py:ro
+      - ./scripts/experiments/probe_official_tools.py:/workspace/scripts/experiments/probe_official_tools.py:ro
+      - ./docker/a:/workspace/docker/a:rw
+      - ./vendor:/workspace/vendor:ro
+      - ./data:/workspace/data:rw
+      - ./runs:/workspace/runs:rw
+      - ${DOCKER_HOST_SOCKET:-/Users/asaki/.docker/run/docker.sock}:/var/run/docker.sock
+    command: ["sleep", "infinity"]

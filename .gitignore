@@ -16,4 +16,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
+dist/
+build/
 .DS_Store
+
+# Legacy local checkout and its data remain outside the new project root
+/chi-agent/

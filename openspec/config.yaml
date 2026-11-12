@@ -1,0 +1,9 @@
+schema: spec-driven
+
+context: |
+  CHI Agent 为 CHI-Bench 提供 Provider、Payer 与 CM 三角色的自主 Agent、开发操作者和独立导出包。
+  当前授权、累计结果、候选身份和未决事项见 openspec/REVIEW_STATE.md。开发完成声明、确定性检查与官方评分分别记录。
+  安装、下载、测试和执行在 Docker 内进行，基线 Python 3.12。运行命令见根 README 和 docs 里的两份包手册。
+  根 AGENTS.md 记录协作、提案审批、GitHub 交付及资源约定。运行用凭据、原始轨迹、数据、手册和 vendor 留在本地。
+  Agent 输入只含调用方授权的公开任务材料和当前工作区。评分期望、隐藏参考和 verifier 材料留在评审侧。
+  规格定义可观察行为和 Given/When/Then 场景。设计取舍写入 design.md，实施和验证只在 tasks.md 跟踪。

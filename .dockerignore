@@ -1,0 +1,19 @@
+.git
+.github
+.env*
+runs/
+data/
+vendor/
+.coordination/
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.DS_Store
+
+# Exclude the entire legacy local project, including ignored data
+/chi-agent/

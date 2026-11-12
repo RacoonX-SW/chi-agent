@@ -1,16 +1,28 @@
-# CHI Agent
+# CHI Workflow Agent
 
-面向 Kaggle CHI-Bench 竞赛的 Agent 开发仓库。保存源码、OpenSpec、学习及验收记录；D0 离线工程与 A 只读工具接入已独立验证，尚无自主 Agent 任务、官方分数或已验收的完整 Agent。
+面向 CHI-Bench 的医疗行政工作流 Agent，支持医疗机构授权申请（Provider）、保险方审查（Payer）和照护管理（CM）。Agent 通过官方 MCP 工具处理任务，程序负责上下文预算、工具调用校验、完成核验和可追溯的运行记录。[CHI-Bench](https://github.com/actava-ai/chi-bench)
 
-- [项目状态与参赛路线](chi-agent/README.md)
-- [第一阶段任务与验收交接](chi-agent/openspec/changes/bootstrap-baseline/handoff.md)
-- [边参赛边学习的约定](chi-agent/docs/learning-agreement.md)
-- [GitHub 存储与协作约定](chi-agent/docs/github-workflow.md)
+## 阶段成果
 
-保留现有目录结构：本仓库根目录对应本机 `Kaggle/`，项目代码位于 `chi-agent/`。接续开发先读取 [AGENTS.md](AGENTS.md) 和 [COLLABORATION.md](COLLABORATION.md)。
+在 75 个公开任务中，已核对至少 **20 个不同任务**有真实模型开发运行记录，覆盖 Provider 10 个、Payer 6 个和 CM 4 个。最近一组 `16384` 基线覆盖 Payer t022、t023、t024 和 CM anorexia、CKD、asthma。六题均提交完成声明并通过历史检查。各结果对应当时的冻结版本，`official_reward=null`。[成果证据](openspec/REVIEW_STATE.md#开发成果)
 
-后续代码和文档先在 `codex/<任务名>` 工作分支开发，由 Codex 推送并创建目标为 `main` 的 PR，用户审核后决定是否合并。Codex 不直接开发/推送 main，也不自行合并；具体见 [GitHub 协作约定](chi-agent/docs/github-workflow.md)。
+## Docker 快速开始
 
-D0 已通过离线代码验收；本轮仅恢复 A 官方环境与无模型只读工具接入，实际证据见 [A 审核](chi-agent/reviews/bootstrap-baseline-a-review.md)。B/C、参赛模型 API 和官方判分仍暂停。分支 push、PR 创建、独立检查与用户合并分别记录，不等于已向 Kaggle 提交参赛材料。
+在仓库根目录构建 Python 3.12 开发镜像，导出 Go 程序包到尚不存在的目录。
 
-手册、数据集、凭据、本地环境和真实运行产物只保存在本地，不纳入仓库。已有验收记录中的模拟观察不是真实 trial 结果。
+```sh
+docker compose build dev
+docker compose run --rm --no-deps dev python -m chi_agent.bundle build --target /workspace/dist
+```
+
+`dist/` 包含启动入口、依赖锁和 `bundle-manifest.json`。两种程序包各有一份手册，涵盖外部依赖、预检和运行。[Go](docs/go-chi-entry-runbook.md) · [兼容评测](docs/evaluation-entry-runbook.md)
+
+## 项目结构
+
+| 路径 | 用途 |
+| --- | --- |
+| [src/chi_agent](src/chi_agent/) | Agent 运行、MCP、上下文、账本和导出包 |
+| [scripts/development](scripts/development/) | 开发调度、资源检查和患者模拟 |
+| [scripts/experiments](scripts/experiments/) | 早期探针、基线和实验 |
+| [scripts/tools](scripts/tools/) | 构建、检查和运行汇总 |
+| [tests](tests/) · [openspec](openspec/) | 回归测试和行为规格 |
