@@ -17,10 +17,15 @@ def test_provider_v3_branches_through_go_transport(tmp_path, action):
 
 
 def test_malformed_successful_submit_is_not_redispatched(tmp_path):
-    asyncio.run(_exercise(tmp_path, 'submit_pa', malformed=True))
+    asyncio.run(_exercise(tmp_path, 'submit_pa', submit_outcome='malformed'))
 
 
-async def _exercise(tmp_path, action, malformed=False):
+def test_submit_error_with_unknown_effect_is_not_redispatched(tmp_path):
+    asyncio.run(_exercise(tmp_path, 'submit_pa', submit_outcome='tool_error'))
+
+
+async def _exercise(tmp_path, action, submit_outcome='success'):
+    verified = submit_outcome == 'success'
     patient = {'id':'P1', 'dob':'1970-01-01', 'sex':'male'}
     order = {'id':'O1', 'patient_id':'P1', 'procedure_code':'12345', 'site_of_service':'office'}
     chart = {'patient':patient, 'orders':[order], 'summaries':['90 day treatment trial']}
@@ -51,7 +56,10 @@ async def _exercise(tmp_path, action, malformed=False):
                 value = {'case':case(), 'next_actions':[], 'message':'recorded'}
             elif name == 'docs.create_submission_bundle': value = {'bundle_document':{'id':'B1','case_id':'C1','patient_id':'P1','kind':'submission_bundle'},'readiness':{'ready_to_submit':True,'missing_items':[],'warnings':[]}}
             elif name == 'auth.submit_authorization':
-                status['value'] = 'draft' if malformed else 'submitted'; value = {'case':case(),'intake_case':{'id':'I1'}}
+                if submit_outcome == 'tool_error':
+                    from mcp.types import CallToolResult, TextContent
+                    return CallToolResult(isError=True, content=[TextContent(type='text', text='synthetic response error')])
+                status['value'] = 'submitted' if verified else 'draft'; value = {'case':case(),'intake_case':{'id':'I1'}}
             elif name == 'cases.get_case':
                 packets = [{'case_id':'C1','status':'submitted','payload':{'bundle_document_id':'B1'}}] if status['value'] == 'submitted' else []
                 value = {'case':case(),'patient':patient,'service_request':order,'submission_packets':packets}
@@ -77,8 +85,8 @@ async def _exercise(tmp_path, action, malformed=False):
     else:
         calls += [('blocked_bundle','docs__create_submission_bundle',{'case_id':'C1','document_ids':[]}),
                   ('blocked_submit','auth__submit_authorization',{'case_id':'C1','channel':'portal','bundle_document_id':'B1'})]
-    if malformed:
-        calls += [('submit_again','auth__submit_authorization',{'case_id':'C1','channel':'portal','bundle_document_id':'B1'})]
+    if not verified:
+        calls += [('submit_again','auth__submit_authorization',{'case_id':'C1','channel':'fax','bundle_document_id':'B1'})]
     calls += [('readback','cases__get_case',{'case_id':'C1'}), ('claim','local-claim_done',{})]
     main = iter(calls)
     async def reply(request):
@@ -102,7 +110,7 @@ async def _exercise(tmp_path, action, malformed=False):
     try:
         async def run():
             return await run_chi(journal,'synthetic-secret',role='provider',instruction='90 day treatment trial',mcp_url='http://synthetic.invalid/mcp',instruction_path=instruction,logs_dir=tmp_path/'logs',workspace_root=workspace,handbook_root=handbook,tool_references=[],lower=httpx.MockTransport(reply),server_factory=lambda _:server)
-        if malformed:
+        if not verified:
             from chi_agent.opencode_go_provider import GoFailure
             with pytest.raises(GoFailure, match='chi_claim_required'):
                 await run()
@@ -116,7 +124,7 @@ async def _exercise(tmp_path, action, malformed=False):
         assert 'provider_location_evidence_required' in by_id['wrong_site']
         assert 'provider_location_evidence_required' in by_id['wrong_service']
         assert 'provider_submit_decision_required' in by_id['early_bundle']
-        if malformed:
+        if not verified:
             assert 'provider_submission_outcome_unverified' in by_id['submit_again']
             assert 'completion_blocked_unknown:' in by_id['claim']
         else:
@@ -131,9 +139,9 @@ async def _exercise(tmp_path, action, malformed=False):
                 if type(anchor) is dict and anchor.get('schema') == 'chi-intent-anchor-v1':
                     stages.append(anchor['current_step'])
         assert 'verify_evidence' in stages
-        if not malformed:
+        if verified:
             assert 'verify_and_close' in stages
-        if action == 'submit_pa' and not malformed:
+        if action == 'submit_pa' and verified:
             assert stages.index('verify_evidence') < stages.index('prepare_packet') < stages.index('submit_or_defer') < stages.index('verify_and_close')
         elif action != 'submit_pa':
             assert 'prepare_packet' not in stages and 'submit_or_defer' not in stages
@@ -141,6 +149,8 @@ async def _exercise(tmp_path, action, malformed=False):
         run_log = tmp_path/'logs'/'run_log.txt'
         assert _read_run_log_checked(tmp_path/'logs') is not None
         original = json.loads(run_log.read_text())
+        if verified:
+            assert original['completion']['claim']['target'] == {'case_id': 'C1', 'patient_id': 'P1'}
         legacy = json.loads(json.dumps(original['completion']))
         legacy['completion_evidence'].pop('failed_terminal_objects')
         assert _is_completion(legacy)
@@ -151,7 +161,7 @@ async def _exercise(tmp_path, action, malformed=False):
         original['completion'] = blocked
         run_log.write_text(json.dumps(original))
         assert _read_run_log_checked(tmp_path/'logs') is not None
-        journal.finish('failed' if malformed else 'complete', error='chi_claim_required' if malformed else None); journal._validate('a'*64)
+        journal.finish('complete' if verified else 'failed', error=None if verified else 'chi_claim_required'); journal._validate('a'*64)
     finally: journal.close()
     raw = (root/'chi-accounting.json').read_bytes()
     assert inspect_history(root,'a'*64,hashlib.sha256(raw).hexdigest())['status'] == 'inspected'

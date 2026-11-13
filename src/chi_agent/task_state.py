@@ -688,6 +688,8 @@ class TaskState:
         if not self._provider_enabled:
             return None
         if tool == 'cases.create_from_order':
+            if self.data['target']['case_id'] is not None:
+                return 'provider_target_case_already_bound'
             return None if self._provider_location_matches(args) else 'provider_location_evidence_required'
         case_id = args.get('case_id')
         data = self.data['provider_pre_submission']
@@ -717,10 +719,16 @@ class TaskState:
         return None
 
     def _provider_observe(self, call_id, tool, args, result, event, provider_result=None):
-        if not self._provider_enabled or event != 'returned' or type(args) is not dict or type(result) is not str:
+        if not self._provider_enabled or type(args) is not dict or type(result) is not str:
             return
         data = self.data['provider_pre_submission']; pid = self.binding.bound
         existing = data['cases'].get(args.get('case_id'))
+        if event != 'returned':
+            if existing is not None and tool == 'auth.submit_authorization' and event in {'failed', 'returned_error'}:
+                existing['submit_attempted'] = True
+                existing['readback'] = None
+                self._register_unknown(self.data['observations'][-1])
+            return
         if existing is not None and tool == 'auth.submit_authorization':
             existing['submit_attempted'] = True
         if existing is not None and tool == 'docs.create_submission_bundle':
@@ -752,10 +760,13 @@ class TaskState:
             if (type(case) is dict and type(patient) is dict and type(order) is dict and
                     type(case.get('id')) is str and case.get('patient_id') == pid == patient.get('id') == order.get('patient_id')
                     and args.get('patient_id') == pid and case.get('service_request_id') == order.get('id')
+                    and order.get('procedure_code') == args.get('procedure_code')
+                    and _provider_site(order) == args.get('site_of_service')
                     and (not args.get('source_order_id') or args['source_order_id'] == order.get('id'))
                     and self.binding.cases.get(case['id']) == pid):
                 data['cases'][case['id']] = {'patient_id': pid, 'create_call_id': call_id,
                     'decision': None, 'bundle': None, 'submit': None, 'submit_attempted': False, 'readback': None, 'bundle_written': False}
+                self.data['target']['case_id'] = case['id']
             else:
                 self.binding.poisoned = True
                 raise GoFailure('provider_create_result_unverified')
@@ -769,7 +780,8 @@ class TaskState:
             review = data['reviews'].get(case_id)
             item['decision'] = None; item['readback'] = None; item['bundle'] = None
             if (type(case) is dict and case.get('id') == case_id and case.get('patient_id') == pid
-                    and action in expected and case.get('status') == expected[action] and review and review['action'] == action
+                    and action in expected and case.get('status') == expected[action]
+                    and value.get('final_action', action) == action and review and review['action'] == action
                     and self._provider_current(review['policy']) and self._provider_current(review['clinical'])):
                 item['decision'] = {'action': action, 'status': case['status'], 'call_id': call_id}
             else:

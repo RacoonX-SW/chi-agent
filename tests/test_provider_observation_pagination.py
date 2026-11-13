@@ -83,7 +83,9 @@ async def _exercise_transport(tmp_path, v3):
             self.calls.append((name, args))
             if name == 'chart.search_patients': return result(roster)
             if name == 'chart.get_patient_chart_by_patient': return result(chart)
-            return result({"case":{"id":"C1", "patient_id":"P0", "service_request_id":"O1"}, "patient":{"id":"P0"}, "service_request":{"id":"O1", "patient_id":"P0"}})
+            return result({"case":{"id":"C1", "patient_id":"P0", "service_request_id":"O1"},
+                           "patient":{"id":"P0"}, "service_request":dict(chart['orders'][0],
+                                                                          site_of_service=args.get('site_of_service'))})
     server = Server(); requests = []; confirm_wire = []; steps = []; delivered_pages = {}
     location_quote = '"site_of_service": "22"'
     location_page = None
