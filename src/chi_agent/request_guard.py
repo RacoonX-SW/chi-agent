@@ -35,7 +35,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                  claimed, confirmation, before_batch=None, observed_request=None, run_started=None,
                  billing_lock=None, fatal_getter=None, context_recorder=None, context_limit=DEFAULT_BUDGET,
                  recovery_blocker=None, canonical_tools=None, wire_recorder=None, summary_snapshot=None,
-                 main_max_tokens=8192, anchor_getter=None):
+                 main_max_tokens=8192, anchor_getter=None, delivered_request=None):
         if (type(secret) is not str or not secret.strip() or type(session) is not str
                 or not re.fullmatch(r"chi-[0-9a-f]{32}", session)
                 or type(system) is not str or type(instruction) is not str
@@ -95,6 +95,9 @@ class ChiGuard(httpx.AsyncBaseTransport):
         self.claimed, self.confirmation = claimed, confirmation
         self.before_batch = before_batch
         self.observed_request = observed_request
+        if delivered_request is not None and not callable(delivered_request):
+            raise GoFailure("chi_guard_invalid")
+        self.delivered_request = delivered_request
         self.error = None
         self.safe_cause = None
         self.billing_lock = billing_lock or asyncio.Lock()
@@ -712,6 +715,8 @@ class ChiGuard(httpx.AsyncBaseTransport):
                     or payload["usage"]["completion_tokens"] > self._expected_max_tokens(purpose)):
                 raise GoFailure("chi_usage_over_limit")
             recoverable = self._response(payload, purpose)
+            if self.delivered_request is not None and purpose in {"main", "continuation"}:
+                self.delivered_request(json.loads(raw)["messages"], len(self.journal.run["requests"]))
             self.safe_cause = None
             try:
                 self.journal.record_diagnostic("ok", int((time.monotonic() - start) * 1000))

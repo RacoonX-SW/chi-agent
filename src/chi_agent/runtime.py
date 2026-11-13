@@ -211,7 +211,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
         auxiliary.wire_recorder = record_wire
     run_started = time.monotonic()
     context = contextvars.ContextVar("chi_confirmation", default=None)
-    holder, exchanges = {}, []
+    holder, exchanges, delivered = {}, [], []
     binding = PatientBinding(instruction, journal) if role == "provider" else None
     state = (TaskState(logs_dir / "task-state", run=journal.run["run"], role=role, binding=binding,
                        requirements=requirements, instruction=instruction,
@@ -231,7 +231,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                                 tool_references=tool_references, handbook_root=handbook_root,
                                 journal=journal, binding=binding, guard_getter=lambda: holder.get("guard"),
                                 client_getter=lambda: holder.get("client"), confirmation_context=context,
-                                exchanges=exchanges, dispatch_lock=bridge.lock, instruction=instruction,
+                                exchanges=delivered if binding is not None else exchanges, dispatch_lock=bridge.lock, instruction=instruction,
                                 evidence_shadow=evidence_shadow, state=state, capabilities=capabilities,
                                 requirements=requirements,
                                 context_policy=journal.run['launch'].get('context_policy'))
@@ -286,6 +286,27 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                             exchanges.append({"call_id": call_id, "tool": fn["name"], "arguments": fn["arguments"],
                                               "result": content, "observed_at_request_round": used})
 
+            def delivered_request(messages, used):
+                # Use the transmitted view, not the unprojected source. A later
+                # request may deliver a page that was previously projected out.
+                records = {item["id"]: item for item in holder["guard"].contract.records}
+                for message in messages:
+                    if message.get("role") != "tool":
+                        continue
+                    call_id = message.get("tool_call_id")
+                    record = records.get(call_id)
+                    content = message.get("content")
+                    if record is None:
+                        continue
+                    if isinstance(content, list):
+                        content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+                    if type(content) is not str:
+                        continue
+                    entry = {"call_id": call_id, "tool": record["name"], "arguments": record["arguments"],
+                             "result": content, "observed_at_request_round": used}
+                    if not any(e["call_id"] == call_id and e["result"] == content for e in delivered):
+                        delivered.append(entry)
+
             session = "chi-" + uuid.uuid4().hex
             def summary_snapshot():
                 from copy import deepcopy
@@ -300,7 +321,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                              context_recorder=record_context, context_limit=context_budget,
                              recovery_blocker=recovery_blocker, canonical_tools=canonical_tools,
                              wire_recorder=record_wire, summary_snapshot=summary_snapshot,
-                             main_max_tokens=main_max_tokens,
+                             main_max_tokens=main_max_tokens, delivered_request=delivered_request if binding is not None else None,
                              anchor_getter=((lambda: state.anchor()) if state is not None
                                             and journal.run['launch'].get('context_policy') == 'chi-context-v3'
                                             else None))

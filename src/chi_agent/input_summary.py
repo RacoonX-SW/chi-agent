@@ -112,15 +112,31 @@ def verify_tool_actions(records, events, canonical_tools, *, root, run):
         result_hash = hashlib.sha256(record['result'].encode()).hexdigest()
         if (first.get('tool') != canonical or last.get('tool') != canonical
                 or first.get('arguments_sha256') != hashlib.sha256(encoded).hexdigest()
-                or last.get('result_sha256') != result_hash
                 or last.get('event') not in {'returned', 'returned_error', 'refused'}
                 or (effect == 'mutation' and last.get('event') == 'returned_error')):
             raise ValueError('chi_summary_unavailable')
         evidence = verify_tool(root, run, record['id'], last['result_evidence_sha256'])
-        if (evidence.get('raw_sha256') != result_hash
-                or evidence.get('redaction') == 'secret_detected'
-                or (evidence.get('body_utf8') is not None and evidence['body_utf8'] != record['result'])):
+        source = evidence.get('body_utf8')
+        source_hash = last.get('result_sha256')
+        if (evidence.get('raw_sha256') != source_hash or evidence.get('redaction') == 'secret_detected'
+                or (source is not None and hashlib.sha256(source.encode()).hexdigest() != source_hash)):
             raise ValueError('chi_summary_unavailable')
+        if result_hash != source_hash:
+            # Only the initial Provider roster projection has an independently
+            # reproducible view. Other differences retain the old refusal.
+            try:
+                from .patient_identity_binding import _digest, _eligible_roster, roster_page
+                if canonical != 'chart.search_patients' or last['event'] != 'returned' or type(source) is not str:
+                    raise ValueError
+                value = json.loads(source)
+                if not _eligible_roster(value, record['arguments']) or not value['items']:
+                    raise ValueError
+                canonical_source = json.dumps(value, ensure_ascii=False)
+                if roster_page(value['items'], _digest(canonical_source), 0) != record['result']:
+                    raise ValueError
+            except Exception:
+                raise ValueError('chi_summary_unavailable') from None
+        result_hash = source_hash
         actions.append({'call_id': record['id'], 'tool': record['name'], 'canonical_tool': canonical,
                         'arguments': copy.deepcopy(record['arguments']), 'result_sha256': result_hash,
                         'event': last['event']})
