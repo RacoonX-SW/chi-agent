@@ -68,6 +68,7 @@ LOCAL_EFFECTS = {
     "local-task-state": "neutral",
     "local-role-guidance": "neutral",
     "local-read-patient-observation": "read",
+    "local-read-patient-roster": "read",
     "local-fs-write": "mutation",
     "local-fs-edit": "mutation",
     "local-confirm-patient": "neutral",
@@ -173,7 +174,7 @@ def source_kind_for(role: str, tool: str, kind: str, scope: str, effect: str | N
             if scope == "shared_public":
                 return "policy_evidence"
             return "other_evidence"
-        if tool == "local-read-patient-observation":
+        if tool in {"local-read-patient-observation", "local-read-patient-roster"}:
             return "patient_evidence"
         if tool in NEUTRAL_LOCAL:
             return "neutral"

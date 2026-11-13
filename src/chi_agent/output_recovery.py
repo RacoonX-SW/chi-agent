@@ -21,7 +21,7 @@ REGENERATE = ('The previous response was interrupted by the output length limit.
 DIGEST = re.compile(r'^[0-9a-f]{64}$')
 
 READ = frozenset('''local-fs-read local-fs-list local-fs-search local-task-state local-role-guidance
-local-read-patient-observation local-completion-check local-evidence-sources local-evidence-excerpt
+local-read-patient-observation local-read-patient-roster local-completion-check local-evidence-sources local-evidence-excerpt
 local-evidence-check chart.get_patient_chart_by_patient chart.list_candidate_orders chart.search_patients
 cases.list_cases
 forms.list_required_forms forms.validate_form p2p_session.get_context people.list_contacts

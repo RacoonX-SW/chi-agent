@@ -21,7 +21,7 @@ EVIDENCE_SHADOW_MODES = {None, "off", "shadow"}
 CAPABILITIES = {None, "f0-f3-v1"}
 REQUIREMENTS_VERSIONS = {None, REQUIREMENTS_POLICY}
 OBSERVED_LOCAL = {"local-fs-read", "local-fs-list", "local-fs-search",
-                  "local-fs-write", "local-fs-edit", "local-read-patient-observation"}
+                  "local-fs-write", "local-fs-edit", "local-read-patient-observation", "local-read-patient-roster"}
 
 
 def local_tools(*, role, workspace_root, instruction_path, tool_references, handbook_root,
@@ -222,7 +222,14 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
     async def observation(args):
         from .patient_identity_binding import Refusal
         try:
-            return binding.read_observation(args["patient_id"], args["offset"])
+            return binding.read_observation(args["patient_id"], args["offset"], args.get("sha256"))
+        except Refusal as exc:
+            return "REFUSED: " + str(exc)
+
+    async def roster_page(args):
+        from .patient_identity_binding import Refusal
+        try:
+            return binding.read_roster(args["sha256"], args["offset"])
         except Refusal as exc:
             return "REFUSED: " + str(exc)
 
@@ -546,9 +553,10 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         ("local-claim_done", claim_description, empty, claim),
     ]
     if binding is not None:
-        from .patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION
+        from .patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION, ROSTER_DESCRIPTION
         defs.extend([
-            ("local-read-patient-observation", READ_DESCRIPTION, schema({"patient_id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}}, ["patient_id", "offset"]), observation),
+            ("local-read-patient-observation", READ_DESCRIPTION, schema({"patient_id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}, "sha256": {"type": "string"}}, ["patient_id", "offset"]), observation),
+            ("local-read-patient-roster", ROSTER_DESCRIPTION, schema({"sha256": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}}, ["sha256", "offset"]), roster_page),
             ("local-confirm-patient", CONFIRM_DESCRIPTION, schema({"patient_id": {"type": "string"}, "instruction_quote": {"type": "string", "minLength": 1}, "chart_quote": {"type": "string", "minLength": 1}}, ["patient_id", "instruction_quote", "chart_quote"]), confirm),
         ])
     if capabilities == "f0-f3-v1":
@@ -656,13 +664,17 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                 journal.start_tool(selected["id"], name, args)
                 try:
                     full_output = await callback(args)
-                    if warning:
+                    page_tool = name in {"local-read-patient-observation", "local-read-patient-roster"}
+                    if warning and not page_tool:
                         full_output = full_output + "\n" + warning
                     recorder = getattr(guard, "record_full_result", None)
                     if callable(recorder):
                         recorder(selected["id"], full_output)
-                    reduced, _reducer = reduce_tool_result(name, full_output)
-                    visible, truncation = truncate_tool_text(reduced, tool=name, arguments=args)
+                    if page_tool:
+                        visible = full_output
+                    else:
+                        reduced, _reducer = reduce_tool_result(name, full_output)
+                        visible, truncation = truncate_tool_text(reduced, tool=name, arguments=args)
                     guard.contract.record_result(selected["id"], visible)
                     journal.record_tool(selected["id"], name, full_output,
                                         event="refused" if full_output.startswith("REFUSED:") else "returned",

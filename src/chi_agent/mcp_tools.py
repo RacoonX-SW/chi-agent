@@ -87,6 +87,10 @@ class MCPBridge:
                 addition = append_description(canonical, description)
                 if addition is not None:
                     description = addition[0]
+                if canonical == "chart.search_patients":
+                    description += (" For patient confirmation, search without filters and set limit high enough "
+                                    "to return the complete roster. Follow the initial page next_offset with "
+                                    "local-read-patient-roster and its sha256 until null.")
             async def invoke(_context, payload, *, model_name=model_name):
                 guard = self.guard
                 call_id = getattr(_context, "tool_call_id", None)
@@ -246,13 +250,25 @@ class MCPBridge:
                     result = json.dumps(structured, ensure_ascii=False, allow_nan=False)
                 else:
                     result = json.dumps(value, ensure_ascii=False, allow_nan=False)
-                if warning:
+                page = None
+                if (self.binding is not None and canonical == "chart.search_patients" and not is_error
+                        and getattr(self.binding, "roster", None) is not None and self.binding.roster["call_id"] == selected["id"]
+                        and self.binding.roster["items"]):
+                    from .patient_identity_binding import _digest, Refusal
+                    try:
+                        page = self.binding.read_roster(_digest(self.binding.roster["text"]), 0)
+                    except Refusal as exc:
+                        page = "REFUSED: " + str(exc)
+                if warning and page is None:
                     result = result + "\n" + warning
                 recorder = getattr(self.guard, "record_full_result", None)
                 if callable(recorder):
                     recorder(selected["id"], result)
-                reduced, _reducer = reduce_tool_result(canonical, result)
-                visible, _truncation = truncate_tool_text(reduced, tool=canonical, arguments=args)
+                if page is not None:
+                    visible = page
+                else:
+                    reduced, _reducer = reduce_tool_result(canonical, result)
+                    visible, _truncation = truncate_tool_text(reduced, tool=canonical, arguments=args)
                 self.guard.contract.record_result(selected["id"], visible)
                 self.guard.journal.record_tool(selected["id"], canonical, result,
                                                event="returned_error" if is_error else "returned",
