@@ -24,13 +24,17 @@ def test_submit_error_with_unknown_effect_is_not_redispatched(tmp_path):
     asyncio.run(_exercise(tmp_path, 'submit_pa', submit_outcome='tool_error'))
 
 
-async def _exercise(tmp_path, action, submit_outcome='success'):
+def test_submission_requires_rebuilding_bundle_after_form_write(tmp_path):
+    asyncio.run(_exercise(tmp_path, 'submit_pa', form_changed=True))
+
+
+async def _exercise(tmp_path, action, submit_outcome='success', form_changed=False):
     verified = submit_outcome == 'success'
     patient = {'id':'P1', 'dob':'1970-01-01', 'sex':'male'}
     order = {'id':'O1', 'patient_id':'P1', 'procedure_code':'12345', 'site_of_service':'office'}
     chart = {'patient':patient, 'orders':[order], 'summaries':['90 day treatment trial']}
     roster = {'items':[patient], 'total':1}
-    status = {'value':'draft'}
+    status = {'value':'draft', 'bundle_id':None}
     events = []; wire = []
     class Server:
         async def __aenter__(self): return self
@@ -43,6 +47,7 @@ async def _exercise(tmp_path, action, submit_outcome='success'):
                     tool('cases.create_from_order', strprops('patient_id','source_order_id','procedure_code','description','site_of_service'), ['patient_id','source_order_id','procedure_code','description','site_of_service']),
                     tool('auth.finalize_provider_determination', strprops('case_id','final_action'), ['case_id','final_action']),
                     tool('docs.create_submission_bundle', {'case_id':{'type':'string'}, 'document_ids':{'type':'array','items':{'type':'string'}}}, ['case_id','document_ids']),
+                    tool('forms.save_form_response', strprops('case_id'), ['case_id']),
                     tool('auth.submit_authorization', strprops('case_id','channel','bundle_document_id'), ['case_id','channel','bundle_document_id']),
                     tool('cases.get_case', strprops('case_id'), ['case_id'])]
         async def call_tool(self, name, args):
@@ -54,14 +59,17 @@ async def _exercise(tmp_path, action, submit_outcome='success'):
             elif name == 'auth.finalize_provider_determination':
                 status['value'] = {'submit_pa':'ready_to_submit','gather_more_evidence':'docs_needed','do_not_submit':'closed'}[args['final_action']]
                 value = {'case':case(), 'next_actions':[], 'message':'recorded'}
-            elif name == 'docs.create_submission_bundle': value = {'bundle_document':{'id':'B1','case_id':'C1','patient_id':'P1','kind':'submission_bundle'},'readiness':{'ready_to_submit':True,'missing_items':[],'warnings':[]}}
+            elif name == 'docs.create_submission_bundle':
+                status['bundle_id'] = 'B2' if status['bundle_id'] else 'B1'
+                value = {'bundle_document':{'id':status['bundle_id'],'case_id':'C1','patient_id':'P1','kind':'submission_bundle'},'readiness':{'ready_to_submit':True,'missing_items':[],'warnings':[]}}
+            elif name == 'forms.save_form_response': value = {'case':case()}
             elif name == 'auth.submit_authorization':
                 if submit_outcome == 'tool_error':
                     from mcp.types import CallToolResult, TextContent
                     return CallToolResult(isError=True, content=[TextContent(type='text', text='synthetic response error')])
                 status['value'] = 'submitted' if verified else 'draft'; value = {'case':case(),'intake_case':{'id':'I1'}}
             elif name == 'cases.get_case':
-                packets = [{'case_id':'C1','status':'submitted','payload':{'bundle_document_id':'B1'}}] if status['value'] == 'submitted' else []
+                packets = [{'case_id':'C1','status':'submitted','payload':{'bundle_document_id':status['bundle_id']}}] if status['value'] == 'submitted' else []
                 value = {'case':case(),'patient':patient,'service_request':order,'submission_packets':packets}
             else: raise AssertionError(name)
             return SimpleNamespace(isError=False, structuredContent=value, content=[], model_dump=lambda **_: {'structuredContent':value,'content':[],'isError':False})
@@ -80,8 +88,12 @@ async def _exercise(tmp_path, action, submit_outcome='success'):
              ('decision','auth__finalize_provider_determination',{'case_id':'C1','final_action':action})]
     if action == 'submit_pa':
         calls += [('bundle','docs__create_submission_bundle',{'case_id':'C1','document_ids':[]}),
-                  ('before_submit','cases__get_case',{'case_id':'C1'}),
-                  ('submit','auth__submit_authorization',{'case_id':'C1','channel':'portal','bundle_document_id':'B1'})]
+                  ('before_submit','cases__get_case',{'case_id':'C1'})]
+        if form_changed:
+            calls += [('edit_form','forms__save_form_response',{'case_id':'C1'}),
+                      ('stale_bundle','auth__submit_authorization',{'case_id':'C1','channel':'portal','bundle_document_id':'B1'}),
+                      ('rebuild','docs__create_submission_bundle',{'case_id':'C1','document_ids':[]})]
+        calls += [('submit','auth__submit_authorization',{'case_id':'C1','channel':'portal','bundle_document_id':'B2' if form_changed else 'B1'})]
     else:
         calls += [('blocked_bundle','docs__create_submission_bundle',{'case_id':'C1','document_ids':[]}),
                   ('blocked_submit','auth__submit_authorization',{'case_id':'C1','channel':'portal','bundle_document_id':'B1'})]
@@ -117,13 +129,16 @@ async def _exercise(tmp_path, action, submit_outcome='success'):
         else:
             await run()
         assert len([e for e in events if e[0]=='cases.create_from_order']) == 1
-        assert len([e for e in events if e[0]=='docs.create_submission_bundle']) == (1 if action == 'submit_pa' else 0)
+        assert len([e for e in events if e[0]=='docs.create_submission_bundle']) == ((2 if form_changed else 1) if action == 'submit_pa' else 0)
         assert len([e for e in events if e[0]=='auth.submit_authorization']) == (1 if action == 'submit_pa' else 0)
         by_id = {m['tool_call_id']:m['content'] for body in wire for m in body['messages'] if m.get('role') == 'tool'}
         assert 'provider_location_evidence_required' in by_id['bad_create']
         assert 'provider_location_evidence_required' in by_id['wrong_site']
         assert 'provider_location_evidence_required' in by_id['wrong_service']
         assert 'provider_submit_decision_required' in by_id['early_bundle']
+        if form_changed:
+            assert 'provider_ready_bundle_required' in by_id['stale_bundle']
+            assert [args['bundle_document_id'] for name, args in events if name == 'auth.submit_authorization'] == ['B2']
         if not verified:
             assert 'provider_submission_outcome_unverified' in by_id['submit_again']
             assert 'completion_blocked_unknown:' in by_id['claim']

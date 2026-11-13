@@ -38,6 +38,7 @@ PROVIDER_ACTION_STATUS = {"submit_pa": "ready_to_submit", "gather_more_evidence"
 PROVIDER_SUBMITTED_STATUSES = frozenset({"submitted", "resubmitted", "under_review", "approved", "partially_approved", "denied", "pended_action_required", "appealed", "appeal_upheld", "appeal_overturned", "external_appealed", "external_appeal_upheld", "external_appeal_overturned", "closed"})
 PROVIDER_POS_CODES = {"11": "office", "21": "inpatient_hospital", "22": "outpatient_hospital", "19": "outpatient_hospital"}
 PROVIDER_CHART_PAGE = "local-read-patient-observation"
+PROVIDER_BUNDLE_INPUT_WRITES = frozenset({"forms.save_form_response", "docs.upload_evidence", "docs.upload_evidence_file"})
 PROVIDER_ORDER_FIELDS = {"chart.get_patient_chart_by_patient": "orders", "chart.list_candidate_orders": "items"}
 PROVIDER_CLINICAL_FIELDS = ("summaries", "conditions", "observations", "encounters", "orders",
                             "procedures", "medications", "allergies", "notes", "items")
@@ -736,6 +737,8 @@ class TaskState:
             existing['bundle'] = None
         if existing is not None and effect_for(tool, 'mcp') == 'mutation':
             existing['readback'] = None
+            if not existing['submit_attempted'] and tool in PROVIDER_BUNDLE_INPUT_WRITES:
+                existing['bundle'] = None
         if type(provider_result) is dict:
             value = provider_result
         else:
