@@ -145,8 +145,8 @@ def test_returned_usage_cap_settles_before_decision(tmp_path,role,limit,over):
 
 
 def test_time_policy_literal_contract():
-    assert TIME_POLICY=={'connect_seconds':30,'main_read_seconds':240,'confirmation_read_seconds':360,
-        'write_seconds':60,'pool_seconds':60,'main_io_seconds':300,'confirmation_io_seconds':420,
+    assert TIME_POLICY=={'connect_seconds':30,'main_read_seconds':300,'confirmation_read_seconds':360,
+        'write_seconds':60,'pool_seconds':60,'main_io_seconds':360,'confirmation_io_seconds':420,
         'b_admission_seconds':180,'chi_admission_seconds':1800,'b_operator_seconds':360,
         'chi_operator_seconds':1380,'operator_max_seconds':3600}
     assert DEFAULT_BUDGET['max_chars']==3500000 and DEFAULT_BUDGET['max_estimated_tokens']==1000000
@@ -212,7 +212,7 @@ def test_patient_probe_wire_type_and_full_chain(tmp_path,value,code):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize('role,read,wall',[('main',240,300),('confirmation',360,420),('patient',360,420)])
+@pytest.mark.parametrize('role,read,wall',[('main',300,360),('confirmation',360,420),('patient',360,420)])
 def test_actual_transport_timeout_by_purpose(tmp_path,role,read,wall):
     async def run():
         is_patient=role=='patient'
@@ -353,8 +353,8 @@ def test_continuation_usage_cap_and_timeout_are_main_limits(tmp_path,over):
                     await guard.handle_async_request(request(payload('main',8192)))
             else:
                 await guard.handle_async_request(request(payload('main',8192)))
-        assert len(sent)==2 and walls==[300,300]
-        assert [req.extensions['timeout']['read'] for req in sent]==[240,240]
+        assert len(sent)==2 and walls==[360,360]
+        assert [req.extensions['timeout']['read'] for req in sent]==[300,300]
         assert j.run['requests'][1]['purpose']=='continuation'
         assert j.run['requests'][1]['max_tokens']==8192
         assert j.run['requests'][1]['usage']['output_tokens']==8192+int(over)
