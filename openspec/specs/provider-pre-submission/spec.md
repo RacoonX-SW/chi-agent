@@ -1,10 +1,11 @@
-# Provider pre-submission
+# provider-pre-submission Specification
 
 ## Purpose
 
 使 Go Provider 能在真实写入前区分服务地点与开单地点，并按有依据的决定完成新转诊。
+完成声明引用同一案件的决定回执和结构化回查，便于追溯提交、补证和关案三条分支。
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: 建案前核验服务实际执行地点
 
