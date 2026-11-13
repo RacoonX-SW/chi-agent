@@ -34,6 +34,19 @@ SCHEMA_V4 = "chi-task-state-v4"
 VERSION_V4 = "chi-task-state-v4"
 ANCHOR_SCHEMA = "chi-intent-anchor-v1"
 CONTEXT_POLICY_V3 = "chi-context-v3"
+PROVIDER_ACTION_STATUS = {"submit_pa": "ready_to_submit", "gather_more_evidence": "docs_needed", "do_not_submit": "closed"}
+PROVIDER_SUBMITTED_STATUSES = frozenset({"submitted", "resubmitted", "under_review", "approved", "partially_approved", "denied", "pended_action_required", "appealed", "appeal_upheld", "appeal_overturned", "external_appealed", "external_appeal_upheld", "external_appeal_overturned", "closed"})
+PROVIDER_POS_CODES = {"11": "office", "21": "inpatient_hospital", "22": "outpatient_hospital", "19": "outpatient_hospital"}
+PROVIDER_CHART_PAGE = "local-read-patient-observation"
+PROVIDER_ORDER_FIELDS = {"chart.get_patient_chart_by_patient": "orders", "chart.list_candidate_orders": "items"}
+PROVIDER_CLINICAL_FIELDS = ("summaries", "conditions", "observations", "encounters", "orders",
+                            "procedures", "medications", "allergies", "notes", "items")
+PROVIDER_POS_LABELS = {"office": "office", "inpatient_hospital": "inpatient hospital",
+                       "outpatient_hospital": "outpatient hospital", "ambulatory_surgical_center": "ambulatory surgical center",
+                       "emergency_room": "emergency room", "skilled_nursing_facility": "skilled nursing facility",
+                       "home": "home", "telehealth": "telehealth", "urgent_care": "urgent care",
+                       "rehabilitation_facility": "rehabilitation facility", "hospice": "hospice"}
+
 DRIFT_CLASS_LIMIT = 2
 DRIFT_RUN_LIMIT = 3
 LEGACY_SCHEMAS = frozenset({"chi-task-state-v1", "chi-task-state-v2"})
@@ -128,6 +141,49 @@ def _text(value: object, *, field: str) -> str:
 
 def _normalized_quote(value: str) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", value)).strip().casefold()
+
+
+def _provider_texts(value):
+    if type(value) is str:
+        yield value
+    elif type(value) is list:
+        for item in value:
+            yield from _provider_texts(item)
+    elif type(value) is dict:
+        for item in value.values():
+            yield from _provider_texts(item)
+
+
+def _provider_orders(value, field, patient_id, args):
+    items = value.get(field)
+    if type(items) is not list:
+        return []
+    source_order = args.get("source_order_id")
+    code = args.get("procedure_code")
+    return [item for item in items if type(item) is dict and item.get("patient_id") == patient_id
+            and (not source_order or item.get("id") == source_order)
+            and type(code) is str and item.get("procedure_code") == code]
+
+
+def _provider_site(order):
+    site = order.get('site_of_service')
+    return PROVIDER_POS_CODES.get(site, site) if type(site) is str else None
+
+
+def _provider_location_statement(text, quote, label, args):
+    if not re.search(r'\b' + re.escape(label) + r'\b', quote, re.I):
+        return False
+    names = [re.escape(name.strip()) for name in (args.get('description'), args.get('procedure_code'))
+             if type(name) is str and name.strip()]
+    if not names:
+        return False
+    service = r'(?:' + '|'.join(names) + r')'
+    action = r'(?:is\s+)?(?:scheduled|planned|to be performed|performed)\s+(?:at|in)\s+'
+    site = r'(?:an?\s+|the\s+)?' + re.escape(label)
+    patterns = (r'(?:the\s+)?' + service + r'\s+' + action + site,
+                r'(?:the\s+)?(?:service|procedure|test|study|treatment)\s+(?:for\s+)?' + service + r'\s+' + action + site)
+    return any(quote in line and any(re.fullmatch(pattern, line.strip(), re.I) for pattern in patterns)
+               for line in re.split(r'[.!?](?=\s|$)|\r?\n', text))
 
 
 def _fingerprint(tool: str, kind: str, arguments) -> str:
@@ -308,7 +364,15 @@ class TaskState:
             "stagnation": None,
             "updated_at_utc_ms": 0,
         }
+        self._provider_enabled = self._context_v3 and role == "provider" and binding is not None
+        self._provider_guard = None
+        self._provider_delivered = {}
+        self.provider_file_versions = {}
+        if self._provider_enabled:
+            self.data["provider_pre_submission"] = {"schema": "chi-provider-pre-submission-v1", "location": None, "reviews": {}, "cases": {}, "generated_documents": []}
         self._update_keys = set(UPDATE_KEYS)
+        if self._provider_enabled:
+            self._update_keys.update({"provider_location", "provider_review"})
         if self._requirements_enabled:
             self.data.update({
                 "schema": SCHEMA_V4,
@@ -334,6 +398,421 @@ class TaskState:
         except Exception:
             raise GoFailure("chi_state_persistence_failed") from None
 
+    def provider_configure(self, guard_getter, delivered, instruction, instruction_path, handbook_root, tool_references):
+        self._provider_guard = guard_getter
+        self._provider_delivered = delivered
+        self._provider_instruction = instruction
+        self._provider_instruction_path = str(instruction_path)
+        self._provider_handbook = Path(handbook_root)
+        self._provider_references = {str(path) for path in tool_references}
+
+    def _provider_chart_page(self, record, visible):
+        from .patient_identity_binding import Refusal
+
+        args = record['arguments']
+        if args.get('patient_id') != self.binding.bound:
+            raise StateRefusal('provider_clinical_source_invalid')
+        try:
+            page = json.loads(visible)
+            expected = self.binding.read_observation(self.binding.bound, args['offset'], args.get('sha256'))
+            if type(page) is not dict or page != json.loads(expected):
+                raise ValueError
+            return page
+        except (Refusal, ValueError, KeyError, TypeError):
+            raise StateRefusal('provider_clinical_source_invalid') from None
+
+    def _provider_source(self, call_id, quote, kind):
+        if type(quote) is not str or not 1 <= len(quote) <= 800:
+            raise StateRefusal("provider_source_quote_invalid")
+        if call_id == "instruction":
+            if kind != "location" or quote not in self._provider_instruction:
+                raise StateRefusal("provider_source_unverified")
+            text = self._provider_instruction
+            return {"call_id": call_id, "sha256": hashlib.sha256(text.encode()).hexdigest(),
+                    "start": text.index(quote), "end": text.index(quote) + len(quote)}
+        guard = self._provider_guard() if self._provider_guard else None
+        if guard is None or call_id not in self._provider_delivered:
+            raise StateRefusal("provider_source_not_delivered")
+        rec = next((r for r in guard.contract.records if r['id'] == call_id), None)
+        obs = next((o for o in self.data['observations'] if o['call_id'] == call_id), None)
+        if rec is None or obs is None or obs['event'] != 'returned':
+            raise StateRefusal("provider_source_unverified")
+        canonical = guard.canonical_tools.get(rec['name'], rec['name'])
+        visible = self._provider_delivered[call_id]
+        if canonical == PROVIDER_CHART_PAGE:
+            if kind == 'policy':
+                raise StateRefusal('provider_policy_source_invalid')
+            page = self._provider_chart_page(rec, visible)
+            text = page['content']
+            if quote not in text:
+                raise StateRefusal('provider_source_quote_invalid')
+            chart = self.binding.charts[self.binding.bound]['value']
+            fields = {key: chart[key] for key in PROVIDER_CLINICAL_FIELDS if key in chart}
+            if kind == 'clinical' and (len(quote.strip()) < 8 or quote not in json.dumps(fields, ensure_ascii=False)):
+                raise StateRefusal('provider_clinical_quote_invalid')
+            start = text.index(quote)
+            return {'call_id': call_id, 'sha256': page['sha256'],
+                    'view_sha256': hashlib.sha256(visible.encode()).hexdigest(),
+                    'start': start, 'end': start + len(quote)}
+        if quote not in visible:
+            raise StateRefusal("provider_source_quote_invalid")
+        if kind == 'policy':
+            if canonical != 'local-fs-read' or obs.get('scope') != 'shared_public':
+                raise StateRefusal("provider_policy_source_invalid")
+            path = rec['arguments'].get('path')
+            try:
+                in_handbook = Path(path).is_relative_to(self._provider_handbook)
+            except (TypeError, ValueError):
+                in_handbook = False
+            if path == self._provider_instruction_path or not (in_handbook or path in self._provider_references):
+                raise StateRefusal("provider_policy_source_invalid")
+        else:
+            if canonical not in {'chart.get_patient_chart_by_patient', 'chart.list_candidate_orders', 'docs.get_document'}:
+                raise StateRefusal("provider_clinical_source_invalid")
+            if canonical.startswith('chart.') and rec['arguments'].get('patient_id') != self.binding.bound:
+                raise StateRefusal("provider_clinical_source_invalid")
+            if canonical == 'docs.get_document' and rec['arguments'].get('document_id') in self.data['provider_pre_submission']['generated_documents']:
+                raise StateRefusal("provider_clinical_source_invalid")
+            if canonical == 'docs.get_document' and (self.binding.patient_documents.get(rec['arguments'].get('document_id')) != self.binding.bound
+                                                       and rec['arguments'].get('document_id') not in self.binding.documents):
+                raise StateRefusal("provider_clinical_source_invalid")
+        if kind == 'clinical' or (kind == 'location' and canonical == 'docs.get_document'):
+            try:
+                delivered_value = json.loads(visible)
+                if canonical == 'docs.get_document':
+                    document = delivered_value['document']
+                    if (type(document) is not dict or document.get('id') != rec['arguments'].get('document_id')
+                            or document.get('patient_id') != self.binding.bound
+                            or (kind == 'location' and document.get('case_id') is not None)
+                            or type(document.get('content')) is not str
+                            or quote not in document['content']):
+                        raise ValueError
+                else:
+                    if len(quote.strip()) < 8:
+                        raise ValueError
+                    if canonical == 'chart.get_patient_chart_by_patient':
+                        if type(delivered_value.get('patient')) is not dict or delivered_value['patient'].get('id') != self.binding.bound:
+                            raise ValueError
+                    elif canonical == 'chart.list_candidate_orders':
+                        items = delivered_value.get('items')
+                        if type(items) is not list or any(type(x) is not dict or x.get('patient_id') != self.binding.bound for x in items):
+                            raise ValueError
+                    allowed = {key: delivered_value[key] for key in PROVIDER_CLINICAL_FIELDS if key in delivered_value}
+                    if quote not in json.dumps(allowed, ensure_ascii=False) and not any(
+                            quote in value for value in _provider_texts(allowed)):
+                        raise ValueError
+            except (TypeError, KeyError, ValueError):
+                raise StateRefusal('provider_clinical_quote_invalid') from None
+        full = guard.full_results.get(call_id, rec['result'])
+        file_sha = self.provider_file_versions.get(call_id) if canonical == 'local-fs-read' else None
+        if canonical == 'local-fs-read' and file_sha is None:
+            raise StateRefusal('provider_source_version_unavailable')
+        return {"call_id": call_id, "sha256": hashlib.sha256(full.encode()).hexdigest(),
+                "file_sha256": file_sha,
+                "view_sha256": hashlib.sha256(visible.encode()).hexdigest(),
+                "start": visible.index(quote), "end": visible.index(quote) + len(quote),
+                "resource": _sha([canonical, rec['arguments']])}
+
+    def _provider_current(self, source):
+        if source is None:
+            return False
+        if source['call_id'] == 'instruction':
+            return hashlib.sha256(self._provider_instruction.encode()).hexdigest() == source['sha256']
+        guard = self._provider_guard() if self._provider_guard else None
+        if guard is None:
+            return False
+        records = guard.contract.records
+        original = next((r for r in records if r['id'] == source['call_id']), None)
+        if original is None:
+            return False
+        name = guard.canonical_tools.get(original['name'], original['name'])
+        if name == PROVIDER_CHART_PAGE:
+            try:
+                page = self._provider_chart_page(original, self._provider_delivered[source['call_id']])
+            except StateRefusal:
+                return False
+            return page['sha256'] == source['sha256']
+        if name == 'local-fs-read':
+            path = original['arguments'].get('path')
+            matching = [r for r in records if r['name'] == original['name'] and r['arguments'].get('path') == path
+                        and r['id'] in self.provider_file_versions and
+                        any(o['call_id'] == r['id'] and o['event'] == 'returned' for o in self.data['observations'])]
+            return bool(matching) and self.provider_file_versions[matching[-1]['id']] == source['file_sha256']
+        matching = [r for r in records if r['result'] is not None and
+                    _sha([guard.canonical_tools.get(r['name'], r['name']), r['arguments']]) == source['resource'] and
+                    any(o['call_id'] == r['id'] and o['event'] == 'returned' for o in self.data['observations'])]
+        if not matching:
+            return False
+        latest = matching[-1]
+        full = guard.full_results.get(latest['id'], latest['result'])
+        return hashlib.sha256(full.encode()).hexdigest() == source['sha256']
+
+    def _provider_apply_location(self, value):
+        if type(value) is not dict or set(value) != {'site_of_service', 'source_call_id', 'quote'} or not self.binding.bound:
+            raise StateRefusal('provider_location_invalid')
+        sites = {'office', 'inpatient_hospital', 'outpatient_hospital', 'ambulatory_surgical_center', 'emergency_room',
+                 'skilled_nursing_facility', 'home', 'telehealth', 'urgent_care', 'rehabilitation_facility', 'hospice', 'other'}
+        if value['site_of_service'] not in sites:
+            raise StateRefusal('provider_location_invalid')
+        source = self._provider_source(value['source_call_id'], value['quote'], 'location')
+        self.data['provider_pre_submission']['location'] = {'site_of_service': value['site_of_service'], 'source': source}
+
+    def _provider_apply_review(self, value):
+        keys = {'case_id', 'action', 'rationale', 'policy_source_call_id', 'policy_quote', 'clinical_source_call_id', 'clinical_quote'}
+        if type(value) is not dict or set(value) != keys or value['action'] not in {'submit_pa','gather_more_evidence','do_not_submit'}:
+            raise StateRefusal('provider_review_invalid')
+        case_id = value['case_id']
+        case = self.data['provider_pre_submission']['cases'].get(case_id)
+        if case is None or self.binding.bound != case['patient_id'] or self.binding.cases.get(case_id) != self.binding.bound:
+            raise StateRefusal('provider_review_case_unverified')
+        rationale = _text(value['rationale'], field='rationale')
+        if case.get('submit_attempted'):
+            raise StateRefusal('provider_submission_already_recorded')
+        if value['policy_source_call_id'] == value['clinical_source_call_id']:
+            raise StateRefusal('provider_review_sources_not_independent')
+        policy = self._provider_source(value['policy_source_call_id'], value['policy_quote'], 'policy')
+        clinical = self._provider_source(value['clinical_source_call_id'], value['clinical_quote'], 'clinical')
+        guard = self._provider_guard()
+        rec = next(r for r in guard.contract.records if r['id'] == value['clinical_source_call_id'])
+        if guard.canonical_tools.get(rec['name'], rec['name']) == 'docs.get_document':
+            doc = rec['arguments'].get('document_id')
+            try:
+                value_doc = json.loads(self._provider_delivered[rec['id']])['document']
+            except (ValueError, KeyError, TypeError):
+                raise StateRefusal('provider_clinical_source_invalid') from None
+            if (doc in self.binding.documents and self.binding.documents[doc] != case_id
+                    or value_doc.get('case_id') not in (None, case_id)):
+                raise StateRefusal('provider_clinical_source_invalid')
+        self.data['provider_pre_submission']['reviews'][case_id] = {'action': value['action'],
+            'rationale_sha256': hashlib.sha256(rationale.encode()).hexdigest(), 'policy': policy, 'clinical': clinical}
+        case['decision'] = None
+        case['bundle'] = None
+        case['readback'] = None
+
+    def _provider_location_matches(self, args):
+        location = self.data['provider_pre_submission']['location']
+        if location is None or location['site_of_service'] != args.get('site_of_service') or not self._provider_current(location['source']):
+            return False
+        site = location['site_of_service']
+        source = location['source']
+        call_id = source['call_id']
+        # Any latest independently observed order that identifies this service
+        # must agree, including a chart/list cross-read of the same order.
+        guard = self._provider_guard() if self._provider_guard else None
+        latest = {}
+        if guard is not None:
+            returned = {item['call_id'] for item in self.data['observations'] if item['event'] == 'returned'}
+            for rec in guard.contract.records:
+                canonical = guard.canonical_tools.get(rec['name'], rec['name'])
+                if (canonical in PROVIDER_ORDER_FIELDS
+                        and rec['arguments'].get('patient_id') == self.binding.bound and rec['result'] is not None
+                        and rec['id'] in returned):
+                    latest[canonical] = rec
+            for canonical, rec in latest.items():
+                if canonical == 'chart.get_patient_chart_by_patient':
+                    value = self.binding.charts.get(self.binding.bound, {}).get('value')
+                else:
+                    value = self._provider_payload(guard, rec)
+                if value is None:
+                    return False
+                field = PROVIDER_ORDER_FIELDS[canonical]
+                source_order = args.get('source_order_id')
+                orders = value.get(field, [])
+                if type(orders) is not list or (source_order and any(
+                        type(order) is dict and order.get('id') == source_order
+                        and order.get('patient_id') == self.binding.bound
+                        and order.get('procedure_code') != args.get('procedure_code') for order in orders)):
+                    return False
+                for order in _provider_orders(value, field, self.binding.bound, args):
+                    order_site = _provider_site(order)
+                    if order_site and order_site != site:
+                        return False
+        label = PROVIDER_POS_LABELS.get(site)
+        if call_id == 'instruction':
+            text = self._provider_instruction
+            quote = text[source['start']:source['end']].rstrip('.!?')
+            return label is not None and _provider_location_statement(text, quote, label, args)
+        if guard is None:
+            return False
+        rec = next((r for r in guard.contract.records if r['id'] == call_id), None)
+        if rec is None:
+            return False
+        canonical = guard.canonical_tools.get(rec['name'], rec['name'])
+        text = self._provider_delivered[call_id]
+        try:
+            if canonical == PROVIDER_CHART_PAGE:
+                page = self._provider_chart_page(rec, text)
+                text = page['content']
+                quote = text[source['start']:source['end']]
+                chart = self.binding.charts[self.binding.bound]['value']
+                for order in _provider_orders(chart, 'orders', self.binding.bound, args):
+                    raw_site = order.get('site_of_service')
+                    serialized = json.dumps(order, ensure_ascii=False)
+                    start = text.find(serialized)
+                    field = '"site_of_service": ' + json.dumps(raw_site, ensure_ascii=False)
+                    if (_provider_site(order) == site and start >= 0 and raw_site in quote and quote in field
+                            and start <= source['start'] < source['end'] <= start + len(serialized)):
+                        return True
+                value = chart
+                canonical = 'chart.get_patient_chart_by_patient'
+            else:
+                quote = text[source['start']:source['end']]
+                value = self._provider_payload(guard, rec)
+                if value is None:
+                    return False
+                field = PROVIDER_ORDER_FIELDS.get(canonical)
+                if field is not None:
+                    delivered = json.loads(text)
+                    seen_orders = _provider_orders(delivered, field, self.binding.bound, args)
+                    if any(_provider_site(order) == site and order['site_of_service'] in quote
+                           and quote in json.dumps(order, ensure_ascii=False) for order in seen_orders):
+                        return True
+        except (ValueError, KeyError, TypeError):
+            return False
+        if label is None:
+            return False
+        evidence = value.get('document', {}).get('content') if canonical == 'docs.get_document' else {
+            key: value[key] for key in PROVIDER_CLINICAL_FIELDS if key in value}
+        quote = quote.rstrip('.!?')
+        return any(_provider_location_statement(candidate, quote, label, args) for candidate in _provider_texts(evidence))
+
+    def _provider_payload(self, guard, record):
+        text = guard.full_results.get(record['id'], record['result'])
+        try:
+            value = json.JSONDecoder().raw_decode(text.lstrip())[0]
+        except (TypeError, ValueError, AttributeError):
+            return None
+        return value if type(value) is dict else None
+
+    def provider_gate(self, tool, args):
+        if not self._provider_enabled:
+            return None
+        if tool == 'cases.create_from_order':
+            return None if self._provider_location_matches(args) else 'provider_location_evidence_required'
+        case_id = args.get('case_id')
+        data = self.data['provider_pre_submission']
+        case = data['cases'].get(case_id)
+        if case is None:
+            return None
+        if tool == 'auth.respond_to_pend' and not (case.get('submit') and case.get('readback') and case['readback']['status'] == 'pended_action_required'):
+            return 'provider_submission_before_pend_required'
+        if self.binding.bound != case['patient_id'] or self.binding.cases.get(case_id) != case['patient_id']:
+            return 'provider_case_unverified'
+        if case.get('submit_attempted') and case.get('submit') is None and effect_for(tool, 'mcp') == 'mutation':
+            return 'provider_submission_outcome_unverified'
+        review = data['reviews'].get(case_id)
+        fresh = review is not None and self._provider_current(review['policy']) and self._provider_current(review['clinical'])
+        if tool in {'auth.finalize_provider_determination', 'docs.create_submission_bundle', 'auth.submit_authorization'} and case.get('submit_attempted'):
+            return 'provider_submission_already_recorded'
+        if tool == 'auth.finalize_provider_determination':
+            return None if fresh and args.get('final_action') == review['action'] else 'provider_review_required_or_stale'
+        if tool in {'docs.create_submission_bundle', 'auth.submit_authorization'}:
+            decision = case.get('decision')
+            if not fresh or not decision or decision['action'] != 'submit_pa' or decision['action'] != review['action']:
+                return 'provider_submit_decision_required_or_stale'
+            if tool == 'auth.submit_authorization':
+                bundle = case.get('bundle')
+                if not bundle or bundle['ready'] is not True or args.get('bundle_document_id') != bundle['id']:
+                    return 'provider_ready_bundle_required'
+        return None
+
+    def _provider_observe(self, call_id, tool, args, result, event, provider_result=None):
+        if not self._provider_enabled or event != 'returned' or type(args) is not dict or type(result) is not str:
+            return
+        data = self.data['provider_pre_submission']; pid = self.binding.bound
+        existing = data['cases'].get(args.get('case_id'))
+        if existing is not None and tool == 'auth.submit_authorization':
+            existing['submit_attempted'] = True
+        if existing is not None and tool == 'docs.create_submission_bundle':
+            existing['bundle_written'] = True
+            existing['bundle'] = None
+        if existing is not None and effect_for(tool, 'mcp') == 'mutation':
+            existing['readback'] = None
+        if type(provider_result) is dict:
+            value = provider_result
+        else:
+            try:
+                value = json.loads(result)
+            except ValueError:
+                value = None
+        if type(value) is not dict:
+            if tool == 'cases.create_from_order':
+                self.binding.poisoned = True
+                raise GoFailure('provider_create_result_unverified')
+            if existing is not None and tool in {'auth.finalize_provider_determination', 'docs.create_submission_bundle', 'auth.submit_authorization'}:
+                self._register_unknown(self.data['observations'][-1])
+            return
+        if effect_for(tool, 'mcp') == 'mutation':
+            for key in ('document', 'bundle_document'):
+                doc = value.get(key)
+                if type(doc) is dict and type(doc.get('id')) is str and doc['id'] not in data['generated_documents']:
+                    data['generated_documents'].append(doc['id'])
+        if tool == 'cases.create_from_order':
+            case, patient, order = value.get('case'), value.get('patient'), value.get('service_request')
+            if (type(case) is dict and type(patient) is dict and type(order) is dict and
+                    type(case.get('id')) is str and case.get('patient_id') == pid == patient.get('id') == order.get('patient_id')
+                    and args.get('patient_id') == pid and case.get('service_request_id') == order.get('id')
+                    and (not args.get('source_order_id') or args['source_order_id'] == order.get('id'))
+                    and self.binding.cases.get(case['id']) == pid):
+                data['cases'][case['id']] = {'patient_id': pid, 'create_call_id': call_id,
+                    'decision': None, 'bundle': None, 'submit': None, 'submit_attempted': False, 'readback': None, 'bundle_written': False}
+            else:
+                self.binding.poisoned = True
+                raise GoFailure('provider_create_result_unverified')
+            return
+        case_id = args.get('case_id'); item = data['cases'].get(case_id)
+        if item is None or self.binding.cases.get(case_id) != item['patient_id']:
+            return
+        case = value.get('case')
+        if tool == 'auth.finalize_provider_determination':
+            action = args.get('final_action'); expected = PROVIDER_ACTION_STATUS
+            review = data['reviews'].get(case_id)
+            item['decision'] = None; item['readback'] = None; item['bundle'] = None
+            if (type(case) is dict and case.get('id') == case_id and case.get('patient_id') == pid
+                    and action in expected and case.get('status') == expected[action] and review and review['action'] == action
+                    and self._provider_current(review['policy']) and self._provider_current(review['clinical'])):
+                item['decision'] = {'action': action, 'status': case['status'], 'call_id': call_id}
+            else:
+                self._register_unknown(self.data['observations'][-1])
+        elif tool == 'docs.create_submission_bundle':
+            item['bundle_written'] = True
+            item['bundle'] = None
+            bundle, readiness = value.get('bundle_document'), value.get('readiness')
+            if (type(bundle) is dict and type(bundle.get('id')) is str and bundle.get('case_id') == case_id
+                    and bundle.get('patient_id') == pid and bundle.get('kind') == 'submission_bundle'
+                    and type(readiness) is dict and type(readiness.get('ready_to_submit')) is bool
+                    and type(readiness.get('missing_items')) is list and type(readiness.get('warnings')) is list
+                    and (not readiness['ready_to_submit'] or not readiness['missing_items'])):
+                item['bundle'] = {'id': bundle['id'], 'ready': readiness['ready_to_submit'], 'call_id': call_id}
+            else:
+                self._register_unknown(self.data['observations'][-1])
+        elif tool == 'auth.submit_authorization':
+            item['submit'] = None; item['readback'] = None
+            if (type(case) is dict and case.get('id') == case_id and case.get('patient_id') == pid
+                    and case.get('status') in PROVIDER_SUBMITTED_STATUSES and item.get('bundle')
+                    and args.get('bundle_document_id') == item['bundle']['id']):
+                item['submit'] = {'call_id': call_id, 'bundle_id': item['bundle']['id'], 'status': case['status']}
+            else:
+                self._register_unknown(self.data['observations'][-1])
+        elif tool == 'cases.get_case':
+            item['readback'] = None
+            packets = value.get('submission_packets')
+            if (type(case) is dict and case.get('id') == case_id and case.get('patient_id') == pid
+                    and type(case.get('status')) is str and type(packets) is list):
+                decision = item.get('decision'); action = decision.get('action') if decision else None
+                submit = item.get('submit')
+                if action in {'gather_more_evidence','do_not_submit'}:
+                    good = (not packets and not item['bundle_written'] and submit is None and
+                            case['status'] == {'gather_more_evidence':'docs_needed','do_not_submit':'closed'}[action])
+                elif action == 'submit_pa' and submit:
+                    good = (case['status'] in PROVIDER_SUBMITTED_STATUSES and
+                            any(type(p) is dict and p.get('case_id') == case_id and p.get('status') in {'submitted', 'resubmitted'} and
+                                type(p.get('payload')) is dict and p['payload'].get('bundle_document_id') == submit['bundle_id'] for p in packets))
+                else:
+                    good = False
+                if good:
+                    item['readback'] = {'call_id':call_id, 'status':case['status']}
+
     # -- program observations -------------------------------------------
     def scope_for_arguments(self, arguments) -> str:
         if type(arguments) is dict and type(arguments.get("case_id")) is str:
@@ -343,7 +822,7 @@ class TaskState:
         return "unattributed"
 
     def observe(self, *, call_id: str, tool: str, kind: str, arguments=None, result=None,
-                event: str = "returned", round_number: int = 0, scope: str | None = None) -> dict:
+                event: str = "returned", round_number: int = 0, scope: str | None = None, provider_result=None) -> dict:
         if (type(call_id) is not str or not CALL_ID.fullmatch(call_id) or event not in
                 {"returned", "returned_error", "refused", "failed"}):
             raise StateRefusal("chi_state_update_invalid")
@@ -380,6 +859,7 @@ class TaskState:
             self.data["stagnation"] = {"tool": tool, "count": count,
                                        "call_id": call_id, "effect": effect}
         self.data["observations"].append(observation)
+        self._provider_observe(call_id, tool, arguments, result, event, provider_result)
         if self._context_v3:
             self._bind_target_from_observation(observation)
         if effect == "mutation":
@@ -728,6 +1208,10 @@ class TaskState:
             raise StateRefusal("chi_state_program_owned")
         backup = json.loads(json.dumps(self.data))
         try:
+            if "provider_location" in payload:
+                self._provider_apply_location(payload["provider_location"])
+            if "provider_review" in payload:
+                self._provider_apply_review(payload["provider_review"])
             if "target" in payload:
                 self._apply_target(payload["target"])
             if "requirements" in payload:
@@ -909,6 +1393,21 @@ class TaskState:
                 unresolved.append(failure)
         return sorted(unresolved, key=lambda item: item["seq"])
 
+    def _provider_last_readback(self, mutation):
+        if not self._provider_enabled or mutation is None:
+            return None
+        scope = mutation.get('scope')
+        for case_id, case in self.data['provider_pre_submission']['cases'].items():
+            if not (scope == 'case:' + case_id or mutation['call_id'] == case['create_call_id']):
+                continue
+            readback = case.get('readback')
+            if not readback:
+                continue
+            source = next((o for o in self.data['observations'] if o['call_id'] == readback['call_id']), None)
+            if source and source['event'] == 'returned' and source['seq'] > mutation['seq']:
+                return case, source
+        return None
+
     def _completion(self) -> tuple[bool, str | None, str, str, str | None]:
         """One shared completion evaluation for claim feedback and reports."""
         if self.data.get("claim_violation"):
@@ -936,6 +1435,17 @@ class TaskState:
                 except StateRefusal:
                     return (False, "completion_requirements_evidence_invalid:" + item["id"],
                             "blocked", "not_verified", None)
+        if self._provider_enabled:
+            data = self.data['provider_pre_submission']
+            for case_id, case in data['cases'].items():
+                review = data['reviews'].get(case_id)
+                if (review is None or not self._provider_current(review['policy'])
+                        or not self._provider_current(review['clinical'])):
+                    return False, 'completion_provider_review_required_or_stale', 'blocked', 'not_verified', 'terminal_object'
+                if not case['decision'] or case['decision']['action'] != review['action']:
+                    return False, 'completion_provider_decision_unverified', 'blocked', 'not_verified', 'terminal_object'
+                if not case['readback']:
+                    return False, 'completion_provider_branch_readback_required', 'blocked', 'not_verified', 'business_status'
         if self._context_v3:
             from .completion import evaluate
             allowed, reason, _details = evaluate(self.data)
@@ -947,7 +1457,8 @@ class TaskState:
                         "blocked", "not_verified", "business_status")
         status = self.data["latest_business_status"]
         business = self._business_mutations()
-        if business:
+        provider_readback = self._provider_last_readback(business[-1]) if business else None
+        if business and provider_readback is None:
             last = business[-1]
             if status is None or status["source_seq"] <= last["seq"]:
                 return (False, "completion_readback_required:" + last["call_id"],
@@ -964,6 +1475,8 @@ class TaskState:
                         and source.get("scope") != last.get("scope"))):
                 return (False, "completion_readback_required:" + last["call_id"],
                         "blocked", "not_verified", "business_status")
+        if provider_readback is not None:
+            return True, None, "mechanical_pass", "observed", None
         if status is None:
             return True, None, "not_applicable", "not_observed", None
         return True, None, "mechanical_pass", "observed", None
@@ -1022,6 +1535,13 @@ class TaskState:
         files = self._file_mutations()
         unresolved = self._unresolved_file_deliveries()
         last_business = business[-1] if business else None
+        provider_readback = self._provider_last_readback(last_business)
+        if provider_readback is not None:
+            case, source = provider_readback
+            status_view = {'text': case['readback']['status'], 'source_call_id': source['call_id'],
+                           'source_seq': source['seq'], 'source_tool': source['tool'],
+                           'source_kind': source['source_kind'], 'source_scope': source['scope'],
+                           'source_event': source['event']}
         last_file = files[-1] if files else None
         open_unknowns = [item["id"] for item in self.data["unknowns"] if item["status"] == "open"]
 
@@ -1082,10 +1602,12 @@ class TaskState:
         if not allowed:
             return {"status": "refused", "reason": reason}
         status = self.data["latest_business_status"]
+        business = self._business_mutations()
+        readback = self._provider_last_readback(business[-1]) if business else None
         self.data["claim"] = {
             "version": self.data["version"],
             "target": dict(self.data["target"]),
-            "verified_status_call_id": status["source_call_id"] if status else None,
+            "verified_status_call_id": readback[1]["call_id"] if readback else status["source_call_id"] if status else None,
             "at_utc_ms": time.time_ns() // 1000000,
             "kind": "model_claim",
         }
@@ -1143,6 +1665,21 @@ class TaskState:
         from .role_guidance import guidance
         summary = self.summary()
         stage_id = self._current_stage()
+        if self._provider_enabled:
+            pre = self.data['provider_pre_submission']
+            selected_id = self.data['target']['case_id']
+            if selected_id is None and len(pre['cases']) == 1:
+                selected_id = next(iter(pre['cases']))
+            case = pre['cases'].get(selected_id)
+            review = pre['reviews'].get(selected_id)
+            if case is not None and (review is None or case['decision'] is None):
+                stage_id = 'verify_evidence'
+            elif case is not None and (case['decision']['action'] != 'submit_pa' or case['submit']):
+                stage_id = 'verify_and_close'
+            elif case is not None and case.get('bundle') and case['bundle']['ready']:
+                stage_id = 'submit_or_defer'
+            elif case is not None:
+                stage_id = 'prepare_packet'
         stages = guidance(self.data["role"], summary).get("stages", [])
         stage = next((item for item in stages if item.get("id") == stage_id), None)
         if stage is None:
@@ -1162,6 +1699,26 @@ class TaskState:
                 "do not claim completion without a returned business readback",
             ],
         }
+        if self._provider_enabled:
+            data = self.data['provider_pre_submission']
+            selected_id = self.data['target']['case_id']
+            if selected_id is None and len(data['cases']) == 1:
+                selected_id = next(iter(data['cases']))
+            case = data['cases'].get(selected_id)
+            if case is None and self.binding.bound is not None and not data['cases']:
+                payload['goal'] = 'Find explicit evidence of where the requested service is performed, then record provider_location.'
+                payload['acceptance'] = ['Quote the actual service location from a delivered patient order or explicit public task evidence.']
+            if case is not None:
+                review = data['reviews'].get(selected_id)
+                if review is None:
+                    payload['goal'] = 'Review public policy and scoped clinical evidence before deciding whether to submit.'
+                    payload['acceptance'] = ['Record exact public policy and patient evidence quotes, action, and reasons including any missing or contrary support.']
+                elif not case['decision']:
+                    payload['goal'] = 'Record the provider determination before creating a submission bundle.'
+                    payload['acceptance'] = ['Record the same action with auth.finalize_provider_determination.']
+                elif case['decision']['action'] != 'submit_pa':
+                    payload['acceptance'] = ['Read the same case and verify its status and empty submission_packets.']
+                payload['forbidden'].append('do not create a bundle or submit without the verified submit decision')
         text = json.dumps(payload, ensure_ascii=False, sort_keys=True,
                           separators=(",", ":"))
         return {"text": text, "sha256": _sha(payload), "stage": stage_id,
@@ -1193,6 +1750,8 @@ class TaskState:
             "drift": data.get("drift"),
             "limits": dict(LIMITS),
         }
+        if self._provider_enabled:
+            result["provider_pre_submission"] = data["provider_pre_submission"]
         if self._requirements_enabled:
             result["requirements"] = list(data["requirements"])
             result["requirements_declared"] = bool(data["requirements_declared"])

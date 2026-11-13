@@ -34,18 +34,18 @@ def dependency_identity(lock_path: Path) -> dict[str, str]:
             "wheel_sha256": PDF_WHEEL_SHA256, "package_sha256": digest.hexdigest()}
 
 
-def read_allowed_file(path: Path, offset: int | None, limit: int | None, *, pdf_enabled: bool) -> str:
+def read_allowed_file(path: Path, offset: int | None, limit: int | None, *, pdf_enabled: bool, source_version=None) -> str:
     try:
         with path.open("rb") as handle:
             header = handle.read(5)
-        is_pdf = path.suffix.lower() == ".pdf" or header == b"%PDF-"
+            is_pdf = path.suffix.lower() == ".pdf" or header == b"%PDF-"
+            raw = header + handle.read(MAX_PDF_BYTES + 1 if is_pdf else -1)
         if not is_pdf:
-            text = path.read_text(encoding="utf-8")
+            text = io.TextIOWrapper(io.BytesIO(raw), encoding="utf-8", newline=None).read()
         else:
             if not pdf_enabled:
                 return "ERROR: PDF reading is unavailable in this execution mode"
-            with path.open("rb") as handle:
-                pdf_bytes = handle.read(MAX_PDF_BYTES + 1)
+            pdf_bytes = raw
             if len(pdf_bytes) > MAX_PDF_BYTES:
                 return "ERROR: PDF exceeds the input size limit"
             from pypdf import PdfReader
@@ -78,6 +78,8 @@ def read_allowed_file(path: Path, offset: int | None, limit: int | None, *, pdf_
             text = "".join(lines[start:start + int(limit)] if limit is not None else lines[start:])
         if is_pdf and len(text) > MAX_RESULT_CHARS:
             return "ERROR: PDF text exceeds the output limit; use offset and limit"
+        if source_version is not None:
+            source_version(hashlib.sha256(raw).hexdigest())
         return text
     except (UnicodeError, OSError):
         return "ERROR: file is unreadable or is not supported UTF-8 text"
