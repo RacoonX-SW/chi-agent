@@ -522,7 +522,8 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
     if role == "provider" and context_policy == "chi-context-v3":
         state_update_description += (" For a new referral, record provider_location with site_of_service, source_call_id and exact quote "
             "from the delivered instruction or patient-specific order/chart before case creation; the source must explicitly establish "
-            "where the requested service is performed. Use source_call_id instruction for the public task. "
+            "where the requested service is performed. HOPD means outpatient hospital when explicitly linked to the requested procedure. "
+            "If the current sources do not establish a site, report the evidence gap and stop guessing. Use source_call_id instruction for the public task. "
             "Before a new case determination, record provider_review with case_id, action, rationale and independent exact quotes "
             "from a public policy read and patient/case-specific clinical read. Record the matching provider determination before "
             "creating a bundle. Submit only the same ready bundle. Finish with cases.get_case and its submission_packets.")

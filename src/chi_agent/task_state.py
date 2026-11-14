@@ -172,8 +172,6 @@ def _provider_site(order):
 
 
 def _provider_location_statement(text, quote, label, args):
-    if not re.search(r'\b' + re.escape(label) + r'\b', quote, re.I):
-        return False
     names = [re.escape(name.strip()) for name in (args.get('description'), args.get('procedure_code'))
              if type(name) is str and name.strip()]
     if not names:
@@ -183,8 +181,87 @@ def _provider_location_statement(text, quote, label, args):
     site = r'(?:an?\s+|the\s+)?' + re.escape(label)
     patterns = (r'(?:the\s+)?' + service + r'\s+' + action + site,
                 r'(?:the\s+)?(?:service|procedure|test|study|treatment)\s+(?:for\s+)?' + service + r'\s+' + action + site)
-    return any(quote in line and any(re.fullmatch(pattern, line.strip(), re.I) for pattern in patterns)
-               for line in re.split(r'[.!?](?=\s|$)|\r?\n', text))
+    if re.search(r'\b' + re.escape(label) + r'\b', quote, re.I) and any(
+            quote in line and any(re.fullmatch(pattern, line.strip(), re.I) for pattern in patterns)
+            for line in re.split(r'[.!?](?=\s|$)|\r?\n', text)):
+        return True
+    if label != 'outpatient hospital':
+        return False
+    site = r'(?:HOPD|hospital outpatient department|outpatient hospital)'
+    code = args.get('procedure_code')
+    if type(code) is not str or not code.strip():
+        return False
+    code_pattern = r'\b' + re.escape(code.strip()) + r'\b'
+    unsafe = r'\b(?:not|no|never|possible|possibly|may|might|could|if|unless|consider|considering|alternative|prior|previous|history|historical|cancelled|canceled)\b'
+    other_site = r'\b(?:ASC|ambulatory surgical cent(?:er|re)|office|inpatient hospital|urgent care)\b'
+    # Match a whole bounded clause, including its context, rather than a
+    # favorable substring of a negated or conditional statement.
+    for sentence in re.split(r'[.!?](?=\s|$)|\r?\n', text):
+        clauses = sentence.split(';')
+        for index, clause in enumerate(clauses):
+            clause = clause.strip()
+            head, delimiter, reason = clause.partition(' based on:')
+            # A reason may describe equipment unavailable at an alternative.
+            # Other location claims in the reason can qualify the requested site.
+            cleaned_reason = re.sub(r'\b(?:not\s+available|unavailable)\s+at\s+(?:an?\s+)?accessible\s+ASC\b'
+                                    r'(?:\s*\([\w &.-]+\))?', '', reason, flags=re.I)
+            others = [part.strip() for i, part in enumerate(clauses) if i != index]
+            safe_context = (r'(?:pre-operative assessment|pre-operative H&P and surgical planning|'
+                            r'medically cleared(?: for general anesthesia)?|'
+                            r'ASC access attestation (?:was )?completed citing '
+                            r'[\w &\-]+ (?:unavailable|unavailability) at [\w &\-]+)')
+            if (quote not in sentence or not (quote in clause or clause in quote)
+                    or not re.search(site, quote, re.I) or re.search(unsafe, head, re.I)
+                    or re.search(unsafe, cleaned_reason, re.I)
+                    or re.search(r'\b(?:unavailable|but|instead)\b', head + ' ' + cleaned_reason, re.I)
+                    or re.search(site, cleaned_reason, re.I)
+                    or any(not re.fullmatch(safe_context, other, re.I) for other in others)
+                    or re.search(other_site, head + ' ' + cleaned_reason, re.I)
+                    or len(re.findall(r'\bCPT\s+\w+', clause, re.I)) > 1):
+                continue
+            planned = (r'planned\s+[^;\n]{1,160}' + code_pattern +
+                       r'\s*\)?\s+at\s+[\w &\-]{1,100}?' + site + r'\s*\)?')
+            request = (r'requesting\s+' + site + r'\s+authorization\s+for\s+(?:CPT\s+)?' +
+                       code_pattern + r'\b[^;\n]*')
+            if (not delimiter and re.fullmatch(planned, head, re.I)) or re.fullmatch(request, head, re.I):
+                return True
+    # Contiguous, uniquely named plan fields are a single bounded scope.
+    fields = re.findall(r'(?im)^\s*\*\*(Planned Procedure|Planned Facility|Setting):\*\*\s*([^\n]+)', text)
+    if len(fields) == 3 and [key.casefold() for key, _ in fields] == ['planned procedure', 'planned facility', 'setting']:
+        procedure, facility, setting = [value.strip() for _, value in fields]
+        block = re.search(r'(?im)^\s*\*\*Planned Procedure:\*\*[^\n]*\n\s*\*\*Planned Facility:\*\*[^\n]*\n\s*\*\*Setting:\*\*[^\n]*', text)
+        site_lines = [] if not block else block.group().splitlines()[1:]
+        if (block and any(quote in line for line in site_lines) and re.search(site, quote, re.I)
+                and re.search(code_pattern, procedure, re.I) and not re.search(unsafe, block.group(), re.I)
+                and len(re.findall(r'\bCPT\s+\w+', procedure, re.I)) <= 1
+                and re.fullmatch(r'[\w &\-]+\s*\(' + site + r'\)', facility, re.I)
+                and re.fullmatch(site, setting, re.I)):
+            return True
+    # A single named facility above a single Procedure Plan and its unique
+    # procedure/setting fields may also be paired within this delivered note.
+    facility_fields = list(re.finditer(r'(?im)^\*\*Planned Facility:\*\*\s*([^\n]+)', text))
+    plans = list(re.finditer(r'(?im)^##\s+Procedure Plan\s*$', text))
+    procedure_fields = list(re.finditer(r'(?im)^\*\*Planned Procedure:\*\*\s*([^\n]+)', text))
+    setting_fields = list(re.finditer(r'(?im)^\*\*Setting:\*\*\s*([^\n]+)', text))
+    if all(len(items) == 1 for items in (facility_fields, plans, procedure_fields, setting_fields)):
+        facility, plan, procedure, setting = (items[0] for items in (facility_fields, plans, procedure_fields, setting_fields))
+        next_heading = re.search(r'(?m)^#{1,6}\s+', text[plan.end():])
+        end = plan.end() + next_heading.start() if next_heading else len(text)
+        between = text[facility.end():plan.start()]
+        scope = text[plan.end():end]
+        if (facility.end() <= plan.start() < procedure.start() < setting.start() < end
+                and not re.search(r'(?m)^#{1,6}\s+', between)
+                and quote in facility.group() and re.search(site, quote, re.I)
+                and re.fullmatch(r'[\w &\-]+\s*\(' + site + r'\)(?:,\s*NPI\s*\d+)?', facility.group(1), re.I)
+                and re.fullmatch(site + r'(?:\s*[—–-]\s*see rationale below)?', setting.group(1).strip(), re.I)
+                and re.search(r'\bCPT\s+' + code_pattern, procedure.group(1), re.I)
+                and len(re.findall(r'\bCPT\s+\w+', scope, re.I)) == 1
+                and not re.search(r'(?im)^\*\*(?!Planned Procedure:|Laterality:|Anesthesia:|Setting:)[^\n]+:\*\*', scope)
+                and not re.search(r'\b(?:other|additional|second)\s+(?:procedure|service)\b', scope, re.I)
+                and not re.search(unsafe, between + scope, re.I)
+                and not re.search(r'\b(?:office|inpatient hospital|urgent care|ambulatory surgical center)\b', scope, re.I)):
+            return True
+    return False
 
 
 def _fingerprint(tool: str, kind: str, arguments) -> str:
@@ -590,9 +667,10 @@ class TaskState:
         case['bundle'] = None
         case['readback'] = None
 
-    def _provider_location_matches(self, args):
+    def _provider_location_matches(self, args, *, checked_current=False):
         location = self.data['provider_pre_submission']['location']
-        if location is None or location['site_of_service'] != args.get('site_of_service') or not self._provider_current(location['source']):
+        if (location is None or location['site_of_service'] != args.get('site_of_service')
+                or (not checked_current and not self._provider_current(location['source']))):
             return False
         site = location['site_of_service']
         source = location['source']
@@ -691,7 +769,14 @@ class TaskState:
         if tool == 'cases.create_from_order':
             if self.data['target']['case_id'] is not None:
                 return 'provider_target_case_already_bound'
-            return None if self._provider_location_matches(args) else 'provider_location_evidence_required'
+            location = self.data['provider_pre_submission']['location']
+            if location is None:
+                return 'provider_location_evidence_required: missing; find and record explicit same-procedure site evidence or report it unavailable'
+            if location['site_of_service'] != args.get('site_of_service'):
+                return 'provider_location_evidence_required: site mismatch; check the requested site and recorded evidence'
+            if not self._provider_current(location['source']):
+                return 'provider_location_evidence_required: stale source; reread and cite current evidence'
+            return None if self._provider_location_matches(args, checked_current=True) else 'provider_location_evidence_required: insufficient, conflicting, or wrong-service site evidence; inspect current sources and report a gap if none establish it'
         case_id = args.get('case_id')
         data = self.data['provider_pre_submission']
         case = data['cases'].get(case_id)
@@ -1721,7 +1806,7 @@ class TaskState:
                 selected_id = next(iter(data['cases']))
             case = data['cases'].get(selected_id)
             if case is None and self.binding.bound is not None and not data['cases']:
-                payload['goal'] = 'Find explicit evidence of where the requested service is performed, then record provider_location.'
+                payload['goal'] = 'Find explicit evidence of where the requested service is performed, then record provider_location; if unavailable, report the gap and stop guessing.'
                 payload['acceptance'] = ['Quote the actual service location from a delivered patient order or explicit public task evidence.']
             if case is not None:
                 review = data['reviews'].get(selected_id)

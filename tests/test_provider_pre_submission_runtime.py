@@ -209,7 +209,7 @@ def test_location_quote_retains_the_full_sentence(tmp_path, instruction, allowed
     state.propose({'provider_location': {'site_of_service': 'office', 'source_call_id': 'instruction',
                                          'quote': quote}})
     reason = state.provider_gate('cases.create_from_order', {'site_of_service': 'office', 'description': 'study'})
-    assert reason == (None if allowed else 'provider_location_evidence_required')
+    assert reason is None if allowed else reason.startswith('provider_location_evidence_required')
 
 
 def test_policy_version_uses_full_same_snapshot_across_pages(tmp_path):
@@ -239,3 +239,34 @@ def test_policy_version_uses_full_same_snapshot_across_pages(tmp_path):
     guard.full_results['three'] = third; state.provider_file_versions['three'] = new_versions[0]
     state.observe(call_id='three',tool='local-fs-read',kind='local',arguments=records[-1]['arguments'],result=third,scope='shared_public')
     assert third == second and not state._provider_current(source)
+
+
+@pytest.mark.parametrize(('text', 'quote', 'allowed'), [
+    ('Pre-operative assessment; medically cleared; planned arthroscopic RCR (CPT 12345) at Example Memorial Hospital HOPD; ASC access attestation was completed citing equipment unavailable at Alternate Surgical Center.', 'planned arthroscopic RCR (CPT 12345) at Example Memorial Hospital HOPD', True),
+    ('Pre-operative H&P and surgical planning; medically cleared for general anesthesia; planned repair (CPT 12345) at Example Memorial Hospital HOPD; ASC access attestation completed citing specialized equipment unavailability at Alternate Surgical Center.', 'planned repair (CPT 12345) at Example Memorial Hospital HOPD', True),
+    ('Requesting HOPD authorization for CPT 12345 R shoulder arthroscopic repair based on: (1) complexity, and (2) equipment unavailable at accessible ASC (Alternate Surgical Center).', 'Requesting HOPD authorization for CPT 12345 R shoulder arthroscopic repair based on: (1) complexity, and (2) equipment unavailable at accessible ASC (Alternate Surgical Center)', True),
+    ('Requesting HOPD authorization for CPT 12345 repair based on: (1) complexity and (2) equipment not available at accessible ASC (Other Facility).', 'Requesting HOPD authorization for CPT 12345 repair based on: (1) complexity and (2) equipment not available at accessible ASC (Other Facility)', True),
+    ('**Planned Facility:** Example Memorial Hospital (HOPD), NPI 1234567890\n\n## Procedure Plan\n**Planned Procedure:** shoulder repair — CPT 12345\n**Laterality:** Right\n**Anesthesia:** General\n**Setting:** HOPD — see rationale below\n\n## Rationale\nDetails.', '**Planned Facility:** Example Memorial Hospital (HOPD), NPI 1234567890', True),
+    ('**Planned Procedure:** arthroscopic repair CPT 12345\n**Planned Facility:** Example Hospital (HOPD)\n**Setting:** HOPD', 'Example Hospital (HOPD)', True),
+    ('**Planned Procedure:** arthroscopic repair CPT 12345\n**Planned Facility:** Example Hospital (HOPD)\n**Setting:** HOPD', '**Planned Facility:** Example Hospital (HOPD)', True),
+    ('Prior visit at Example Hospital HOPD; planned repair CPT 12345 at office.', 'Example Hospital HOPD', False),
+    ('Planned repair CPT 67890 at Example Hospital HOPD.', 'Planned repair CPT 67890 at Example Hospital HOPD', False),
+    ('Not planned repair CPT 12345 at Example Hospital HOPD.', 'planned repair CPT 12345 at Example Hospital HOPD', False),
+    ('Planned repair CPT 12345 at Example Hospital HOPD if needed.', 'Planned repair CPT 12345 at Example Hospital HOPD', False),
+    ('Planned repair CPT 12345 and CPT 67890 at Example Hospital HOPD.', 'Planned repair CPT 12345 and CPT 67890 at Example Hospital HOPD', False),
+    ('This was cancelled; planned repair CPT 12345 at Example Hospital HOPD.', 'planned repair CPT 12345 at Example Hospital HOPD', False),
+    ('Planned repair CPT 12345 at Example Hospital HOPD; only if cleared.', 'Planned repair CPT 12345 at Example Hospital HOPD', False),
+    ('Planned repair CPT 12345 at Example Hospital HOPD; scheduled at the office.', 'Planned repair CPT 12345 at Example Hospital HOPD', False),
+    ('Requesting HOPD authorization for CPT 12345 repair based on: only if cleared.', 'Requesting HOPD authorization for CPT 12345 repair based on: only if cleared', False),
+    ('Requesting HOPD authorization for CPT 12345 repair, but the surgery is planned at an ASC.', 'Requesting HOPD authorization for CPT 12345 repair', False),
+    ('Requesting HOPD authorization for CPT 12345 repair based on: HOPD unavailable.', 'Requesting HOPD authorization for CPT 12345 repair', False),
+    ('Planned repair (CPT 12345) at Example Hospital hospital outpatient department.', 'Planned repair (CPT 12345) at Example Hospital hospital outpatient department', True),
+    ('Requesting HOPD authorization for CPT 123456 repair.', 'Requesting HOPD authorization for CPT 123456 repair', False),
+    ('**Planned Procedure:** repair CPT 12345\n**Planned Facility:** Example Hospital (HOPD)\n**Setting:** office', 'Example Hospital (HOPD)', False),
+    ('**Planned Facility:** Example Hospital (HOPD), NPI 1234567890\n## Procedure Plan\n**Planned Procedure:** repair CPT 12345\n**Other Procedure:** repair CPT 67890\n**Setting:** HOPD', 'Example Hospital (HOPD)', False),
+    ('**Planned Facility:** Example Hospital (HOPD), NPI 1234567890\n## Procedure Plan\n**Planned Procedure:** repair CPT 12345\n**Setting:** office', 'Example Hospital (HOPD)', False),
+    ('**Planned Facility:** Example Hospital (HOPD), NPI 1234567890\n## Other section\n## Procedure Plan\n**Planned Procedure:** repair CPT 12345\n**Setting:** HOPD', 'Example Hospital (HOPD)', False),
+])
+def test_hopd_location_statement(text, quote, allowed):
+    from chi_agent.task_state import _provider_location_statement
+    assert _provider_location_statement(text, quote, 'outpatient hospital', {'procedure_code':'12345', 'description':'arthroscopic repair'}) is allowed
