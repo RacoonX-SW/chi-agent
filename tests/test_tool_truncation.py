@@ -3,9 +3,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from chi_agent.context_assembly import (canonical_record, key_ids_for, reduce_tool_result,
+from chi_agent.context.context_assembly import (canonical_record, key_ids_for, reduce_tool_result,
                              truncate_tool_text)
-from chi_agent.text_search import (DEFAULT_RESULTS, MAX_RESULTS, SINGLE_FILE_MAX_RESULTS,
+from chi_agent.tools.text_search import (DEFAULT_RESULTS, MAX_RESULTS, SINGLE_FILE_MAX_RESULTS,
                            SearchRefusal, search)
 
 

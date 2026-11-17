@@ -61,3 +61,5 @@ Go 默认使用 `deepseek-v4.1-flash`、`record_only` 和零自动重试。主�
 ## Harbor 接入
 
 在控制侧设置 `PYTHONDONTWRITEBYTECODE=1`，将包的 `scripts/`、固定 vendor 源码和控制侧依赖放入 Python 模块路径，指定 `go_chi_harness:GoChiHarness`。使用 `CHI_GO_BUNDLE_ROOT`、`CHI_GO_STATE_ROOT`、`CHI_GO_BUNDLE_SHA256`、`CHI_GO_ROLE`、`CHI_GO_EVALUATION_ID`、`CHI_GO_TASK_ID`、`CHI_GO_ATTEMPT_ID`、`CHI_GO_RUN_ID` 和 `CHI_GO_HISTORY_MODE` 提供调用信息。本地接续另需 `CHI_GO_Q_ROOT`。Key 通过控制器运行时环境注入，预检成功后才进入 runner。调用方负责世界镜像、依赖、输入资源和持久化状态，`install()` 由此保持空操作。
+
+当前导出使用 v3 清单：`scripts/chi_agent/` 按 agent、context、tools、models、accounting、roles 和 evaluation 子包组织，包含各子包初始化文件。校验器仍按各自冻结清单验证 v1 和 v2 历史包。

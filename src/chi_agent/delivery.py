@@ -13,7 +13,7 @@ import re
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlsplit
 
-from .bundle import BundleFailure, validate_bundle
+from chi_agent.bundle import BundleFailure, validate_bundle
 
 SCHEMA = "chi-go-delivery-plan-v1"
 SHA256 = re.compile(r"^[0-9a-f]{64}$")

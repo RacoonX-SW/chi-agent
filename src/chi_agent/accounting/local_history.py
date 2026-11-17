@@ -6,7 +6,7 @@ is not applicable; that separation does not prove prior account usage is zero.
 """
 from pathlib import Path
 
-from .opencode_go_provider import GoJournal, source_identity
+from chi_agent.models.opencode_go_provider import GoJournal, source_identity
 
 
 def acquire_existing_history(root: Path) -> GoJournal:

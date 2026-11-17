@@ -8,7 +8,7 @@ import sys
 import time
 import pytest
 
-import chi_agent.mcp_tools as go_chi_mcp
+import chi_agent.tools.mcp_tools as go_chi_mcp
 import scripts.development.run_role_in_bundle as role_runner
 
 

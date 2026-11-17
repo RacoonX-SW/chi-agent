@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from chi_agent.journal import ChiJournal, inspect_history
-from chi_agent.runtime import run_chi
+from chi_agent.accounting.journal import ChiJournal, inspect_history
+from chi_agent.agent.runtime import run_chi
 
 
 @pytest.mark.parametrize('action', ['submit_pa', 'gather_more_evidence', 'do_not_submit'])
@@ -123,7 +123,7 @@ async def _exercise(tmp_path, action, submit_outcome='success', form_changed=Fal
         async def run():
             return await run_chi(journal,'synthetic-secret',role='provider',instruction='90 day treatment trial',mcp_url='http://synthetic.invalid/mcp',instruction_path=instruction,logs_dir=tmp_path/'logs',workspace_root=workspace,handbook_root=handbook,tool_references=[],lower=httpx.MockTransport(reply),server_factory=lambda _:server)
         if not verified:
-            from chi_agent.opencode_go_provider import GoFailure
+            from chi_agent.models.opencode_go_provider import GoFailure
             with pytest.raises(GoFailure, match='chi_claim_required'):
                 await run()
         else:
@@ -169,7 +169,7 @@ async def _exercise(tmp_path, action, submit_outcome='success', form_changed=Fal
         legacy = json.loads(json.dumps(original['completion']))
         legacy['completion_evidence'].pop('failed_terminal_objects')
         assert _is_completion(legacy)
-        from chi_agent.task_state import TaskState
+        from chi_agent.agent.task_state import TaskState
         empty = TaskState(tmp_path/'empty-state', run='empty', role='provider', context_policy='chi-context-v3')
         blocked = empty.completion_report()
         assert blocked['required_readback'] == 'terminal_object'
@@ -183,7 +183,7 @@ async def _exercise(tmp_path, action, submit_outcome='success', form_changed=Fal
 
 
 def test_candidate_order_reducer_preserves_location_and_procedure():
-    from chi_agent.context_assembly import reduce_tool_result
+    from chi_agent.context.context_assembly import reduce_tool_result
     items = [{'id':f'O{i}', 'patient_id':'P1', 'procedure_code':'12345', 'site_of_service':'22', 'description':'service', 'private_field':'irrelevant'} for i in range(12)]
     reduced, _ = reduce_tool_result('chart.list_candidate_orders', json.dumps({'items':items,'total':12}))
     first = json.loads(reduced)['items'][0]
@@ -198,7 +198,7 @@ def test_candidate_order_reducer_preserves_location_and_procedure():
     ('The study is scheduled at the office only if another site cannot be used.', False),
 ])
 def test_location_quote_retains_the_full_sentence(tmp_path, instruction, allowed):
-    from chi_agent.task_state import TaskState
+    from chi_agent.agent.task_state import TaskState
 
     binding = SimpleNamespace(bound='P1')
     state = TaskState(tmp_path / 'state', run='run', role='provider', binding=binding,
@@ -213,8 +213,8 @@ def test_location_quote_retains_the_full_sentence(tmp_path, instruction, allowed
 
 
 def test_policy_version_uses_full_same_snapshot_across_pages(tmp_path):
-    from chi_agent.pdf_resource_reader import read_allowed_file
-    from chi_agent.task_state import TaskState
+    from chi_agent.tools.pdf_resource_reader import read_allowed_file
+    from chi_agent.agent.task_state import TaskState
     path = tmp_path/'policy.txt'; path.write_bytes(b'A policy requires evidence.\r\nSecond line.\rThird line.')
     versions = []
     first = read_allowed_file(path, 1, 1, pdf_enabled=True, source_version=versions.append)
@@ -268,5 +268,5 @@ def test_policy_version_uses_full_same_snapshot_across_pages(tmp_path):
     ('**Planned Facility:** Example Hospital (HOPD), NPI 1234567890\n## Other section\n## Procedure Plan\n**Planned Procedure:** repair CPT 12345\n**Setting:** HOPD', 'Example Hospital (HOPD)', False),
 ])
 def test_hopd_location_statement(text, quote, allowed):
-    from chi_agent.task_state import _provider_location_statement
+    from chi_agent.agent.task_state import _provider_location_statement
     assert _provider_location_statement(text, quote, 'outpatient hospital', {'procedure_code':'12345', 'description':'arthroscopic repair'}) is allowed

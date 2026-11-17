@@ -11,7 +11,7 @@ import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-import chi_agent.budget_evaluation as budget_evaluation
+import chi_agent.accounting.budget_evaluation as budget_evaluation
 import chi_agent.bundle as go_chi_bundle
 import scripts.experiments.run_baseline as run_baseline
 
@@ -33,7 +33,7 @@ def baseline_function():
 def test_old_and_extracted_function_ast_and_behavior_are_equivalent():
     old = baseline_function()
     pure = budget_evaluation.evaluate_budget
-    source = ast.parse((ROOT/'src/chi_agent/budget_evaluation.py').read_text())
+    source = ast.parse((ROOT/'src/chi_agent/accounting/budget_evaluation.py').read_text())
     extracted = next(node for node in source.body if isinstance(node, ast.FunctionDef) and node.name == 'evaluate_budget')
     assert ast.dump(extracted, include_attributes=False) == ast.dump(ast.parse(REFERENCE.read_bytes()).body[0], include_attributes=False)
     assert run_baseline.evaluate_budget is pure
@@ -70,11 +70,12 @@ def test_real_exported_package_budget_path_in_isolated_process(tmp_path):
     target = tmp_path/'bundle'
     identity = go_chi_bundle.build_bundle(target, source_root=ROOT)
     assert go_chi_bundle.validate_bundle(target).manifest_sha256 == identity.manifest_sha256
-    assert (target/'scripts/chi_agent/budget_evaluation.py').is_file()
+    assert (target/'scripts/chi_agent/accounting/budget_evaluation.py').is_file()
     assert not (target/'scripts/run_baseline.py').exists()
     code = r'''
 import pathlib, sys
-from chi_agent import budget_evaluation as budget, model_runner_adapter as a
+from chi_agent.accounting import budget_evaluation as budget
+from chi_agent.evaluation import model_runner_adapter as a
 root=pathlib.Path(sys.argv[1]).resolve()
 assert pathlib.Path(a.__file__).resolve().is_relative_to(root)
 assert pathlib.Path(budget.__file__).resolve().is_relative_to(root)
@@ -102,12 +103,12 @@ print('isolated_budget_closure=passed; provider_calls=0')
 
 
 def test_actual_identity_calculations_bind_budget_module():
-    import chi_agent.evaluation_preflight as b_live_preflight
+    import chi_agent.evaluation.evaluation_preflight as b_live_preflight
     import chi_agent.evaluation_cli as evaluation_entry
     import scripts.development.run_development_legacy as live_development
-    import chi_agent.opencode_go_provider as opencode_go_provider
-    expected = hashlib.sha256((ROOT/'src/chi_agent/budget_evaluation.py').read_bytes()).hexdigest()
-    name = 'src/chi_agent/budget_evaluation.py'
+    import chi_agent.models.opencode_go_provider as opencode_go_provider
+    expected = hashlib.sha256((ROOT/'src/chi_agent/accounting/budget_evaluation.py').read_bytes()).hexdigest()
+    name = 'src/chi_agent/accounting/budget_evaluation.py'
     assert opencode_go_provider.source_identity()['files_sha256'][name] == expected
     assert b_live_preflight._source_and_sdk()[0]['application_sources_sha256'][name] == expected
     evaluation = evaluation_entry._runtime_identity()

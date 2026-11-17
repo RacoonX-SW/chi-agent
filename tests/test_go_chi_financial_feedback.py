@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from chi_agent.journal import ChiJournal, acknowledge_unsettled, audit_or_rebind, inspect_history
-from chi_agent.runtime_policy import FEE_POLICY
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.accounting.journal import ChiJournal, acknowledge_unsettled, audit_or_rebind, inspect_history
+from chi_agent.agent.runtime_policy import FEE_POLICY
+from chi_agent.models.opencode_go_provider import GoFailure
 from test_go_chi_inspect import event
 from test_go_chi_journal import USAGE, settle
 
@@ -27,7 +27,7 @@ class FinancialFeedbackTests(unittest.TestCase):
         import contextlib
         import io
         import chi_agent.cli as entry
-        from chi_agent.opencode_go_provider import GoJournal, source_identity
+        from chi_agent.models.opencode_go_provider import GoJournal, source_identity
         with tempfile.TemporaryDirectory() as d:
             qroot = Path(d)/'q'
             q = GoJournal(qroot, 'synthetic-q', source_identity()); q.finish('failed', 'synthetic_failed', 0); q.close()
@@ -134,7 +134,7 @@ class FinancialFeedbackTests(unittest.TestCase):
             root = Path(d)/'chi'; root.mkdir(); args = fixture(root)
             with self.assertRaises(GoFailure): acknowledge_unsettled(root, **dict(args, request_sha256='f'*64))
             self.assertFalse((root/'acknowledgement.pending').exists())
-            with patch('chi_agent.journal._atomic', side_effect=OSError('synthetic failure')):
+            with patch('chi_agent.accounting.journal._atomic', side_effect=OSError('synthetic failure')):
                 with self.assertRaises(OSError): acknowledge_unsettled(root, **args)
             self.assertTrue((root/'acknowledgement.pending').exists())
             with self.assertRaisesRegex(GoFailure, 'chi_history_invalid'):
@@ -170,14 +170,14 @@ class FinancialFeedbackTests(unittest.TestCase):
                     if lock: lock.close()
 
     def test_ack_partial_writes_remain_blocked(self):
-        from chi_agent.journal import _write_exclusive as real_write
+        from chi_agent.accounting.journal import _write_exclusive as real_write
         for kind in ('accounting', 'provider', 'event'):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as d:
                 root = Path(d)/'chi'; root.mkdir(); args = fixture(root)
                 def fail_at(path, data):
                     if f'-{kind}-' in path.name: raise OSError('synthetic write failure')
                     return real_write(path, data)
-                with patch('chi_agent.journal._write_exclusive', side_effect=fail_at):
+                with patch('chi_agent.accounting.journal._write_exclusive', side_effect=fail_at):
                     with self.assertRaises(OSError): acknowledge_unsettled(root, **args)
                 self.assertTrue((root/'acknowledgement.pending').exists())
                 with self.assertRaisesRegex(GoFailure, 'chi_history_invalid'):

@@ -1,6 +1,6 @@
 import unittest
 
-from chi_agent.output_recovery import mode_and_fragment
+from chi_agent.context.output_recovery import mode_and_fragment
 
 
 def payload(message):

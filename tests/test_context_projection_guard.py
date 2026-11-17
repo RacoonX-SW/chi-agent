@@ -9,12 +9,12 @@ from unittest.mock import patch
 
 import httpx
 
-from chi_agent.context_assembly import truncate_tool_text
-from chi_agent.context_budget import DEFAULT_BUDGET_V3, measure_request
-from chi_agent.request_guard import ChiGuard
-from chi_agent.journal import ChiJournal
-from chi_agent.opencode_go_provider import GoFailure
-from chi_agent.request_budget import feedback
+from chi_agent.context.context_assembly import truncate_tool_text
+from chi_agent.context.context_budget import DEFAULT_BUDGET_V3, measure_request
+from chi_agent.models.request_guard import ChiGuard
+from chi_agent.accounting.journal import ChiJournal
+from chi_agent.models.opencode_go_provider import GoFailure
+from chi_agent.accounting.request_budget import feedback
 from test_go_chi_guard import SECRET, SESSION, TOOLS, USAGE, URL, body, request
 
 
@@ -80,7 +80,7 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
             journal.finish("failed")
             journal.close()
             raw = (root / "chi-accounting.json").read_bytes()
-            from chi_agent.journal import inspect_history
+            from chi_agent.accounting.journal import inspect_history
             self.assertEqual(inspect_history(root, "a" * 64,
                                              __import__("hashlib").sha256(raw).hexdigest())["status"],
                              "inspected")
@@ -148,7 +148,7 @@ class GuardProjectionTests(unittest.IsolatedAsyncioTestCase):
             journal.finish("failed")
             journal.close()
             raw = (root / "chi-accounting.json").read_bytes()
-            from chi_agent.journal import inspect_history
+            from chi_agent.accounting.journal import inspect_history
             self.assertEqual(inspect_history(root, "a" * 64,
                                              hashlib.sha256(raw).hexdigest())["status"], "inspected")
 
@@ -251,7 +251,7 @@ class FullResultLimitTests(unittest.TestCase):
             guard = ChiGuard(journal, SECRET, SESSION, httpx.MockTransport(lambda r: r),
                              tools=TOOLS, system="system", instruction="instruction",
                              claimed=lambda: False, confirmation=lambda: None)
-            with patch('chi_agent.request_guard.MAX_FULL_RESULTS_TOTAL_BYTES', 10):
+            with patch('chi_agent.models.request_guard.MAX_FULL_RESULTS_TOTAL_BYTES', 10):
                 guard.record_full_result("c1", "123456")
                 with self.assertRaises(GoFailure) as caught:
                     guard.record_full_result("c2", "123456")

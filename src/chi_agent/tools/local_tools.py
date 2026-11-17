@@ -6,16 +6,16 @@ import hashlib
 import os
 from pathlib import Path
 
-from .opencode_go_provider import GoFailure
-from .workspace_paths import workspace_path
-from .evaluation_bundle import _check_components, BundleFailure
-from .role_guidance import guidance as role_guidance
-from .context_assembly import reduce_tool_result, truncate_tool_text
-from .resource_index import build_index, search_index
-from .text_search import SearchRefusal, search as bounded_search
-from .task_state import REQUIREMENTS_POLICY, StateRefusal
-from .payer_evidence import CASE_ID, EvidenceRegistry
-from .pdf_resource_reader import read_allowed_file
+from chi_agent.models.opencode_go_provider import GoFailure
+from chi_agent.tools.workspace_paths import workspace_path
+from chi_agent.evaluation_bundle import _check_components, BundleFailure
+from chi_agent.roles.role_guidance import guidance as role_guidance
+from chi_agent.context.context_assembly import reduce_tool_result, truncate_tool_text
+from chi_agent.tools.resource_index import build_index, search_index
+from chi_agent.tools.text_search import SearchRefusal, search as bounded_search
+from chi_agent.agent.task_state import REQUIREMENTS_POLICY, StateRefusal
+from chi_agent.roles.payer_evidence import CASE_ID, EvidenceRegistry
+from chi_agent.tools.pdf_resource_reader import read_allowed_file
 
 EVIDENCE_SHADOW_MODES = {None, "off", "shadow"}
 CAPABILITIES = {None, "f0-f3-v1"}
@@ -200,7 +200,7 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         return "workspace file written"
 
     async def edit_file(args):
-        from .evaluation_bundle import _read_regular_bounded
+        from chi_agent.evaluation_bundle import _read_regular_bounded
         path = writable(args.get("path"))
         if path is None:
             return "REFUSED: workspace_case_unverified_or_role_invalid"
@@ -228,21 +228,21 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         return "task marked as done"
 
     async def observation(args):
-        from .patient_identity_binding import Refusal
+        from chi_agent.roles.patient_identity_binding import Refusal
         try:
             return binding.read_observation(args["patient_id"], args["offset"], args.get("sha256"))
         except Refusal as exc:
             return "REFUSED: " + str(exc)
 
     async def roster_page(args):
-        from .patient_identity_binding import Refusal
+        from chi_agent.roles.patient_identity_binding import Refusal
         try:
             return binding.read_roster(args["sha256"], args["offset"])
         except Refusal as exc:
             return "REFUSED: " + str(exc)
 
     async def confirm(args):
-        from .patient_identity_binding import PROMPT, PROMPT_VERSION, MAX_CONFIRM_INPUT, CONFIRM_MAX_OUTPUT_TOKENS, Refusal
+        from chi_agent.roles.patient_identity_binding import PROMPT, PROMPT_VERSION, MAX_CONFIRM_INPUT, CONFIRM_MAX_OUTPUT_TOKENS, Refusal
         try:
             evidence = binding.confirmation_input(args["patient_id"], exchanges)
             if (not args["instruction_quote"].strip() or args["instruction_quote"] not in binding.instruction
@@ -579,7 +579,7 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
         ("local-claim_done", claim_description, empty, claim),
     ]
     if binding is not None:
-        from .patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION, ROSTER_DESCRIPTION
+        from chi_agent.roles.patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION, ROSTER_DESCRIPTION
         defs.extend([
             ("local-read-patient-observation", READ_DESCRIPTION, schema({"patient_id": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}, "sha256": {"type": "string"}}, ["patient_id", "offset"]), observation),
             ("local-read-patient-roster", ROSTER_DESCRIPTION, schema({"sha256": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}}, ["sha256", "offset"]), roster_page),

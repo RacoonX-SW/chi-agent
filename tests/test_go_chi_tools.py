@@ -6,10 +6,10 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from agents.models.openai_chatcompletions import Converter
-from chi_agent.tool_contract import ToolContract
-from chi_agent.task_state import TaskState
-from chi_agent.local_tools import local_tools
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.tools.tool_contract import ToolContract
+from chi_agent.agent.task_state import TaskState
+from chi_agent.tools.local_tools import local_tools
+from chi_agent.models.opencode_go_provider import GoFailure
 
 
 class Journal:

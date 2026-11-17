@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 
-from .output_recovery import classify
+from chi_agent.context.output_recovery import classify
 
 SCHEMA = "chi-context-assembly-v1"
 TRUNCATE_SCHEMA = "chi-tool-truncation-v1"

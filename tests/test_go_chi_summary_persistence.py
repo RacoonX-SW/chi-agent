@@ -1,9 +1,9 @@
 import asyncio,hashlib,json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
-import chi_agent.journal as journal_module
-from chi_agent.journal import ChiJournal,inspect_history
-from chi_agent.opencode_go_provider import GoFailure
+import chi_agent.accounting.journal as journal_module
+from chi_agent.accounting.journal import ChiJournal,inspect_history
+from chi_agent.models.opencode_go_provider import GoFailure
 from test_go_chi_summary_review import Flow
 
 class PersistenceMatrix(unittest.TestCase):

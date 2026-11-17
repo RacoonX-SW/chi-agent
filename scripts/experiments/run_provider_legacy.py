@@ -11,11 +11,11 @@ import time
 from pathlib import Path
 
 from scripts.development.world_environment import _docker, _task_environment, wait_world
-from chi_agent.provider_transport import _reject_symlink_ancestors
+from chi_agent.models.provider_transport import _reject_symlink_ancestors
 from scripts.development.review_run import _checks
 from chi_agent.evaluation_bundle import _check_components, _read_regular_bounded
 from scripts.development.capture_resources import capture_resources
-from chi_agent.runtime_policy import TIME_POLICY
+from chi_agent.agent.runtime_policy import TIME_POLICY
 from scripts.development.run_development_legacy import _capture_review_input
 from docker.types import Mount
 from chi_bench.verifier.task_runtime import collect_all_verifier_checks  # preflight the delayed verifier import

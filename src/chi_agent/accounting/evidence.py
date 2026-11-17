@@ -5,8 +5,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from .evaluation_bundle import _check_components, _read_regular_bounded, _write_exclusive, _fsync_dir
-from .opencode_go_provider import GoFailure, _contains_secret, _unique
+from chi_agent.evaluation_bundle import _check_components, _read_regular_bounded, _write_exclusive, _fsync_dir
+from chi_agent.models.opencode_go_provider import GoFailure, _contains_secret, _unique
 
 MAX_EVIDENCE_BYTES = 20 * 1024 * 1024
 

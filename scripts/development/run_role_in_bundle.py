@@ -94,7 +94,7 @@ async def development(journal, secret, run_chi, kwargs):
             if kwargs['role'] != 'payer':
                 raise RuntimeError('evidence_shadow_role_invalid')
             kwargs['evidence_shadow'] = 'shadow'
-        from chi_agent.mcp_tools import selected_server
+        from chi_agent.tools.mcp_tools import selected_server
         kwargs['server_factory'] = lambda url: TrackedServer(selected_server(url, auxiliary=kwargs['role'] == 'cm'), tracking)
         if kwargs['role'] == 'cm':
             capability = CAPABILITY_PATH.read_text(encoding='ascii').strip()

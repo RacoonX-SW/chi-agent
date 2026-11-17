@@ -18,14 +18,14 @@ from unittest.mock import AsyncMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
-import chi_agent.provider_profile as profiles
-import chi_agent.execution_policy as policies
-import chi_agent.evaluation_preflight as preflight
+import chi_agent.models.provider_profile as profiles
+import chi_agent.accounting.execution_policy as policies
+import chi_agent.evaluation.evaluation_preflight as preflight
 
 try:
     import httpx
-    import chi_agent.provider_transport as transport
-    import chi_agent.model_runner_adapter as runner_adapter
+    import chi_agent.models.provider_transport as transport
+    import chi_agent.evaluation.model_runner_adapter as runner_adapter
 except ModuleNotFoundError as exc:
     httpx = transport = runner_adapter = None
     _OPTIONAL_IMPORT_ERROR = exc

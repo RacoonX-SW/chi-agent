@@ -21,7 +21,7 @@ docker compose run --rm --no-deps dev python -m chi_agent.bundle build --target 
 
 | 路径 | 用途 |
 | --- | --- |
-| [src/chi_agent](src/chi_agent/) | Agent 运行、MCP、上下文、账本和导出包 |
+| [src/chi_agent](src/chi_agent/) | 根目录保留入口和交付；`agent/`、`context/`、`tools/`、`models/`、`accounting/`、`roles/`、`evaluation/` 分别组织运行、上下文、工具、模型、账本、角色和评测 |
 | [scripts/development](scripts/development/) | 开发调度、资源检查和患者模拟 |
 | [scripts/experiments](scripts/experiments/) | 早期探针、基线和实验 |
 | [scripts/tools](scripts/tools/) | 构建、检查和运行汇总 |

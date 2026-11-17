@@ -23,7 +23,7 @@ from typing import Any
 
 import httpx
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 PROFILE_PATH = ROOT / "profiles/opencode-go-deepseek.json"
 DEFAULT_ROOT = ROOT / "runs/opencode-go-development"
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$")
@@ -122,7 +122,7 @@ def load_profile() -> tuple[dict, str]:
     try:
         raw = _read_regular(PROFILE_PATH, 65536)
         value = json.loads(raw, object_pairs_hook=_unique)
-        from .provider_profile import _same_typed_value
+        from chi_agent.models.provider_profile import _same_typed_value
         if not _same_typed_value(value, PROFILE):
             raise ValueError
         return value, _sha(raw)
@@ -132,11 +132,11 @@ def load_profile() -> tuple[dict, str]:
 
 def source_identity() -> dict:
     _, profile_hash = load_profile()
-    package = Path(__file__).resolve().parent.relative_to(ROOT)
+    package = Path(__file__).resolve().parent.parent.relative_to(ROOT)
     paths = ("profiles/opencode-go-deepseek.json", "requirements-model.lock") + tuple(
         (package / name).as_posix() for name in (
-            "opencode_go_provider.py", "provider_profile.py", "provider_transport.py",
-            "execution_policy.py", "model_runner_adapter.py", "budget_evaluation.py", "model_adapter.py",
+            "models/opencode_go_provider.py", "models/provider_profile.py", "models/provider_transport.py",
+            "accounting/execution_policy.py", "evaluation/model_runner_adapter.py", "accounting/budget_evaluation.py", "models/model_adapter.py",
         )
     )
     try:
@@ -191,7 +191,7 @@ class GoJournal:
     """One source-bound USD namespace; prior account history is not presumed zero."""
     def __init__(self, root: Path, run_id: str, identity: dict, *, maintenance: bool = False):
         if not ID_RE.fullmatch(run_id): raise GoFailure("run_id_invalid")
-        from .provider_transport import _reject_symlink_ancestors
+        from chi_agent.models.provider_transport import _reject_symlink_ancestors
         try:
             _reject_symlink_ancestors(root, "path_invalid")
             root.mkdir(parents=True, exist_ok=True)
@@ -545,7 +545,7 @@ class GoGuard(httpx.AsyncBaseTransport):
             unsafe_body = _contains_secret(payload, self.secret, self.session)
             if not unsafe_body: entry["response_body"] = payload
             else: entry["response_redacted"] = "secret_detected"
-            from .provider_transport import GuardedTransport
+            from chi_agent.models.provider_transport import GuardedTransport
             try: incoming, outgoing = GuardedTransport._usage(payload)
             except Exception: raise GoFailure("go_usage_unknown") from None
             over_limit = incoming > PROFILE["documented_context_tokens"] or outgoing > PROFILE["max_output_tokens"]
@@ -612,7 +612,7 @@ async def _run_probe(root: Path, run_id: str, secret: str, *, lower: httpx.Async
     from agents.tool import FunctionTool
     from agents.tracing import get_trace_provider
     from agents.models.openai_chatcompletions import Converter
-    from .model_runner_adapter import _patch_empty_history_compatibility
+    from chi_agent.evaluation.model_runner_adapter import _patch_empty_history_compatibility
     identity = source_identity()
     journal = GoJournal(root, run_id, identity)
     start = time.monotonic()
@@ -695,7 +695,7 @@ def preflight() -> dict:
     identity = source_identity()
     if DEFAULT_ROOT.exists():
         try:
-            from .provider_transport import _reject_symlink_ancestors
+            from chi_agent.models.provider_transport import _reject_symlink_ancestors
             _reject_symlink_ancestors(DEFAULT_ROOT, "path_invalid")
             if (DEFAULT_ROOT / ".rebind-pending").exists() or (DEFAULT_ROOT / ".rebind-pending").is_symlink(): raise ValueError
             if not (DEFAULT_ROOT / "accounting.json").exists():

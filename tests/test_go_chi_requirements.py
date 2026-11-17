@@ -10,14 +10,14 @@ import httpx
 
 from chi_agent.cli import REQUIREMENTS_POLICY as ENTRY_POLICY
 from chi_agent.cli import _is_completion, _read_run_log_checked, main as entry_main
-from chi_agent.role_guidance import VERSION, VERSION_REQUIREMENTS, digest, guidance
-from chi_agent.journal import ChiJournal
+from chi_agent.roles.role_guidance import VERSION, VERSION_REQUIREMENTS, digest, guidance
+from chi_agent.accounting.journal import ChiJournal
 from scripts.tools.inspect_readiness import _completion_state
-from chi_agent.runtime import run_chi
-from chi_agent.task_state import (MAX_REQUIREMENTS, MAX_STATE_BYTES, MAX_TEXT,
+from chi_agent.agent.runtime import run_chi
+from chi_agent.agent.task_state import (MAX_REQUIREMENTS, MAX_STATE_BYTES, MAX_TEXT,
                           REQUIREMENTS_POLICY, StateRefusal, TaskState, _atomic_write)
-from chi_agent.local_tools import local_tools
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.tools.local_tools import local_tools
+from chi_agent.models.opencode_go_provider import GoFailure
 from scripts.development.run_role_in_bundle import reject_shadow_with_validation_flags, selected_validation_flags
 
 INSTRUCTION = (

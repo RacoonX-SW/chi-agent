@@ -20,6 +20,25 @@ class BundleTests(unittest.TestCase):
             built = bundle.build_bundle(destination, source_root=source)
             self.assertEqual(bundle.validate_bundle(destination).manifest_sha256, built.manifest_sha256)
             self.assertFalse((destination / ".env").exists())
-            (destination / "scripts" / "chi_agent" / "request_guard.py").write_text("tampered", encoding="utf-8")
+            (destination / "scripts" / "chi_agent" / "models" / "request_guard.py").write_text("tampered", encoding="utf-8")
             with self.assertRaisesRegex(bundle.BundleFailure, "bundle_file_digest_mismatch"):
                 bundle.validate_bundle(destination)
+
+    def test_v3_requires_subpackage_initializers_and_rejects_v2_tree(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d) / 'bundle'
+            bundle.build_bundle(root)
+            (root / 'scripts/chi_agent/models/__init__.py').unlink()
+            with self.assertRaisesRegex(bundle.BundleFailure, 'bundle_tree_invalid'):
+                bundle.validate_bundle(root)
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            for name in bundle.V2_PACKAGE_FILES:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('v2')
+            (root / bundle.MANIFEST_NAME).write_text(
+                '{"schema":"chi-go-evaluation-bundle-v3",'
+                '"bundle_id":"go-chi-evaluation-record-only-v3"}')
+            with self.assertRaisesRegex(bundle.BundleFailure, 'bundle_tree_invalid'):
+                bundle.validate_bundle(root)

@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from chi_agent.task_state import CONTEXT_POLICY_V3, TaskState
+from chi_agent.agent.task_state import CONTEXT_POLICY_V3, TaskState
 
 
 class CompletionGateTests(unittest.TestCase):

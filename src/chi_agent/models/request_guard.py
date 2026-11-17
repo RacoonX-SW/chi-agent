@@ -10,15 +10,15 @@ import time
 
 import httpx
 
-from .context_budget import DEFAULT_BUDGET, budget_pressure, check_budget, measure_request
-from .context_assembly import project_messages
-from .tool_contract import ToolContract, ContractFailure, validate_anchor
-from .diagnostics import build_cause, cause_for_code
-from .opencode_go_provider import (GoFailure, _contains_secret, _unique,
+from chi_agent.context.context_budget import DEFAULT_BUDGET, budget_pressure, check_budget, measure_request
+from chi_agent.context.context_assembly import project_messages
+from chi_agent.tools.tool_contract import ToolContract, ContractFailure, validate_anchor
+from chi_agent.accounting.diagnostics import build_cause, cause_for_code
+from chi_agent.models.opencode_go_provider import (GoFailure, _contains_secret, _unique,
                                   SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
                                   SCHEMAS as B_SCHEMAS, DESCRIPTIONS as B_DESCRIPTIONS)
-from .provider_transport import GuardedTransport
-from .runtime_policy import TIME_POLICY, SUMMARY_VERSIONS, output_limit
+from chi_agent.models.provider_transport import GuardedTransport
+from chi_agent.agent.runtime_policy import TIME_POLICY, SUMMARY_VERSIONS, output_limit
 
 MAX_FULL_RESULT_BYTES = 8 * 1024 * 1024
 MAX_FULL_RESULTS_TOTAL_BYTES = 64 * 1024 * 1024
@@ -159,7 +159,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                     or _contains_secret(body, self.secret, self.session)):
                 raise ValueError
             if purpose == 'summary':
-                from .output_recovery import canonical_sha
+                from chi_agent.context.output_recovery import canonical_sha
                 if context is not None or canonical_sha(body) != summary['body_sha256']:
                     raise GoFailure('chi_summary_source_changed')
             elif context is not None:
@@ -177,13 +177,13 @@ class ChiGuard(httpx.AsyncBaseTransport):
                 messages = source_body["messages"]
                 source_used = used
                 if summary is not None and summary['kind'] == 'main':
-                    from .output_recovery import canonical_sha
+                    from chi_agent.context.output_recovery import canonical_sha
                     if canonical_sha(body) != summary['body_sha256']:
                         raise GoFailure('chi_summary_source_changed')
                     messages = summary['source_body']['messages']
                     source_used = summary['source_used']
                 if continuation:
-                    from .output_recovery import canonical_sha
+                    from chi_agent.context.output_recovery import canonical_sha
                     if (hashlib.sha256(raw).hexdigest() != active["body_sha256"]
                             or canonical_sha(body) != active["view_sha256"]
                             or canonical_sha(body) != canonical_sha(json.loads(raw, object_pairs_hook=_unique))):
@@ -246,7 +246,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             if purpose == 'summary':
                 raise GoFailure('chi_summary_invalid')
             if purpose == "main" and self.journal.run["kind"] == "chi" and self.journal.run["launch"].get("output_recovery") == "chi-output-recovery-v1":
-                from .output_recovery import mode_and_fragment
+                from chi_agent.context.output_recovery import mode_and_fragment
                 try: mode_and_fragment(payload)
                 except ValueError: raise GoFailure("chi_response_invalid") from None
                 return True
@@ -290,7 +290,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
                              and name == "verify_patch")):
                         raise ContractFailure("chi_b_order_invalid")
                 if purpose == "continuation" or (purpose == 'main' and self._active_summary is not None):
-                    from .output_recovery import canonical_sha, classify
+                    from chi_agent.context.output_recovery import canonical_sha, classify
                     parsed = copy.deepcopy(self.contract).accept_batch(clean)
                     completed = set()
                     dispatched = {event['call_id'] for event in self.journal.run['tool_events']
@@ -322,7 +322,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             raise GoFailure("chi_response_invalid")
 
     def _contract_snapshot(self):
-        from .output_recovery import canonical_sha
+        from chi_agent.context.output_recovery import canonical_sha
         return canonical_sha({"definitions": self.contract.definitions, "records": self.contract.records,
                               "batches": self.contract.batches, "seen": sorted(self.contract.seen),
                               "refusals": self.contract.refusals})
@@ -330,7 +330,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
     def _make_view_identity(self, source_body, wire_body, anchor, pressure, *, mode,
                             parent_round=None, frozen_view=False,
                             projection_rule="chi-context-projection-v1"):
-        from .output_recovery import canonical_sha
+        from chi_agent.context.output_recovery import canonical_sha
         return {
             "schema": "chi-view-identity-v1",
             "source_sha256": canonical_sha(source_body["messages"]),
@@ -367,14 +367,14 @@ class ChiGuard(httpx.AsyncBaseTransport):
             raise GoFailure("chi_recovery_limit")
 
     def _summary_protected(self):
-        from .input_summary import protected_snapshot
+        from chi_agent.context.input_summary import protected_snapshot
         binding, state = self.summary_snapshot()
         return protected_snapshot(journal=self.journal, contract=self.contract, canonical_tools=self.canonical_tools,
                                   role=self.journal.run['launch']['role'], instruction=self.instruction,
                                   system=self.system, patient_binding=binding, task_state=state)
 
     def _summary_check(self, *, request, raw_hash, contract_hash, protected_hash, used):
-        from .input_summary import canonical_sha
+        from chi_agent.context.input_summary import canonical_sha
         if self.fatal_getter(): raise GoFailure(self.fatal_getter())
         if self.error is not None: raise GoFailure(self.error)
         task = asyncio.current_task()
@@ -390,7 +390,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             raise GoFailure('chi_run_time_limit')
 
     async def _handle_input_summary(self, request):
-        from .input_summary import canonical_sha, select_closed, summary_request, NOTICE
+        from chi_agent.context.input_summary import canonical_sha, select_closed, summary_request, NOTICE
         if self.journal.run['launch'].get('input_summary') not in SUMMARY_VERSIONS or self.confirmation() is not None:
             return False, None
         try:
@@ -485,7 +485,7 @@ class ChiGuard(httpx.AsyncBaseTransport):
             self._active_summary = None
 
     async def handle_async_request(self, request):
-        from .output_recovery import canonical_sha, derive_view, mode_and_fragment
+        from chi_agent.context.output_recovery import canonical_sha, derive_view, mode_and_fragment
         async with self._control_lock:
             handled, summary_response = await self._handle_input_summary(request)
             if handled:

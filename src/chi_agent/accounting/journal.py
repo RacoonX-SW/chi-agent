@@ -16,13 +16,13 @@ import re
 from decimal import Decimal
 from pathlib import Path
 
-from .opencode_go_provider import GoFailure, _atomic, _billing, _object, _unique, _contains_secret
-from .provider_transport import _reject_symlink_ancestors
-from .diagnostics import (SCHEMA_V2, build_cause, validate_cause, validate_v1, validate_v2)
-from .evidence import (envelope, write as write_evidence, verify as verify_evidence,
+from chi_agent.models.opencode_go_provider import GoFailure, _atomic, _billing, _object, _unique, _contains_secret
+from chi_agent.models.provider_transport import _reject_symlink_ancestors
+from chi_agent.accounting.diagnostics import (SCHEMA_V2, build_cause, validate_cause, validate_v1, validate_v2)
+from chi_agent.accounting.evidence import (envelope, write as write_evidence, verify as verify_evidence,
                              write_tool, verify_tool)
-from .evaluation_bundle import _read_regular_bounded, _write_exclusive, _fsync_dir
-from .runtime_policy import FEE_POLICY, SUMMARY_VERSIONS, output_limit
+from chi_agent.evaluation_bundle import _read_regular_bounded, _write_exclusive, _fsync_dir
+from chi_agent.agent.runtime_policy import FEE_POLICY, SUMMARY_VERSIONS, output_limit
 
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 DIGEST = re.compile(r"^[0-9a-f]{64}$")
@@ -107,7 +107,7 @@ def _fee_decision(usage: dict, policy: str | None) -> tuple[dict, str | None, st
 
 
 def _state_object(path: Path) -> dict:
-    from .opencode_go_provider import _unique
+    from chi_agent.models.opencode_go_provider import _unique
     try:
         raw = _read_regular_bounded(path, MAX_STATE_BYTES, "chi_history_invalid")
         value = json.loads(raw, object_pairs_hook=_unique,
@@ -147,7 +147,7 @@ def _acknowledged(root: Path, state: dict) -> dict:
         event_name = f'{index:04d}-event-{ref["event_sha256"]}.json'
         event_raw = _read_regular_bounded(directory / event_name, 1024 * 1024, 'chi_history_invalid')
         if hashlib.sha256(event_raw).hexdigest() != ref['event_sha256']: raise ValueError
-        from .opencode_go_provider import _unique
+        from chi_agent.models.opencode_go_provider import _unique
         event = json.loads(event_raw, object_pairs_hook=_unique, parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
         if (type(event) is not dict or set(event) != {'schema', 'identity', 'accounting_sha256', 'provider_sha256', 'run', 'round', 'request_sha256', 'reason'}
                 or event['schema'] != 'chi-go-unsettled-ack-v1'
@@ -190,7 +190,7 @@ def _acknowledged(root: Path, state: dict) -> dict:
         request_doc = verify_evidence(root, event['run'], event['round'], 'request', request['request_evidence_sha256'])
         diagnostic = verify_evidence(root, event['run'], event['round'], 'diagnostic', request['diagnostic_evidence_sha256'])
         if diagnostic.get('code') != 'chi_timeout' or request_doc.get('dispatch') is not None: raise ValueError
-        from .provider_inspection import inspect_provider
+        from chi_agent.models.provider_inspection import inspect_provider
         body = request_doc.get('body_utf8')
         pending = {'kind': attempt['kind'], 'purpose': request['purpose'], 'dispatch': request_doc.get('dispatch'),
                    'body_bytes': len(body.encode()) if body is not None else None}
@@ -352,8 +352,8 @@ def inspect_history(root: Path, expected_identity: str, expected_sha256: str) ->
 def acknowledge_unsettled(root: Path, *, identity: str, accounting_sha256: str, run: str, round_number: int,
                           request_sha256: str, provider_path: Path, provider_sha256: str, reason: str) -> dict:
     """Record the user's bounded decision; neither settle nor alter the failed attempt."""
-    from .evaluation_bundle import _check_components
-    from .provider_inspection import inspect_provider
+    from chi_agent.evaluation_bundle import _check_components
+    from chi_agent.models.provider_inspection import inspect_provider
     if (any(type(x) is not str or not DIGEST.fullmatch(x) for x in (identity, accounting_sha256, request_sha256, provider_sha256))
             or type(run) is not str or not ID.fullmatch(run) or type(round_number) is not int or round_number < 1
             or type(reason) is not str or not reason.strip() or len(reason) > 256): raise GoFailure('chi_ack_invalid')
@@ -420,8 +420,8 @@ def reconcile_provider_timeout(root: Path, *, identity: str, accounting_sha256: 
     The event records provider identity, tokens and cost; billing splits remain
     incomplete rather than being fabricated.
     """
-    from .evaluation_bundle import _check_components
-    from .provider_inspection import inspect_provider
+    from chi_agent.evaluation_bundle import _check_components
+    from chi_agent.models.provider_inspection import inspect_provider
     if (any(type(x) is not str or not DIGEST.fullmatch(x)
             for x in (identity, accounting_sha256, request_sha256, provider_sha256))
             or type(run) is not str or not ID.fullmatch(run) or type(round_number) is not int or round_number < 1
@@ -502,8 +502,8 @@ def reconcile_provider_timeout(root: Path, *, identity: str, accounting_sha256: 
 
 def _recovery_source(root: Path, run: dict, parent_round: int, *, anchor=None):
     """Reconstruct a recovery source only from verified, settled evidence."""
-    from .provider_transport import GuardedTransport
-    from .output_recovery import derive_view, mode_and_fragment
+    from chi_agent.models.provider_transport import GuardedTransport
+    from chi_agent.context.output_recovery import derive_view, mode_and_fragment
     if (type(parent_round) is not int or not 1 <= parent_round <= len(run["requests"])):
         raise ValueError("chi_recovery_invalid")
     item = run["requests"][parent_round - 1]
@@ -556,9 +556,9 @@ def _recovery_source(root: Path, run: dict, parent_round: int, *, anchor=None):
 def _replay_source_view(root: Path, run: dict, source_body: dict, wire_body: dict,
                         *, keep_recent_batches: int, project_results: bool):
     """Replay a v3 projection from persisted source + tool evidence."""
-    from .context_assembly import project_messages
-    from .output_recovery import canonical_sha
-    from .evidence import verify_tool
+    from chi_agent.context.context_assembly import project_messages
+    from chi_agent.context.output_recovery import canonical_sha
+    from chi_agent.accounting.evidence import verify_tool
     if (type(source_body) is not dict or type(source_body.get('messages')) is not list
             or type(wire_body) is not dict or type(wire_body.get('messages')) is not list):
         raise GoFailure('chi_view_source_mismatch')
@@ -1056,7 +1056,7 @@ class ChiJournal:
                     if req.get("body_utf8") is not None and hashlib.sha256(req["body_utf8"].encode()).hexdigest() != req["raw_sha256"]:
                         raise ValueError
                     if 'view_identity' in item:
-                        from .output_recovery import canonical_sha
+                        from chi_agent.context.output_recovery import canonical_sha
                         body = json.loads(req["body_utf8"], object_pairs_hook=_unique)
                         vi = item['view_identity']
                         if (canonical_sha(body) != vi['view_sha256']
@@ -1067,7 +1067,7 @@ class ChiJournal:
                                          != vi['anchor_sha256']))):
                             raise ValueError
                     if 'source_evidence_sha256' in item:
-                        from .output_recovery import canonical_sha
+                        from chi_agent.context.output_recovery import canonical_sha
                         src = verify_evidence(self.root, a["run"], index, "source",
                                               item['source_evidence_sha256'])
                         if (type(src) is not dict or set(src) != {'schema', 'body_utf8', 'raw_sha256'}
@@ -1130,7 +1130,7 @@ class ChiJournal:
                                     usage = evidence.get("usage")
                                     if (type(usage) is not dict or usage.get("prompt_tokens") != item["usage"]["input_tokens"]
                                             or usage.get("completion_tokens") != item["usage"]["output_tokens"]): raise ValueError
-                                    from .provider_transport import GuardedTransport
+                                    from chi_agent.models.provider_transport import GuardedTransport
                                     GuardedTransport._usage({"usage": usage})
                                     billed, billing_error, effective_fee_stop = _fee_decision(usage, fee_policy)
                                     if billed != item["billing"] or billing_error != item["billing_error"]:
@@ -1175,8 +1175,8 @@ class ChiJournal:
                     else:
                         raise ValueError
                 if recovery_enabled:
-                    from .output_recovery import validate_permit
-                    from .output_recovery import canonical_sha
+                    from chi_agent.context.output_recovery import validate_permit
+                    from chi_agent.context.output_recovery import canonical_sha
                     seen_parents, bound_rounds = set(), set()
                     for event in a["recovery_events"]:
                         if (type(event) is not dict or set(event) != {"parent_round", "permit_sha256", "continuation_round"}
@@ -1224,7 +1224,7 @@ class ChiJournal:
                                             raise GoFailure("chi_view_source_mismatch")
                                         anchor_replay = {"text": msgs[2].get("content"),
                                                          "sha256": permit["anchor_sha256"]}
-                                    from .output_recovery import derive_view as _derive
+                                    from chi_agent.context.output_recovery import derive_view as _derive
                                     expected_view = _derive(projected, response_body, old_used=old_used,
                                                             claimed=claimed, anchor=anchor_replay)
                                     if canonical_sha(expected_view) != permit["view_sha256"]:
@@ -1325,7 +1325,7 @@ class ChiJournal:
             raise GoFailure("chi_evidence_persistence_failed") from None
 
     def _validate_summary_history(self, run, identity, expected_evidence):
-        from .input_summary import (candidate_from_response, canonical_sha, derive_view, select_closed,
+        from chi_agent.context.input_summary import (candidate_from_response, canonical_sha, derive_view, select_closed,
                                     summary_request, validate_saved_source)
         events = run['summary_events']
         summary_rounds = [item['round'] for item in run['requests'] if item['purpose'] == 'summary']
@@ -1539,7 +1539,7 @@ class ChiJournal:
     def issue_recovery(self, view_body: dict, *, source_body=None, anchor=None, pressure=False,
                        secrets: tuple[str, ...] = ()) -> int:
         """Persist one consumed, immutable permit without issuing a request."""
-        from .output_recovery import (POLICY, VIEW, INSTRUCTION_VERSION, canonical_sha,
+        from chi_agent.context.output_recovery import (POLICY, VIEW, INSTRUCTION_VERSION, canonical_sha,
                                      mode_and_fragment, validate_permit)
         if getattr(self, "_recovery_persistence_failed", False):
             raise GoFailure("chi_recovery_persistence_failed")
@@ -1639,9 +1639,9 @@ class ChiJournal:
 
     def select_summary(self, source_body, protected, canonical_tools, *, source_raw, secrets=()):
         """Persist the one-shot source selection before any summary request."""
-        from .input_summary import (canonical_sha, protected_snapshot, select_closed,
+        from chi_agent.context.input_summary import (canonical_sha, protected_snapshot, select_closed,
                                     summary_request, validate_source)
-        from .request_budget import feedback
+        from chi_agent.accounting.request_budget import feedback
         if (getattr(self, '_summary_persistence_failed', False)
                 or not _summary_enabled(self.run['launch'], self.run['kind'])
                 or self.run['summary_events'] or self.state['pending'] is not None
@@ -1695,8 +1695,8 @@ class ChiJournal:
 
     def install_summary(self, current_protected, *, context_limit, secrets=()):
         """Persist candidate and checkpoint before exposing an active view."""
-        from .context_budget import check_budget, measure_request
-        from .input_summary import candidate_from_response, canonical_sha, derive_view
+        from chi_agent.context.context_budget import check_budget, measure_request
+        from chi_agent.context.input_summary import candidate_from_response, canonical_sha, derive_view
         try:
             if (getattr(self, '_summary_persistence_failed', False)
                     or not _summary_enabled(self.run['launch'], self.run['kind'])
@@ -1762,8 +1762,8 @@ class ChiJournal:
     def project_summary(self, source_body, source_raw, current_protected, *, source_used,
                         context_limit, secrets=()):
         """Persist a derived view and its complete independently verifiable source."""
-        from .context_budget import check_budget, measure_request
-        from .input_summary import canonical_sha, derive_view, validate_saved_source
+        from chi_agent.context.context_budget import check_budget, measure_request
+        from chi_agent.context.input_summary import canonical_sha, derive_view, validate_saved_source
         try:
             if (getattr(self, '_summary_persistence_failed', False)
                     or not _summary_enabled(self.run['launch'], self.run['kind'])
@@ -1851,7 +1851,7 @@ class ChiJournal:
             if projections and projections[-1]['round'] > len(self.run['requests']) and purpose != 'main':
                 raise GoFailure('chi_summary_unavailable')
             if summary_event['status'] == 'installed' and purpose == 'main':
-                from .input_summary import canonical_sha
+                from chi_agent.context.input_summary import canonical_sha
                 if (type(summary_projection) is not int or not 0 <= summary_projection < len(projections)
                         or summary_projection != len(projections) - 1
                         or projections[-1]['round'] != len(self.run['requests']) + 1):
@@ -1868,7 +1868,7 @@ class ChiJournal:
         if summary_projection is not None and (summary_event is None or summary_event['status'] != 'installed'):
             raise GoFailure('chi_summary_unavailable')
         if purpose == 'summary':
-            from .input_summary import canonical_sha
+            from chi_agent.context.input_summary import canonical_sha
             if (type(summary_permit) is not int or summary_permit != 0 or summary_event is None
                     or summary_event['status'] != 'selected' or summary_event['summary_round'] is not None):
                 raise GoFailure('chi_summary_unavailable')
@@ -1891,7 +1891,7 @@ class ChiJournal:
         if purpose == "continuation":
             if self.run["status"] != "started":
                 raise GoFailure("chi_recovery_invalid")
-            from .output_recovery import canonical_sha, validate_permit
+            from chi_agent.context.output_recovery import canonical_sha, validate_permit
             events = self.run["recovery_events"]
             if type(recovery_permit) is not int or not 0 <= recovery_permit < len(events):
                 raise GoFailure("chi_recovery_invalid")
@@ -2118,7 +2118,7 @@ class ChiJournal:
         if self.state["pending"] is None:
             raise GoFailure("chi_pending_invalid")
         try:
-            from .provider_transport import GuardedTransport
+            from chi_agent.models.provider_transport import GuardedTransport
             incoming, outgoing = GuardedTransport._usage({'usage': usage})
             billed, billing_error, halt = _fee_decision(usage, self.run['launch'].get('fee_policy'))
         except GoFailure:

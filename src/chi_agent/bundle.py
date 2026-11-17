@@ -15,7 +15,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_NAME = "bundle-manifest.json"
 INCOMPLETE_NAME = ".bundle-incomplete"
-MANIFEST_SCHEMA = "chi-go-evaluation-bundle-v2"
+MANIFEST_SCHEMA = "chi-go-evaluation-bundle-v3"
 CONFIG_PATH = "profiles/go-chi-entry.json"
 MAX_FILE_BYTES = 16 * 1024 * 1024
 
@@ -70,7 +70,7 @@ V1_PACKAGE_FILES: dict[str, str] = {
 }
 
 # Explicit v2 destination-to-source boundary.
-PACKAGE_FILES: dict[str, str] = {
+V2_PACKAGE_FILES: dict[str, str] = {
     "scripts/go_chi_entry.py": "docker/entrypoints/go_chi_entry.py",
     "scripts/chi_agent/cli.py": "src/chi_agent/cli.py",
     "scripts/chi_agent/evidence.py": "src/chi_agent/evidence.py",
@@ -119,6 +119,64 @@ PACKAGE_FILES: dict[str, str] = {
     "requirements-pdf.lock": "requirements-pdf.lock",
     "RUN_CHI_GO.md": "docs/go-chi-entry-runbook.md",
     "scripts/chi_agent/__init__.py": "src/chi_agent/__init__.py",
+}
+
+PACKAGE_FILES: dict[str, str] = {
+    "scripts/go_chi_entry.py": "docker/entrypoints/go_chi_entry.py",
+    "scripts/chi_agent/cli.py": "src/chi_agent/cli.py",
+    "scripts/chi_agent/accounting/evidence.py": "src/chi_agent/accounting/evidence.py",
+    "scripts/chi_agent/bundle.py": "src/chi_agent/bundle.py",
+    "scripts/chi_agent/tools/tool_contract.py": "src/chi_agent/tools/tool_contract.py",
+    "scripts/chi_agent/accounting/diagnostics.py": "src/chi_agent/accounting/diagnostics.py",
+    "scripts/chi_agent/context/context_budget.py": "src/chi_agent/context/context_budget.py",
+    "scripts/chi_agent/context/context_assembly.py": "src/chi_agent/context/context_assembly.py",
+    "scripts/chi_agent/agent/completion.py": "src/chi_agent/agent/completion.py",
+    "scripts/chi_agent/tools/resource_index.py": "src/chi_agent/tools/resource_index.py",
+    "scripts/chi_agent/context/output_recovery.py": "src/chi_agent/context/output_recovery.py",
+    "scripts/chi_agent/roles/role_guidance.py": "src/chi_agent/roles/role_guidance.py",
+    "scripts/chi_agent/models/request_guard.py": "src/chi_agent/models/request_guard.py",
+    "scripts/chi_agent/tools/text_search.py": "src/chi_agent/tools/text_search.py",
+    "scripts/chi_agent/agent/task_state.py": "src/chi_agent/agent/task_state.py",
+    "scripts/chi_agent/models/auxiliary_transport.py": "src/chi_agent/models/auxiliary_transport.py",
+    "scripts/chi_agent/models/provider_inspection.py": "src/chi_agent/models/provider_inspection.py",
+    "scripts/chi_agent/delivery.py": "src/chi_agent/delivery.py",
+    "scripts/go_chi_harness.py": "docker/entrypoints/go_chi_harness.py",
+    "scripts/chi_agent/harbor_adapter.py": "src/chi_agent/harbor_adapter.py",
+    "scripts/chi_agent/accounting/journal.py": "src/chi_agent/accounting/journal.py",
+    "scripts/chi_agent/context/input_summary.py": "src/chi_agent/context/input_summary.py",
+    "scripts/chi_agent/accounting/local_history.py": "src/chi_agent/accounting/local_history.py",
+    "scripts/chi_agent/agent/runtime_policy.py": "src/chi_agent/agent/runtime_policy.py",
+    "scripts/chi_agent/tools/mcp_tools.py": "src/chi_agent/tools/mcp_tools.py",
+    "scripts/chi_agent/tools/workspace_paths.py": "src/chi_agent/tools/workspace_paths.py",
+    "scripts/chi_agent/agent/runtime.py": "src/chi_agent/agent/runtime.py",
+    "scripts/chi_agent/tools/local_tools.py": "src/chi_agent/tools/local_tools.py",
+    "scripts/chi_agent/evaluation_bundle.py": "src/chi_agent/evaluation_bundle.py",
+    "scripts/chi_agent/accounting/execution_policy.py": "src/chi_agent/accounting/execution_policy.py",
+    "scripts/chi_agent/models/provider_profile.py": "src/chi_agent/models/provider_profile.py",
+    "scripts/chi_agent/models/provider_transport.py": "src/chi_agent/models/provider_transport.py",
+    "scripts/chi_agent/evaluation/model_runner_adapter.py": "src/chi_agent/evaluation/model_runner_adapter.py",
+    "scripts/chi_agent/accounting/budget_evaluation.py": "src/chi_agent/accounting/budget_evaluation.py",
+    "scripts/chi_agent/models/model_adapter.py": "src/chi_agent/models/model_adapter.py",
+    "scripts/chi_agent/models/opencode_go_provider.py": "src/chi_agent/models/opencode_go_provider.py",
+    "scripts/chi_agent/roles/patient_identity_binding.py": "src/chi_agent/roles/patient_identity_binding.py",
+    "scripts/chi_agent/roles/payer_evidence.py": "src/chi_agent/roles/payer_evidence.py",
+    "scripts/chi_agent/tools/pdf_resource_reader.py": "src/chi_agent/tools/pdf_resource_reader.py",
+    "scripts/chi_agent/roles/referral_field_guidance.py": "src/chi_agent/roles/referral_field_guidance.py",
+    "scripts/chi_agent/accounting/request_budget.py": "src/chi_agent/accounting/request_budget.py",
+    "scripts/install_model_dependencies.sh": "scripts/tools/install_model_dependencies.sh",
+    "profiles/go-chi-entry.json": "profiles/go-chi-entry.json",
+    "profiles/opencode-go-deepseek.json": "profiles/opencode-go-deepseek.json",
+    "requirements-model.lock": "requirements-model.lock",
+    "requirements-pdf.lock": "requirements-pdf.lock",
+    "RUN_CHI_GO.md": "docs/go-chi-entry-runbook.md",
+    "scripts/chi_agent/__init__.py": "src/chi_agent/__init__.py",
+    "scripts/chi_agent/accounting/__init__.py": "src/chi_agent/accounting/__init__.py",
+    "scripts/chi_agent/agent/__init__.py": "src/chi_agent/agent/__init__.py",
+    "scripts/chi_agent/context/__init__.py": "src/chi_agent/context/__init__.py",
+    "scripts/chi_agent/evaluation/__init__.py": "src/chi_agent/evaluation/__init__.py",
+    "scripts/chi_agent/models/__init__.py": "src/chi_agent/models/__init__.py",
+    "scripts/chi_agent/roles/__init__.py": "src/chi_agent/roles/__init__.py",
+    "scripts/chi_agent/tools/__init__.py": "src/chi_agent/tools/__init__.py",
 }
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -345,7 +403,7 @@ def build_bundle(target: Path, *, source_root: Path = ROOT) -> BundleIdentity:
             raise BundleFailure("bundle_source_invalid")
         unsigned = {
             "schema": MANIFEST_SCHEMA,
-            "bundle_id": "go-chi-evaluation-record-only-v2",
+            "bundle_id": "go-chi-evaluation-record-only-v3",
             "files": entries,
             "entry_config_sha256": config["sha256"],
             "identity_is_not_signature_or_authorization": True,
@@ -394,7 +452,8 @@ def validate_bundle(root: Path) -> BundleIdentity:
         raise BundleFailure("bundle_manifest_invalid") from None
     versions = {
         ("chi-go-evaluation-bundle-v1", "go-chi-evaluation-record-only-v1"): V1_PACKAGE_FILES,
-        (MANIFEST_SCHEMA, "go-chi-evaluation-record-only-v2"): PACKAGE_FILES,
+        ("chi-go-evaluation-bundle-v2", "go-chi-evaluation-record-only-v2"): V2_PACKAGE_FILES,
+        (MANIFEST_SCHEMA, "go-chi-evaluation-record-only-v3"): PACKAGE_FILES,
     }
     if type(manifest) is not dict:
         raise BundleFailure("bundle_manifest_invalid")

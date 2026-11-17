@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import httpx
 import chi_agent.cli as entry
-import chi_agent.opencode_go_provider as go
+import chi_agent.models.opencode_go_provider as go
 
 
 class EntryTests(unittest.TestCase):

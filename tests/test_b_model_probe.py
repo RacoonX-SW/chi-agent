@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 import scripts.experiments.probe_model_tools as probe
-from chi_agent.model_adapter import CANDIDATE_PROFILE, make_assistant_message
+from chi_agent.models.model_adapter import CANDIDATE_PROFILE, make_assistant_message
 
 
 class TestBModelProbe(unittest.TestCase):

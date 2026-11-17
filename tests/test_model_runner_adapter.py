@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 try:
-    import chi_agent.model_runner_adapter as adapter
+    import chi_agent.evaluation.model_runner_adapter as adapter
 except ModuleNotFoundError as exc:  # Optional dependency layer is absent in base image.
     adapter = None
     _OPTIONAL_IMPORT_ERROR = exc

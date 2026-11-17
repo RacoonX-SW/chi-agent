@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 LOCAL_POLICY_PATH = ROOT / "profiles" / "local-development-policy.json"
 POLICY_SCHEMA = "chi-execution-accounting-policy-v1"
 _MONEY_RE = re.compile(r"^(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,6})?$")

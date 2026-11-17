@@ -15,7 +15,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_NAME = "bundle-manifest.json"
 INCOMPLETE_NAME = ".bundle-incomplete"
-MANIFEST_SCHEMA = "chi-evaluation-entry-bundle-v2"
+MANIFEST_SCHEMA = "chi-evaluation-entry-bundle-v3"
 CONFIG_PATH = "profiles/evaluation-entry.json"
 MAX_FILE_BYTES = 16 * 1024 * 1024
 
@@ -39,7 +39,7 @@ V1_PACKAGE_FILES: dict[str, str] = {
 }
 
 # Explicit v2 destination-to-source boundary.
-PACKAGE_FILES: dict[str, str] = {
+V2_PACKAGE_FILES: dict[str, str] = {
     "scripts/evaluation_entry.py": "docker/entrypoints/evaluation_entry.py",
     "scripts/chi_agent/evaluation_cli.py": "src/chi_agent/evaluation_cli.py",
     "scripts/chi_agent/evaluation_bundle.py": "src/chi_agent/evaluation_bundle.py",
@@ -58,6 +58,31 @@ PACKAGE_FILES: dict[str, str] = {
     "requirements-model.lock": "requirements-model.lock",
     "RUN_EVALUATION.md": "docs/evaluation-entry-runbook.md",
     "scripts/chi_agent/__init__.py": "src/chi_agent/__init__.py",
+}
+
+PACKAGE_FILES: dict[str, str] = {
+    "scripts/evaluation_entry.py": "docker/entrypoints/evaluation_entry.py",
+    "scripts/chi_agent/evaluation_cli.py": "src/chi_agent/evaluation_cli.py",
+    "scripts/chi_agent/evaluation_bundle.py": "src/chi_agent/evaluation_bundle.py",
+    "scripts/chi_agent/evaluation/evaluation_preflight.py": "src/chi_agent/evaluation/evaluation_preflight.py",
+    "scripts/chi_agent/accounting/execution_policy.py": "src/chi_agent/accounting/execution_policy.py",
+    "scripts/chi_agent/models/provider_profile.py": "src/chi_agent/models/provider_profile.py",
+    "scripts/chi_agent/models/provider_transport.py": "src/chi_agent/models/provider_transport.py",
+    "scripts/chi_agent/roles/patient_identity_binding.py": "src/chi_agent/roles/patient_identity_binding.py",
+    "scripts/chi_agent/accounting/request_budget.py": "src/chi_agent/accounting/request_budget.py",
+    "scripts/chi_agent/evaluation/model_runner_adapter.py": "src/chi_agent/evaluation/model_runner_adapter.py",
+    "scripts/chi_agent/accounting/budget_evaluation.py": "src/chi_agent/accounting/budget_evaluation.py",
+    "scripts/chi_agent/models/model_adapter.py": "src/chi_agent/models/model_adapter.py",
+    "scripts/install_model_dependencies.sh": "scripts/tools/install_model_dependencies.sh",
+    "profiles/evaluation-entry.json": "profiles/evaluation-entry.json",
+    "profiles/deepseek-flash-prepared.json": "profiles/deepseek-flash-prepared.json",
+    "requirements-model.lock": "requirements-model.lock",
+    "RUN_EVALUATION.md": "docs/evaluation-entry-runbook.md",
+    "scripts/chi_agent/__init__.py": "src/chi_agent/__init__.py",
+    "scripts/chi_agent/accounting/__init__.py": "src/chi_agent/accounting/__init__.py",
+    "scripts/chi_agent/evaluation/__init__.py": "src/chi_agent/evaluation/__init__.py",
+    "scripts/chi_agent/models/__init__.py": "src/chi_agent/models/__init__.py",
+    "scripts/chi_agent/roles/__init__.py": "src/chi_agent/roles/__init__.py",
 }
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -284,7 +309,7 @@ def build_bundle(target: Path, *, source_root: Path = ROOT) -> BundleIdentity:
             raise BundleFailure("bundle_source_invalid")
         unsigned = {
             "schema": MANIFEST_SCHEMA,
-            "bundle_id": "evaluation-entry-identified-record-only-v2",
+            "bundle_id": "evaluation-entry-identified-record-only-v3",
             "files": entries,
             "entry_config_sha256": config["sha256"],
             "identity_is_not_signature_or_authorization": True,
@@ -333,7 +358,8 @@ def validate_bundle(root: Path) -> BundleIdentity:
         raise BundleFailure("bundle_manifest_invalid") from None
     versions = {
         ("chi-evaluation-entry-bundle-v1", "evaluation-entry-identified-record-only-v1"): V1_PACKAGE_FILES,
-        (MANIFEST_SCHEMA, "evaluation-entry-identified-record-only-v2"): PACKAGE_FILES,
+        ("chi-evaluation-entry-bundle-v2", "evaluation-entry-identified-record-only-v2"): V2_PACKAGE_FILES,
+        (MANIFEST_SCHEMA, "evaluation-entry-identified-record-only-v3"): PACKAGE_FILES,
     }
     if type(manifest) is not dict:
         raise BundleFailure("bundle_manifest_invalid")

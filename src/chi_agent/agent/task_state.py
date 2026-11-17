@@ -26,7 +26,7 @@ import time
 import unicodedata
 from pathlib import Path
 
-from .opencode_go_provider import GoFailure
+from chi_agent.models.opencode_go_provider import GoFailure
 
 SCHEMA = "chi-task-state-v3"
 VERSION = "chi-task-state-v3"
@@ -485,7 +485,7 @@ class TaskState:
         self._provider_references = {str(path) for path in tool_references}
 
     def _provider_chart_page(self, record, visible):
-        from .patient_identity_binding import Refusal
+        from chi_agent.roles.patient_identity_binding import Refusal
 
         args = record['arguments']
         if args.get('patient_id') != self.binding.bound:
@@ -1547,7 +1547,7 @@ class TaskState:
                 if not case['readback']:
                     return False, 'completion_provider_branch_readback_required', 'blocked', 'not_verified', 'business_status'
         if self._context_v3:
-            from .completion import evaluate
+            from chi_agent.agent.completion import evaluate
             allowed, reason, _details = evaluate(self.data)
             if not allowed:
                 return False, reason, "blocked", "not_verified", "terminal_object"
@@ -1690,7 +1690,7 @@ class TaskState:
             "note": note,
         }
         if self._context_v3:
-            from .completion import evaluate
+            from chi_agent.agent.completion import evaluate
             _allowed, _reason, details = evaluate(self.data)
             report["completion_evidence"] = details
         if self._requirements_enabled:
@@ -1762,7 +1762,7 @@ class TaskState:
 
     def anchor(self) -> dict:
         """Return the deterministic wire-only intent anchor for this state."""
-        from .role_guidance import guidance
+        from chi_agent.roles.role_guidance import guidance
         summary = self.summary()
         stage_id = self._current_stage()
         if self._provider_enabled:

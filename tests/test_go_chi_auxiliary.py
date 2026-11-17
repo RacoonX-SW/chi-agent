@@ -5,9 +5,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from chi_agent.auxiliary_transport import AuxiliaryTransport
-from chi_agent.journal import ChiJournal
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.models.auxiliary_transport import AuxiliaryTransport
+from chi_agent.accounting.journal import ChiJournal
+from chi_agent.models.opencode_go_provider import GoFailure
 
 SECRET = 'synthetic-secret'
 SESSION = 'chi-' + 'a' * 32
@@ -164,7 +164,7 @@ async def _cancelled_auxiliary():
 
 def test_patient_context_budget_records_actual_wire_and_blocks_before_send():
     async def exercise():
-        from chi_agent.context_budget import DEFAULT_BUDGET
+        from chi_agent.context.context_budget import DEFAULT_BUDGET
         with tempfile.TemporaryDirectory() as d:
             j = ChiJournal(Path(d), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',
                            kind='patient_probe', launch={'aux_contract': 'patient-simulator-v1'})
@@ -194,7 +194,7 @@ def test_patient_context_budget_records_actual_wire_and_blocks_before_send():
 
 def test_patient_context_budget_accepts_v3_budget():
     async def exercise():
-        from chi_agent.context_budget import DEFAULT_BUDGET_V3, budget_from_bytes
+        from chi_agent.context.context_budget import DEFAULT_BUDGET_V3, budget_from_bytes
         with tempfile.TemporaryDirectory() as d:
             j = ChiJournal(Path(d), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',
                            kind='patient_probe', launch={'aux_contract': 'patient-simulator-v1'})

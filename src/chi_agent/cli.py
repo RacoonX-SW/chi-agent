@@ -19,15 +19,15 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).absolute().parents[2]
 sys.dont_write_bytecode = True
 
-from .evaluation_bundle import BundleFailure, _check_components, _read_regular_bounded
-from .bundle import validate_bundle
-from .context_budget import (DEFAULT_BUDGET, DEFAULT_BUDGET_V3, budget_from_bytes,
+from chi_agent.evaluation_bundle import BundleFailure, _check_components, _read_regular_bounded
+from chi_agent.bundle import validate_bundle
+from chi_agent.context.context_budget import (DEFAULT_BUDGET, DEFAULT_BUDGET_V3, budget_from_bytes,
                             budget_from_input_tokens)
-from .diagnostics import is_safe_error_code, validate_cause
-from .journal import ChiJournal, publish_b_receipt
-from .local_history import acquire_existing_history
-from .runtime_policy import TIME_POLICY, FEE_POLICY, RECOVERY_POLICY, SUMMARY_POLICY, SUMMARY_VERSIONS, summary_policy
-from .opencode_go_provider import GoFailure, INSTRUCTION, SYSTEM, load_profile
+from chi_agent.accounting.diagnostics import is_safe_error_code, validate_cause
+from chi_agent.accounting.journal import ChiJournal, publish_b_receipt
+from chi_agent.accounting.local_history import acquire_existing_history
+from chi_agent.agent.runtime_policy import TIME_POLICY, FEE_POLICY, RECOVERY_POLICY, SUMMARY_POLICY, SUMMARY_VERSIONS, summary_policy
+from chi_agent.models.opencode_go_provider import GoFailure, INSTRUCTION, SYSTEM, load_profile
 
 CONFIG = {"schema": "chi-go-evaluation-entry-v1", "provider_profile_id": "opencode-go-deepseek-v4.1-flash-v1",
           "policy_mode": "record_only", "hard_cap_usd": None, "chi_max_requests": 50,
@@ -555,8 +555,8 @@ def _cleanup_run_log(logs_dir, code):
 
 
 def _identity(expected):
-    from .model_runner_adapter import _sdk_identity, _upstream_identity
-    from .pdf_resource_reader import dependency_identity
+    from chi_agent.evaluation.model_runner_adapter import _sdk_identity, _upstream_identity
+    from chi_agent.tools.pdf_resource_reader import dependency_identity
     if type(expected) is not str or not DIGEST.fullmatch(expected):
         raise GoFailure("chi_manifest_identity_required")
     identity = validate_bundle(ROOT)
@@ -715,8 +715,8 @@ async def _run_b(journal, secret):
     import httpx
     from openai import AsyncOpenAI
     from agents.models.openai_chatcompletions import Converter
-    from .request_guard import ChiGuard
-    from .runtime import coding_tools, run_coding_b
+    from chi_agent.models.request_guard import ChiGuard
+    from chi_agent.agent.runtime import coding_tools, run_coding_b
     holder = {}
     tools = coding_tools(lambda: holder["guard"])
     session = "chi-" + uuid.uuid4().hex
@@ -767,8 +767,8 @@ def main(argv=None, *, development=None):
         identity, identity_detail = _identity(args.bundle_sha256)
         if args.mode == "preflight":
             import importlib
-            for module in ("diagnostics", "context_budget", "output_recovery", "input_summary", "role_guidance", "text_search", "task_state",
-                           "request_guard", "mcp_tools", "local_tools", "runtime"):
+            for module in ("accounting.diagnostics", "context.context_budget", "context.output_recovery", "context.input_summary", "roles.role_guidance", "tools.text_search", "agent.task_state",
+                           "models.request_guard", "tools.mcp_tools", "tools.local_tools", "agent.runtime"):
                 loaded = importlib.import_module(f"{__package__}.{module}")
                 path = Path(getattr(loaded, "__file__", "")).resolve()
                 if ROOT not in path.parents:
@@ -777,7 +777,7 @@ def main(argv=None, *, development=None):
                               "identity": identity_detail, "official_reward": None}, sort_keys=True))
             return 0
         if args.mode == "reconcile-provider":
-            from .journal import reconcile_provider_timeout
+            from chi_agent.accounting.journal import reconcile_provider_timeout
             if (args.history_mode != "external" or args.local_q_root is not None
                     or args.output_root is None or args.provider_record is None
                     or args.provider_record_sha256 is None or args.target_run is None
@@ -795,7 +795,7 @@ def main(argv=None, *, development=None):
             print(json.dumps({**result, "official_reward": None}, sort_keys=True))
             return 0
         if args.mode in {"audit-history", "rebind-history", "inspect-history", "acknowledge-unsettled"}:
-            from .journal import audit_or_rebind, inspect_history, acknowledge_unsettled
+            from chi_agent.accounting.journal import audit_or_rebind, inspect_history, acknowledge_unsettled
             if args.history_mode != "local" or args.local_q_root is None or args.output_root is None:
                 raise GoFailure("chi_local_history_required")
             qroot = _path(args.local_q_root, exists=True)
@@ -814,7 +814,7 @@ def main(argv=None, *, development=None):
                 if (args.provider_record is None) != (args.provider_record_sha256 is None):
                     raise GoFailure('chi_provider_record_invalid')
                 if args.provider_record is not None:
-                    from .provider_inspection import inspect_provider
+                    from chi_agent.models.provider_inspection import inspect_provider
                     result['provider_record'] = inspect_provider(args.provider_record, args.provider_record_sha256,
                                                                 result.get('pending_request'))
             else:
@@ -913,7 +913,7 @@ def main(argv=None, *, development=None):
                 "final_output_claimed": False, "official_reward": None}, sort_keys=True), encoding="utf-8")
         else:
             import httpx
-            from .runtime import run_chi
+            from chi_agent.agent.runtime import run_chi
             context_budget = dict(DEFAULT_BUDGET_V3)
             if context_budget.get("model") != "deepseek-v4.1-flash":
                 raise GoFailure("chi_config_invalid")

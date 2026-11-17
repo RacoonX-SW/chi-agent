@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from chi_agent.evaluation_bundle import _fsync_dir, _write_exclusive
-from chi_agent.provider_transport import _reject_symlink_ancestors
+from chi_agent.models.provider_transport import _reject_symlink_ancestors
 from scripts.development.world_environment import _api_timeout
 
 _PROGRAM = r'''

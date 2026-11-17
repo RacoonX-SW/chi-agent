@@ -1,5 +1,5 @@
-from chi_agent.context_budget import check_budget, measure_request
-from chi_agent.runtime_policy import output_limit, summary_policy
+from chi_agent.context.context_budget import check_budget, measure_request
+from chi_agent.agent.runtime_policy import output_limit, summary_policy
 
 
 def test_limits_are_version_and_purpose_specific():

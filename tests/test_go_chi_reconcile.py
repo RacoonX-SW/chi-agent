@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from chi_agent.journal import ChiJournal, inspect_history, reconcile_provider_timeout
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.accounting.journal import ChiJournal, inspect_history, reconcile_provider_timeout
+from chi_agent.models.opencode_go_provider import GoFailure
 
 
 def provider_event(session, body_bytes, started_at):
