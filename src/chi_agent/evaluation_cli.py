@@ -16,27 +16,32 @@ from urllib.parse import urlsplit
 ROOT = Path(__file__).absolute().parents[2]
 sys.dont_write_bytecode = True
 
-from .evaluation_bundle import (PACKAGE_FILES, BundleFailure, BundleIdentity, _check_components,
+from chi_agent.evaluation_bundle import (PACKAGE_FILES, BundleFailure, BundleIdentity, _check_components,
                                _read_regular_bounded, validate_bundle)
-from .execution_policy import PolicyFailure, ExecutionPolicy, is_validated_policy, make_evaluation_policy
-from .provider_profile import ProfileFailure, ProviderProfile, load_profile
-from .evaluation_preflight import PreparationFailure, _policy_summary, _profile_summary, _rehearse, _source_and_sdk
+from chi_agent.accounting.execution_policy import PolicyFailure, ExecutionPolicy, is_validated_policy, make_evaluation_policy
+from chi_agent.models.provider_profile import ProfileFailure, ProviderProfile, load_profile
+from chi_agent.evaluation.evaluation_preflight import PreparationFailure, _policy_summary, _profile_summary, _rehearse, _source_and_sdk
 
 
 ENTRY_CONFIG_PATH = ROOT / "profiles" / "evaluation-entry.json"
 ENTRY_RUNTIME_SOURCE_FILES = (
     "scripts/evaluation_entry.py",
+    "scripts/chi_agent/__init__.py",
+    "scripts/chi_agent/accounting/__init__.py",
+    "scripts/chi_agent/evaluation/__init__.py",
+    "scripts/chi_agent/models/__init__.py",
+    "scripts/chi_agent/roles/__init__.py",
     "scripts/chi_agent/evaluation_cli.py",
     "scripts/chi_agent/evaluation_bundle.py",
-    "scripts/chi_agent/evaluation_preflight.py",
-    "scripts/chi_agent/execution_policy.py",
-    "scripts/chi_agent/provider_profile.py",
-    "scripts/chi_agent/provider_transport.py",
-    "scripts/chi_agent/patient_identity_binding.py",
-    "scripts/chi_agent/request_budget.py",
-    "scripts/chi_agent/model_runner_adapter.py",
-    "scripts/chi_agent/budget_evaluation.py",
-    "scripts/chi_agent/model_adapter.py",
+    "scripts/chi_agent/evaluation/evaluation_preflight.py",
+    "scripts/chi_agent/accounting/execution_policy.py",
+    "scripts/chi_agent/models/provider_profile.py",
+    "scripts/chi_agent/models/provider_transport.py",
+    "scripts/chi_agent/roles/patient_identity_binding.py",
+    "scripts/chi_agent/accounting/request_budget.py",
+    "scripts/chi_agent/evaluation/model_runner_adapter.py",
+    "scripts/chi_agent/accounting/budget_evaluation.py",
+    "scripts/chi_agent/models/model_adapter.py",
     "profiles/evaluation-entry.json",
     "profiles/deepseek-flash-prepared.json",
 )

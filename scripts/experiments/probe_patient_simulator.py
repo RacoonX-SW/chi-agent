@@ -36,9 +36,9 @@ def main():
     if not bundle.is_absolute(): raise ValueError('probe_bundle_invalid')
     sys.path.insert(0, str(bundle / 'scripts'))
     from chi_agent.cli import _identity
-    from chi_agent.local_history import acquire_existing_history
-    from chi_agent.journal import ChiJournal
-    from chi_agent.runtime_policy import FEE_POLICY
+    from chi_agent.accounting.local_history import acquire_existing_history
+    from chi_agent.accounting.journal import ChiJournal
+    from chi_agent.agent.runtime_policy import FEE_POLICY
     from chi_agent.evaluation_bundle import _check_components
     identity, _ = _identity(c['bundle_sha256'])
     if identity != c['runtime_identity']: raise ValueError('probe_identity_invalid')
@@ -82,7 +82,7 @@ async def _run(journal, secret, *, lower=None):
     from openai import AsyncOpenAI
     from chi_bench.conversation.session import ConversationSession
     from scripts.development.patient_adapter import adapter_class
-    from chi_agent.auxiliary_transport import AuxiliaryTransport
+    from chi_agent.models.auxiliary_transport import AuxiliaryTransport
     session_header = 'chi-' + uuid.uuid4().hex
     transport = AuxiliaryTransport(journal, secret, session_header, lower or httpx.AsyncHTTPTransport(retries=0, verify=True),
                                    asyncio.Lock(), lambda: None)

@@ -6,9 +6,9 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from chi_agent.journal import ChiJournal
-from chi_agent.patient_identity_binding import PatientBinding, Refusal
-from chi_agent.runtime import run_chi
+from chi_agent.accounting.journal import ChiJournal
+from chi_agent.roles.patient_identity_binding import PatientBinding, Refusal
+from chi_agent.agent.runtime import run_chi
 
 
 class MemoryJournal:
@@ -142,13 +142,13 @@ async def _exercise_transport(tmp_path, v3):
     handbook = tmp_path/'handbook'; handbook.mkdir(); workspace = tmp_path/'workspace'; workspace.mkdir()
     launch = {'context_policy': 'chi-context-v3', 'source_evidence_policy': 'canonical-v1', 'role': 'provider'} if v3 else {}
     journal = ChiJournal(tmp_path/'state', identity='a'*64, evaluation='eval', task='provider', attempt='a', run='run', launch=launch)
-    from chi_agent.context_budget import budget_from_input_tokens, DEFAULT_BUDGET
+    from chi_agent.context.context_budget import budget_from_input_tokens, DEFAULT_BUDGET
     budget = budget_from_input_tokens(45000) if v3 else DEFAULT_BUDGET
     try:
         async def run():
             return await run_chi(journal, 'synthetic-secret', role='provider', instruction='90 day treatment trial', mcp_url='http://synthetic.invalid/mcp', instruction_path=instruction, logs_dir=tmp_path/'logs', workspace_root=workspace, handbook_root=handbook, tool_references=[], lower=httpx.MockTransport(wire), server_factory=lambda _: server, capabilities="f0-f3-v1" if v3 else None, context_budget=budget)
         if v3:
-            from chi_agent.opencode_go_provider import GoFailure
+            from chi_agent.models.opencode_go_provider import GoFailure
             # The synthetic workflow intentionally stops before terminal authorization;
             # production completion rules correctly prevent its claim.
             with pytest.raises(GoFailure, match='chi_claim_required'):
@@ -174,7 +174,7 @@ async def _exercise_transport(tmp_path, v3):
             journal._validate('a' * 64)
     finally: journal.close()
     if v3:
-        from chi_agent.journal import inspect_history
+        from chi_agent.accounting.journal import inspect_history
         import hashlib
         raw = (tmp_path/'state'/'chi-accounting.json').read_bytes()
         assert inspect_history(tmp_path/'state', 'a'*64, hashlib.sha256(raw).hexdigest())['status'] == 'inspected'
@@ -206,8 +206,8 @@ def test_partial_and_filtered_results_do_not_establish_roster():
 
 def test_summary_verifies_roster_page_against_original_evidence(tmp_path):
     import hashlib
-    from chi_agent.evidence import write_tool
-    from chi_agent.input_summary import verify_tool_actions
+    from chi_agent.accounting.evidence import write_tool
+    from chi_agent.context.input_summary import verify_tool_actions
     roster, _ = sample()
     binding = PatientBinding('instruction', MemoryJournal())
     binding.observe('call_0', 'chart.search_patients', {}, result(roster))

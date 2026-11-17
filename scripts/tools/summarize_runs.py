@@ -14,8 +14,8 @@ from decimal import Decimal
 from pathlib import Path
 
 from chi_agent.evaluation_bundle import _read_regular_bounded
-from chi_agent.journal import MAX_STATE_BYTES, inspect_history
-from chi_agent.opencode_go_provider import GoFailure, _unique
+from chi_agent.accounting.journal import MAX_STATE_BYTES, inspect_history
+from chi_agent.models.opencode_go_provider import GoFailure, _unique
 
 SCHEMA = "chi-go-run-summary-v1"
 CURRENCY = "USD"

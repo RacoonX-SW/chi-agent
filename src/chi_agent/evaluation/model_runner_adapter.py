@@ -28,9 +28,9 @@ from typing import Any
 
 import httpx
 
-from .model_adapter import CANDIDATE_PROFILE, ProbeFailure
+from chi_agent.models.model_adapter import CANDIDATE_PROFILE, ProbeFailure
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 VENDOR = ROOT / "vendor" / "chi-bench"
 VENDOR_SRC = VENDOR / "src"
 UPSTREAM_SHA = "4444a07fa68a4f1623f841a292a54e284fc8e7f7"
@@ -325,7 +325,7 @@ def _mark_unknown_usage(ledger: Ledger) -> None:
 
 
 def _budget_check(ledger: Ledger, request_body: dict[str, Any]) -> int:
-    from .budget_evaluation import evaluate_budget
+    from chi_agent.accounting.budget_evaluation import evaluate_budget
 
     _validate_accounting_state(ledger)
 
@@ -827,7 +827,7 @@ async def _run_offline(scenario: str, *, prepared: dict[str, Any] | None = None)
             max_turns = MAX_ROUNDS
             output_tokens = MAX_OUTPUT_TOKENS
         else:
-            from .provider_transport import GuardedTransport
+            from chi_agent.models.provider_transport import GuardedTransport
             wire = PreparedFixtureWire(ledger)
             client_transport = GuardedTransport(
                 profile=prepared["profile"], journal=prepared["journal"],

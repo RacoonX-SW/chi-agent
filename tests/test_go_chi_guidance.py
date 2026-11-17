@@ -1,6 +1,6 @@
 import unittest
 
-from chi_agent.role_guidance import VERSION, digest, guidance
+from chi_agent.roles.role_guidance import VERSION, digest, guidance
 
 
 class GuidanceTests(unittest.TestCase):
@@ -84,7 +84,7 @@ class GuidanceTests(unittest.TestCase):
     def test_digest_covers_the_delivered_workspace_invariant(self):
         import hashlib
         import json
-        from chi_agent.role_guidance import _INVARIANTS, _STAGES
+        from chi_agent.roles.role_guidance import _INVARIANTS, _STAGES
         legacy = json.dumps({"version": VERSION, "invariants": _INVARIANTS, "stages": _STAGES},
                             ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
         self.assertNotEqual(digest(), hashlib.sha256(legacy).hexdigest())

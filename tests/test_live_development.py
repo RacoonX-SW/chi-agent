@@ -316,8 +316,8 @@ class LiveDevelopmentTests(unittest.TestCase):
         import hashlib
         from types import SimpleNamespace
         identity = live._execution_identity()
-        source = live.ROOT / "src" / "chi_agent" / "pdf_resource_reader.py"
-        self.assertEqual(identity["application_files_sha256"]["src/chi_agent/pdf_resource_reader.py"],
+        source = live.ROOT / "src" / "chi_agent" / "tools" / "pdf_resource_reader.py"
+        self.assertEqual(identity["application_files_sha256"]["src/chi_agent/tools/pdf_resource_reader.py"],
                          hashlib.sha256(source.read_bytes()).hexdigest())
         self.assertNotIn("pdf_dependency", identity)
         with tempfile.TemporaryDirectory() as temp:
@@ -351,8 +351,8 @@ class LiveDevelopmentTests(unittest.TestCase):
         self.assertEqual(unsupported.exception.code, "response_model_mismatch")
 
     def test_unknown_real_usage_blocks_restart_and_one_c_claim_cannot_replay(self):
-        from chi_agent.execution_policy import load_local_policy
-        from chi_agent.provider_profile import load_profile
+        from chi_agent.accounting.execution_policy import load_local_policy
+        from chi_agent.models.provider_profile import load_profile
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -382,8 +382,8 @@ class LiveDevelopmentTests(unittest.TestCase):
 
     def test_unknown_usage_keeps_known_prefix_and_never_reports_zero_total(self):
         from decimal import Decimal
-        from chi_agent.execution_policy import load_local_policy
-        from chi_agent.provider_profile import load_profile
+        from chi_agent.accounting.execution_policy import load_local_policy
+        from chi_agent.models.provider_profile import load_profile
 
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -414,8 +414,8 @@ class LiveDevelopmentTests(unittest.TestCase):
 
     def test_real_only_text_block_tool_history_is_strict_and_legacy_default_stays_closed(self):
         from types import SimpleNamespace
-        from chi_agent.provider_profile import load_profile
-        from chi_agent.provider_transport import GuardedTransport, GuardFailure
+        from chi_agent.models.provider_profile import load_profile
+        from chi_agent.models.provider_transport import GuardedTransport, GuardFailure
 
         body = {
             "model": "deepseek-flash", "max_tokens": 128, "reasoning_effort": "high",
@@ -481,7 +481,7 @@ class LiveDevelopmentTests(unittest.TestCase):
         fake_docker = FakeDocker(test_root)
         fake_mcp_factory = lambda *args, **kwargs: FakeMCP(mcp_calls)
 
-        from chi_agent.provider_transport import GuardedTransport
+        from chi_agent.models.provider_transport import GuardedTransport
         original_validate_request = GuardedTransport._validate_request
 
         def capture_guard_shape(transport, request, raw):
@@ -531,7 +531,7 @@ class LiveDevelopmentTests(unittest.TestCase):
                                  msg=f"result={result_b}; transport_factories={transport_factories}; "
                                      f"mock runner error: {fake_docker.containers.created[-1].error}")
                 self.assertEqual(len(wire_by_kind["b-smoke"].requests), 3)
-                from chi_agent.referral_field_guidance import MARKER
+                from chi_agent.roles.referral_field_guidance import MARKER
                 for body in wire_by_kind["b-smoke"].requests:
                     assert all(MARKER not in item["function"].get("description", "") for item in body.get("tools", []))
                 runner_b = fake_docker.containers.created[-1]
@@ -941,7 +941,7 @@ class ContinuedDevelopmentTests(unittest.TestCase):
 
     def test_record_only_known_above_five_and_unknown_blocks(self):
         from decimal import Decimal
-        from chi_agent.execution_policy import load_real_development_policy
+        from chi_agent.accounting.execution_policy import load_real_development_policy
         profile = live.load_profile()
         policy = load_real_development_policy()
         with tempfile.TemporaryDirectory() as temp:

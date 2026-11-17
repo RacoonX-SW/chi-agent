@@ -11,7 +11,7 @@ from pypdf import PdfWriter
 from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
 
 import scripts.development.run_development_legacy as live
-import chi_agent.pdf_resource_reader as reader
+import chi_agent.tools.pdf_resource_reader as reader
 
 
 def make_text_pdf(path: Path, *, encrypted: bool = False) -> None:
@@ -66,7 +66,7 @@ class PdfReaderTests(unittest.TestCase):
             with self.assertRaises(live.LiveFailure) as error:
                 live._execution_identity(k=True)
             self.assertEqual(error.exception.code, "pdf_dependency_unavailable_or_mismatch")
-        with patch('chi_agent.pdf_resource_reader.dependency_identity', side_effect=ModuleNotFoundError):
+        with patch('chi_agent.tools.pdf_resource_reader.dependency_identity', side_effect=ModuleNotFoundError):
             with self.assertRaises(live.LiveFailure) as error:
                 live._execution_identity(k=True)
             self.assertEqual(error.exception.code, "pdf_dependency_unavailable_or_mismatch")

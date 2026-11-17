@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-import chi_agent.patient_identity_binding as pib
+import chi_agent.roles.patient_identity_binding as pib
 
 
 class Journal:
@@ -144,11 +144,11 @@ def test_cross_patient_orders_cases_forms_documents_and_conflicting_result():
 def test_confirm_uses_guarded_shared_budget_and_two_attempt_limit(tmp_path, first_result):
     import httpx
     from openai import AsyncOpenAI
-    import chi_agent.provider_profile as profiles
-    import chi_agent.provider_transport as transport
-    import chi_agent.execution_policy as policies
+    import chi_agent.models.provider_profile as profiles
+    import chi_agent.models.provider_transport as transport
+    import chi_agent.accounting.execution_policy as policies
     import scripts.development.run_development_legacy as live
-    import chi_agent.model_runner_adapter as adapter
+    import chi_agent.evaluation.model_runner_adapter as adapter
     from test_live_development import _adopt_synthetic_history
     import contextvars
 
@@ -215,7 +215,7 @@ def test_confirm_uses_guarded_shared_budget_and_two_attempt_limit(tmp_path, firs
 
 def test_batch_confirmation_cannot_race_other_tools():
     import scripts.development.run_development_legacy as live
-    import chi_agent.model_runner_adapter as adapter
+    import chi_agent.evaluation.model_runner_adapter as adapter
     guard, _ = observations()
     ledger = adapter.Ledger("synthetic")
     class Recorder:
@@ -424,7 +424,7 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
     assert [name for name, _ in backend] == expected_backend
     assert all(entry["status"] == "settled" for entry in journal["requests"])
     assert len(journal["requests"]) == len(wire)
-    import chi_agent.request_budget as request_budget
+    import chi_agent.accounting.request_budget as request_budget
     for index, body in enumerate(wire, 1):
         request_entry = journal["requests"][index - 1]
         system_text = body["messages"][0]["content"]
@@ -439,7 +439,7 @@ def test_official_runner_synthetic_patient_flow(tmp_path, monkeypatch, mode):
             assert request_entry["request_budget_feedback"] == record
     assert "max_turns=50" in (tmp_path / "logs/run_log.txt").read_text()
     if mode in {"guidance_a", "guidance_b"}:
-        import chi_agent.referral_field_guidance as guidance
+        import chi_agent.roles.referral_field_guidance as guidance
         recorded = journal["referral_field_guidance"]
         assert recorded["version"] == guidance.VERSION and recorded["guidance_sha256"] == guidance.GUIDANCE_SHA256
         assert set(recorded["tools"]) == set(guidance.GUIDANCE)

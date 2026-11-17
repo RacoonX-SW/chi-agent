@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from chi_agent.journal import ChiJournal
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.accounting.journal import ChiJournal
+from chi_agent.models.opencode_go_provider import GoFailure
 
 
 def view_identity(**overrides):
@@ -37,7 +37,7 @@ class SourceGovernanceTests(unittest.TestCase):
     def test_source_total_cap_fails_closed(self):
         with tempfile.TemporaryDirectory() as directory:
             journal = self._journal(directory)
-            with patch('chi_agent.journal.MAX_SOURCE_TOTAL_BYTES', 10):
+            with patch('chi_agent.accounting.journal.MAX_SOURCE_TOTAL_BYTES', 10):
                 with self.assertRaises(GoFailure) as caught:
                     journal.reserve(b"{}", "main", view_identity=view_identity(),
                                     source_body=source_body())

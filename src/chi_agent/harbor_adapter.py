@@ -11,8 +11,8 @@ from pathlib import PurePosixPath
 from urllib.parse import urlsplit
 
 from chi_bench.experiment.agents.openai_agents_harness import OpenAIAgentsHarness
-from .evaluation_bundle import _check_components, _read_regular_bounded
-from .delivery import FORBIDDEN_ENV
+from chi_agent.evaluation_bundle import _check_components, _read_regular_bounded
+from chi_agent.delivery import FORBIDDEN_ENV
 
 ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 

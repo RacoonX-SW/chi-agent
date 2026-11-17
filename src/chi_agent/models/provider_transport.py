@@ -21,8 +21,8 @@ from typing import Any, Callable
 
 import httpx
 
-from .execution_policy import ExecutionPolicy, PolicyFailure, is_validated_policy, load_local_policy
-from .provider_profile import ProviderProfile, is_validated_profile
+from chi_agent.accounting.execution_policy import ExecutionPolicy, PolicyFailure, is_validated_policy, load_local_policy
+from chi_agent.models.provider_profile import ProviderProfile, is_validated_profile
 
 
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -712,7 +712,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         self.run_contract = run_contract
         self.base_system_instructions = base_system_instructions
         if run_contract is not None:
-            from .request_budget import K_C_CONTRACT, MAX_REQUESTS
+            from chi_agent.accounting.request_budget import K_C_CONTRACT, MAX_REQUESTS
             from chi_bench.experiment.agents.openai_agents_runner import SYSTEM_PROMPT
             if (run_contract is not K_C_CONTRACT or journal.policy.scope != "real_development"
                     or journal.run_doc.get("run_kind") != "c-once"
@@ -754,7 +754,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         context_provider = getattr(self, "confirmation_context", None)
         context = context_provider() if context_provider is not None else None
         if context is not None:
-            from .patient_identity_binding import PROMPT, CONFIRM_MAX_OUTPUT_TOKENS
+            from chi_agent.roles.patient_identity_binding import PROMPT, CONFIRM_MAX_OUTPUT_TOKENS
             messages = body.get("messages")
             if (type(context) is not tuple or len(context) != 2 or context[0] != "patient_confirmation"
                     or type(context[1]) is not str or len(context[1]) != 64
@@ -789,7 +789,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
         if not isinstance(body.get("messages"), list) or self.ledger.rounds >= self.max_rounds:
             raise GuardFailure("round_or_history_invalid", "request_guard")
         if getattr(self, "run_contract", None) is not None and context is None:
-            from .request_budget import feedback, claim_recorded
+            from chi_agent.accounting.request_budget import feedback, claim_recorded
             try:
                 suffix, _ = feedback(self.ledger.rounds, claim_recorded(self.journal))
                 if (not body["messages"] or body["messages"][0] != {"role": "system", "content": self.base_system_instructions + suffix}
@@ -928,7 +928,7 @@ class GuardedTransport(httpx.AsyncBaseTransport):
             next_round = self.ledger.rounds + 1
             context = self.confirmation_context() if self.confirmation_context is not None else None
             if context is None and self.run_contract is not None:
-                from .request_budget import feedback, claim_recorded
+                from chi_agent.accounting.request_budget import feedback, claim_recorded
                 _, budget_record = feedback(self.ledger.rounds, claim_recorded(self.journal))
                 self.journal.reserve(self.profile, request, body, raw, max_output, next_round,
                                      budget_feedback=budget_record)

@@ -7,8 +7,8 @@ import pytest
 
 import scripts.experiments.probe_patient_simulator as probe
 import chi_agent.cli as go_chi_entry
-import chi_agent.journal as go_chi_journal
-import chi_agent.local_history as go_chi_local
+import chi_agent.accounting.journal as go_chi_journal
+import chi_agent.accounting.local_history as go_chi_local
 
 
 def test_missing_credential_leaves_safe_failure(tmp_path, monkeypatch):

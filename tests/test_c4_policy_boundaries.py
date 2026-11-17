@@ -10,14 +10,14 @@ import httpx
 import pytest
 
 import chi_agent.cli as entry
-from chi_agent.auxiliary_transport import AuxiliaryTransport
+from chi_agent.models.auxiliary_transport import AuxiliaryTransport
 from chi_agent.bundle import PACKAGE_FILES, build_bundle, validate_bundle
-from chi_agent.context_budget import DEFAULT_BUDGET
-from chi_agent.request_guard import ChiGuard
-from chi_agent.journal import ChiJournal
-from chi_agent.runtime_policy import RECOVERY_POLICY, TIME_POLICY
-from chi_agent.opencode_go_provider import GoFailure, SYSTEM, INSTRUCTION, SCHEMAS, DESCRIPTIONS
-from chi_agent.request_budget import feedback
+from chi_agent.context.context_budget import DEFAULT_BUDGET
+from chi_agent.models.request_guard import ChiGuard
+from chi_agent.accounting.journal import ChiJournal
+from chi_agent.agent.runtime_policy import RECOVERY_POLICY, TIME_POLICY
+from chi_agent.models.opencode_go_provider import GoFailure, SYSTEM, INSTRUCTION, SCHEMAS, DESCRIPTIONS
+from chi_agent.accounting.request_budget import feedback
 
 URL = 'https://opencode.ai/inference/go/openai/v1/chat/completions'
 SECRET = 'synthetic-secret'
@@ -247,7 +247,7 @@ def test_actual_transport_timeout_by_purpose(tmp_path,role,read,wall):
 
 def test_mixed_confirmation_continuation_and_ten_patients_keep_shared_limit(tmp_path):
     async def run():
-        from chi_agent.output_recovery import derive_view
+        from chi_agent.context.output_recovery import derive_view
         j=ChiJournal(tmp_path,identity='a'*64,evaluation='e',task='t',attempt='a',run='r',
                      launch={'role':'cm','aux_contract':'patient-simulator-v1',
                              'output_recovery':'chi-output-recovery-v1'})
@@ -318,7 +318,7 @@ def test_guard_rejects_reasoning_or_retry_drift_before_dispatch(tmp_path,overrid
 
 
 def test_legacy_adapter_limits_are_separate_from_go_profile():
-    import chi_agent.model_runner_adapter as legacy
+    import chi_agent.evaluation.model_runner_adapter as legacy
     profile=json.loads((entry.ROOT/'profiles/opencode-go-deepseek.json').read_text())
     assert (legacy.MAX_ROUNDS,legacy.MAX_OUTPUT_TOKENS)==(3,128)
     assert (profile['max_requests'],profile['max_output_tokens'])==(6,1024)

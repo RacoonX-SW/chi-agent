@@ -4,10 +4,10 @@ import json
 import httpx
 import pytest
 
-from chi_agent.journal import ChiJournal, inspect_history
-from chi_agent.output_recovery import POLICY
-from chi_agent.runtime import run_chi
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.accounting.journal import ChiJournal, inspect_history
+from chi_agent.context.output_recovery import POLICY
+from chi_agent.agent.runtime import run_chi
+from chi_agent.models.opencode_go_provider import GoFailure
 from test_go_chi_capabilities_runtime import Server, completion
 from test_go_chi_recovery_journal import digest
 
@@ -208,8 +208,8 @@ def test_sdk_cancel_after_permit_records_not_sent(tmp_path):
 def test_cli_recovery_is_live_only_and_default_off(capsys):
     import chi_agent.cli as entry
     args=entry._parser().parse_args(['coding-b','--bundle-sha256','a'*64])
-    from chi_agent.runtime_policy import RECOVERY_POLICY
-    from chi_agent.output_recovery import VIEW, INSTRUCTION_VERSION
+    from chi_agent.agent.runtime_policy import RECOVERY_POLICY
+    from chi_agent.context.output_recovery import VIEW, INSTRUCTION_VERSION
     assert args.output_recovery is None and entry.CONFIG['output_recovery_policy']['default_enabled'] is False
     assert RECOVERY_POLICY['version']==POLICY and RECOVERY_POLICY['view_version']==VIEW
     assert RECOVERY_POLICY['instruction_version']==INSTRUCTION_VERSION

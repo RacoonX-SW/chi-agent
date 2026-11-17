@@ -102,7 +102,7 @@ def derive_view(parent_body, response, *, old_used, claimed, anchor=None):
     parent view is already frozen/projected and batches start after it.
     """
     import copy
-    from .request_budget import feedback
+    from chi_agent.accounting.request_budget import feedback
     if (type(parent_body) is not dict or type(parent_body.get('messages')) is not list
             or len(parent_body['messages']) < 2 or type(old_used) is not int or old_used < 0
             or type(claimed) is not bool):

@@ -25,9 +25,9 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
-from chi_agent.execution_policy import load_local_policy, load_real_development_policy
-from chi_agent.evaluation_preflight import _profile_summary, _source_and_sdk, build_plan
-from chi_agent.provider_profile import load_profile
+from chi_agent.accounting.execution_policy import load_local_policy, load_real_development_policy
+from chi_agent.evaluation.evaluation_preflight import _profile_summary, _source_and_sdk, build_plan
+from chi_agent.models.provider_profile import load_profile
 
 ROOT = Path(__file__).resolve().parents[2]
 TASK_ID = "pa_t018_t018_o001_p01_new_referral_provider"
@@ -183,7 +183,7 @@ def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
                         "request_wire_bytes", "route", "model", "reserve_basis"}
         confirmation = is_k and type(pending) is dict and pending.get("purpose") == "patient_confirmation"
         if confirmation:
-            from chi_agent.patient_identity_binding import CONFIRM_MAX_OUTPUT_TOKENS
+            from chi_agent.roles.patient_identity_binding import CONFIRM_MAX_OUTPUT_TOKENS
             pending_keys.add("purpose")
             output_valid = type(pending.get("output_reserve_tokens")) is int and pending["output_reserve_tokens"] == CONFIRM_MAX_OUTPUT_TOKENS
             wire_limit = 8 * 1024 * 1024
@@ -232,7 +232,7 @@ def _validate_accounting_state(state: dict[str, Any], *, profile: Any,
 def _execution_identity(*, k: bool = False) -> dict[str, Any]:
     profile = load_profile()
     policy = load_real_development_policy() if k else load_local_policy()
-    import chi_agent.model_runner_adapter as adapter
+    import chi_agent.evaluation.model_runner_adapter as adapter
     upstream = adapter._upstream_identity()
     try:
         sdk = adapter._sdk_identity()
@@ -249,22 +249,22 @@ def _execution_identity(*, k: bool = False) -> dict[str, Any]:
                for name, version in expected.items()):
             raise LiveFailure("sdk_lock_identity_mismatch") from None
         sdk = expected
-    files = ("scripts/development/run_development_legacy.py", "src/chi_agent/provider_transport.py",
-             "src/chi_agent/pdf_resource_reader.py",
-             "src/chi_agent/model_runner_adapter.py", "src/chi_agent/budget_evaluation.py", "src/chi_agent/provider_profile.py",
-             "scripts/development/world_environment.py", "src/chi_agent/execution_policy.py",
-             "src/chi_agent/evaluation_preflight.py", "src/chi_agent/model_adapter.py",
+    files = ("scripts/development/run_development_legacy.py", "src/chi_agent/models/provider_transport.py",
+             "src/chi_agent/tools/pdf_resource_reader.py",
+             "src/chi_agent/evaluation/model_runner_adapter.py", "src/chi_agent/accounting/budget_evaluation.py", "src/chi_agent/models/provider_profile.py",
+             "scripts/development/world_environment.py", "src/chi_agent/accounting/execution_policy.py",
+             "src/chi_agent/evaluation/evaluation_preflight.py", "src/chi_agent/models/model_adapter.py",
              "profiles/deepseek-flash-prepared.json", "profiles/local-development-policy.json",
              "requirements-model.lock")
     if k:
-        files += ("requirements-pdf.lock", "scripts/development/provider_task_resources.py", "src/chi_agent/patient_identity_binding.py",
-                  "src/chi_agent/request_budget.py", "src/chi_agent/referral_field_guidance.py")
+        files += ("requirements-pdf.lock", "scripts/development/provider_task_resources.py", "src/chi_agent/roles/patient_identity_binding.py",
+                  "src/chi_agent/accounting/request_budget.py", "src/chi_agent/roles/referral_field_guidance.py")
     hashes = {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in files}
     identity = {"vendor": upstream, "sdk": sdk, "application_files_sha256": hashes,
                 "profile_sha256": profile.sha256, "policy_sha256": policy.sha256}
     if k:
         try:
-            from chi_agent.pdf_resource_reader import dependency_identity
+            from chi_agent.tools.pdf_resource_reader import dependency_identity
             identity["pdf_dependency"] = dependency_identity(ROOT / "requirements-pdf.lock")
         except Exception:
             raise LiveFailure("pdf_dependency_unavailable_or_mismatch") from None
@@ -695,7 +695,7 @@ class RealDevelopmentJournal:
 
     def _require_active_lock(self) -> None:
         if self.closed or not self._lock_owned or self.lock_fd is None:
-            from chi_agent.provider_transport import GuardFailure
+            from chi_agent.models.provider_transport import GuardFailure
             raise GuardFailure("journal_lock_not_owned", "persistence")
 
     @property
@@ -710,7 +710,7 @@ class RealDevelopmentJournal:
     def reserve(self, profile: Any, request: Any, body: dict[str, Any], raw: bytes,
                 max_output: int, round_number: int, *, purpose: str | None = None,
                 budget_feedback: dict | None = None) -> Decimal:
-        from chi_agent.provider_transport import GuardFailure
+        from chi_agent.models.provider_transport import GuardFailure
         self._require_active_lock()
         fresh = _read_json(self.state_path)
         if self.cap_cny is None:
@@ -723,14 +723,14 @@ class RealDevelopmentJournal:
         if profile.sha256 != self.profile.sha256:
             raise GuardFailure("real_profile_mismatch", "request_guard")
         if purpose is not None:
-            from chi_agent.patient_identity_binding import CONFIRM_MAX_OUTPUT_TOKENS
+            from chi_agent.roles.patient_identity_binding import CONFIRM_MAX_OUTPUT_TOKENS
             if (purpose != "patient_confirmation" or self.policy.scope != "real_development"
                     or type(max_output) is not int or max_output != CONFIRM_MAX_OUTPUT_TOKENS):
                 raise GuardFailure("confirmation_policy_invalid", "request_guard")
         elif type(max_output) is not int or not 1 <= max_output <= profile.max_output_tokens:
             raise GuardFailure("output_limit", "request_guard")
         if budget_feedback is not None:
-            from chi_agent.request_budget import feedback, claim_recorded
+            from chi_agent.accounting.request_budget import feedback, claim_recorded
             try:
                 _, expected_feedback = feedback(round_number - 1, claim_recorded(self))
                 if (self.policy.scope != "real_development" or self.run_doc.get("run_kind") != "c-once"
@@ -760,12 +760,12 @@ class RealDevelopmentJournal:
         try:
             self._persist()
         except Exception:
-            from chi_agent.provider_transport import GuardFailure
+            from chi_agent.models.provider_transport import GuardFailure
             raise GuardFailure("journal_write_failed", "request_guard") from None
         return reserve
 
     def settle(self, actual_cost: Decimal, incoming: int, outgoing: int, *, response_metadata: dict | None = None) -> bool:
-        from chi_agent.provider_transport import GuardFailure
+        from chi_agent.models.provider_transport import GuardFailure
         self._require_active_lock()
         pending = self.state.get("pending")
         if not isinstance(pending, dict) or pending.get("run_id") != self.run_id:
@@ -842,7 +842,7 @@ class RealDevelopmentJournal:
 
     def record_effect(self, effect: dict[str, Any]) -> None:
         if type(effect) is not dict or set(effect) != {"tool", "call_id", "result"}:
-            from chi_agent.provider_transport import GuardFailure
+            from chi_agent.models.provider_transport import GuardFailure
             raise GuardFailure("tool_effect_invalid", "tool_execution")
         self.run_doc["tool_effects"].append(effect)
         self._persist()
@@ -1146,7 +1146,7 @@ def _capture_review_input(world: Any, capture_root: Path, run_id: str,
                           resource_identity: dict | None = None) -> dict[str, Any]:
     """Capture only the stopped runner's owned world, never participant outputs."""
     from scripts.development.world_environment import _api_timeout
-    from chi_agent.provider_transport import _reject_symlink_ancestors
+    from chi_agent.models.provider_transport import _reject_symlink_ancestors
     limit = 16 * 1024 * 1024
     deadline = time.monotonic() + 60
     try:
@@ -1458,7 +1458,7 @@ def _orchestrate(kind: str, run_id: str, budget_root: Path, *, _test_context: An
         runner_name = f"chi-agent-real-runner-{run_id}"
         runner_network = "bridge"
         if k and kind == "c-once":
-            from chi_agent.request_budget import MAX_REQUESTS
+            from chi_agent.accounting.request_budget import MAX_REQUESTS
             runner_max_turns = str(MAX_REQUESTS)
         else:
             runner_max_turns = "6" if kind == "b-smoke" else str(profile.max_rounds)
@@ -1667,7 +1667,7 @@ def _tool_schema(tool: Any) -> tuple[str, dict[str, Any]] | None:
 
 
 def _apply_referral_guidance(function_tool: Any, raw_name: str, journal: RealDevelopmentJournal) -> Any:
-    from chi_agent.referral_field_guidance import VERSION, GUIDANCE_SHA256, append_description
+    from chi_agent.roles.referral_field_guidance import VERSION, GUIDANCE_SHA256, append_description
     try:
         applied = append_description(raw_name, function_tool.description)
     except ValueError:
@@ -1755,7 +1755,7 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
         if path.is_symlink() or not path.is_file():
             return "ERROR: projected file is unavailable"
         offset, limit = args.get("offset"), args.get("limit")
-        from chi_agent.pdf_resource_reader import read_allowed_file
+        from chi_agent.tools.pdf_resource_reader import read_allowed_file
         pdf_enabled = getattr(getattr(journal, "policy", None), "scope", None) == "real_development"
         return read_allowed_file(path, offset, limit, pdf_enabled=pdf_enabled)
 
@@ -1820,14 +1820,14 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
 
     async def read_patient_observation(_ctx: Any, payload: str) -> str:
         args = json.loads(payload)
-        from chi_agent.patient_identity_binding import Refusal
+        from chi_agent.roles.patient_identity_binding import Refusal
         try:
             return binding.read_observation(args["patient_id"], args["offset"])
         except Refusal as exc:
             return f"REFUSED: {exc}"
 
     async def confirm_patient(_ctx: Any, payload: str) -> str:
-        from chi_agent.patient_identity_binding import PROMPT, PROMPT_VERSION, MAX_CONFIRM_INPUT, CONFIRM_MAX_OUTPUT_TOKENS, Refusal
+        from chi_agent.roles.patient_identity_binding import PROMPT, PROMPT_VERSION, MAX_CONFIRM_INPUT, CONFIRM_MAX_OUTPUT_TOKENS, Refusal
         args = json.loads(payload)
         try:
             evidence = binding.confirmation_input(args["patient_id"], exchanges or [])
@@ -1959,7 +1959,7 @@ def _live_tools(kind: str, logs_dir: Path, projection_root: Path, journal: RealD
                  fn("local-fs-write", "Create or overwrite files only inside provider/shared workspace directories.", write_schema, write_file),
                  fn("local-fs-edit", "Edit existing files only inside provider/shared workspace directories.", edit_schema, edit_file)]
         if binding is not None:
-            from chi_agent.patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION
+            from chi_agent.roles.patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION
             read_observation_schema = {"type": "object", "properties": {"patient_id": {"type": "string"},
                                         "offset": {"type": "integer", "minimum": 0}},
                                        "required": ["patient_id", "offset"], "additionalProperties": False}
@@ -2035,7 +2035,7 @@ def _validate_live_response(response: dict[str, Any], ledger: Any, profile: Any,
         parsed.append((call_id, name, args))
     seen = ledger.validated_call_ids
     if binding is not None:
-        from chi_agent.patient_identity_binding import Refusal
+        from chi_agent.roles.patient_identity_binding import Refusal
         if any(name == "local-confirm-patient" for _, name, _ in parsed) and len(parsed) != 1:
             raise LiveFailure("patient_confirmation_batch_invalid")
         for call_id, name, args in parsed:
@@ -2182,7 +2182,7 @@ def _install_dispatch_recorder(official_runner: Any, mcp_util: Any, journal: Rea
                 if binding is None:
                     value = await patched_invoke(server, tool, context, input_json, meta=meta)
                 else:
-                    from chi_agent.patient_identity_binding import Refusal
+                    from chi_agent.roles.patient_identity_binding import Refusal
                     async with binding_lock:
                         refusal = binding.batch_refusals.get(call_id)
                         if not refusal:
@@ -2226,10 +2226,10 @@ async def _worker_run(args: argparse.Namespace) -> int:
     import httpx
     from contextlib import asynccontextmanager
 
-    from chi_agent.execution_policy import load_local_policy
-    from chi_agent.provider_profile import load_profile
-    from chi_agent.provider_transport import GuardFailure, GuardedTransport
-    from chi_agent.model_runner_adapter import (
+    from chi_agent.accounting.execution_policy import load_local_policy
+    from chi_agent.models.provider_profile import load_profile
+    from chi_agent.models.provider_transport import GuardFailure, GuardedTransport
+    from chi_agent.evaluation.model_runner_adapter import (
         Ledger, _patch_empty_history_compatibility, _same_route_reasoning,
     )
 
@@ -2263,7 +2263,7 @@ async def _worker_run(args: argparse.Namespace) -> int:
     request_context = None
     if k and kind == "c-once":
         import contextvars
-        from chi_agent.patient_identity_binding import PatientBinding
+        from chi_agent.roles.patient_identity_binding import PatientBinding
         binding = PatientBinding(instruction_file.read_text(encoding="utf-8"), journal)
         binding_lock = asyncio.Lock()
         active_mcp = contextvars.ContextVar("patient_binding_mcp", default=None)
@@ -2280,13 +2280,13 @@ async def _worker_run(args: argparse.Namespace) -> int:
     overridden_max_turns = bool(k and kind == "c-once")
     try:
         if overridden_max_turns:
-            from chi_agent.request_budget import K_C_CONTRACT, MAX_REQUESTS
+            from chi_agent.accounting.request_budget import K_C_CONTRACT, MAX_REQUESTS
             os.environ["OPENAI_AGENTS_MAX_TURNS"] = str(MAX_REQUESTS)
             journal.run_doc["run_kind"] = "c-once"
             journal._persist()
         if binding is not None:
-            from chi_agent.patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION, PROMPT, PROMPT_VERSION
-            from chi_agent.referral_field_guidance import VERSION as REFERRAL_GUIDANCE_VERSION, GUIDANCE_SHA256
+            from chi_agent.roles.patient_identity_binding import CONFIRM_DESCRIPTION, READ_DESCRIPTION, PROMPT, PROMPT_VERSION
+            from chi_agent.roles.referral_field_guidance import VERSION as REFERRAL_GUIDANCE_VERSION, GUIDANCE_SHA256
             journal.run_doc["referral_field_guidance"] = {
                 "version": REFERRAL_GUIDANCE_VERSION, "guidance_sha256": GUIDANCE_SHA256, "tools": {}}
             binding.event("protocol", prompt_version=PROMPT_VERSION, prompt_sha256=hashlib.sha256(PROMPT.encode()).hexdigest(),
@@ -2350,7 +2350,7 @@ async def _worker_run(args: argparse.Namespace) -> int:
             openai_client = AsyncOpenAI(api_key=secret, base_url=profile.endpoint + "/v1",
                                         http_client=client_http, max_retries=0)
             if overridden_max_turns:
-                from chi_agent.request_budget import feedback, claim_recorded
+                from chi_agent.accounting.request_budget import feedback, claim_recorded
                 class BudgetedModel(OpenAIChatCompletionsModel):
                     async def get_response(self, system_instructions: str | None, *args: Any, **kwargs: Any):
                         if system_instructions != official_runner.SYSTEM_PROMPT:

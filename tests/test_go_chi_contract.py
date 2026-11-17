@@ -1,7 +1,7 @@
 import unittest
 
-from chi_agent.tool_contract import ContractFailure, ToolContract
-from chi_agent.request_budget import feedback
+from chi_agent.tools.tool_contract import ContractFailure, ToolContract
+from chi_agent.accounting.request_budget import feedback
 
 
 def definition():

@@ -5,10 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
-from chi_agent.journal import ChiJournal, inspect_history
-from chi_agent.output_recovery import POLICY, derive_view
-from chi_agent.opencode_go_provider import GoFailure
-from chi_agent.request_budget import feedback
+from chi_agent.accounting.journal import ChiJournal, inspect_history
+from chi_agent.context.output_recovery import POLICY, derive_view
+from chi_agent.models.opencode_go_provider import GoFailure
+from chi_agent.accounting.request_budget import feedback
 
 IDENTITY = 'a' * 64
 USAGE = {'prompt_tokens': 3, 'completion_tokens': 2, 'total_tokens': 5, 'cost': 0,
@@ -122,7 +122,7 @@ def test_replay_rejects_tamper(tmp_path, change):
 def test_persistence_failure_has_no_retry(tmp_path, failure):
     j = new(tmp_path); _, _, view = submit_parent(j)
     before = len(j.run['requests'])
-    target = 'chi_agent.journal.write_evidence' if failure == 'write' else 'chi_agent.journal.ChiJournal._persist'
+    target = 'chi_agent.accounting.journal.write_evidence' if failure == 'write' else 'chi_agent.accounting.journal.ChiJournal._persist'
     with patch(target, side_effect=OSError('fault')):
         with pytest.raises(GoFailure, match='chi_recovery_persistence_failed'): j.issue_recovery(view)
     with pytest.raises(GoFailure, match='chi_recovery_persistence_failed'): j.issue_recovery(view)

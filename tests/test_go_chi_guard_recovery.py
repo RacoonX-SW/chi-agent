@@ -6,10 +6,10 @@ from unittest.mock import patch
 import httpx
 import pytest
 
-from chi_agent.request_guard import ChiGuard
-from chi_agent.journal import ChiJournal, inspect_history
-from chi_agent.output_recovery import POLICY
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.models.request_guard import ChiGuard
+from chi_agent.accounting.journal import ChiJournal, inspect_history
+from chi_agent.context.output_recovery import POLICY
+from chi_agent.models.opencode_go_provider import GoFailure
 from test_go_chi_guard import SECRET, SESSION, TOOLS, USAGE, body, request
 from test_go_chi_recovery_journal import digest
 
@@ -156,7 +156,7 @@ def test_mutated_contract_history_blocks_before_permit(tmp_path):
 
 def test_budget_exceeded_before_issue(tmp_path):
     async def run():
-        from chi_agent.context_budget import DEFAULT_BUDGET, measure_request
+        from chi_agent.context.context_budget import DEFAULT_BUDGET, measure_request
         raw=request(body()).content
         original=measure_request(body(),raw)
         limit=dict(DEFAULT_BUDGET,max_estimated_tokens=original['estimated_tokens']+8192+10)

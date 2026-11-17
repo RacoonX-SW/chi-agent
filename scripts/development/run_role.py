@@ -12,14 +12,14 @@ import time
 from pathlib import Path
 
 from scripts.development.world_environment import _docker, _task_environment, wait_world
-from chi_agent.provider_transport import _reject_symlink_ancestors
+from chi_agent.models.provider_transport import _reject_symlink_ancestors
 from scripts.development.review_run import _checks
 from chi_agent.evaluation_bundle import _check_components, _read_regular_bounded
 from scripts.development.capture_resources import capture_resources
 from scripts.development.run_development_legacy import _capture_review_input
 from scripts.development.capture_cm_state import capture_cm_review_input
 from scripts.development.role_resource_preflight import bounded_request_count, validate
-from chi_agent.workspace_paths import workspace_path
+from chi_agent.tools.workspace_paths import workspace_path
 from docker.types import Mount
 from chi_bench.verifier.task_runtime import collect_all_verifier_checks  # fail before world startup if verifier is unavailable
 

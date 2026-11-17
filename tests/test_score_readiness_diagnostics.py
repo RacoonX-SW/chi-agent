@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import chi_agent.cli as go_chi_entry
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.models.opencode_go_provider import GoFailure
 
 
 def rich_log():

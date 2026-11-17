@@ -6,8 +6,8 @@ import httpx
 import pytest
 from jsonschema import Draft202012Validator
 
-from chi_agent.journal import ChiJournal, inspect_history
-from chi_agent.runtime import run_chi
+from chi_agent.accounting.journal import ChiJournal, inspect_history
+from chi_agent.agent.runtime import run_chi
 from test_go_chi_capabilities_runtime import Result, Server, completion
 
 

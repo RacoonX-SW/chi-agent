@@ -14,9 +14,9 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
-from .execution_policy import (ExecutionPolicy, PolicyFailure, is_validated_policy,
+from chi_agent.accounting.execution_policy import (ExecutionPolicy, PolicyFailure, is_validated_policy,
                                 load_local_policy, make_evaluation_policy)
-from .provider_profile import ProfileFailure, load_profile, validate_budget_evidence
+from chi_agent.models.provider_profile import ProfileFailure, load_profile, validate_budget_evidence
 
 
 class PreparationFailure(Exception):
@@ -26,12 +26,12 @@ class PreparationFailure(Exception):
         self.phase = phase
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 SYNTHETIC_RUNS = ROOT / "runs" / "b-provider-preflight" / "synthetic"
 EVALUATION_RUNS = ROOT / "runs" / "evaluation-policy-rehearsal"
 APPLICATION_SOURCE_FILES = (
-    "src/chi_agent/model_runner_adapter.py", "src/chi_agent/budget_evaluation.py", "src/chi_agent/provider_profile.py", "src/chi_agent/execution_policy.py",
-    "src/chi_agent/provider_transport.py", "src/chi_agent/evaluation_preflight.py", "profiles/local-development-policy.json",
+    "src/chi_agent/evaluation/model_runner_adapter.py", "src/chi_agent/accounting/budget_evaluation.py", "src/chi_agent/models/provider_profile.py", "src/chi_agent/accounting/execution_policy.py",
+    "src/chi_agent/models/provider_transport.py", "src/chi_agent/evaluation/evaluation_preflight.py", "profiles/local-development-policy.json",
 )
 FIXTURE_SCENARIOS = (
     "success", "http-429", "http-503", "connect-error", "timeout", "missing-usage",
@@ -217,11 +217,11 @@ async def _rehearse(scenario: str, run_id: str, *, initial_prior: Decimal = Deci
                     execution_identity_sha256: str | None = None,
                     official_launch: dict[str, Any] | None = None) -> tuple[Any, Any, str | None]:
     try:
-        from .provider_transport import EvaluationJournal, GuardFailure, SyntheticJournal
+        from chi_agent.models.provider_transport import EvaluationJournal, GuardFailure, SyntheticJournal
     except Exception:
         raise PreparationFailure("optional_sdk_layer_unavailable") from None
     try:
-        from .model_runner_adapter import _run_offline
+        from chi_agent.evaluation.model_runner_adapter import _run_offline
     except Exception:
         raise PreparationFailure("optional_sdk_layer_unavailable") from None
 

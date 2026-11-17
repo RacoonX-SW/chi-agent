@@ -8,14 +8,14 @@ from pathlib import Path
 
 import httpx
 
-from chi_agent.context_assembly import project_messages
-from chi_agent.context_budget import DEFAULT_BUDGET_V3
-from chi_agent.evidence import verify_tool, write_tool
-from chi_agent.request_budget import feedback
-from chi_agent.request_guard import ChiGuard
-from chi_agent.journal import ChiJournal, _replay_source_view, inspect_history
-from chi_agent.output_recovery import canonical_sha, validate_permit
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.context.context_assembly import project_messages
+from chi_agent.context.context_budget import DEFAULT_BUDGET_V3
+from chi_agent.accounting.evidence import verify_tool, write_tool
+from chi_agent.accounting.request_budget import feedback
+from chi_agent.models.request_guard import ChiGuard
+from chi_agent.accounting.journal import ChiJournal, _replay_source_view, inspect_history
+from chi_agent.context.output_recovery import canonical_sha, validate_permit
+from chi_agent.models.opencode_go_provider import GoFailure
 from test_go_chi_guard import SECRET, SESSION, TOOLS, USAGE, URL, body, request
 
 LOCAL_TOOLS = [{"type": "function", "function": {
@@ -246,7 +246,7 @@ class RecoveryViewBindingTests(unittest.TestCase):
         response = {"model": "deepseek-v4.1-flash",
                     "choices": [{"finish_reason": "length",
                                  "message": {"role": "assistant", "content": "part"}}]}
-        from chi_agent.output_recovery import derive_view
+        from chi_agent.context.output_recovery import derive_view
         view = derive_view(parent, response, old_used=0, claimed=False, anchor=anchor_doc)
         run = {"evaluation": "e", "task": "t", "attempt": "a", "run": "r"}
         permit = {

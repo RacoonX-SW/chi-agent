@@ -17,12 +17,31 @@ from unittest.mock import patch
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
-import chi_agent.provider_profile as b_provider_profile
+import chi_agent.models.provider_profile as b_provider_profile
 import chi_agent.evaluation_bundle as bundle
 import chi_agent.evaluation_cli as entry
 
 
 class EvaluationEntryBundleTests(unittest.TestCase):
+    def test_v3_requires_subpackage_initializers_and_rejects_v2_tree(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, _ = self.build(temp)
+            (root / 'scripts/chi_agent/evaluation/__init__.py').unlink()
+            with self.assertRaisesRegex(bundle.BundleFailure, 'bundle_tree_invalid'):
+                bundle.validate_bundle(root)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in bundle.V2_PACKAGE_FILES:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('v2')
+            (root / bundle.MANIFEST_NAME).write_text(json.dumps({
+                'schema': 'chi-evaluation-entry-bundle-v3',
+                'bundle_id': 'evaluation-entry-identified-record-only-v3',
+            }))
+            with self.assertRaisesRegex(bundle.BundleFailure, 'bundle_tree_invalid'):
+                bundle.validate_bundle(root)
+
     def build(self, temp: str) -> tuple[Path, bundle.BundleIdentity]:
         target = Path(temp) / "package"
         identity = bundle.build_bundle(target, source_root=PROJECT_ROOT)
@@ -257,7 +276,7 @@ class EvaluationEntryBundleTests(unittest.TestCase):
             command = (
                 "import sys; from pathlib import Path; "
                 "sys.path.insert(0, sys.argv[1]); import chi_agent.evaluation_cli as e; "
-                "import chi_agent.provider_profile as p; "
+                "import chi_agent.models.provider_profile as p; "
                 "e.ROOT=Path(sys.argv[2]); e.ENTRY_CONFIG_PATH=Path(sys.argv[2])/'profiles/evaluation-entry.json'; "
                 "p.PROFILE_PATH=Path(sys.argv[2])/'profiles/deepseek-flash-prepared.json'; "
                 "raise SystemExit(e.main(['launch-rehearse','--evaluation-id','fifo-test',"

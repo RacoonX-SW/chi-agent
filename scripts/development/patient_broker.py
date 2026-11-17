@@ -14,7 +14,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from chi_agent.auxiliary_transport import AuxiliaryTransport
+from chi_agent.models.auxiliary_transport import AuxiliaryTransport
 
 
 class PatientBroker:

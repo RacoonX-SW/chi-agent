@@ -5,9 +5,9 @@ from unittest.mock import patch
 
 import pytest
 
-from chi_agent.journal import inspect_history
-from chi_agent.output_recovery import derive_view
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.accounting.journal import inspect_history
+from chi_agent.context.output_recovery import derive_view
+from chi_agent.models.opencode_go_provider import GoFailure
 from test_go_chi_recovery_journal import USAGE, digest, new, settle_continuation, submit_parent
 
 
@@ -79,8 +79,8 @@ def test_bad_binding_rejected_by_replay(tmp_path, mutation):
 @pytest.mark.parametrize('point', ['marker', 'evidence', 'persist'])
 def test_continuation_reserve_persistence_failure_never_reused(tmp_path, point):
     j = new(tmp_path); _, _, view = submit_parent(j); j.issue_recovery(view)
-    target = {'marker': 'chi_agent.journal.ChiJournal._mark_tool_inflight',
-              'evidence': 'chi_agent.journal.write_evidence', 'persist': 'chi_agent.journal.ChiJournal._persist'}[point]
+    target = {'marker': 'chi_agent.accounting.journal.ChiJournal._mark_tool_inflight',
+              'evidence': 'chi_agent.accounting.journal.write_evidence', 'persist': 'chi_agent.accounting.journal.ChiJournal._persist'}[point]
     with patch(target, side_effect=OSError('fault')):
         with pytest.raises(Exception): j.reserve(json.dumps(view).encode(), 'continuation', recovery_permit=0)
     with pytest.raises(GoFailure, match='chi_recovery_persistence_failed'):

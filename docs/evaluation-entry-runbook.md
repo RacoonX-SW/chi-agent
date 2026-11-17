@@ -28,3 +28,5 @@ docker run --rm --network none --read-only --tmpfs /tmp \
 ```
 
 预检成功时 `technical_ready=true`。运行 `rehearse` 时，将包外可写目录挂到 `/output`，传入 `--output-root /output --evaluation-id`、`--task-id`、`--attempt-id` 和 `--run-id`。使用 `launch-rehearse` 时另传外部合成 `--instruction-file`、`--mcp-url` 和新的 `--logs-dir`。两个模式使用合成 HTTP 与工具，保留独立的运行记录。
+
+当前导出使用 v3 清单：`scripts/chi_agent/` 按职责子包组织，并包含运行所需的子包初始化文件。校验器仍按各自冻结清单验证 v1 和 v2 历史包。

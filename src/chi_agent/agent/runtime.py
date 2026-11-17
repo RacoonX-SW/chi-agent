@@ -5,16 +5,16 @@ import hashlib
 import json
 import os
 
-from .opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
+from chi_agent.models.opencode_go_provider import (GoFailure, SYSTEM as B_SYSTEM, INSTRUCTION as B_INSTRUCTION,
                                   SCHEMAS as B_SCHEMAS, DESCRIPTIONS as B_DESCRIPTIONS,
                                   _matches_patch, _same_route_reasoning)
-from .model_runner_adapter import _patch_empty_history_compatibility
-from .context_budget import DEFAULT_BUDGET, check_budget, measure_request
-from .runtime_policy import TIME_POLICY, RECOVERY_POLICY, SUMMARY_VERSIONS
-from .role_guidance import (VERSION as GUIDANCE_VERSION,
+from chi_agent.evaluation.model_runner_adapter import _patch_empty_history_compatibility
+from chi_agent.context.context_budget import DEFAULT_BUDGET, check_budget, measure_request
+from chi_agent.agent.runtime_policy import TIME_POLICY, RECOVERY_POLICY, SUMMARY_VERSIONS
+from chi_agent.roles.role_guidance import (VERSION as GUIDANCE_VERSION,
                              VERSION_REQUIREMENTS as GUIDANCE_VERSION_REQUIREMENTS,
                              digest as guidance_digest, version as guidance_version)
-from .task_state import REQUIREMENTS_POLICY, TaskState
+from chi_agent.agent.task_state import REQUIREMENTS_POLICY, TaskState
 
 
 def coding_tools(guard_getter):
@@ -104,12 +104,12 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     from agents.tracing import get_trace_provider
     from agents.models.openai_chatcompletions import Converter, OpenAIChatCompletionsModel
     from chi_bench.experiment.agents import openai_agents_runner as official
-    from .request_guard import ChiGuard
-    from .mcp_tools import MCPBridge, selected_server
-    from .workspace_paths import workspace_path
-    from .local_tools import local_tools
-    from .patient_identity_binding import PatientBinding
-    from .request_budget import feedback
+    from chi_agent.models.request_guard import ChiGuard
+    from chi_agent.tools.mcp_tools import MCPBridge, selected_server
+    from chi_agent.tools.workspace_paths import workspace_path
+    from chi_agent.tools.local_tools import local_tools
+    from chi_agent.roles.patient_identity_binding import PatientBinding
+    from chi_agent.accounting.request_budget import feedback
 
     if journal.run["kind"] != "chi" or role not in {"provider", "payer", "cm"}:
         raise GoFailure("chi_run_contract_invalid")
@@ -182,7 +182,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             raise GoFailure("chi_context_persistence_failed") from None
     def record_wire(item):
         wire_counts[item['purpose']] += 1
-        from .evidence import verify
+        from chi_agent.accounting.evidence import verify
         recovery = next((event for event in journal.run.get("recovery_events", [])
                          if event["parent_round"] == item["round"] or event["continuation_round"] == item["round"]), None)
         mode = None
@@ -316,7 +316,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             session = "chi-" + uuid.uuid4().hex
             def summary_snapshot():
                 from copy import deepcopy
-                from .input_summary import binding_snapshot
+                from chi_agent.context.input_summary import binding_snapshot
                 return binding_snapshot(binding), deepcopy(state.data) if state is not None else None
 
             guard = ChiGuard(journal, secret, session, lower, tools=definitions, system=official.SYSTEM_PROMPT,
@@ -382,7 +382,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
             except Exception:
                 failure = failure or "chi_cleanup_failed"
         try:
-            from .evidence import verify
+            from chi_agent.accounting.evidence import verify
             with recovery_path.open("a", encoding="utf-8") as handle:
                 for event in journal.run.get("recovery_events", []):
                     permit = verify(journal.root, journal.run_id, event['parent_round'], 'recovery', event['permit_sha256'])

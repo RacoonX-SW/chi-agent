@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from chi_agent.workspace_paths import workspace_path
+from chi_agent.tools.workspace_paths import workspace_path
 
 
 class ResourcesTests(unittest.TestCase):

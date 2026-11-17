@@ -88,7 +88,7 @@ def test_world_cb_installs_before_same_process_serve():
 
 async def _test_probe():
     from scripts.experiments.probe_patient_simulator import _run
-    from chi_agent.journal import ChiJournal
+    from chi_agent.accounting.journal import ChiJournal
     with tempfile.TemporaryDirectory() as d:
         journal = ChiJournal(Path(d), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r',
                              kind='patient_probe', launch={'aux_contract': 'patient-simulator-v1'})

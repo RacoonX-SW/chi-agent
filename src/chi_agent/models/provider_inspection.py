@@ -6,8 +6,8 @@ import re
 from decimal import Decimal
 from pathlib import Path
 
-from .evaluation_bundle import _check_components, _read_regular_bounded
-from .opencode_go_provider import GoFailure, _unique
+from chi_agent.evaluation_bundle import _check_components, _read_regular_bounded
+from chi_agent.models.opencode_go_provider import GoFailure, _unique
 
 
 def inspect_provider(path: Path, expected_sha256: str, pending: dict | None) -> dict:

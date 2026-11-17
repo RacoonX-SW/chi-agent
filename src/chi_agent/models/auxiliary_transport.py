@@ -8,11 +8,11 @@ import time
 
 import httpx
 
-from .context_budget import DEFAULT_BUDGET, check_budget, measure_request
-from .diagnostics import cause_for_code
-from .runtime_policy import TIME_POLICY
-from .provider_transport import GuardedTransport
-from .opencode_go_provider import GoFailure, _contains_secret, _unique
+from chi_agent.context.context_budget import DEFAULT_BUDGET, check_budget, measure_request
+from chi_agent.accounting.diagnostics import cause_for_code
+from chi_agent.agent.runtime_policy import TIME_POLICY
+from chi_agent.models.provider_transport import GuardedTransport
+from chi_agent.models.opencode_go_provider import GoFailure, _contains_secret, _unique
 
 
 class AuxiliaryTransport(httpx.AsyncBaseTransport):

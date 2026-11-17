@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .evaluation_bundle import BundleFailure, _check_components
+from chi_agent.evaluation_bundle import BundleFailure, _check_components
 
 ROLES = {"provider", "payer", "cm"}
 CASE = re.compile(r"^[A-Za-z0-9_-]{1,96}$")

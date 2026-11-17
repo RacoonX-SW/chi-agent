@@ -11,9 +11,9 @@ import re
 
 from jsonschema import Draft202012Validator
 
-from .opencode_go_provider import GoFailure
-from .context_assembly import reduce_tool_result, truncate_tool_text
-from .task_state import effect_for
+from chi_agent.models.opencode_go_provider import GoFailure
+from chi_agent.context.context_assembly import reduce_tool_result, truncate_tool_text
+from chi_agent.agent.task_state import effect_for
 
 CM_NAMES = {
     "cm_intake.list_referral_queue", "cm_intake.get_referral", "cm_intake.open_case", "cm_intake.disenroll_case",
@@ -83,7 +83,7 @@ class MCPBridge:
             self.raw_names[model_name] = (raw, canonical)
             names.add(canonical)
             if role == "provider":
-                from .referral_field_guidance import append_description
+                from chi_agent.roles.referral_field_guidance import append_description
                 addition = append_description(canonical, description)
                 if addition is not None:
                     description = addition[0]
@@ -117,7 +117,7 @@ class MCPBridge:
         """Precheck the full batch against the current provider binding."""
         if self.binding is None:
             return
-        from .patient_identity_binding import Refusal
+        from chi_agent.roles.patient_identity_binding import Refusal
         for call in calls:
             mapped = self.raw_names.get(call["name"])
             if mapped is None:
@@ -154,7 +154,7 @@ class MCPBridge:
                 self.guard.contract.record_result(selected["id"], result)
                 return result
             if self.binding is not None:
-                from .patient_identity_binding import Refusal
+                from chi_agent.roles.patient_identity_binding import Refusal
                 reason = self.binding.batch_refusals.get(selected["id"])
                 if reason is None:
                     try:
@@ -262,7 +262,7 @@ class MCPBridge:
                 if (self.binding is not None and canonical == "chart.search_patients" and not is_error
                         and getattr(self.binding, "roster", None) is not None and self.binding.roster["call_id"] == selected["id"]
                         and self.binding.roster["items"]):
-                    from .patient_identity_binding import _digest, Refusal
+                    from chi_agent.roles.patient_identity_binding import _digest, Refusal
                     try:
                         page = self.binding.read_roster(_digest(self.binding.roster["text"]), 0)
                     except Refusal as exc:

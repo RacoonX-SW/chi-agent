@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 import httpx
-from chi_agent.journal import ChiJournal
-import chi_agent.runtime as runtime
+from chi_agent.accounting.journal import ChiJournal
+import chi_agent.agent.runtime as runtime
 run_chi = runtime.run_chi
 ROOT = Path(__file__).resolve().parents[2]
 SCHEMA = 'chi-trace-replay-v1'

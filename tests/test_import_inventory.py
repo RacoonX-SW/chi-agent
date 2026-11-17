@@ -106,15 +106,15 @@ class RealTreeTests(unittest.TestCase):
                 shutil.copyfile(source / origin, target)
             result = import_inventory.inventory(root)
             unknown = next((item for item in result["unknown_imports"]
-                            if item["module"] == "chi_agent.model_runner_adapter"), None)
-            self.assertTrue(unknown is None or "chi_agent.budget_evaluation" not in unknown["imports"])
-            self.assertNotIn({"module": "chi_agent.model_runner_adapter", "imports": "chi_agent.budget_evaluation"},
+                            if item["module"] == "chi_agent.evaluation.model_runner_adapter"), None)
+            self.assertTrue(unknown is None or "chi_agent.accounting.budget_evaluation" not in unknown["imports"])
+            self.assertNotIn({"module": "chi_agent.evaluation.model_runner_adapter", "imports": "chi_agent.accounting.budget_evaluation"},
                              result["closure_gaps"])
-            (root / "scripts/chi_agent/budget_evaluation.py").unlink()
+            (root / "scripts/chi_agent/accounting/budget_evaluation.py").unlink()
             missing = import_inventory.inventory(root)
             unknown = next(item for item in missing["unknown_imports"]
-                           if item["module"] == "chi_agent.model_runner_adapter")
-            self.assertIn("chi_agent.budget_evaluation", unknown["imports"])
+                           if item["module"] == "chi_agent.evaluation.model_runner_adapter")
+            self.assertIn("chi_agent.accounting.budget_evaluation", unknown["imports"])
 
 
 if __name__ == "__main__":

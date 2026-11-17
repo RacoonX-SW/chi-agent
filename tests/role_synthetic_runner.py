@@ -9,7 +9,7 @@ from pathlib import Path
 import httpx
 
 import chi_agent.cli as go_chi_entry
-import chi_agent.opencode_go_provider as opencode_go_provider
+import chi_agent.models.opencode_go_provider as opencode_go_provider
 import scripts.development.run_role_in_bundle as role_runner
 
 

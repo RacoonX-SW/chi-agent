@@ -12,8 +12,8 @@ import re
 from typing import Any
 
 from jsonschema import Draft202012Validator
-from .diagnostics import build_cause
-from .request_budget import feedback
+from chi_agent.accounting.diagnostics import build_cause
+from chi_agent.accounting.request_budget import feedback
 
 CALL_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 

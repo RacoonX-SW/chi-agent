@@ -62,7 +62,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from chi_agent.budget_evaluation import evaluate_budget
+from chi_agent.accounting.budget_evaluation import evaluate_budget
 from scripts.experiments.baseline_gate_policy import evaluate_gate
 
 # ---------------------------------------------------------------------------

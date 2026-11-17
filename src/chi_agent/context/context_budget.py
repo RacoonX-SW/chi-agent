@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import math
 
-from .runtime_policy import DEFAULT_CONTEXT_MODEL, context_profile
+from chi_agent.agent.runtime_policy import DEFAULT_CONTEXT_MODEL, context_profile
 
 SCHEMA_V1 = "chi-context-v1"
 SCHEMA_V2 = "chi-context-v2"

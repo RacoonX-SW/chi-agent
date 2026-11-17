@@ -18,8 +18,8 @@ from typing import Any
 
 import httpx
 import scripts.development.run_development_legacy as live
-from chi_agent.provider_profile import load_profile
-from chi_agent.provider_transport import _reject_symlink_ancestors
+from chi_agent.models.provider_profile import load_profile
+from chi_agent.models.provider_transport import _reject_symlink_ancestors
 
 ROOT = Path(__file__).resolve().parents[2]
 INPUT_ROOT = ROOT / "runs/development-review-inputs"

@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import chi_agent.delivery as delivery
 import chi_agent.cli as go_chi_entry
-from chi_agent.runtime_policy import RECOVERY_POLICY, SUMMARY_POLICY
+from chi_agent.agent.runtime_policy import RECOVERY_POLICY, SUMMARY_POLICY
 
 HARBOR_AVAILABLE = importlib.util.find_spec("harbor") is not None
 if HARBOR_AVAILABLE:

@@ -8,11 +8,11 @@ from unittest.mock import patch
 
 import httpx
 
-from chi_agent.request_guard import ChiGuard
-from chi_agent.journal import ChiJournal
-from chi_agent.opencode_go_provider import GoFailure, SYSTEM, INSTRUCTION, SCHEMAS, DESCRIPTIONS
-from chi_agent.runtime_policy import TIME_POLICY
-from chi_agent.request_budget import feedback
+from chi_agent.models.request_guard import ChiGuard
+from chi_agent.accounting.journal import ChiJournal
+from chi_agent.models.opencode_go_provider import GoFailure, SYSTEM, INSTRUCTION, SCHEMAS, DESCRIPTIONS
+from chi_agent.agent.runtime_policy import TIME_POLICY
+from chi_agent.accounting.request_budget import feedback
 
 URL = "https://opencode.ai/inference/go/openai/v1/chat/completions"
 SECRET = "synthetic-test-secret"
@@ -75,7 +75,7 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
                 next_j.finish('failed'); next_j.close()
 
     async def test_wall_timeout_and_admission_are_distinct(self):
-        from chi_agent.runtime_policy import TIME_POLICY
+        from chi_agent.agent.runtime_policy import TIME_POLICY
         with tempfile.TemporaryDirectory() as directory:
             j = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r')
             calls = []
@@ -92,7 +92,7 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
             j.finish('failed', guard.error); j.close()
 
     async def test_confirmation_wall_timeout_preserves_pending(self):
-        from chi_agent.runtime_policy import TIME_POLICY
+        from chi_agent.agent.runtime_policy import TIME_POLICY
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             j = ChiJournal(root, identity='a' * 64, evaluation='e', task='t', attempt='a', run='r')
@@ -138,7 +138,7 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
             j.finish('failed', guard.error); j.close()
 
     async def test_b_expired_admission_does_not_reserve(self):
-        from chi_agent.runtime_policy import TIME_POLICY
+        from chi_agent.agent.runtime_policy import TIME_POLICY
         with tempfile.TemporaryDirectory() as directory:
             j = ChiJournal(Path(directory), identity='a' * 64, evaluation='e', task='t', attempt='a', run='r', kind='coding_b')
             defs = [{'type': 'function', 'function': {'name': name, 'description': DESCRIPTIONS[name],
@@ -314,11 +314,11 @@ class GuardTests(unittest.IsolatedAsyncioTestCase):
                     "choices": [{"finish_reason": "stop", "message": {"role": "assistant", "content": "done"}}]})
             guard = ChiGuard(j, SECRET, SESSION, httpx.MockTransport(answer), tools=TOOLS,
                              system="system", instruction="instruction", claimed=lambda: False, confirmation=lambda: None)
-            from chi_agent.journal import write_evidence
+            from chi_agent.accounting.journal import write_evidence
             def fail_response(root, run, number, kind, value):
                 if kind == "response": raise OSError("synthetic write failure")
                 return write_evidence(root, run, number, kind, value)
-            with patch('chi_agent.journal.write_evidence', side_effect=fail_response):
+            with patch('chi_agent.accounting.journal.write_evidence', side_effect=fail_response):
                 with self.assertRaisesRegex(GoFailure, "chi_evidence_persistence_failed"):
                     await guard.handle_async_request(request(body()))
             self.assertEqual(j.run["requests"][0]["usage"]["input_tokens"], 3)

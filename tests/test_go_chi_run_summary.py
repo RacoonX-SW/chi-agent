@@ -8,8 +8,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import scripts.tools.summarize_runs as summary
-from chi_agent.journal import ChiJournal
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.accounting.journal import ChiJournal
+from chi_agent.models.opencode_go_provider import GoFailure
 
 IDENTITY = "a" * 64
 USAGE = {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5, "cost": 0,

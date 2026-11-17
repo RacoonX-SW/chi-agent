@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from chi_agent.model_adapter import (
+from chi_agent.models.model_adapter import (
     BudgetProfile,
     CANDIDATE_PROFILE,
     ProbeFailure,

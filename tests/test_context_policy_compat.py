@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 
 import chi_agent.cli as go_chi_entry
-from chi_agent.journal import ChiJournal
-from chi_agent.opencode_go_provider import GoFailure
+from chi_agent.accounting.journal import ChiJournal
+from chi_agent.models.opencode_go_provider import GoFailure
 
 
 class ContextPolicyCompatibilityTests(unittest.TestCase):
