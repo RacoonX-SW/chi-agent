@@ -140,11 +140,19 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                    and item.get("event") == "returned" and item.get("effect") == "read"
                    for item in state.data.get("observations", []))
 
+    last_file_version = {}
+
     async def read_file(args):
+        last_file_version.clear()
         path = allowed_read(args.get("path"))
         if path is None or not path.is_file() or path.is_symlink():
             return "ERROR: file is outside the role allowlist or unavailable"
-        return read_allowed_file(path, args.get("offset"), args.get("limit"), pdf_enabled=True)
+        version_callback = None
+        if (state is not None and state._provider_enabled and str(path) != str(instruction_path)
+                and classify_source('local-fs-read', json.dumps(args), '') == 'shared_public'):
+            version_callback = lambda digest: last_file_version.update({"sha256": digest})
+        return read_allowed_file(path, args.get("offset"), args.get("limit"), pdf_enabled=True,
+                                 source_version=version_callback)
 
     async def list_files(args):
         path = allowed_read(args.get("path"), directory=True)
@@ -447,6 +455,16 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
     if context_policy == "chi-context-v3":
         state_update_schema["properties"].pop("facts", None)
         state_update_schema["properties"].pop("target", None)
+    if role == "provider" and context_policy == "chi-context-v3":
+        state_update_schema["properties"]["provider_location"] = schema({
+            "site_of_service": {"type":"string"}, "source_call_id": {"type":"string"}, "quote": {"type":"string", "maxLength":800}},
+            ["site_of_service", "source_call_id", "quote"])
+        state_update_schema["properties"]["provider_review"] = schema({
+            "case_id": {"type":"string"}, "action": {"type":"string", "enum":["submit_pa", "gather_more_evidence", "do_not_submit"]},
+            "rationale": {"type":"string", "maxLength":800}, "policy_source_call_id": {"type":"string"},
+            "policy_quote": {"type":"string", "maxLength":800}, "clinical_source_call_id": {"type":"string"},
+            "clinical_quote": {"type":"string", "maxLength":800}},
+            ["case_id", "action", "rationale", "policy_source_call_id", "policy_quote", "clinical_source_call_id", "clinical_quote"])
     if requirements == REQUIREMENTS_POLICY:
         state_update_schema["properties"]["requirements"] = {
             "type": "array", "maxItems": 8,
@@ -501,6 +519,14 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
             "binds the target from returned case-scoped observations and the patient binding. A status "
             "update must cite a returned business-status read of the target case; other reads are evidence "
             "only. The program rejects stale, wrong-case, unobserved or binding-changing updates.")
+    if role == "provider" and context_policy == "chi-context-v3":
+        state_update_description += (" For a new referral, record provider_location with site_of_service, source_call_id and exact quote "
+            "from the delivered instruction or patient-specific order/chart before case creation; the source must explicitly establish "
+            "where the requested service is performed. HOPD means outpatient hospital when explicitly linked to the requested procedure. "
+            "If the current sources do not establish a site, report the evidence gap and stop guessing. Use source_call_id instruction for the public task. "
+            "Before a new case determination, record provider_review with case_id, action, rationale and independent exact quotes "
+            "from a public policy read and patient/case-specific clinical read. Record the matching provider determination before "
+            "creating a bundle. Submit only the same ready bundle. Finish with cases.get_case and its submission_packets.")
     claim_description = (
         "Mark the task as complete after finishing the work. The program may refuse when a "
         "business write lacks a later business-status readback, a file write failed, an unknown write is open, "
@@ -664,6 +690,9 @@ def local_tools(*, role, workspace_root, instruction_path, tool_references, hand
                 journal.start_tool(selected["id"], name, args)
                 try:
                     full_output = await callback(args)
+                    if (name == 'local-fs-read' and state is not None and state._provider_enabled
+                            and 'sha256' in last_file_version):
+                        state.provider_file_versions[selected['id']] = last_file_version['sha256']
                     page_tool = name in {"local-read-patient-observation", "local-read-patient-roster"}
                     if warning and not page_tool:
                         full_output = full_output + "\n" + warning

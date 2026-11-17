@@ -104,7 +104,8 @@ _SAFE_CODE = re.compile(r"^[a-z0-9_]{1,64}$")
 _COMPLETION_REASON = re.compile(
     r"^completion_(blocked_claim_violation|blocked_unknown|file_write_failed|readback_required|"
     r"requirements_undeclared|requirements_empty|requirements_open|requirements_evidence_invalid|"
-    r"missing_step|terminal_object_missing|business_write_failed)"
+    r"missing_step|terminal_object_missing|business_write_failed|provider_review_required_or_stale|"
+    r"provider_decision_unverified|provider_branch_readback_required)"
     r"(:[A-Za-z0-9_.-]{1,128})?$")
 _TARGET_KEYS = {"case_id", "patient_id"}
 _CLAIM_KEYS = {"version", "target", "verified_status_call_id", "at_utc_ms", "kind"}
@@ -277,7 +278,10 @@ def _is_completion(value):
     if type(value["required_readback"]) is not str \
             and value["required_readback"] is not None:
         return False
-    if value["required_readback"] not in {None, "business_status", "file_delivery"}:
+    allowed_readback = {None, "business_status", "file_delivery"}
+    if schema == "chi-completion-v5":
+        allowed_readback.add("terminal_object")
+    if value["required_readback"] not in allowed_readback:
         return False
     if not _is_open_unknowns(value["open_unknowns"]):
         return False
@@ -322,13 +326,16 @@ def _is_completion(value):
     if schema == "chi-completion-v5":
         evidence = value["completion_evidence"]
         if (type(evidence) is not dict
-                or set(evidence) != {"schema", "policy", "missing_steps", "terminal_objects"}
+                or set(evidence) not in ({"schema", "policy", "missing_steps", "terminal_objects"},
+                                         {"schema", "policy", "missing_steps", "terminal_objects", "failed_terminal_objects"})
                 or evidence.get("schema") != "chi-completion-evidence-v1"
                 or evidence.get("policy") != "chi-context-v3"
                 or type(evidence.get("missing_steps")) is not list
                 or any(type(item) is not list or not item
                        or any(type(name) is not str for name in item)
                        for item in evidence["missing_steps"])
+                or type(evidence.get("failed_terminal_objects", [])) is not list
+                or any(type(name) is not str for name in evidence.get("failed_terminal_objects", []))
                 or type(evidence.get("terminal_objects")) is not list
                 or any(type(name) is not str for name in evidence["terminal_objects"])):
             return False

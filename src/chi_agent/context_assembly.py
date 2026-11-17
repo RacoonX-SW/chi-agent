@@ -223,6 +223,8 @@ def _selected_keys(tool: str):
         return {"id", "case_id", "line_number", "decision", "recommendation", "status"}
     if tool.startswith("cm_"):
         return {"id", "case_id", "status", "title", "updated_at"}
+    if tool == "chart.list_candidate_orders":
+        return {"id", "patient_id", "procedure_code", "description", "site_of_service", "status"}
     if tool.startswith("chart."):
         return {"id", "patient_id", "name", "dob", "status"}
     return None

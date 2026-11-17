@@ -212,6 +212,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
     run_started = time.monotonic()
     context = contextvars.ContextVar("chi_confirmation", default=None)
     holder, exchanges, delivered = {}, [], []
+    delivered_results = {}
     binding = PatientBinding(instruction, journal) if role == "provider" else None
     state = (TaskState(logs_dir / "task-state", run=journal.run["run"], role=role, binding=binding,
                        requirements=requirements, instruction=instruction,
@@ -287,8 +288,7 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                                               "result": content, "observed_at_request_round": used})
 
             def delivered_request(messages, used):
-                # Use the transmitted view, not the unprojected source. A later
-                # request may deliver a page that was previously projected out.
+                # A later request may deliver a page that was previously projected out.
                 records = {item["id"]: item for item in holder["guard"].contract.records}
                 for message in messages:
                     if message.get("role") != "tool":
@@ -306,6 +306,12 @@ async def run_chi(journal, secret, *, role, instruction, mcp_url, instruction_pa
                              "result": content, "observed_at_request_round": used}
                     if not any(e["call_id"] == call_id and e["result"] == content for e in delivered):
                         delivered.append(entry)
+                    if content == record["result"]:
+                        delivered_results[call_id] = content
+
+            if state is not None and role == "provider" and journal.run['launch'].get('context_policy') == 'chi-context-v3':
+                state.provider_configure(lambda: holder.get("guard"), delivered_results, instruction,
+                                         instruction_path, handbook_root, tool_references)
 
             session = "chi-" + uuid.uuid4().hex
             def summary_snapshot():

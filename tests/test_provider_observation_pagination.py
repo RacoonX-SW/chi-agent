@@ -25,7 +25,8 @@ def sample():
     patients = [{"id": f"P{i}", "patient_name": ("名\\\"" * 45) + str(i),
                  "sex": "male" if i == 0 else "female", "dob": "1970-01-01"} for i in range(65)]
     roster = {"items": patients, "total": len(patients)}
-    chart = {"patient": patients[0], "orders": [{"id": "O1", "patient_id": "P0"}],
+    chart = {"patient": patients[0], "orders": [{"id": "O1", "patient_id": "P0",
+                                                   "procedure_code": "12345", "site_of_service": "22"}],
              "notes": "90 day treatment trial " + ('中文\\\"\n' * 3000)}
     return roster, chart
 
@@ -75,14 +76,21 @@ async def _exercise_transport(tmp_path, v3):
             def tool(name, props, required):
                 return SimpleNamespace(name=name, description="synthetic", inputSchema={"type":"object", "properties":props, "required":required, "additionalProperties":False})
             return [tool("chart.search_patients", {}, []), tool("chart.get_patient_chart_by_patient", {"patient_id":{"type":"string"}}, ["patient_id"]),
-                    tool("cases.create_from_order", {"patient_id":{"type":"string"}, "source_order_id":{"type":"string"}}, ["patient_id", "source_order_id"])]
+                    tool("cases.create_from_order", {key: {"type": "string"} for key in
+                          ("patient_id", "source_order_id", "procedure_code", "site_of_service")},
+                         ["patient_id", "source_order_id"])]
         async def call_tool(self, name, args):
             self.calls.append((name, args))
             if name == 'chart.search_patients': return result(roster)
             if name == 'chart.get_patient_chart_by_patient': return result(chart)
-            return result({"case":{"id":"C1", "patient_id":"P0", "service_request_id":"O1"}, "patient":{"id":"P0"}, "service_request":{"id":"O1", "patient_id":"P0"}})
+            return result({"case":{"id":"C1", "patient_id":"P0", "service_request_id":"O1"},
+                           "patient":{"id":"P0"}, "service_request":dict(chart['orders'][0],
+                                                                          site_of_service=args.get('site_of_service'))})
     server = Server(); requests = []; confirm_wire = []; steps = []; delivered_pages = {}
+    location_quote = '"site_of_service": "22"'
+    location_page = None
     async def wire(request):
+        nonlocal location_page
         body = json.loads(request.content); requests.append(body)
         if 'response_format' in body:
             confirm_wire.append(body)
@@ -96,13 +104,15 @@ async def _exercise_transport(tmp_path, v3):
                 tool_messages = [m for m in body['messages'] if m['role'] == 'tool']
                 pages = []
                 for m in tool_messages:
-                    try: pages.append(json.loads(m['content']))
+                    try: pages.append((m['tool_call_id'], json.loads(m['content'])))
                     except (ValueError, TypeError): pass
-                for page in pages:
+                for call_id, page in pages:
                     if page.get('kind') == 'patient_roster_page':
                         delivered_pages[('roster', page['offset'])] = page
                     elif page.get('patient_id') == 'P0' and 'next_offset' in page and 'content' in page:
                         delivered_pages[('chart', page['offset'])] = page
+                        if location_quote in page['content']:
+                            location_page = call_id
                 roster_pages = [page for (kind, _), page in delivered_pages.items() if kind == 'roster']
                 chart_pages = [page for (kind, _), page in delivered_pages.items() if kind == 'chart']
                 if roster_pages[-1]['next_offset'] is not None:
@@ -111,10 +121,16 @@ async def _exercise_transport(tmp_path, v3):
                     name, args = 'local-read-patient-observation', {'patient_id':'P0', 'offset':chart_pages[-1]['next_offset'] if chart_pages else 0}
                 elif not any(s[0] == 'local-confirm-patient' for s in steps):
                     name, args = 'local-confirm-patient', {'patient_id':'P0', 'instruction_quote':'90 day treatment trial', 'chart_quote':'90 day treatment trial'}
+                elif v3 and not any(s[0] == 'local-state-update' for s in steps):
+                    assert location_page is not None
+                    name, args = 'local-state-update', {'provider_location': {'site_of_service': 'outpatient_hospital',
+                                                                              'source_call_id': location_page, 'quote': location_quote}}
                 elif not any(s[0] == 'cases__create_from_order' and s[1]['patient_id'] == 'P1' for s in steps):
                     name, args = 'cases__create_from_order', {'patient_id':'P1', 'source_order_id':'O1'}
                 elif not any(s[0] == 'cases__create_from_order' and s[1]['patient_id'] == 'P0' for s in steps):
                     name, args = 'cases__create_from_order', {'patient_id':'P0', 'source_order_id':'O1'}
+                    if v3:
+                        args.update(procedure_code='12345', site_of_service='outpatient_hospital')
                 elif v3 and not any(s[0] == 'local-claim_done' for s in steps):
                     name, args = 'local-claim_done', {}
                 else: name = None

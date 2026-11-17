@@ -167,6 +167,14 @@ class MCPBridge:
                                                    secrets=(self.guard.secret, self.guard.session))
                     self.guard.contract.record_result(selected["id"], result)
                     return result
+            if self.state is not None:
+                reason = self.state.provider_gate(canonical, args)
+                if reason is not None:
+                    result = "REFUSED: " + reason
+                    self.guard.journal.refuse_tool(selected["id"], canonical, args, result,
+                                                   secrets=(self.guard.secret, self.guard.session))
+                    self.guard.contract.record_result(selected["id"], result)
+                    return result
             warning = None
             if self.state is not None:
                 drift = self.state.drift_check(canonical, "mcp", args)
@@ -276,8 +284,14 @@ class MCPBridge:
                 if self.state is not None:
                     run_doc = getattr(self.guard.journal, "run", None)
                     rounds = len(run_doc.get("requests", [])) if isinstance(run_doc, dict) else 0
+                    provider_result = structured if type(structured) is dict else None
+                    if provider_result is None and single_text:
+                        try:
+                            provider_result = json.loads(content[0].text)
+                        except (ValueError, TypeError):
+                            pass
                     self.state.observe(call_id=selected["id"], tool=canonical, kind="mcp",
-                                       arguments=args, result=result,
+                                       arguments=args, result=result, provider_result=provider_result,
                                        event="returned_error" if is_error else "returned",
                                        round_number=rounds,
                                        scope=self.state.scope_for_arguments(args))
