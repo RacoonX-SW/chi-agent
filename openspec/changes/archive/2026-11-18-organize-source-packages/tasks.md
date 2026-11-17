@@ -26,9 +26,13 @@
 
 ## 4. 集成与独立审核
 
-- [ ] 4.1 主代理在固定候选上运行 Docker Python 3.12 全量离线回归与 controller 专项，按实际记录通过、失败、跳过和环境限制，核对常规验证入口可执行。
-- [ ] 4.2 运行现有合成 Harbor 入口演练，对照基线和候选的同一 Trace/Replay suite，确认工具事件、派发、状态与完成声明的行为差异为空，并保留各自源码和环境身份。
-- [ ] 4.3 审阅 Diff、迁移表、两类上传清单和历史包身份，确认工具契约、Prompt、业务状态、预算和费用规则符合迁移验收要求，执行 `git diff --check` 与 OpenSpec 严格校验，将独立审核和验收证据写入最终 PR 描述。
+- [x] 4.1 主代理在固定候选上运行 Docker Python 3.12 全量离线回归与 controller 专项，按实际记录通过、失败、跳过和环境限制，核对常规验证入口可执行。
+  - 独立候选 `6ef5e9a`，常规入口 `CHI_VENDOR_DIR=<原 vendor 路径> bash scripts/tools/verify_offline.sh --allow-dirty` 通过。此参数保留无关未跟踪提案，已提交源码固定且 Diff 为空。1178 passed、44 skipped、403 subtests，与基线相比新增两项通过，既有跳过数量相同。controller 原专项 14 项通过，复用现有 Harbor overlay 后扩展专项 40 项全部通过。日志在临时审核目录 `independent/verify-offline.log` 和 `independent/controller-harbor-overlay.log`。
+- [x] 4.2 运行现有合成 Harbor 入口演练，对照基线和候选的同一 Trace/Replay suite，确认工具事件、派发、状态与完成声明的行为差异为空，并保留各自源码和环境身份。
+  - 原始两份 replay 报告保留，原比较器按预期拒绝不同 evaluator。独立对照使用一份固定评估器字节，只通过显式 flat/grouped 导入选择器加载两棵只读源码，比较器契约沿用原实现。4/4 合成用例通过，`differences=[]`。共同 evaluator 身份 `442a68fd…`，两侧源码身份分别 `ceaa5161…`、`a2fb0f3b…`，报告与临时控制器在 `independent/baseline-common`、`candidate-common`、`replay-comparison.json` 和 `common_replay_evaluator.py`。
+  - 复用固定 vendor、原依赖卷和现有 Harbor overlay，运行导出包的 `claim-blocked` 与 `runner-nonzero` 合成 Trial，两者均通过既有演练断言，确认无完成声明时阻断、返回码 23 传递、合成凭据无泄漏和容器清理。初次输出挂载与缺少探针挂载的设置失败日志分别保留，补齐挂载后以新目录复验，源码候选保持 `6ef5e9a`。日志为 `independent/harbor-*-r3.log`。
+- [x] 4.3 审阅 Diff、迁移表、两类上传清单和历史包身份，确认工具契约、Prompt、业务状态、预算和费用规则符合迁移验收要求，执行 `git diff --check` 与 OpenSpec 严格校验，将独立审核和验收证据写入最终 PR 描述。
+  - 主代理在 Docker 中独立核对全部模块去向、七个初始化文件、两类 v3 显式清单及导入闭包，V1/V2 字典与基线逐项一致。37 个原模块经导入与已批准路径变更归一化后 AST 相同，其余五个构建、入口和身份模块已逐项审阅。Go 清单 55 成员与评测清单 22 成员匹配迁移表，闭包缺项均为 0。四个历史包保持原 manifest 身份并通过校验，独立审核和验证结果已写入 PR #107。`git diff --check` 与本 Change 严格校验通过。
 
 ## Workflow follow-up
 
